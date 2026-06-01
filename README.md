@@ -62,34 +62,33 @@ The API will be available at `http://localhost:8080`
 
 ```
 schick/
-├── cmd/                           # Command line applications
-│   ├── server/                   # Main API server
-│   └── migrate/                  # Database migrations
-├── internal/                      # Private application code
-│   ├── handlers/                 # HTTP request handlers
-│   ├── services/                 # Microservices layer
-│   │   ├── auth-service/         # Authentication, login, token refresh, 2FA
-│   │   ├── product-service/      # Product & inventory CRUD operations
-│   │   ├── order-service/        # Order management & lifecycle
-│   │   ├── user-service/         # Customer user management & profiles
-│   │   ├── notification-service/ # Email & push notification triggers
-│   │   ├── chat-service/         # Customer chat threads & messaging
-│   │   ├── analytics-service/    # Reporting queries & metrics
-│   │   └── config-service/       # Server settings (Super Admin only)
-│   ├── models/                   # Data models & entities
-│   ├── repository/               # Data access layer (DAL)
-│   ├── middleware/               # HTTP middleware & interceptors
-│   └── utils/                    # Utility functions & helpers
-├── pkg/                           # Public packages & shared libraries
-├── migrations/                    # Database migration files
-├── config/                        # Configuration management
-├── tests/                         # Test suites & fixtures
-└── docs/                          # API documentation & Swagger specs
+├── cmd/                       # Command line applications
+│   ├── server/               # Main API server
+│   └── migrate/              # Database migrations
+├── internal/                  # Private application code
+│   ├── handlers/             # HTTP request handlers
+│   ├── models/               # Data models & entities
+│   ├── repository/           # Data access layer (DAL)
+│   ├── middleware/           # HTTP middleware & interceptors
+│   └── utils/                # Utility functions & helpers
+├── pkg/                       # Public packages & reusable services
+│   ├── auth/                 # Authentication, login, token refresh, 2FA
+│   ├── product/              # Product & inventory CRUD operations
+│   ├── order/                # Order management & lifecycle
+│   ├── user/                 # Customer user management & profiles
+│   ├── notification/         # Email & push notification triggers
+│   ├── chat/                 # Customer chat threads & messaging
+│   ├── analytics/            # Reporting queries & metrics
+│   └── config/               # Server settings (Super Admin only)
+├── migrations/                # Database migration files
+├── config/                    # Configuration management
+├── tests/                     # Test suites & fixtures
+└── docs/                      # API documentation & Swagger specs
 ```
 
 ### Services Architecture
 
-#### 🔐 Auth Service (`auth-service`)
+#### 🔐 Auth Service (`pkg/auth`)
 Handles user authentication and security:
 - User login & logout
 - JWT token generation and refresh
@@ -97,7 +96,15 @@ Handles user authentication and security:
 - Password reset & recovery
 - OAuth/SSO integration points
 
-#### 📦 Product Service (`product-service`)
+**Usage:**
+```go
+import "github.com/elug3/schick/pkg/auth"
+
+authSvc := auth.NewService(db, config)
+token, err := authSvc.Login(ctx, email, password)
+```
+
+#### 📦 Product Service (`pkg/product`)
 Manages product catalog and inventory:
 - Product CRUD operations
 - Inventory management & tracking
@@ -105,7 +112,15 @@ Manages product catalog and inventory:
 - Stock level management
 - Product search & categorization
 
-#### 🛒 Order Service (`order-service`)
+**Usage:**
+```go
+import "github.com/elug3/schick/pkg/product"
+
+productSvc := product.NewService(db, cache)
+products, err := productSvc.List(ctx, filters, pagination)
+```
+
+#### 🛒 Order Service (`pkg/order`)
 Manages the complete order lifecycle:
 - Order creation & processing
 - Order status tracking
@@ -113,7 +128,15 @@ Manages the complete order lifecycle:
 - Payment processing coordination
 - Shipment & delivery tracking
 
-#### 👤 User Service (`user-service`)
+**Usage:**
+```go
+import "github.com/elug3/schick/pkg/order"
+
+orderSvc := order.NewService(db, notificationSvc)
+order, err := orderSvc.Create(ctx, orderData)
+```
+
+#### 👤 User Service (`pkg/user`)
 Handles customer user management:
 - User profile management
 - Address book management
@@ -121,7 +144,15 @@ Handles customer user management:
 - User preferences & settings
 - Customer preferences & notifications settings
 
-#### 📬 Notification Service (`notification-service`)
+**Usage:**
+```go
+import "github.com/elug3/schick/pkg/user"
+
+userSvc := user.NewService(db, cache)
+profile, err := userSvc.GetProfile(ctx, userID)
+```
+
+#### 📬 Notification Service (`pkg/notification`)
 Manages all notification channels:
 - Email notifications (order confirmations, shipping updates)
 - Push notifications (mobile alerts)
@@ -129,7 +160,15 @@ Manages all notification channels:
 - Notification templates & scheduling
 - Event-triggered notification system
 
-#### 💬 Chat Service (`chat-service`)
+**Usage:**
+```go
+import "github.com/elug3/schick/pkg/notification"
+
+notifSvc := notification.NewService(smtpConfig, pushConfig)
+err := notifSvc.SendEmail(ctx, email, template, data)
+```
+
+#### 💬 Chat Service (`pkg/chat`)
 Manages customer communications:
 - Customer chat threads
 - Support ticket creation & tracking
@@ -137,7 +176,15 @@ Manages customer communications:
 - Real-time message delivery
 - Chat thread management & resolution
 
-#### 📊 Analytics Service (`analytics-service`)
+**Usage:**
+```go
+import "github.com/elug3/schick/pkg/chat"
+
+chatSvc := chat.NewService(db, wsHub)
+thread, err := chatSvc.CreateThread(ctx, userID, subject)
+```
+
+#### 📊 Analytics Service (`pkg/analytics`)
 Provides reporting and metrics:
 - Sales analytics & reporting
 - User behavior analytics
@@ -145,7 +192,15 @@ Provides reporting and metrics:
 - Revenue & profit analysis
 - Custom report generation
 
-#### ⚙️ Config Service (`config-service`)
+**Usage:**
+```go
+import "github.com/elug3/schick/pkg/analytics"
+
+analyticsSvc := analytics.NewService(db)
+report, err := analyticsSvc.GetSalesReport(ctx, filters)
+```
+
+#### ⚙️ Config Service (`pkg/config`)
 Manages system configuration (Super Admin only):
 - Server settings & parameters
 - Feature flags & toggles
@@ -153,9 +208,17 @@ Manages system configuration (Super Admin only):
 - Audit logging for config changes
 - Role-based access control
 
+**Usage:**
+```go
+import "github.com/elug3/schick/pkg/config"
+
+configSvc := config.NewService(db, cache)
+setting, err := configSvc.GetSetting(ctx, key)
+```
+
 ## 🔌 API Endpoints
 
-### Authentication (`auth-service`)
+### Authentication (`pkg/auth`)
 - `POST /api/v1/auth/register` - Register new user
 - `POST /api/v1/auth/login` - User login
 - `POST /api/v1/auth/logout` - User logout
@@ -163,7 +226,7 @@ Manages system configuration (Super Admin only):
 - `POST /api/v1/auth/2fa/setup` - Setup 2FA
 - `POST /api/v1/auth/2fa/verify` - Verify 2FA code
 
-### Products (`product-service`)
+### Products (`pkg/product`)
 - `GET /api/v1/products` - List products with filtering and pagination
 - `GET /api/v1/products/:id` - Get product details
 - `POST /api/v1/products` - Create product (admin only)
@@ -172,38 +235,38 @@ Manages system configuration (Super Admin only):
 - `GET /api/v1/products/:id/inventory` - Get product inventory
 - `PUT /api/v1/products/:id/inventory` - Update inventory
 
-### Orders (`order-service`)
+### Orders (`pkg/order`)
 - `POST /api/v1/orders` - Create order
 - `GET /api/v1/orders` - List user's orders
 - `GET /api/v1/orders/:id` - Get order details
 - `PUT /api/v1/orders/:id/status` - Update order status (admin only)
 - `GET /api/v1/orders/:id/tracking` - Get order tracking info
 
-### Users (`user-service`)
+### Users (`pkg/user`)
 - `GET /api/v1/users/profile` - Get user profile
 - `PUT /api/v1/users/profile` - Update user profile
 - `GET /api/v1/users/addresses` - Get user addresses
 - `POST /api/v1/users/addresses` - Add address
 - `GET /api/v1/users/wishlist` - Get wishlist
 
-### Notifications (`notification-service`)
+### Notifications (`pkg/notification`)
 - `GET /api/v1/notifications` - Get user notifications
 - `POST /api/v1/notifications/preferences` - Update notification preferences
 - `PUT /api/v1/notifications/:id/read` - Mark notification as read
 
-### Chat (`chat-service`)
+### Chat (`pkg/chat`)
 - `GET /api/v1/chat/threads` - List chat threads
 - `POST /api/v1/chat/threads` - Create new chat thread
 - `GET /api/v1/chat/threads/:id/messages` - Get thread messages
 - `POST /api/v1/chat/threads/:id/messages` - Send message
 
-### Analytics (`analytics-service`)
+### Analytics (`pkg/analytics`)
 - `GET /api/v1/analytics/sales` - Sales analytics (admin only)
 - `GET /api/v1/analytics/products` - Product performance (admin only)
 - `GET /api/v1/analytics/users` - User metrics (admin only)
 - `GET /api/v1/analytics/revenue` - Revenue reports (admin only)
 
-### Config (`config-service`)
+### Config (`pkg/config`)
 - `GET /api/v1/config/settings` - Get system settings (Super Admin only)
 - `PUT /api/v1/config/settings` - Update settings (Super Admin only)
 - `GET /api/v1/config/features` - Get feature flags (Super Admin only)
@@ -257,8 +320,9 @@ go test ./...
 go test -cover ./...
 
 # Run specific service tests
-go test ./internal/services/auth-service -v
-go test ./internal/services/product-service -v
+go test ./pkg/auth -v
+go test ./pkg/product -v
+go test ./pkg/order -v
 
 # Run specific test
 go test ./internal/handlers -v
