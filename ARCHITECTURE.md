@@ -47,7 +47,7 @@ service-name/
 ├── ports/
 ├── infra/
 ├── handler/
-└── runtime/
+└── bootstrap/
 ```
 
 ### Example:
@@ -77,7 +77,7 @@ auth/
 ├── handler/
 │   └── http.go
 │
-└── runtime/
+└── bootstrap/
     └── bootstrap.go
 ```
 
@@ -192,9 +192,9 @@ Handlers MUST NOT contain business logic.
 
 ---
 
-## Runtime Rules
+## Bootstrap Rules
 
-Runtime wires dependencies together.
+Bootstrap wires dependencies together.
 
 ### Responsibilities:
 
