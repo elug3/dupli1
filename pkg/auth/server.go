@@ -56,11 +56,13 @@ func NewServer(opts ServerOptions) (*Server, error) {
 
 // Run starts the server and blocks until it stops or returns an error.
 func (s *Server) Run() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	httpSrv := s.http
+	addr := httpSrv.Addr
+	s.mu.RUnlock()
 
-	fmt.Printf("Starting auth server on %s\n", s.http.Addr)
-	err := s.http.ListenAndServe()
+	fmt.Printf("Starting auth server on %s\n", addr)
+	err := httpSrv.ListenAndServe()
 	s.markStopped()
 	if err != nil && err != http.ErrServerClosed {
 		return err
