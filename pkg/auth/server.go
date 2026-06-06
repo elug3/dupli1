@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+
+	"github.com/elug3/schick/pkg/auth/bootstrap"
 )
 
 // Server represents the auth service HTTP server.
 type Server struct {
 	opts      ServerOptions
 	http      *http.Server
+	app       *bootstrap.App
 	mu        sync.RWMutex
 	stopped   chan struct{}
 	stopOnce  sync.Once
@@ -22,15 +25,22 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		return nil, err
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
+		DBURL:              opts.DBURL,
+		RedisURL:           opts.RedisURL,
+		TokenSigningKey:    opts.TokenSigningKey,
+		TokenExpiry:        opts.TokenExpiry,
+		RefreshTokenExpiry: opts.RefreshTokenExpiry,
+		Debug:              opts.Debug,
+		MaxConns:           opts.MaxConns,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	srv := &http.Server{
 		Addr:         opts.Addr,
-		Handler:      mux,
+		Handler:      app.Engine,
 		ReadTimeout:  opts.ReadTimeout,
 		WriteTimeout: opts.WriteTimeout,
 		IdleTimeout:  opts.IdleTimeout,
@@ -39,6 +49,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	return &Server{
 		opts:    opts,
 		http:    srv,
+		app:     app,
 		stopped: make(chan struct{}),
 	}, nil
 }
@@ -70,7 +81,11 @@ func (s *Server) Stop() error {
 	defer cancel()
 
 	fmt.Println("Gracefully stopping auth server...")
-	return s.http.Shutdown(ctx)
+	err := s.http.Shutdown(ctx)
+	if closeErr := s.app.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 func (s *Server) markStopped() {

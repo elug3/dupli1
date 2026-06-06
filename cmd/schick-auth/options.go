@@ -16,6 +16,7 @@ type Options = auth.ServerOptions
 
 func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	opts := auth.NewServerOptions()
+	opts.DBURL = "postgres://schick:schick_dev@localhost:5432/schick_db?sslmode=disable"
 	applyEnv(opts)
 
 	host, port, err := splitAddr(opts.Addr)
