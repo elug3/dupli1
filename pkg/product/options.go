@@ -34,6 +34,11 @@ var DefaultServerOptions = ServerOptions{
 	WriteTimeout:       15,
 }
 
+func NewSearchServerOptions() *SearchServerOptions {
+	opts := DefaultSearchServerOptions
+	return &opts
+}
+
 func NewServerOptions() *ServerOptions {
 	opts := DefaultServerOptions
 	return &opts

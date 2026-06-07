@@ -13,30 +13,39 @@ import (
 var usageStr = `
 Usage: schick-product [OPTIONS]
 
-A product server application that serves product data over HTTP.
+A product search server that serves product catalog APIs over HTTP.
 
 Options:
   -host string
-      Server host address (default: localhost)
+      Server host address (default: localhost; also SERVER_HOST env)
   -port int
-      Server port number (default: 8080)
+      Server port number (default: 8080; also SERVER_PORT env)
   -db string
-      Database connection string (default: postgresql://localhost/products)
+      Database connection string (also DB_URL or SCHICK_PRODUCT_DB env)
   -read-timeout int
-      Read timeout in seconds (default: 15)
+      Read timeout in seconds (also SCHICK_PRODUCT_READ_TIMEOUT env)
   -write-timeout int
-      Write timeout in seconds (default: 15)
+      Write timeout in seconds (also SCHICK_PRODUCT_WRITE_TIMEOUT env)
   -help
       Show this help message
+
+Environment variables:
+  SERVER_HOST, SERVER_PORT, DB_URL, SCHICK_PRODUCT_DB,
+  SCHICK_PRODUCT_READ_TIMEOUT, SCHICK_PRODUCT_WRITE_TIMEOUT
 
 Examples:
   schick-product
   schick-product -port 9000 -host 0.0.0.0
   schick-product -db postgresql://prod-db/products -port 3000
+  DB_URL=postgresql://prod-db/products schick-product
 `
 
 func main() {
-	fs := flag.NewFlagSet("schick", flag.ExitOnError)
+	fs := flag.NewFlagSet("schick-product", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, usageStr)
+	}
+
 	opts, err := ConfigureOptions(fs, os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ConfigureOptions: %v\n", err)
@@ -52,18 +61,16 @@ func main() {
 	interrupt, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	var runErr chan error
+	runErr := make(chan error, 1)
 	go func() {
-		err := srv.Run()
-		if err != nil {
-			runErr <- err
-		}
+		runErr <- srv.Run()
 	}()
 
-	// Wait interrupt signal or server error
-
 	select {
-	case <-runErr:
+	case err := <-runErr:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "server error: %v\n", err)
+		}
 	case <-interrupt.Done():
 	}
 
