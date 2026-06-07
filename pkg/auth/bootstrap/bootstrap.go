@@ -8,7 +8,10 @@ import (
 
 	"github.com/elug3/schick/pkg/auth/handler"
 	"github.com/elug3/schick/pkg/auth/infra/jwt"
+	"github.com/elug3/schick/pkg/auth/infra/memory"
 	"github.com/elug3/schick/pkg/auth/infra/postgres"
+	rediscache "github.com/elug3/schick/pkg/auth/infra/redis"
+	"github.com/elug3/schick/pkg/auth/ports"
 	"github.com/elug3/schick/pkg/auth/service"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -16,7 +19,7 @@ import (
 
 // App holds wired auth service dependencies and the HTTP router.
 type App struct {
-	Engine *gin.Engine
+	Engine  *gin.Engine
 	Handler *handler.Handler
 	DB      *sql.DB
 	Redis   *redis.Client
@@ -39,6 +42,9 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	if cfg.TokenExpiry <= 0 {
 		return nil, fmt.Errorf("token expiry must be > 0")
 	}
+	if cfg.RefreshTokenExpiry <= 0 {
+		return nil, fmt.Errorf("refresh token expiry must be > 0")
+	}
 
 	db, err := openPostgres(ctx, cfg.DBURL, cfg.MaxConns)
 	if err != nil {
@@ -51,12 +57,30 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 
-	userRepo := postgres.NewUserRepository(db)
-	tokenGen := jwt.NewTokenGenerator(
+	userRepo, err := postgres.NewUserRepository(ctx, db)
+	if err != nil {
+		if redisClient != nil {
+			_ = redisClient.Close()
+		}
+		_ = db.Close()
+		return nil, err
+	}
+
+	accessTokenGen := jwt.NewTokenGenerator(
 		string(cfg.TokenSigningKey),
 		int64(cfg.TokenExpiry.Seconds()),
 	)
-	svc := service.NewService(userRepo, tokenGen)
+	refreshTokenGen := jwt.NewTokenGenerator(
+		string(cfg.TokenSigningKey),
+		int64(cfg.RefreshTokenExpiry.Seconds()),
+	)
+
+	var sessionStore ports.SessionStore = memory.NewSessionStore()
+	if redisClient != nil {
+		sessionStore = rediscache.NewSessionCache(redisClient)
+	}
+
+	svc := service.NewService(userRepo, accessTokenGen, refreshTokenGen, sessionStore, cfg.RefreshTokenExpiry)
 	h := handler.NewHandler(svc)
 	engine := newRouter(h, cfg.Debug)
 

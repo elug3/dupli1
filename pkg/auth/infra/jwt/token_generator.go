@@ -3,10 +3,11 @@ package jwt
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
+	"github.com/elug3/schick/pkg/auth/ports"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 // TokenGenerator implements ports.TokenGenerator using JWT.
@@ -24,11 +25,20 @@ func NewTokenGenerator(secret string, expirySeconds int64) *TokenGenerator {
 }
 
 // Generate generates a JWT token for a user.
-func (tg *TokenGenerator) Generate(ctx context.Context, userID string) (string, error) {
+func (tg *TokenGenerator) Generate(ctx context.Context, userID uuid.UUID, tokenType ports.TokenType, sessionID string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	now := time.Now()
 	claims := jwt.MapClaims{
-		"user_id": userID,
-		"exp":     time.Now().Add(tg.expiryDuration).Unix(),
-		"iat":     time.Now().Unix(),
+		"user_id": userID.String(),
+		"type":    string(tokenType),
+		"exp":     now.Add(tg.expiryDuration).Unix(),
+		"iat":     now.Unix(),
+	}
+	if sessionID != "" {
+		claims["session_id"] = sessionID
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -41,7 +51,11 @@ func (tg *TokenGenerator) Generate(ctx context.Context, userID string) (string, 
 }
 
 // Validate validates a JWT token and returns the user ID.
-func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (string, error) {
+func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string, expectedType ports.TokenType) (ports.TokenClaims, error) {
+	if err := ctx.Err(); err != nil {
+		return ports.TokenClaims{}, err
+	}
+
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		// Ensure token uses HMAC signing
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -50,30 +64,52 @@ func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (str
 		return []byte(tg.secret), nil
 	})
 	if err != nil {
-		return "", err
+		return ports.TokenClaims{}, err
 	}
 
 	if !token.Valid {
-		return "", fmt.Errorf("invalid token")
+		return ports.TokenClaims{}, fmt.Errorf("invalid token")
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", fmt.Errorf("invalid token claims")
+		return ports.TokenClaims{}, fmt.Errorf("invalid token claims")
 	}
 
 	raw, ok := claims["user_id"]
 	if !ok {
-		return "", fmt.Errorf("user_id claim missing")
+		return ports.TokenClaims{}, fmt.Errorf("user_id claim missing")
 	}
 
+	var userID uuid.UUID
 	switch v := raw.(type) {
 	case string:
-		return v, nil
-	case float64:
-		// handle numeric user ids encoded as numbers
-		return strconv.FormatFloat(v, 'f', -1, 64), nil
+		id, err := uuid.Parse(v)
+		if err != nil {
+			return ports.TokenClaims{}, err
+		}
+		userID = id
 	default:
-		return "", fmt.Errorf("user_id claim has unexpected type")
+		return ports.TokenClaims{}, fmt.Errorf("user_id claim has unexpected type")
 	}
+
+	rawType, ok := claims["type"].(string)
+	if !ok {
+		return ports.TokenClaims{}, fmt.Errorf("token type claim missing")
+	}
+	tokenType := ports.TokenType(rawType)
+	if tokenType != expectedType {
+		return ports.TokenClaims{}, fmt.Errorf("unexpected token type")
+	}
+
+	var sessionID string
+	if rawSessionID, ok := claims["session_id"].(string); ok {
+		sessionID = rawSessionID
+	}
+
+	return ports.TokenClaims{
+		UserID:    userID,
+		Type:      tokenType,
+		SessionID: sessionID,
+	}, nil
 }

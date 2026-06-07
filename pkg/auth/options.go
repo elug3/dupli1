@@ -77,6 +77,9 @@ func (o *ServerOptions) Validate() error {
 	if o.TokenExpiry <= 0 {
 		return fmt.Errorf("TokenExpiry must be > 0")
 	}
+	if o.RefreshTokenExpiry <= 0 {
+		return fmt.Errorf("RefreshTokenExpiry must be > 0")
+	}
 	if o.DBURL == "" {
 		return fmt.Errorf("DBURL is required")
 	}
