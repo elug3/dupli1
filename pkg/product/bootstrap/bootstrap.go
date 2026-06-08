@@ -6,6 +6,7 @@ import (
 
 	"github.com/schick/pkg/product/handler"
 	"github.com/schick/pkg/product/infra/pg"
+	"github.com/schick/pkg/product/middleware"
 	"github.com/schick/pkg/product/service"
 )
 
@@ -35,6 +36,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
+	mux.Handle("/api/products", middleware.RequireAuth(cfg.JWTSecret, h.CreateProductHandler()))
 
 	return &App{
 		Handler: mux,

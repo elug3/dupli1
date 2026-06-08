@@ -52,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv, err := product.NewSearchServer(opts)
+	srv, err := product.NewServer(opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "NewSearchServer: %v\n", err)
 		os.Exit(1)

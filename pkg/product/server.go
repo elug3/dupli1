@@ -24,6 +24,7 @@ type ProductSearchServer struct {
 func NewSearchServer(opts SearchServerOptions) (*ProductSearchServer, error) {
 	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
 		DatabaseConnString: opts.DatabaseConnString,
+		JWTSecret:          opts.JWTSecret,
 	})
 	if err != nil {
 		return nil, err
@@ -97,22 +98,31 @@ func (s *ProductSearchServer) StopAndWait() {
 
 // ProductServer is the full-featured server for admin/manager operations.
 type ProductServer struct {
-	opts    ServerOptions
-	server  *http.Server
-	mu      sync.RWMutex
-	stopped chan struct{}
+	opts     ServerOptions
+	server   *http.Server
+	app      *bootstrap.App
+	mu       sync.RWMutex
+	stopped  chan struct{}
+	stopOnce sync.Once
 }
 
-// NewServer creates a new full-featured product server for admin/manager use.
+// NewServer creates and wires a new full-featured product server for admin/manager use.
 func NewServer(opts ServerOptions) (*ProductServer, error) {
-	mux := http.NewServeMux()
-	addr := fmt.Sprintf("%s:%d", opts.Host, opts.Port)
+	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
+		DatabaseConnString: opts.DatabaseConnString,
+		JWTSecret:          opts.JWTSecret,
+	})
+	if err != nil {
+		return nil, err
+	}
 
+	addr := fmt.Sprintf("%s:%d", opts.Host, opts.Port)
 	return &ProductServer{
 		opts: opts,
+		app:  app,
 		server: &http.Server{
 			Addr:         addr,
-			Handler:      mux,
+			Handler:      app.Handler,
 			ReadTimeout:  time.Duration(opts.ReadTimeout) * time.Second,
 			WriteTimeout: time.Duration(opts.WriteTimeout) * time.Second,
 		},
@@ -126,7 +136,9 @@ func (s *ProductServer) Run() error {
 	s.mu.RUnlock()
 
 	fmt.Printf("Starting ProductServer on %s\n", addr)
-	if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	err := s.server.ListenAndServe()
+	s.markStopped()
+	if err != nil && err != http.ErrServerClosed {
 		return err
 	}
 	return nil
@@ -144,7 +156,15 @@ func (s *ProductServer) Stop() error {
 	defer cancel()
 
 	fmt.Println("Gracefully stopping ProductServer...")
-	return s.server.Shutdown(ctx)
+	err := s.server.Shutdown(ctx)
+	if closeErr := s.app.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	return err
+}
+
+func (s *ProductServer) markStopped() {
+	s.stopOnce.Do(func() { close(s.stopped) })
 }
 
 func (s *ProductServer) Wait() {

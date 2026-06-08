@@ -5,6 +5,7 @@ type SearchServerOptions struct {
 	Host               string
 	Port               int
 	DatabaseConnString string
+	JWTSecret          string
 	ReadTimeout        int // in seconds
 	WriteTimeout       int // in seconds
 }
@@ -22,6 +23,7 @@ type ServerOptions struct {
 	Host               string
 	Port               int
 	DatabaseConnString string
+	JWTSecret          string
 	ReadTimeout        int // in seconds
 	WriteTimeout       int // in seconds
 }

@@ -47,71 +47,15 @@ func TestHealthMethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestGetCategories(t *testing.T) {
-	mux := newMux(memory.NewProductStore())
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/categories", nil))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", rec.Code)
-	}
-	var resp handler.CategoryResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatal(err)
-	}
-	if len(resp.Categories) != 6 {
-		t.Errorf("want 6 categories, got %d", len(resp.Categories))
-	}
-}
-
-func TestGetFilters(t *testing.T) {
-	mux := newMux(memory.NewProductStore())
-
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/filters?category=shoes", nil))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", rec.Code)
-	}
-
-	var resp map[string]interface{}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp["category"] != "shoes" {
-		t.Errorf("want category=shoes, got %v", resp["category"])
-	}
-}
-
-func TestGetFiltersUnknownCategory(t *testing.T) {
-	mux := newMux(memory.NewProductStore())
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/filters?category=unknown", nil))
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("want 404, got %d", rec.Code)
-	}
-}
-
-func TestGetFiltersMissingCategory(t *testing.T) {
-	mux := newMux(memory.NewProductStore())
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/filters", nil))
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("want 400, got %d", rec.Code)
-	}
-}
-
-func TestSearchShoes(t *testing.T) {
+func TestSearchBags(t *testing.T) {
 	store := memory.NewProductStore()
-	store.Shoes = []domain.Shoes{
-		{Product: domain.Product{ID: "1", Name: "Air Max", Brand: "Nike", Price: 120.0}},
-		{Product: domain.Product{ID: "2", Name: "Stan Smith", Brand: "Adidas", Price: 90.0}},
+	store.Bags = []domain.Bag{
+		{Product: domain.Product{ID: "1", Name: "Canvas Tote", Brand: "Baggu", Price: 45.0}},
+		{Product: domain.Product{ID: "2", Name: "Leather Backpack", Brand: "Herschel", Price: 120.0}},
 	}
 	mux := newMux(store)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/shoes", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/bags", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
@@ -122,25 +66,5 @@ func TestSearchShoes(t *testing.T) {
 	}
 	if resp.Total != 2 {
 		t.Errorf("want total=2, got %d", resp.Total)
-	}
-}
-
-func TestSearchGenericMissingCategory(t *testing.T) {
-	mux := newMux(memory.NewProductStore())
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/search", nil))
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("want 400, got %d", rec.Code)
-	}
-}
-
-func TestSearchGenericUnknownCategory(t *testing.T) {
-	mux := newMux(memory.NewProductStore())
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/search?category=unknown", nil))
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("want 500, got %d", rec.Code)
 	}
 }

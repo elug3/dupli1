@@ -8,13 +8,14 @@ import (
 	"github.com/schick/pkg/product"
 )
 
-func ConfigureOptions(fs *flag.FlagSet, args []string) (product.SearchServerOptions, error) {
-	opts := product.DefaultSearchServerOptions
+func ConfigureOptions(fs *flag.FlagSet, args []string) (product.ServerOptions, error) {
+	opts := product.DefaultServerOptions
 	applyEnv(&opts)
 
 	fs.StringVar(&opts.Host, "host", opts.Host, "Server host address")
 	fs.IntVar(&opts.Port, "port", opts.Port, "Server port number")
 	fs.StringVar(&opts.DatabaseConnString, "db", opts.DatabaseConnString, "Database connection string")
+	fs.StringVar(&opts.JWTSecret, "jwt-secret", opts.JWTSecret, "JWT secret for validating access tokens (also JWT_SECRET env)")
 	fs.IntVar(&opts.ReadTimeout, "read-timeout", opts.ReadTimeout, "Read timeout in seconds")
 	fs.IntVar(&opts.WriteTimeout, "write-timeout", opts.WriteTimeout, "Write timeout in seconds")
 
@@ -25,7 +26,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (product.SearchServerOpti
 	return opts, nil
 }
 
-func applyEnv(opts *product.SearchServerOptions) {
+func applyEnv(opts *product.ServerOptions) {
 	if v := os.Getenv("SERVER_HOST"); v != "" {
 		opts.Host = v
 	}
@@ -40,6 +41,9 @@ func applyEnv(opts *product.SearchServerOptions) {
 	// SCHICK_PRODUCT_DB takes precedence over the generic DB_URL
 	if v := os.Getenv("SCHICK_PRODUCT_DB"); v != "" {
 		opts.DatabaseConnString = v
+	}
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		opts.JWTSecret = v
 	}
 	setIntEnv(&opts.ReadTimeout, "SCHICK_PRODUCT_READ_TIMEOUT")
 	setIntEnv(&opts.WriteTimeout, "SCHICK_PRODUCT_WRITE_TIMEOUT")

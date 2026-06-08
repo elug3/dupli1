@@ -61,6 +61,7 @@ services:
       SCHICK_PRODUCT_DB: postgres://schick:schick_dev@postgres-product:5432/products?sslmode=disable
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: "8080"
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
     depends_on:
       postgres-product:
         condition: service_healthy
