@@ -7,20 +7,46 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	natsinfra "github.com/schick/pkg/product/infra/nats"
+	"github.com/schick/pkg/product/infra/pg"
+	"github.com/schick/pkg/product/ports"
 )
 
 // ProductSearchServer is the read-only server for customers to search products
 type ProductSearchServer struct {
-	opts    SearchServerOptions
-	server  *http.Server
-	mu      sync.RWMutex
-	stopped chan struct{}
+	opts          SearchServerOptions
+	server        *http.Server
+	store         *pg.ProductSearchStore
+	natsPublisher *natsinfra.Publisher
+	mu            sync.RWMutex
+	stopped       chan struct{}
 }
 
 // NewSearchServer creates and returns a new read-only product search server
 func NewSearchServer(opts SearchServerOptions) (*ProductSearchServer, error) {
 	mux := http.NewServeMux()
 	addr := net.JoinHostPort(opts.Host, fmt.Sprintf("%d", opts.Port))
+
+	store, err := pg.NewProductStore(opts.DatabaseConnString)
+	if err != nil {
+		return nil, err
+	}
+
+	var eventPublisher ports.EventPublisher
+	var natsPublisher *natsinfra.Publisher
+	if opts.NATSURL != "" {
+		natsPublisher, err = natsinfra.NewPublisher(opts.NATSURL)
+		if err != nil {
+			store.Close()
+			return nil, err
+		}
+		eventPublisher = natsPublisher
+	}
+
+	service := NewProductSearchService(store, eventPublisher)
+	handler := NewProductSearchHandler(service)
+	handler.RegisterRoutes(mux)
 
 	return &ProductSearchServer{
 		opts: opts,
@@ -30,7 +56,9 @@ func NewSearchServer(opts SearchServerOptions) (*ProductSearchServer, error) {
 			ReadTimeout:  time.Duration(opts.ReadTimeout) * time.Second,
 			WriteTimeout: time.Duration(opts.WriteTimeout) * time.Second,
 		},
-		stopped: make(chan struct{}),
+		store:         store,
+		natsPublisher: natsPublisher,
+		stopped:       make(chan struct{}),
 	}, nil
 }
 
@@ -91,7 +119,14 @@ func (s *ProductSearchServer) Stop() error {
 	defer cancel()
 
 	fmt.Println("Gracefully stopping ProductSearchServer...")
-	return s.server.Shutdown(ctx)
+	err := s.server.Shutdown(ctx)
+	if s.natsPublisher != nil {
+		s.natsPublisher.Close()
+	}
+	if s.store != nil {
+		s.store.Close()
+	}
+	return err
 }
 
 // Wait blocks until the search server is closed
