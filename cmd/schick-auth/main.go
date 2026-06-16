@@ -26,13 +26,15 @@ Options:
       Database connection URL
   -redis string
       Redis connection URL
+  -nats string
+      NATS connection URL
   -jwt-secret string
       JWT signing secret (required; also JWT_SECRET env)
   -help
       Show this help message
 
 Environment variables:
-  SERVER_HOST, SERVER_PORT, SCHICK_AUTH_ADDR, JWT_SECRET, DB_URL, REDIS_URL
+  SERVER_HOST, SERVER_PORT, SCHICK_AUTH_ADDR, JWT_SECRET, DB_URL, REDIS_URL, NATS_URL, SCHICK_AUTH_NATS_URL
 
 Examples:
   schick-auth -jwt-secret dev-secret

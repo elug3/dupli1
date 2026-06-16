@@ -11,12 +11,12 @@ import (
 
 // Server represents the auth service HTTP server.
 type Server struct {
-	opts      ServerOptions
-	http      *http.Server
-	app       *bootstrap.App
-	mu        sync.RWMutex
-	stopped   chan struct{}
-	stopOnce  sync.Once
+	opts     ServerOptions
+	http     *http.Server
+	app      *bootstrap.App
+	mu       sync.RWMutex
+	stopped  chan struct{}
+	stopOnce sync.Once
 }
 
 // NewServer creates a new auth server.
@@ -28,6 +28,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
 		DBURL:              opts.DBURL,
 		RedisURL:           opts.RedisURL,
+		NATSURL:            opts.NATSURL,
 		TokenSigningKey:    opts.TokenSigningKey,
 		TokenExpiry:        opts.TokenExpiry,
 		RefreshTokenExpiry: opts.RefreshTokenExpiry,

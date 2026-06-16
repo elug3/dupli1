@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"os"
 
 	"github.com/schick/pkg/product"
 )
@@ -10,11 +11,22 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (product.SearchServerOpti
 	opts := product.DefaultSearchServerOptions
 
 	// Check environment variables first, then use defaults
+	if v := os.Getenv("SCHICK_PRODUCT_DB_URL"); v != "" {
+		opts.DatabaseConnString = v
+	} else if v := os.Getenv("DB_URL"); v != "" {
+		opts.DatabaseConnString = v
+	}
+	if v := os.Getenv("SCHICK_PRODUCT_NATS_URL"); v != "" {
+		opts.NATSURL = v
+	} else if v := os.Getenv("NATS_URL"); v != "" {
+		opts.NATSURL = v
+	}
 
 	// Define command-line flags (these override environment variables)
 	fs.StringVar(&opts.Host, "host", opts.Host, "Server host address")
 	fs.IntVar(&opts.Port, "port", opts.Port, "Server port number")
 	fs.StringVar(&opts.DatabaseConnString, "db", opts.DatabaseConnString, "Database connection string")
+	fs.StringVar(&opts.NATSURL, "nats", opts.NATSURL, "NATS connection URL")
 	fs.IntVar(&opts.ReadTimeout, "read-timeout", opts.ReadTimeout, "Read timeout in seconds")
 	fs.IntVar(&opts.WriteTimeout, "write-timeout", opts.WriteTimeout, "Write timeout in seconds")
 

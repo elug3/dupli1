@@ -22,6 +22,8 @@ Options:
       Server port number (default: 8080)
   -db string
       Database connection string (default: postgresql://localhost/products)
+  -nats string
+      NATS connection URL
   -read-timeout int
       Read timeout in seconds (default: 15)
   -write-timeout int
@@ -32,7 +34,7 @@ Options:
 Examples:
   schick-product
   schick-product -port 9000 -host 0.0.0.0
-  schick-product -db postgresql://prod-db/products -port 3000
+  schick-product -db postgresql://prod-db/products -nats nats://localhost:4222 -port 3000
 `
 
 func main() {

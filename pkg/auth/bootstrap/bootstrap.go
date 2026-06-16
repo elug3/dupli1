@@ -8,7 +8,9 @@ import (
 
 	"github.com/elug3/schick/pkg/auth/handler"
 	"github.com/elug3/schick/pkg/auth/infra/jwt"
+	natsinfra "github.com/elug3/schick/pkg/auth/infra/nats"
 	"github.com/elug3/schick/pkg/auth/infra/postgres"
+	"github.com/elug3/schick/pkg/auth/ports"
 	"github.com/elug3/schick/pkg/auth/service"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -16,7 +18,7 @@ import (
 
 // App holds wired auth service dependencies and the HTTP router.
 type App struct {
-	Engine *gin.Engine
+	Engine  *gin.Engine
 	Handler *handler.Handler
 	DB      *sql.DB
 	Redis   *redis.Client
@@ -51,12 +53,26 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 
+	var eventPublisher ports.EventPublisher
+	var natsPublisher *natsinfra.Publisher
+	if cfg.NATSURL != "" {
+		natsPublisher, err = natsinfra.NewPublisher(cfg.NATSURL)
+		if err != nil {
+			if redisClient != nil {
+				_ = redisClient.Close()
+			}
+			_ = db.Close()
+			return nil, err
+		}
+		eventPublisher = natsPublisher
+	}
+
 	userRepo := postgres.NewUserRepository(db)
 	tokenGen := jwt.NewTokenGenerator(
 		string(cfg.TokenSigningKey),
 		int64(cfg.TokenExpiry.Seconds()),
 	)
-	svc := service.NewService(userRepo, tokenGen)
+	svc := service.NewService(userRepo, tokenGen, eventPublisher)
 	h := handler.NewHandler(svc)
 	engine := newRouter(h, cfg.Debug)
 
@@ -69,6 +85,9 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 			var errs []error
 			if redisClient != nil {
 				errs = append(errs, redisClient.Close())
+			}
+			if natsPublisher != nil {
+				natsPublisher.Close()
 			}
 			errs = append(errs, db.Close())
 			return errors.Join(errs...)
