@@ -358,6 +358,10 @@ For detailed API documentation, visit:
 - Swagger/OpenAPI docs: `http://localhost:8080/swagger/index.html`
 - API reference: See `docs/` directory
 
+## 🚢 Deployment
+
+Deployment plans for staging, production, rollback, configuration, and operational checks are documented in [`docs/deployment-plans.md`](docs/deployment-plans.md).
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please follow these steps:
