@@ -1,0 +1,132 @@
+services:
+  postgres-auth:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: schick_db
+      POSTGRES_USER: schick
+      POSTGRES_PASSWORD: schick_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schick -d schick_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-product:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: products
+      POSTGRES_USER: schick
+      POSTGRES_PASSWORD: schick_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-product-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schick -d products"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  schick-auth:
+    build:
+      context: .
+      dockerfile: cmd/schick-auth/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: postgres://schick:schick_dev@postgres-auth:5432/schick_db?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      SCHICK_AUTH_ADDR: :8080
+      OWNER_EMAIL: admin@schick.com
+      OWNER_PASSWORD: password
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-schick}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-schick_dev}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+        mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-schick} ${MINIO_SECRET_KEY:-schick_dev} &&
+        mc mb --ignore-existing local/product-images &&
+        mc anonymous set download local/product-images
+      "
+    restart: "no"
+
+  schick-product:
+    build:
+      context: .
+      dockerfile: cmd/schick-product/Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      SCHICK_PRODUCT_DB: postgres://schick:schick_dev@postgres-product:5432/products?sslmode=disable
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8080"
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-schick}
+      S3_SECRET_KEY: ${MINIO_SECRET_KEY:-schick_dev}
+      S3_BUCKET: product-images
+    depends_on:
+      postgres-product:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  schick-proxy:
+    build:
+      context: cmd/schick-proxy
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      schick-auth:
+        condition: service_healthy
+      schick-product:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-auth-data:
+  postgres-product-data:
+  minio-data:

@@ -8,8 +8,9 @@ import (
 
 	"github.com/elug3/schick/pkg/auth/handler"
 	"github.com/elug3/schick/pkg/auth/infra/jwt"
-	natsinfra "github.com/elug3/schick/pkg/auth/infra/nats"
+	"github.com/elug3/schick/pkg/auth/infra/memory"
 	"github.com/elug3/schick/pkg/auth/infra/postgres"
+	rediscache "github.com/elug3/schick/pkg/auth/infra/redis"
 	"github.com/elug3/schick/pkg/auth/ports"
 	"github.com/elug3/schick/pkg/auth/service"
 	"github.com/gin-gonic/gin"
@@ -41,6 +42,9 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	if cfg.TokenExpiry <= 0 {
 		return nil, fmt.Errorf("token expiry must be > 0")
 	}
+	if cfg.RefreshTokenExpiry <= 0 {
+		return nil, fmt.Errorf("refresh token expiry must be > 0")
+	}
 
 	db, err := openPostgres(ctx, cfg.DBURL, cfg.MaxConns)
 	if err != nil {
@@ -53,26 +57,30 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 
-	var eventPublisher ports.EventPublisher
-	var natsPublisher *natsinfra.Publisher
-	if cfg.NATSURL != "" {
-		natsPublisher, err = natsinfra.NewPublisher(cfg.NATSURL)
-		if err != nil {
-			if redisClient != nil {
-				_ = redisClient.Close()
-			}
-			_ = db.Close()
-			return nil, err
+	userRepo, err := postgres.NewUserRepository(ctx, db)
+	if err != nil {
+		if redisClient != nil {
+			_ = redisClient.Close()
 		}
-		eventPublisher = natsPublisher
+		_ = db.Close()
+		return nil, err
 	}
 
-	userRepo := postgres.NewUserRepository(db)
-	tokenGen := jwt.NewTokenGenerator(
+	accessTokenGen := jwt.NewTokenGenerator(
 		string(cfg.TokenSigningKey),
 		int64(cfg.TokenExpiry.Seconds()),
 	)
-	svc := service.NewService(userRepo, tokenGen, eventPublisher)
+	refreshTokenGen := jwt.NewTokenGenerator(
+		string(cfg.TokenSigningKey),
+		int64(cfg.RefreshTokenExpiry.Seconds()),
+	)
+
+	var sessionStore ports.SessionStore = memory.NewSessionStore()
+	if redisClient != nil {
+		sessionStore = rediscache.NewSessionCache(redisClient)
+	}
+
+	svc := service.NewService(userRepo, accessTokenGen, refreshTokenGen, sessionStore, cfg.RefreshTokenExpiry)
 	h := handler.NewHandler(svc)
 	engine := newRouter(h, cfg.Debug)
 
@@ -92,6 +100,11 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 			errs = append(errs, db.Close())
 			return errors.Join(errs...)
 		},
+	}
+
+	if err := seedOwner(ctx, cfg, userRepo); err != nil {
+		_ = app.Close()
+		return nil, err
 	}
 
 	return app, nil

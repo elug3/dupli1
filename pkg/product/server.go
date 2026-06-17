@@ -3,83 +3,130 @@ package product
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"sync"
 	"time"
 
-	natsinfra "github.com/schick/pkg/product/infra/nats"
-	"github.com/schick/pkg/product/infra/pg"
-	"github.com/schick/pkg/product/ports"
+	"github.com/schick/pkg/product/bootstrap"
 )
 
-// ProductSearchServer is the read-only server for customers to search products
+// ProductSearchServer is the read-only server for customers to search products.
 type ProductSearchServer struct {
-	opts          SearchServerOptions
-	server        *http.Server
-	store         *pg.ProductSearchStore
-	natsPublisher *natsinfra.Publisher
-	mu            sync.RWMutex
-	stopped       chan struct{}
+	opts     SearchServerOptions
+	http     *http.Server
+	app      *bootstrap.App
+	mu       sync.RWMutex
+	stopped  chan struct{}
+	stopOnce sync.Once
 }
 
-// NewSearchServer creates and returns a new read-only product search server
+// NewSearchServer creates and wires a new read-only product search server.
 func NewSearchServer(opts SearchServerOptions) (*ProductSearchServer, error) {
-	mux := http.NewServeMux()
-	addr := net.JoinHostPort(opts.Host, fmt.Sprintf("%d", opts.Port))
-
-	store, err := pg.NewProductStore(opts.DatabaseConnString)
+	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
+		DatabaseConnString: opts.DatabaseConnString,
+		JWTSecret:          opts.JWTSecret,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	var eventPublisher ports.EventPublisher
-	var natsPublisher *natsinfra.Publisher
-	if opts.NATSURL != "" {
-		natsPublisher, err = natsinfra.NewPublisher(opts.NATSURL)
-		if err != nil {
-			store.Close()
-			return nil, err
-		}
-		eventPublisher = natsPublisher
+	addr := fmt.Sprintf("%s:%d", opts.Host, opts.Port)
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      app.Handler,
+		ReadTimeout:  time.Duration(opts.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(opts.WriteTimeout) * time.Second,
 	}
 
-	service := NewProductSearchService(store, eventPublisher)
-	handler := NewProductSearchHandler(service)
-	handler.RegisterRoutes(mux)
-
 	return &ProductSearchServer{
-		opts: opts,
-		server: &http.Server{
-			Addr:         addr,
-			Handler:      mux,
-			ReadTimeout:  time.Duration(opts.ReadTimeout) * time.Second,
-			WriteTimeout: time.Duration(opts.WriteTimeout) * time.Second,
-		},
-		store:         store,
-		natsPublisher: natsPublisher,
-		stopped:       make(chan struct{}),
+		opts:    opts,
+		http:    srv,
+		app:     app,
+		stopped: make(chan struct{}),
 	}, nil
 }
 
-// ProductServer is the full-featured server for admin/manager operations
-type ProductServer struct {
-	opts    ServerOptions
-	server  *http.Server
-	mu      sync.RWMutex
-	stopped chan struct{}
+// Run starts the server and blocks until it stops.
+func (s *ProductSearchServer) Run() error {
+	s.mu.RLock()
+	addr := s.http.Addr
+	s.mu.RUnlock()
+
+	fmt.Printf("Starting ProductSearchServer on %s\n", addr)
+	err := s.http.ListenAndServe()
+	s.markStopped()
+	if err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
 
-// NewServer creates and returns a new full-featured product server for admin/manager use
-func NewServer(opts ServerOptions) (*ProductServer, error) {
-	mux := http.NewServeMux()
-	addr := net.JoinHostPort(opts.Host, fmt.Sprintf("%d", opts.Port))
+// Stop gracefully stops the server and releases infrastructure resources.
+func (s *ProductSearchServer) Stop() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
+	if s.http == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	fmt.Println("Gracefully stopping ProductSearchServer...")
+	err := s.http.Shutdown(ctx)
+	if closeErr := s.app.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	return err
+}
+
+func (s *ProductSearchServer) markStopped() {
+	s.stopOnce.Do(func() { close(s.stopped) })
+}
+
+// Wait blocks until the server has stopped.
+func (s *ProductSearchServer) Wait() {
+	<-s.stopped
+}
+
+// StopAndWait gracefully stops the server and waits for it to close.
+func (s *ProductSearchServer) StopAndWait() {
+	_ = s.Stop()
+	s.Wait()
+}
+
+// ProductServer is the full-featured server for admin/manager operations.
+type ProductServer struct {
+	opts     ServerOptions
+	server   *http.Server
+	app      *bootstrap.App
+	mu       sync.RWMutex
+	stopped  chan struct{}
+	stopOnce sync.Once
+}
+
+// NewServer creates and wires a new full-featured product server for admin/manager use.
+func NewServer(opts ServerOptions) (*ProductServer, error) {
+	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
+		DatabaseConnString: opts.DatabaseConnString,
+		JWTSecret:          opts.JWTSecret,
+		S3Endpoint:         opts.S3Endpoint,
+		S3AccessKey:        opts.S3AccessKey,
+		S3SecretKey:        opts.S3SecretKey,
+		S3Bucket:           opts.S3Bucket,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	addr := fmt.Sprintf("%s:%d", opts.Host, opts.Port)
 	return &ProductServer{
 		opts: opts,
+		app:  app,
 		server: &http.Server{
 			Addr:         addr,
-			Handler:      mux,
+			Handler:      app.Handler,
 			ReadTimeout:  time.Duration(opts.ReadTimeout) * time.Second,
 			WriteTimeout: time.Duration(opts.WriteTimeout) * time.Second,
 		},
@@ -87,96 +134,20 @@ func NewServer(opts ServerOptions) (*ProductServer, error) {
 	}, nil
 }
 
-// === ProductSearchServer Methods ===
-
-// Run starts the search server and blocks until it's stopped
-func (s *ProductSearchServer) Run() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	fmt.Printf("Starting ProductSearchServer on %s\n", s.server.Addr)
-	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("ProductSearchServer error: %v\n", err)
-		}
-		close(s.stopped)
-	}()
-
-	return nil
-}
-
-// Stop gracefully stops the search server
-func (s *ProductSearchServer) Stop() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.server == nil {
-		return nil
-	}
-
-	// Create a context with 30-second timeout for graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	fmt.Println("Gracefully stopping ProductSearchServer...")
-	err := s.server.Shutdown(ctx)
-	if s.natsPublisher != nil {
-		s.natsPublisher.Close()
-	}
-	if s.store != nil {
-		s.store.Close()
-	}
-	return err
-}
-
-// Wait blocks until the search server is closed
-func (s *ProductSearchServer) Wait() {
-	<-s.stopped
-}
-
-// StopAndWait gracefully stops the search server and waits for it to close
-func (s *ProductSearchServer) StopAndWait() {
-	_ = s.Stop()
-	s.Wait()
-}
-
-// IsReady checks if the search server is ready to serve requests
-func (s *ProductSearchServer) IsReady() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.server == nil {
-		return false
-	}
-
-	// Try to connect to the server
-	conn, err := net.DialTimeout("tcp", s.server.Addr, time.Second)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
-}
-
-// === ProductServer Methods ===
-
-// Run starts the server and blocks until it's stopped
 func (s *ProductServer) Run() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	addr := s.server.Addr
+	s.mu.RUnlock()
 
-	fmt.Printf("Starting ProductServer on %s\n", s.server.Addr)
-	go func() {
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("ProductServer error: %v\n", err)
-		}
-		close(s.stopped)
-	}()
-
+	fmt.Printf("Starting ProductServer on %s\n", addr)
+	err := s.server.ListenAndServe()
+	s.markStopped()
+	if err != nil && err != http.ErrServerClosed {
+		return err
+	}
 	return nil
 }
 
-// Stop gracefully stops the server
 func (s *ProductServer) Stop() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -185,39 +156,26 @@ func (s *ProductServer) Stop() error {
 		return nil
 	}
 
-	// Create a context with 30-second timeout for graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	fmt.Println("Gracefully stopping ProductServer...")
-	return s.server.Shutdown(ctx)
+	err := s.server.Shutdown(ctx)
+	if closeErr := s.app.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	return err
 }
 
-// Wait blocks until the server is closed
+func (s *ProductServer) markStopped() {
+	s.stopOnce.Do(func() { close(s.stopped) })
+}
+
 func (s *ProductServer) Wait() {
 	<-s.stopped
 }
 
-// StopAndWait gracefully stops the server and waits for it to close
 func (s *ProductServer) StopAndWait() {
 	_ = s.Stop()
 	s.Wait()
-}
-
-// IsReady checks if the server is ready to serve requests
-func (s *ProductServer) IsReady() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.server == nil {
-		return false
-	}
-
-	// Try to connect to the server
-	conn, err := net.DialTimeout("tcp", s.server.Addr, time.Second)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
 }

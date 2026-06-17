@@ -23,9 +23,21 @@ func newRouter(h *handler.Handler, debug bool) *gin.Engine {
 
 	v1 := r.Group("/api/v1/auth")
 	{
+		v1.POST("/register", h.Register)
 		v1.POST("/login", h.Login)
 		v1.POST("/logout", h.Logout)
+		v1.GET("/me", h.Me)
 		v1.POST("/refresh", h.Refresh)
+	}
+
+	admin := r.Group("/api/v1/users")
+	admin.Use(h.RequireAdmin())
+	{
+		admin.GET("", h.ListUsers)
+		admin.POST("", h.CreateUser)
+		admin.GET("/:id", h.GetUser)
+		admin.PUT("/:id/role", h.UpdateUserRole)
+		admin.DELETE("/:id", h.DeleteUser)
 	}
 
 	return r

@@ -31,6 +31,8 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 		redisURL           = opts.RedisURL
 		natsURL            = opts.NATSURL
 		jwtSecret          string
+		ownerEmail         = opts.OwnerEmail
+		ownerPassword      = opts.OwnerPassword
 		readTimeoutSec     = int(opts.ReadTimeout / time.Second)
 		writeTimeoutSec    = int(opts.WriteTimeout / time.Second)
 		idleTimeoutSec     = int(opts.IdleTimeout / time.Second)
@@ -52,6 +54,8 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	fs.StringVar(&redisURL, "redis", redisURL, "Redis connection URL")
 	fs.StringVar(&natsURL, "nats", natsURL, "NATS connection URL")
 	fs.StringVar(&jwtSecret, "jwt-secret", jwtSecret, "JWT signing secret")
+	fs.StringVar(&ownerEmail, "owner-email", ownerEmail, "Email for the initial owner account (also OWNER_EMAIL env)")
+	fs.StringVar(&ownerPassword, "owner-password", ownerPassword, "Password for the initial owner account (also OWNER_PASSWORD env)")
 	fs.IntVar(&readTimeoutSec, "read-timeout", readTimeoutSec, "Read timeout in seconds")
 	fs.IntVar(&writeTimeoutSec, "write-timeout", writeTimeoutSec, "Write timeout in seconds")
 	fs.IntVar(&idleTimeoutSec, "idle-timeout", idleTimeoutSec, "Idle timeout in seconds")
@@ -82,6 +86,8 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	if jwtSecret != "" {
 		opts.TokenSigningKey = []byte(jwtSecret)
 	}
+	opts.OwnerEmail = ownerEmail
+	opts.OwnerPassword = ownerPassword
 
 	opts.ReadTimeout = time.Duration(readTimeoutSec) * time.Second
 	opts.WriteTimeout = time.Duration(writeTimeoutSec) * time.Second
@@ -138,6 +144,12 @@ func applyEnv(opts *auth.ServerOptions) {
 	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.TokenSigningKey = []byte(v)
+	}
+	if v := os.Getenv("OWNER_EMAIL"); v != "" {
+		opts.OwnerEmail = v
+	}
+	if v := os.Getenv("OWNER_PASSWORD"); v != "" {
+		opts.OwnerPassword = v
 	}
 	if v := os.Getenv("SCHICK_AUTH_DEBUG"); v != "" {
 		opts.Debug = strings.EqualFold(v, "true") || v == "1"
