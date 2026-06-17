@@ -4,4 +4,8 @@ package bootstrap
 type Config struct {
 	DatabaseConnString string
 	JWTSecret          string
+	S3Endpoint         string
+	S3AccessKey        string
+	S3SecretKey        string
+	S3Bucket           string
 }

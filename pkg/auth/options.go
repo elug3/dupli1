@@ -42,6 +42,10 @@ type ServerOptions struct {
 	// Limits / misc
 	MaxConns int
 	Debug    bool
+
+	// OwnerEmail and OwnerPassword seed the initial owner account on first startup.
+	OwnerEmail    string
+	OwnerPassword string
 }
 
 // NewServerOptions returns ServerOptions populated with sensible defaults.

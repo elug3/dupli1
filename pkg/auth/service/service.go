@@ -42,6 +42,21 @@ func NewService(
 	}
 }
 
+// CreateUser creates a new user with a specified role (for admin use).
+func (s *Service) CreateUser(ctx context.Context, email, password, role string) (*domain.User, error) {
+	u := domain.NewUser(email)
+	if role != "" {
+		u.Role = role
+	}
+	if err := u.SetPassword(password); err != nil {
+		return nil, err
+	}
+	if err := s.userRepo.Save(ctx, u); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
 // Register creates a new user (minimal signature).
 func (s *Service) Register(ctx context.Context, email, password string) (*domain.User, error) {
 	u := domain.NewUser(email)
@@ -96,6 +111,32 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 	}
 
 	return s.sessionStore.Delete(ctx, refreshSessionKey(claims.SessionID))
+}
+
+// ListUsers returns all users for admin management.
+func (s *Service) ListUsers(ctx context.Context) ([]*domain.User, error) {
+	return s.userRepo.ListUsers(ctx)
+}
+
+// UpdateUserRole changes a user's role.
+func (s *Service) UpdateUserRole(ctx context.Context, id uuid.UUID, role string) (*domain.User, error) {
+	user, err := s.userRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, autherrors.ErrUserNotFound
+	}
+	user.Role = role
+	if err := s.userRepo.Save(ctx, user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// DeleteUser removes a user by ID.
+func (s *Service) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	return s.userRepo.Delete(ctx, id)
 }
 
 // Me validates a token and returns the matching user.

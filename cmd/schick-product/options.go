@@ -47,6 +47,18 @@ func applyEnv(opts *product.ServerOptions) {
 	}
 	setIntEnv(&opts.ReadTimeout, "SCHICK_PRODUCT_READ_TIMEOUT")
 	setIntEnv(&opts.WriteTimeout, "SCHICK_PRODUCT_WRITE_TIMEOUT")
+	if v := os.Getenv("S3_ENDPOINT"); v != "" {
+		opts.S3Endpoint = v
+	}
+	if v := os.Getenv("S3_ACCESS_KEY"); v != "" {
+		opts.S3AccessKey = v
+	}
+	if v := os.Getenv("S3_SECRET_KEY"); v != "" {
+		opts.S3SecretKey = v
+	}
+	if v := os.Getenv("S3_BUCKET"); v != "" {
+		opts.S3Bucket = v
+	}
 }
 
 func setIntEnv(target *int, key string) {

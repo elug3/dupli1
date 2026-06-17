@@ -11,4 +11,9 @@ type Config struct {
 	RefreshTokenExpiry time.Duration
 	Debug              bool
 	MaxConns           int
+
+	// OwnerEmail and OwnerPassword seed an owner user on first startup.
+	// When OwnerEmail is empty, seeding is skipped.
+	OwnerEmail    string
+	OwnerPassword string
 }

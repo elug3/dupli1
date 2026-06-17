@@ -6,7 +6,9 @@ import (
 
 	"github.com/schick/pkg/product/handler"
 	"github.com/schick/pkg/product/infra/pg"
+	s3store "github.com/schick/pkg/product/infra/s3"
 	"github.com/schick/pkg/product/middleware"
+	"github.com/schick/pkg/product/ports"
 	"github.com/schick/pkg/product/service"
 )
 
@@ -31,12 +33,38 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 
-	svc := service.NewProductSearchService(store)
-	h := handler.NewHandler(svc)
+	var imgStore ports.ImageStore
+	if cfg.S3Endpoint != "" {
+		imgStore, err = s3store.NewImageStore(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket)
+		if err != nil {
+			store.Close()
+			return nil, err
+		}
+	}
+
+	svc := service.NewProductSearchService(store, imgStore)
+	couponSvc := service.NewCouponService()
+	h := handler.NewHandler(svc, couponSvc)
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
-	mux.Handle("/api/products", middleware.RequireAuth(cfg.JWTSecret, h.CreateProductHandler()))
+
+	auth := func(next http.Handler) http.Handler {
+		return middleware.RequireAuth(cfg.JWTSecret, next)
+	}
+
+	mux.Handle("GET /api/products", auth(h.ListProductsHandler()))
+	mux.Handle("POST /api/products", auth(h.CreateProductHandler()))
+	mux.Handle("GET /api/products/{id}", auth(h.SingleProductHandler()))
+	mux.Handle("PUT /api/products/{id}", auth(h.SingleProductHandler()))
+	mux.Handle("DELETE /api/products/{id}", auth(h.SingleProductHandler()))
+
+	mux.Handle("PUT /api/products/{id}/image", auth(h.UploadImageHandler()))
+
+	mux.Handle("GET /api/coupons", auth(http.HandlerFunc(h.ListCoupons)))
+	mux.Handle("POST /api/coupons", auth(http.HandlerFunc(h.CreateCoupon)))
+	mux.Handle("PUT /api/coupons/{code}", auth(http.HandlerFunc(h.UpdateCoupon)))
+	mux.Handle("DELETE /api/coupons/{code}", auth(http.HandlerFunc(h.DeleteCoupon)))
 
 	return &App{
 		Handler: mux,

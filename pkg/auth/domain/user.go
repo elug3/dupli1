@@ -12,19 +12,19 @@ import (
 
 // User represents a user entity in the domain.
 type User struct {
-	ID       uuid.UUID
-	Email    string
-	Password string // argon2id encoded hash
+	ID        uuid.UUID
+	Email     string
+	Password  string // argon2id encoded hash
+	Role      string // "owner" | "admin" | "user"
+	CreatedAt string // RFC3339, populated from DB
 }
 
 // NewUser creates a new user with the provided id and data.
 func NewUser(email string) *User {
-
-	id := uuid.New()
-
 	return &User{
-		ID:    id,
+		ID:    uuid.New(),
 		Email: email,
+		Role:  "user",
 	}
 }
 

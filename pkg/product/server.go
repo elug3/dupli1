@@ -111,6 +111,10 @@ func NewServer(opts ServerOptions) (*ProductServer, error) {
 	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
 		DatabaseConnString: opts.DatabaseConnString,
 		JWTSecret:          opts.JWTSecret,
+		S3Endpoint:         opts.S3Endpoint,
+		S3AccessKey:        opts.S3AccessKey,
+		S3SecretKey:        opts.S3SecretKey,
+		S3Bucket:           opts.S3Bucket,
 	})
 	if err != nil {
 		return nil, err

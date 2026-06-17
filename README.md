@@ -1,399 +1,154 @@
-# Schick - Go Backend
+# Schick
 
-A modern, full-featured e-commerce marketplace platform backend built with Go, designed for selling authentic clothing, accessories, and fashion products.
+Go backend for a fashion bag marketplace. Two services — auth and product — behind an nginx proxy, all wired with Docker Compose.
 
-## 🎯 Overview
+## Services
 
-Schick is a comprehensive backend solution for building and managing a robust online shopping experience. Built with performance, scalability, and developer experience in mind, the Go backend provides all the essential APIs and services needed to power a production-grade e-commerce marketplace.
+| Service | Port | Description |
+|---------|------|-------------|
+| `schick-auth` | 8080 | JWT login/register |
+| `schick-product` | 8081 | Product catalog, bags, coupons, image upload |
+| `schick-proxy` | 80/443 | nginx reverse proxy |
+| `postgres-auth` | 5432 | Auth DB |
+| `postgres-product` | 5433 | Product DB |
+| `minio` | 9000 / 9001 | S3-compatible image storage (console on 9001) |
 
-## ✨ Features
+## Running
 
-- **Product Management**: Comprehensive product catalog with attributes, variants, and inventory management
-- **Shopping Cart & Checkout**: Seamless shopping experience with cart management and order processing
-- **Payment Processing**: Integrated payment gateway support for multiple payment methods
-- **User Management**: Robust authentication, authorization, and user profile management
-- **Order Management**: Complete order lifecycle management and tracking
-- **Search & Filtering**: Advanced product search and filtering capabilities
-- **Reviews & Ratings**: Customer feedback system with reviews and ratings
-- **Inventory Management**: Real-time stock tracking and management
-- **Admin Dashboard APIs**: Complete admin functionality for marketplace management
+```bash
+cp .env.example .env   # set JWT_SECRET, OWNER_EMAIL, OWNER_PASSWORD
+docker compose up --build
+```
 
-## 🚀 Getting Started
+MinIO bucket `product-images` is created automatically on first start.
 
-### Prerequisites
-
-- Go 1.21 or higher
-- PostgreSQL or supported database
-- Redis (optional, for caching)
-- Docker (optional, for containerization)
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/elug3/schick.git
-   cd schick
-   ```
-
-2. **Install dependencies**
-   ```bash
-   go mod download
-   ```
-
-3. **Set up environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
-
-4. **Run database migrations**
-   ```bash
-   go run cmd/migrate/main.go
-   ```
-
-5. **Start the server**
-   ```bash
-   go run cmd/server/main.go
-   ```
-
-The API will be available at `http://localhost:8080`
-
-## 📋 Project Structure
+## Project Structure
 
 ```
 schick/
-├── cmd/                       # Command line applications
-│   ├── server/               # Main API server
-│   └── migrate/              # Database migrations
-├── internal/                  # Private application code
-│   ├── handlers/             # HTTP request handlers
-│   ├── models/               # Data models & entities
-│   ├── repository/           # Data access layer (DAL)
-│   ├── middleware/           # HTTP middleware & interceptors
-│   └── utils/                # Utility functions & helpers
-├── pkg/                       # Public packages & reusable services
-│   ├── auth/                 # Authentication, login, token refresh, 2FA
-│   ├── product/              # Product & inventory CRUD operations
-│   ├── order/                # Order management & lifecycle
-│   ├── user/                 # Customer user management & profiles
-│   ├── notification/         # Email & push notification triggers
-│   ├── chat/                 # Customer chat threads & messaging
-│   ├── analytics/            # Reporting queries & metrics
-│   └── config/               # Server settings (Super Admin only)
-├── migrations/                # Database migration files
-├── config/                    # Configuration management
-├── tests/                     # Test suites & fixtures
-└── docs/                      # API documentation & Swagger specs
+├── cmd/
+│   ├── schick-auth/       # Auth server entrypoint
+│   └── schick-product/    # Product server entrypoint
+└── pkg/
+    ├── auth/              # Auth service
+    │   ├── domain/        # User model
+    │   ├── handler/       # HTTP handlers
+    │   ├── infra/postgres/ # User repository
+    │   ├── ports/         # Repository interface
+    │   └── service/       # Login, register, token logic
+    └── product/           # Product service
+        ├── domain/        # Product, Bag, Coupon models
+        ├── handler/       # HTTP handlers
+        ├── infra/
+        │   ├── pg/        # Postgres product store
+        │   ├── memory/    # In-memory store (tests)
+        │   └── s3/        # MinIO image store
+        ├── middleware/    # JWT auth middleware
+        ├── ports/         # ProductStore, ImageStore interfaces
+        └── service/       # ProductSearchService, CouponService
 ```
 
-### Services Architecture
+## API
 
-#### 🔐 Auth Service (`pkg/auth`)
-Handles user authentication and security:
-- User login & logout
-- JWT token generation and refresh
-- Two-factor authentication (2FA)
-- Password reset & recovery
-- OAuth/SSO integration points
+### Auth (`schick-auth` :8080)
 
-**Usage:**
-```go
-import "github.com/elug3/schick/pkg/auth"
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/register` | — | Register user |
+| POST | `/login` | — | Login, returns JWT |
+| GET | `/health` | — | Health check |
 
-authSvc := auth.NewService(db, config)
-token, err := authSvc.Login(ctx, email, password)
+### Products (`schick-product` :8081)
+
+**Public**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Health check |
+| GET | `/api/products/bags` | Search bags (`?brand=`, `?color=`, `?material=`) |
+| POST | `/api/coupons/redeem` | Redeem a coupon code |
+
+**Requires `Authorization: Bearer <token>`**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/products` | List all products |
+| POST | `/api/products` | Create product |
+| GET | `/api/products/{id}` | Get product |
+| PUT | `/api/products/{id}` | Update product |
+| DELETE | `/api/products/{id}` | Delete product |
+| PUT | `/api/products/{id}/image` | Upload product image (multipart `image` field) |
+| GET | `/api/coupons` | List coupons |
+| POST | `/api/coupons` | Create coupon |
+| PUT | `/api/coupons/{code}` | Update coupon |
+| DELETE | `/api/coupons/{code}` | Delete coupon |
+
+### Product IDs
+
+IDs are generated from the brand name: first 3 characters uppercased, followed by a sequential counter.
+
+```
+Bottega Veneta → BOT-001, BOT-002, …
+Gucci          → GUC-001, GUC-002, …
 ```
 
-#### 📦 Product Service (`pkg/product`)
-Manages product catalog and inventory:
-- Product CRUD operations
-- Inventory management & tracking
-- Product variants & attributes
-- Stock level management
-- Product search & categorization
-
-**Usage:**
-```go
-import "github.com/elug3/schick/pkg/product"
-
-productSvc := product.NewService(db, cache)
-products, err := productSvc.List(ctx, filters, pagination)
-```
-
-#### 🛒 Order Service (`pkg/order`)
-Manages the complete order lifecycle:
-- Order creation & processing
-- Order status tracking
-- Order history & details
-- Payment processing coordination
-- Shipment & delivery tracking
-
-**Usage:**
-```go
-import "github.com/elug3/schick/pkg/order"
-
-orderSvc := order.NewService(db, notificationSvc)
-order, err := orderSvc.Create(ctx, orderData)
-```
-
-#### 👤 User Service (`pkg/user`)
-Handles customer user management:
-- User profile management
-- Address book management
-- Wishlist & favorites
-- User preferences & settings
-- Customer preferences & notifications settings
-
-**Usage:**
-```go
-import "github.com/elug3/schick/pkg/user"
-
-userSvc := user.NewService(db, cache)
-profile, err := userSvc.GetProfile(ctx, userID)
-```
-
-#### 📬 Notification Service (`pkg/notification`)
-Manages all notification channels:
-- Email notifications (order confirmations, shipping updates)
-- Push notifications (mobile alerts)
-- SMS notifications (critical updates)
-- Notification templates & scheduling
-- Event-triggered notification system
-
-**Usage:**
-```go
-import "github.com/elug3/schick/pkg/notification"
-
-notifSvc := notification.NewService(smtpConfig, pushConfig)
-err := notifSvc.SendEmail(ctx, email, template, data)
-```
-
-#### 💬 Chat Service (`pkg/chat`)
-Manages customer communications:
-- Customer chat threads
-- Support ticket creation & tracking
-- Message history & persistence
-- Real-time message delivery
-- Chat thread management & resolution
-
-**Usage:**
-```go
-import "github.com/elug3/schick/pkg/chat"
-
-chatSvc := chat.NewService(db, wsHub)
-thread, err := chatSvc.CreateThread(ctx, userID, subject)
-```
-
-#### 📊 Analytics Service (`pkg/analytics`)
-Provides reporting and metrics:
-- Sales analytics & reporting
-- User behavior analytics
-- Product performance metrics
-- Revenue & profit analysis
-- Custom report generation
-
-**Usage:**
-```go
-import "github.com/elug3/schick/pkg/analytics"
-
-analyticsSvc := analytics.NewService(db)
-report, err := analyticsSvc.GetSalesReport(ctx, filters)
-```
-
-#### ⚙️ Config Service (`pkg/config`)
-Manages system configuration (Super Admin only):
-- Server settings & parameters
-- Feature flags & toggles
-- System-wide configurations
-- Audit logging for config changes
-- Role-based access control
-
-**Usage:**
-```go
-import "github.com/elug3/schick/pkg/config"
-
-configSvc := config.NewService(db, cache)
-setting, err := configSvc.GetSetting(ctx, key)
-```
-
-## 🔌 API Endpoints
-
-### Authentication (`pkg/auth`)
-- `POST /api/v1/auth/register` - Register new user
-- `POST /api/v1/auth/login` - User login
-- `POST /api/v1/auth/logout` - User logout
-- `POST /api/v1/auth/refresh` - Refresh token
-- `POST /api/v1/auth/2fa/setup` - Setup 2FA
-- `POST /api/v1/auth/2fa/verify` - Verify 2FA code
-
-### Products (`pkg/product`)
-- `GET /api/v1/products` - List products with filtering and pagination
-- `GET /api/v1/products/:id` - Get product details
-- `POST /api/v1/products` - Create product (admin only)
-- `PUT /api/v1/products/:id` - Update product (admin only)
-- `DELETE /api/v1/products/:id` - Delete product (admin only)
-- `GET /api/v1/products/:id/inventory` - Get product inventory
-- `PUT /api/v1/products/:id/inventory` - Update inventory
-
-### Orders (`pkg/order`)
-- `POST /api/v1/orders` - Create order
-- `GET /api/v1/orders` - List user's orders
-- `GET /api/v1/orders/:id` - Get order details
-- `PUT /api/v1/orders/:id/status` - Update order status (admin only)
-- `GET /api/v1/orders/:id/tracking` - Get order tracking info
-
-### Users (`pkg/user`)
-- `GET /api/v1/users/profile` - Get user profile
-- `PUT /api/v1/users/profile` - Update user profile
-- `GET /api/v1/users/addresses` - Get user addresses
-- `POST /api/v1/users/addresses` - Add address
-- `GET /api/v1/users/wishlist` - Get wishlist
-
-### Notifications (`pkg/notification`)
-- `GET /api/v1/notifications` - Get user notifications
-- `POST /api/v1/notifications/preferences` - Update notification preferences
-- `PUT /api/v1/notifications/:id/read` - Mark notification as read
-
-### Chat (`pkg/chat`)
-- `GET /api/v1/chat/threads` - List chat threads
-- `POST /api/v1/chat/threads` - Create new chat thread
-- `GET /api/v1/chat/threads/:id/messages` - Get thread messages
-- `POST /api/v1/chat/threads/:id/messages` - Send message
-
-### Analytics (`pkg/analytics`)
-- `GET /api/v1/analytics/sales` - Sales analytics (admin only)
-- `GET /api/v1/analytics/products` - Product performance (admin only)
-- `GET /api/v1/analytics/users` - User metrics (admin only)
-- `GET /api/v1/analytics/revenue` - Revenue reports (admin only)
-
-### Config (`pkg/config`)
-- `GET /api/v1/config/settings` - Get system settings (Super Admin only)
-- `PUT /api/v1/config/settings` - Update settings (Super Admin only)
-- `GET /api/v1/config/features` - Get feature flags (Super Admin only)
-- `PUT /api/v1/config/features/:name` - Toggle feature flag (Super Admin only)
-
-## 🛠️ Configuration
-
-Configuration is managed through environment variables. See `.env.example` for all available options:
-
-```env
-# Server
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
-SERVER_ENV=development
-
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=schick
-DB_PASSWORD=yourpassword
-DB_NAME=schick_db
-
-# JWT
-JWT_SECRET=your-secret-key
-JWT_EXPIRATION=24h
-
-# Redis (optional)
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-# Email (Notification Service)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your-email@gmail.com
-SMTP_PASSWORD=your-password
-
-# 2FA
-2FA_ISSUER=Schick
-TOTP_WINDOW=1
-```
-
-## 🧪 Testing
-
-Run the test suite:
+### Image Upload
 
 ```bash
-# Run all tests
-go test ./...
-
-# Run with coverage
-go test -cover ./...
-
-# Run specific service tests
-go test ./pkg/auth -v
-go test ./pkg/product -v
-go test ./pkg/order -v
-
-# Run specific test
-go test ./internal/handlers -v
+curl -X PUT http://localhost:8081/api/products/BOT-001/image \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "image=@photo.jpg"
 ```
 
-## 📦 Dependencies
+Returns the updated product with `imageUrl` set to the public MinIO URL.
 
-Key dependencies include:
-- **gin** - HTTP web framework
-- **gorm** - ORM for database operations
-- **jwt-go** - JWT authentication
-- **viper** - Configuration management
-- **zap** - Structured logging
-- **testify** - Testing utilities
-- **redis** - Caching & session management
-- **gomail** - Email notifications
+## Environment Variables
 
-## 🔐 Security
+### Auth service
 
-- JWT-based authentication
-- Password hashing with bcrypt
-- Two-factor authentication (2FA) support
-- CORS protection
-- Rate limiting
-- SQL injection prevention through parameterized queries
-- Input validation and sanitization
-- Role-based access control (RBAC)
-- Super Admin access restrictions for config service
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_URL` | — | Postgres connection string |
+| `JWT_SECRET` | `dev-secret-change-in-production` | Signing secret |
+| `SCHICK_AUTH_ADDR` | `:8080` | Listen address |
+| `OWNER_EMAIL` | — | Seed admin email |
+| `OWNER_PASSWORD` | — | Seed admin password |
 
-## 📝 API Documentation
+### Product service
 
-For detailed API documentation, visit:
-- Swagger/OpenAPI docs: `http://localhost:8080/swagger/index.html`
-- API reference: See `docs/` directory
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SCHICK_PRODUCT_DB` | — | Postgres connection string |
+| `JWT_SECRET` | `dev-secret-change-in-production` | Signing secret |
+| `SERVER_HOST` | `localhost` | Listen host |
+| `SERVER_PORT` | `8080` | Listen port |
+| `S3_ENDPOINT` | — | MinIO/S3 endpoint URL |
+| `S3_ACCESS_KEY` | — | S3 access key |
+| `S3_SECRET_KEY` | — | S3 secret key |
+| `S3_BUCKET` | `product-images` | Bucket name |
 
-## 🤝 Contributing
+### MinIO
 
-Contributions are welcome! Please follow these steps:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MINIO_ACCESS_KEY` | `schick` | Root user |
+| `MINIO_SECRET_KEY` | `schick_dev` | Root password |
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Testing
 
-## 📄 License
+```bash
+cd pkg/product
+go test ./...
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+cd pkg/auth
+go test ./...
+```
 
-## 🆘 Support
+## Dependencies
 
-For support, please:
-- Open an issue on GitHub
-- Check existing documentation
-- Review API documentation
-
-## 🗺️ Roadmap
-
-- [ ] Advanced search with Elasticsearch
-- [ ] Recommendation engine
-- [ ] Multi-currency support
-- [ ] Webhook support
-- [ ] Analytics dashboard
-- [ ] GraphQL API
-- [ ] Real-time notifications with WebSocket
-- [ ] AI-powered chat support
-
-## 👨‍💻 Author
-
-**Schick Backend** - A modern e-commerce platform
-
----
-
-**Built with ❤️ using Go**
+| Package | Purpose |
+|---------|---------|
+| `jackc/pgx/v4` | Postgres driver |
+| `golang-jwt/jwt/v5` | JWT auth |
+| `minio/minio-go/v7` | S3 image storage |
+| `google/uuid` | UUID fallback IDs |
