@@ -83,6 +83,55 @@ services:
       "
     restart: "no"
 
+  schick-inventory:
+    build:
+      context: .
+      dockerfile: cmd/schick-inventory/Dockerfile
+    ports:
+      - "8082:8080"
+    environment:
+      SCHICK_INVENTORY_ADDR: :8080
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  schick-order:
+    build:
+      context: .
+      dockerfile: cmd/schick-order/Dockerfile
+    ports:
+      - "8083:8080"
+    environment:
+      SCHICK_ORDER_ADDR: :8080
+      SCHICK_INVENTORY_URL: http://schick-inventory:8080
+    depends_on:
+      schick-inventory:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  schick-notification:
+    build:
+      context: .
+      dockerfile: cmd/schick-notification/Dockerfile
+    ports:
+      - "8084:8080"
+    environment:
+      SCHICK_NOTIFICATION_ADDR: :8080
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
   schick-product:
     build:
       context: .
