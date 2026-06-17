@@ -8,6 +8,9 @@ Go backend for a fashion bag marketplace. Two services — auth and product — 
 |---------|------|-------------|
 | `schick-auth` | 8080 | JWT login/register |
 | `schick-product` | 8081 | Product catalog, bags, coupons, image upload |
+| `schick-inventory` | 8082 | Stock and reservation APIs |
+| `schick-order` | 8083 | Checkout and order lifecycle APIs |
+| `schick-notification` | 8084 | Outbound notification service |
 | `schick-proxy` | 80/443 | nginx reverse proxy |
 | `postgres-auth` | 5432 | Auth DB |
 | `postgres-product` | 5433 | Product DB |
