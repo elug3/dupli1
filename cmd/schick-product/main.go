@@ -21,7 +21,11 @@ Options:
   -port int
       Server port number (default: 8080; also SERVER_PORT env)
   -db string
-      Database connection string (also DB_URL or SCHICK_PRODUCT_DB env)
+<<<<<<< cursor/schick-auth-main-1b99
+      Database connection string (default: postgresql://localhost/products)
+  -nats string
+      NATS connection URL
+>>>>>>> main
   -read-timeout int
       Read timeout in seconds (also SCHICK_PRODUCT_READ_TIMEOUT env)
   -write-timeout int
@@ -36,8 +40,10 @@ Environment variables:
 Examples:
   schick-product
   schick-product -port 9000 -host 0.0.0.0
+<<<<<<< cursor/schick-auth-main-1b99
   schick-product -db postgresql://prod-db/products -port 3000
   DB_URL=postgresql://prod-db/products schick-product
+>>>>>>> main
 `
 
 func main() {

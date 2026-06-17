@@ -7,43 +7,29 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/elug3/schick/pkg/auth"
+	"github.com/elug3/schick/pkg/order"
 )
 
 var usageStr = `
-Usage: schick-auth [OPTIONS]
+Usage: schick-order [OPTIONS]
 
-An auth server application that serves authentication APIs over HTTP.
+An order server application that serves checkout and order lifecycle APIs over HTTP.
 
 Options:
   -host string
-      Server host address (default from SCHICK_AUTH_ADDR or :8080)
+      Server host address
   -port int
       Server port number
   -addr string
       Server listen address (overrides host/port)
-  -db string
-      Database connection URL
-  -redis string
-      Redis connection URL
-  -nats string
-      NATS connection URL
-  -jwt-secret string
-      JWT signing secret (required; also JWT_SECRET env)
+  -inventory-url string
+      Inventory service base URL
   -help
       Show this help message
-
-Environment variables:
-  SERVER_HOST, SERVER_PORT, SCHICK_AUTH_ADDR, JWT_SECRET, DB_URL, REDIS_URL, NATS_URL, SCHICK_AUTH_NATS_URL
-
-Examples:
-  schick-auth -jwt-secret dev-secret
-  schick-auth -port 9000 -host 0.0.0.0 -jwt-secret dev-secret
-  JWT_SECRET=dev-secret schick-auth
 `
 
 func main() {
-	fs := flag.NewFlagSet("schick-auth", flag.ExitOnError)
+	fs := flag.NewFlagSet("schick-order", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, usageStr)
 	}
@@ -54,7 +40,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv, err := auth.NewServer(opts)
+	srv, err := order.NewServer(opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "NewServer: %v\n", err)
 		os.Exit(1)

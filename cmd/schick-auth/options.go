@@ -29,6 +29,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 		publicAddr         = opts.PublicAddr
 		dbURL              = opts.DBURL
 		redisURL           = opts.RedisURL
+		natsURL            = opts.NATSURL
 		jwtSecret          string
 		ownerEmail         = opts.OwnerEmail
 		ownerPassword      = opts.OwnerPassword
@@ -51,6 +52,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	fs.StringVar(&publicAddr, "public-addr", publicAddr, "Publicly reachable base URL")
 	fs.StringVar(&dbURL, "db", dbURL, "Database connection URL")
 	fs.StringVar(&redisURL, "redis", redisURL, "Redis connection URL")
+	fs.StringVar(&natsURL, "nats", natsURL, "NATS connection URL")
 	fs.StringVar(&jwtSecret, "jwt-secret", jwtSecret, "JWT signing secret")
 	fs.StringVar(&ownerEmail, "owner-email", ownerEmail, "Email for the initial owner account (also OWNER_EMAIL env)")
 	fs.StringVar(&ownerPassword, "owner-password", ownerPassword, "Password for the initial owner account (also OWNER_PASSWORD env)")
@@ -80,6 +82,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	opts.PublicAddr = publicAddr
 	opts.DBURL = dbURL
 	opts.RedisURL = redisURL
+	opts.NATSURL = natsURL
 	if jwtSecret != "" {
 		opts.TokenSigningKey = []byte(jwtSecret)
 	}
@@ -133,6 +136,11 @@ func applyEnv(opts *auth.ServerOptions) {
 	}
 	if v := os.Getenv("REDIS_URL"); v != "" {
 		opts.RedisURL = v
+	}
+	if v := os.Getenv("SCHICK_AUTH_NATS_URL"); v != "" {
+		opts.NATSURL = v
+	} else if v := os.Getenv("NATS_URL"); v != "" {
+		opts.NATSURL = v
 	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.TokenSigningKey = []byte(v)

@@ -6,6 +6,7 @@ import "time"
 type Config struct {
 	DBURL              string
 	RedisURL           string
+	NATSURL            string
 	TokenSigningKey    []byte
 	TokenExpiry        time.Duration
 	RefreshTokenExpiry time.Duration

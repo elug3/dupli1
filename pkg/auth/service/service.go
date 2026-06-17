@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const userRegisteredSubject = "user.registered"
+
 type Service struct {
 	userRepo           ports.UserRepository
 	accessTokenGen     ports.TokenGenerator
@@ -65,6 +67,9 @@ func (s *Service) Register(ctx context.Context, email, password string) (*domain
 	}
 
 	if err := s.userRepo.Save(ctx, u); err != nil {
+		return nil, err
+	}
+	if err := s.publishUserRegistered(ctx, u); err != nil {
 		return nil, err
 	}
 	return u, nil
@@ -212,4 +217,17 @@ func (s *Service) issueTokenPair(ctx context.Context, userID uuid.UUID) (TokenPa
 
 func refreshSessionKey(sessionID string) string {
 	return fmt.Sprintf("auth:refresh:%s", sessionID)
+}
+
+func (s *Service) publishUserRegistered(ctx context.Context, u *domain.User) error {
+	if s.eventPublisher == nil {
+		return nil
+	}
+
+	return s.eventPublisher.Publish(ctx, userRegisteredSubject, userRegisteredEvent{
+		EventType: userRegisteredSubject,
+		UserID:    u.ID,
+		Email:     u.Email,
+		Occurred:  time.Now().UTC(),
+	})
 }

@@ -38,6 +38,7 @@ type ServerOptions struct {
 	// Persistence/infra
 	DBURL    string
 	RedisURL string
+	NATSURL  string
 
 	// Limits / misc
 	MaxConns int

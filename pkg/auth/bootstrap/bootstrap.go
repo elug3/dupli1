@@ -94,6 +94,9 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 			if redisClient != nil {
 				errs = append(errs, redisClient.Close())
 			}
+			if natsPublisher != nil {
+				natsPublisher.Close()
+			}
 			errs = append(errs, db.Close())
 			return errors.Join(errs...)
 		},
