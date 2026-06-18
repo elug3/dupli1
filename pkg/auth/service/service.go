@@ -19,6 +19,7 @@ type Service struct {
 	accessTokenGen     ports.TokenGenerator
 	refreshTokenGen    ports.TokenGenerator
 	sessionStore       ports.SessionStore
+	eventPublisher     ports.EventPublisher
 	refreshTokenExpiry time.Duration
 }
 
@@ -34,14 +35,26 @@ func NewService(
 	refreshTokenGen ports.TokenGenerator,
 	sessionStore ports.SessionStore,
 	refreshTokenExpiry time.Duration,
+	eventPublisher ...ports.EventPublisher,
 ) *Service {
-	return &Service{
+	s := &Service{
 		userRepo:           userRepo,
 		accessTokenGen:     accessTokenGen,
 		refreshTokenGen:    refreshTokenGen,
 		sessionStore:       sessionStore,
 		refreshTokenExpiry: refreshTokenExpiry,
 	}
+	if len(eventPublisher) > 0 {
+		s.eventPublisher = eventPublisher[0]
+	}
+	return s
+}
+
+type userRegisteredEvent struct {
+	EventType string    `json:"event_type"`
+	UserID    uuid.UUID `json:"user_id"`
+	Email     string    `json:"email"`
+	Occurred  time.Time `json:"occurred_at"`
 }
 
 // CreateUser creates a new user with a specified role (for admin use).

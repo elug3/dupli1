@@ -9,6 +9,7 @@ import (
 	"github.com/elug3/schick/pkg/auth/handler"
 	"github.com/elug3/schick/pkg/auth/infra/jwt"
 	"github.com/elug3/schick/pkg/auth/infra/memory"
+	natspub "github.com/elug3/schick/pkg/auth/infra/nats"
 	"github.com/elug3/schick/pkg/auth/infra/postgres"
 	rediscache "github.com/elug3/schick/pkg/auth/infra/redis"
 	"github.com/elug3/schick/pkg/auth/ports"
@@ -80,7 +81,19 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		sessionStore = rediscache.NewSessionCache(redisClient)
 	}
 
-	svc := service.NewService(userRepo, accessTokenGen, refreshTokenGen, sessionStore, cfg.RefreshTokenExpiry)
+	var natsPublisher *natspub.Publisher
+	if cfg.NATSURL != "" {
+		natsPublisher, err = natspub.NewPublisher(cfg.NATSURL)
+		if err != nil {
+			if redisClient != nil {
+				_ = redisClient.Close()
+			}
+			_ = db.Close()
+			return nil, err
+		}
+	}
+
+	svc := service.NewService(userRepo, accessTokenGen, refreshTokenGen, sessionStore, cfg.RefreshTokenExpiry, natsPublisher)
 	h := handler.NewHandler(svc)
 	engine := newRouter(h, cfg.Debug)
 
