@@ -64,6 +64,17 @@ func (r *fakeUserRepo) FindByID(_ context.Context, id uuid.UUID) (*domain.User, 
 	return u, nil
 }
 
+func (r *fakeUserRepo) ListUsers(_ context.Context) ([]*domain.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	users := make([]*domain.User, 0, len(r.byID))
+	for _, user := range r.byID {
+		users = append(users, user)
+	}
+	return users, nil
+}
+
 func (r *fakeUserRepo) Delete(_ context.Context, id uuid.UUID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
