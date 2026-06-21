@@ -16,6 +16,7 @@ type ProductSearchStore struct {
 }
 
 func NewProductStore(connString string) (*ProductSearchStore, error) {
+	connString = withPostgresSSLMode(connString)
 	pool, err := pgxpool.Connect(context.Background(), connString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
