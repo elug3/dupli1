@@ -38,7 +38,7 @@ jobs:
             dockerfile: cmd/schick-product/Dockerfile
             context: .
           - service: schick-proxy
-            dockerfile: Dockerfile
+            dockerfile: cmd/schick-proxy/Dockerfile
             context: cmd/schick-proxy
 
     steps:
