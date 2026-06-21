@@ -173,6 +173,10 @@ services:
         condition: service_healthy
       schick-product:
         condition: service_healthy
+      schick-inventory:
+        condition: service_healthy
+      schick-order:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

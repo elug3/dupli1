@@ -56,14 +56,13 @@ service-name/
 auth/
 
 ├── server.go
-├── config.go
-├── errors.go
+├── options.go
 │
 ├── domain/
 │   └── user.go
 │
 ├── service/
-│   └── login.go
+│   └── service.go
 │
 ├── ports/
 │   ├── repository.go
@@ -75,11 +74,14 @@ auth/
 │   └── jwt/
 │
 ├── handler/
-│   └── http.go
+│   └── handler.go
 │
 └── bootstrap/
-    └── bootstrap.go
+    ├── bootstrap.go
+    └── config.go
 ```
+
+Note: `config.go` and `errors.go` may live in `bootstrap/` or a dedicated `autherrors/` package rather than at the service root. Existing services use `options.go` at the root and `bootstrap/config.go` for wiring config.
 
 ---
 
