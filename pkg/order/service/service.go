@@ -18,12 +18,16 @@ type Service struct {
 	repo           ports.Repository
 	inventory      ports.InventoryClient
 	eventPublisher ports.EventPublisher
+	couponClient   ports.CouponClient
+	checkoutTTL    time.Duration
 	now            func() time.Time
 }
 
 type CreateOrderInput struct {
-	CustomerID string
-	Items      []domain.OrderItem
+	CustomerID    string
+	Items         []domain.OrderItem
+	CouponCode    string
+	DiscountCents int64
 }
 
 type orderEvent struct {
@@ -34,15 +38,30 @@ type orderEvent struct {
 }
 
 func New(repo ports.Repository, inventory ports.InventoryClient, eventPublisher ...ports.EventPublisher) *Service {
+	return NewWithCheckout(repo, inventory, nil, 0, eventPublisher...)
+}
+
+func NewWithCheckout(
+	repo ports.Repository,
+	inventory ports.InventoryClient,
+	couponClient ports.CouponClient,
+	checkoutTTL time.Duration,
+	eventPublisher ...ports.EventPublisher,
+) *Service {
 	s := &Service{
-		repo:      repo,
-		inventory: inventory,
+		repo:         repo,
+		inventory:    inventory,
+		couponClient: couponClient,
+		checkoutTTL:  checkoutTTL,
 		now: func() time.Time {
 			return time.Now().UTC()
 		},
 	}
 	if len(eventPublisher) > 0 {
 		s.eventPublisher = eventPublisher[0]
+	}
+	if s.checkoutTTL <= 0 {
+		s.checkoutTTL = domain.DefaultCheckoutTTL
 	}
 	return s
 }
@@ -66,7 +85,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		return nil, err
 	}
 
-	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, input.Items, s.now())
+	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, input.Items, input.CouponCode, input.DiscountCents, s.now())
 	if err != nil {
 		_ = s.inventory.ReleaseReservation(ctx, reservationID)
 		return nil, err

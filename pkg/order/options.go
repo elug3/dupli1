@@ -5,6 +5,7 @@ import "time"
 type ServerOptions struct {
 	Addr            string
 	InventoryURL    string
+	ProductURL      string
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
@@ -15,6 +16,7 @@ func NewServerOptions() *ServerOptions {
 	return &ServerOptions{
 		Addr:            ":8083",
 		InventoryURL:    "http://localhost:8082",
+		ProductURL:      "http://localhost:8081",
 		ReadTimeout:     5 * time.Second,
 		WriteTimeout:    10 * time.Second,
 		IdleTimeout:     120 * time.Second,

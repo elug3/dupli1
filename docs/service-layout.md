@@ -70,6 +70,7 @@ Product code should protect catalog invariants, such as valid variant combinatio
 
 Owns checkout and the order lifecycle:
 
+- **Checkout sessions** — multi-step cart, coupon application, and completion. See [docs/checkout-session.md](docs/checkout-session.md).
 - Cart-to-order conversion and order creation.
 - Order status transitions and history.
 - Payment coordination and failure handling.

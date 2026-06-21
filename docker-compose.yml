@@ -107,6 +107,7 @@ services:
     environment:
       SCHICK_ORDER_ADDR: :8080
       SCHICK_INVENTORY_URL: http://schick-inventory:8080
+      SCHICK_PRODUCT_URL: http://schick-product:8080
     depends_on:
       schick-inventory:
         condition: service_healthy
