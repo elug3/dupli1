@@ -125,6 +125,7 @@ jobs:
           ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
           ECS_SERVICE: ${{ matrix.service }}
         run: |
+          echo ECS_CLUSTER: "$ECS_CLUSTER" \ ECS_SERVICE: "$ECS_SERVICE"
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
