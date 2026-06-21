@@ -63,3 +63,22 @@ Production URLs use `sslmode=require`. Auth automatically selects SSL mode based
 - RDS creates `schick_db` on first boot. Run `create-product-database.sh` for `products`.
 - The legacy `schick-postgres` ECS service is no longer needed after cutover.
 - Rotate credentials via Secrets Manager and redeploy ECS services.
+
+## VPN / internal API
+
+See [../../docs/vpn-access.md](../../docs/vpn-access.md). Terraform also manages:
+
+- WireGuard UDP ingress on the VPN security group
+- ECS ingress from VPN clients (`10.8.0.0/24`)
+- VPC route for the WireGuard client CIDR
+- Cloud Map service `internal.schick.local` (alias to nginx proxy)
+- Secrets Manager secret `schick/production/vpn/client-config`
+
+After `terraform apply`:
+
+```bash
+bash infra/scripts/bootstrap-internal-vpn.sh
+bash infra/scripts/register-internal-api-dns.sh
+```
+
+Re-run `register-internal-api-dns.sh` after `schick-proxy` redeploys.

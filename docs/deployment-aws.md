@@ -49,6 +49,14 @@ See [infra/terraform/README.md](../infra/terraform/README.md) for full steps.
 
 Database URLs are injected via ECS task secrets, not GitHub secrets.
 
+## Internal API (VPN)
+
+Backend APIs (`auth`, `product`, `proxy`) run in **private subnets** and are not internet-facing. Developers reach them over **WireGuard VPN** at:
+
+- `http://internal.schick.local` — internal API gateway
+
+See [vpn-access.md](vpn-access.md) for setup and client configuration.
+
 ## Local development
 
 Local development still uses Docker Compose Postgres containers (`postgres-auth`, `postgres-product`). See the root `README.md`.
