@@ -1,0 +1,9 @@
+aws_region            = "us-east-1"
+project_name          = "schick"
+environment           = "production"
+vpc_id                = "vpc-0e143b53ca2a4714c"
+private_subnet_ids    = ["subnet-01fd0882721f10499", "subnet-006b8428713711816"]
+ecs_security_group_id = "sg-06581371272cab230"
+db_instance_class     = "db.t3.micro"
+db_allocated_storage_gb = 20
+deletion_protection   = true

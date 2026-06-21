@@ -15,7 +15,7 @@ func openPostgres(ctx context.Context, connURL string, maxConns int) (*sql.DB, e
 		return nil, fmt.Errorf("database URL is required")
 	}
 
-	connURL = withSSLDisabled(connURL)
+	connURL = withPostgresSSLMode(connURL)
 
 	db, err := sql.Open("postgres", connURL)
 	if err != nil {
@@ -34,13 +34,53 @@ func openPostgres(ctx context.Context, connURL string, maxConns int) (*sql.DB, e
 	return db, nil
 }
 
-// withSSLDisabled ensures postgres connections do not require SSL unless
-// sslmode is already set in the connection string.
-func withSSLDisabled(connURL string) string {
+// withPostgresSSLMode sets sslmode when it is not already present.
+// Local/docker hosts default to disable; managed databases default to require.
+func withPostgresSSLMode(connURL string) string {
 	if strings.Contains(connURL, "sslmode=") {
 		return connURL
 	}
 
+	mode := "require"
+	if isLocalPostgresHost(connURL) {
+		mode = "disable"
+	}
+
+	return setSSLMode(connURL, mode)
+}
+
+func isLocalPostgresHost(connURL string) bool {
+	host := postgresHost(connURL)
+	if host == "" {
+		return false
+	}
+
+	switch host {
+	case "localhost", "127.0.0.1", "postgres-auth", "postgres-product", "postgres":
+		return true
+	}
+
+	return strings.HasSuffix(host, ".local")
+}
+
+func postgresHost(connURL string) string {
+	if strings.HasPrefix(connURL, "postgres://") || strings.HasPrefix(connURL, "postgresql://") {
+		parsed, err := url.Parse(connURL)
+		if err != nil {
+			return ""
+		}
+		return parsed.Hostname()
+	}
+
+	for _, field := range strings.Fields(connURL) {
+		if strings.HasPrefix(field, "host=") {
+			return strings.TrimPrefix(field, "host=")
+		}
+	}
+	return ""
+}
+
+func setSSLMode(connURL, mode string) string {
 	if strings.HasPrefix(connURL, "postgres://") || strings.HasPrefix(connURL, "postgresql://") {
 		parsed, err := url.Parse(connURL)
 		if err != nil {
@@ -48,17 +88,17 @@ func withSSLDisabled(connURL string) string {
 			if strings.Contains(connURL, "?") {
 				sep = "&"
 			}
-			return connURL + sep + "sslmode=disable"
+			return connURL + sep + "sslmode=" + mode
 		}
 
 		query := parsed.Query()
-		query.Set("sslmode", "disable")
+		query.Set("sslmode", mode)
 		parsed.RawQuery = query.Encode()
 		return parsed.String()
 	}
 
 	if !strings.Contains(connURL, " ") {
-		return connURL + " sslmode=disable"
+		return connURL + " sslmode=" + mode
 	}
-	return strings.TrimSpace(connURL) + " sslmode=disable"
+	return strings.TrimSpace(connURL) + " sslmode=" + mode
 }

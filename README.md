@@ -23,6 +23,8 @@ cp .env.example .env   # set JWT_SECRET, OWNER_EMAIL, OWNER_PASSWORD
 docker compose up --build
 ```
 
+Production uses **Amazon RDS** for PostgreSQL. See [docs/deployment-aws.md](docs/deployment-aws.md) and [infra/terraform/README.md](infra/terraform/README.md).
+
 MinIO bucket `product-images` is created automatically on first start.
 
 ## Project Structure
