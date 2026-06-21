@@ -4,7 +4,14 @@ Guidance for AI agents working in the Schick repository.
 
 ## Repository status
 
-This repository currently contains **architecture and setup documentation only** (`README.md`, `ARCHITECTURE.md`, `docs/services.md`). There is no `go.mod`, application source, migrations, or `.env.example` on any branch yet. The README describes the intended layout and run workflow for when implementation lands.
+Schick is a Go microservice backend for a fashion bag marketplace. The repo contains:
+
+- Six HTTP services under `cmd/schick-*`
+- Service packages under `pkg/*` (auth, product, inventory, order, notification)
+- Docker Compose for local development
+- Terraform and GitHub Actions for AWS ECS deployment
+
+See [docs/current-state.md](docs/current-state.md) for the authoritative snapshot of what is implemented today.
 
 ## Cursor Cloud specific instructions
 
@@ -12,68 +19,88 @@ This repository currently contains **architecture and setup documentation only**
 
 | Tool | Version / notes |
 |------|-----------------|
-| Go | 1.22+ (`/usr/bin/go`) — meets README requirement of Go 1.21+ |
+| Go | 1.22+ (`/usr/bin/go`) — workspace uses Go 1.26 |
 | PostgreSQL | 16 — `localhost:5432` |
 | Redis | 7 — `localhost:6379` |
 
 ### Starting infrastructure services
 
-PostgreSQL and Redis are installed via apt but may not auto-start in this environment. Start them before running the API or integration tests:
+For tests or non-Docker workflows, start system services:
 
 ```bash
 sudo service postgresql start
 sudo service redis-server start
-```
-
-Verify with:
-
-```bash
 pg_isready -h localhost
 redis-cli ping
 ```
 
+Local development normally uses Docker Compose Postgres containers instead (see below).
+
 ### Database credentials (dev)
 
-Local development uses Docker Compose Postgres containers. **Production uses Amazon RDS** — see `docs/deployment-aws.md` and `infra/terraform/`.
+Docker Compose provides two Postgres instances:
 
-A local dev database is also configured to match README defaults:
+| Service | Host port | Database | User | Password |
+|---------|-----------|----------|------|----------|
+| `postgres-auth` | 5432 | `schick_db` | `schick` | `schick_dev` |
+| `postgres-product` | 5433 | `products` | `schick` | `schick_dev` |
 
-| Setting | Value |
-|---------|-------|
-| `DB_HOST` | `localhost` |
-| `DB_PORT` | `5432` |
-| `DB_USER` | `schick` |
-| `DB_PASSWORD` | `schick_dev` |
-| `DB_NAME` | `schick_db` |
+Connection strings:
 
-Connection string: `postgres://schick:schick_dev@localhost:5432/schick_db?sslmode=disable`
+- Auth: `postgres://schick:schick_dev@localhost:5432/schick_db?sslmode=disable`
+- Product: `postgres://schick:schick_dev@localhost:5433/products?sslmode=disable`
 
-### Running the application (once code exists)
+Production uses **Amazon RDS** — see [docs/deployment-aws.md](docs/deployment-aws.md) and [infra/terraform/README.md](infra/terraform/README.md).
 
-Follow `README.md`:
+### Running locally
 
 ```bash
-go mod download
-cp .env.example .env   # edit with values above
-go run cmd/migrate/main.go
-go run cmd/server/main.go
+cp .env.example .env   # set JWT_SECRET, OWNER_EMAIL, OWNER_PASSWORD
+docker compose up --build
 ```
 
-API: `http://localhost:8080`  
-Swagger (when implemented): `http://localhost:8080/swagger/index.html`
+Gateway: `https://localhost` (self-signed cert; use `curl -k` or trust `certs/server.crt`).
 
-### Testing and linting (once code exists)
+Direct service ports (bypassing proxy):
+
+| Service | Port |
+|---------|------|
+| `schick-auth` | 8080 |
+| `schick-product` | 8081 |
+| `schick-inventory` | 8082 |
+| `schick-order` | 8083 |
+| `schick-notification` | 8084 |
+| `schick-proxy` | 80 / 443 |
+
+### Running a single service (without Docker)
 
 ```bash
-go test ./...
-go test -cover ./...
+# From repo root — uses go.work
+cd pkg/auth && go test ./...
+cd pkg/product && go test ./...
+
+# Auth server
+cd cmd/schick-auth && go run . -help
+
+# Product server
+cd cmd/schick-product && go run . -help
 ```
 
-There is no `golangci-lint` config or Makefile in the repo today.
+### Testing
+
+Run tests per module (root `go test ./...` does not work because the root `go.mod` is a workspace stub):
+
+```bash
+cd pkg/auth && go test ./...
+cd pkg/product && go test ./...
+cd pkg/inventory && go test ./...
+cd pkg/order && go test ./...
+```
 
 ### Gotchas
 
-- **`go mod download` / `go test ./...` fail today** because `go.mod` is not present. This is expected until implementation is added.
-- **No Docker Compose** — PostgreSQL and Redis run as system services, not containers.
-- **Redis is optional** per README but installed and running for session/cache development.
+- **Module paths differ:** auth/inventory/order use `github.com/elug3/schick/pkg/...`; product uses `github.com/schick/pkg/product`.
+- **Inventory and order** use in-memory stores today (no Postgres).
+- **Notification** is a health-only stub; no outbound messaging yet.
+- **Redis and NATS** are optional for auth (session cache and event publishing); not wired in Docker Compose by default.
 - **SMTP, payment, and OAuth providers** are external; no local mocks are bundled.
