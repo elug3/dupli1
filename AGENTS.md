@@ -34,7 +34,9 @@ redis-cli ping
 
 ### Database credentials (dev)
 
-A local dev database is configured to match README defaults:
+Local development uses Docker Compose Postgres containers. **Production uses Amazon RDS** — see `docs/deployment-aws.md` and `infra/terraform/`.
+
+A local dev database is also configured to match README defaults:
 
 | Setting | Value |
 |---------|-------|
