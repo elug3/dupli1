@@ -49,6 +49,15 @@ bash infra/scripts/update-ecs-for-rds.sh
 bash infra/scripts/retire-ecs-postgres.sh
 ```
 
+## Local development against RDS
+
+RDS is in a private subnet. Connect via VPN, then:
+
+```bash
+bash infra/scripts/fetch-rds-env.sh
+docker compose -f docker-compose.yml -f docker-compose.rds.yml --env-file .env.rds up --build
+```
+
 ## Connection strings
 
 | Service | Env var | Database |

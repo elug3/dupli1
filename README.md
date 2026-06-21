@@ -18,10 +18,24 @@ Go microservice backend for a fashion bag marketplace. Six services behind an ng
 
 ## Running
 
+### Local (Docker Compose Postgres)
+
 ```bash
 cp .env.example .env   # set JWT_SECRET, OWNER_EMAIL, OWNER_PASSWORD
 docker compose up --build
 ```
+
+### Against Amazon RDS (requires VPN)
+
+Production databases live on **Amazon RDS** in a private subnet. To run auth/product locally against RDS:
+
+```bash
+# AWS credentials required (Secrets Manager read)
+bash infra/scripts/fetch-rds-env.sh
+docker compose -f docker-compose.yml -f docker-compose.rds.yml --env-file .env.rds up --build
+```
+
+See [docs/deployment-aws.md](docs/deployment-aws.md) and [infra/terraform/README.md](infra/terraform/README.md) for production ECS + RDS setup.
 
 API gateway: `https://localhost` (self-signed cert — pass `-k` to curl or trust `certs/server.crt`).
 
