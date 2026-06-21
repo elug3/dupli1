@@ -16,6 +16,7 @@ type Product struct {
 	Name        string
 	Description string
 	Price       float64
+	FirstPrice  float64
 	Brand       string
 	Color       string
 	Material    string

@@ -64,7 +64,7 @@ func (s *ProductSearchStore) SearchConsultations(filter map[string]string) ([]do
 }
 
 func (s *ProductSearchStore) SearchShoes(filter map[string]string) ([]domain.Shoes, error) {
-	query := "SELECT id, name, description, price, brand, size, color, gender, material, stock, category FROM shoes WHERE 1=1"
+	query := "SELECT id, name, description, price, first_price, brand, size, color, gender, material, stock, category FROM shoes WHERE 1=1"
 	args := []interface{}{}
 	idx := 1
 
@@ -102,7 +102,7 @@ func (s *ProductSearchStore) SearchShoes(filter map[string]string) ([]domain.Sho
 	var results []domain.Shoes
 	for rows.Next() {
 		var shoe domain.Shoes
-		if err := rows.Scan(&shoe.ID, &shoe.Name, &shoe.Description, &shoe.Price, &shoe.Brand, &shoe.Size, &shoe.Color, &shoe.Gender, &shoe.Material, &shoe.Stock, &shoe.Category); err != nil {
+		if err := rows.Scan(&shoe.ID, &shoe.Name, &shoe.Description, &shoe.Price, &shoe.FirstPrice, &shoe.Brand, &shoe.Size, &shoe.Color, &shoe.Gender, &shoe.Material, &shoe.Stock, &shoe.Category); err != nil {
 			return nil, err
 		}
 		results = append(results, shoe)
@@ -112,7 +112,7 @@ func (s *ProductSearchStore) SearchShoes(filter map[string]string) ([]domain.Sho
 }
 
 func (s *ProductSearchStore) SearchOuterwear(filter map[string]string) ([]domain.Outerwear, error) {
-	query := "SELECT id, name, description, price, brand, size, color, gender, material, stock, category FROM outerwear WHERE 1=1"
+	query := "SELECT id, name, description, price, first_price, brand, size, color, gender, material, stock, category FROM outerwear WHERE 1=1"
 	args := []interface{}{}
 	idx := 1
 
@@ -150,7 +150,7 @@ func (s *ProductSearchStore) SearchOuterwear(filter map[string]string) ([]domain
 	var results []domain.Outerwear
 	for rows.Next() {
 		var item domain.Outerwear
-		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Price, &item.Brand, &item.Size, &item.Color, &item.Gender, &item.Material, &item.Stock, &item.Category); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Price, &item.FirstPrice, &item.Brand, &item.Size, &item.Color, &item.Gender, &item.Material, &item.Stock, &item.Category); err != nil {
 			return nil, err
 		}
 		results = append(results, item)
@@ -160,7 +160,7 @@ func (s *ProductSearchStore) SearchOuterwear(filter map[string]string) ([]domain
 }
 
 func (s *ProductSearchStore) SearchBottoms(filter map[string]string) ([]domain.Bottoms, error) {
-	query := "SELECT id, name, description, price, brand, size, color, gender, material, stock, category FROM bottoms WHERE 1=1"
+	query := "SELECT id, name, description, price, first_price, brand, size, color, gender, material, stock, category FROM bottoms WHERE 1=1"
 	args := []interface{}{}
 	idx := 1
 
@@ -198,7 +198,7 @@ func (s *ProductSearchStore) SearchBottoms(filter map[string]string) ([]domain.B
 	var results []domain.Bottoms
 	for rows.Next() {
 		var item domain.Bottoms
-		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Price, &item.Brand, &item.Size, &item.Color, &item.Gender, &item.Material, &item.Stock, &item.Category); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Description, &item.Price, &item.FirstPrice, &item.Brand, &item.Size, &item.Color, &item.Gender, &item.Material, &item.Stock, &item.Category); err != nil {
 			return nil, err
 		}
 		results = append(results, item)
@@ -208,7 +208,7 @@ func (s *ProductSearchStore) SearchBottoms(filter map[string]string) ([]domain.B
 }
 
 func (s *ProductSearchStore) SearchBags(filter map[string]string) ([]domain.Bag, error) {
-	query := "SELECT id, name, description, price, brand, color, material, capacity, stock, category FROM bags WHERE 1=1"
+	query := "SELECT id, name, description, price, first_price, brand, color, material, capacity, stock, category FROM bags WHERE 1=1"
 	args := []interface{}{}
 	idx := 1
 
@@ -238,7 +238,7 @@ func (s *ProductSearchStore) SearchBags(filter map[string]string) ([]domain.Bag,
 	var results []domain.Bag
 	for rows.Next() {
 		var b domain.Bag
-		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.Price, &b.Brand, &b.Color, &b.Material, &b.Capacity, &b.Stock, &b.Category); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.Price, &b.FirstPrice, &b.Brand, &b.Color, &b.Material, &b.Capacity, &b.Stock, &b.Category); err != nil {
 			return nil, err
 		}
 		results = append(results, b)
@@ -248,7 +248,7 @@ func (s *ProductSearchStore) SearchBags(filter map[string]string) ([]domain.Bag,
 }
 
 func (s *ProductSearchStore) SearchClocks(filter map[string]string) ([]domain.Clock, error) {
-	query := "SELECT id, name, description, price, brand, type, material, stock, category FROM clocks WHERE 1=1"
+	query := "SELECT id, name, description, price, first_price, brand, type, material, stock, category FROM clocks WHERE 1=1"
 	args := []interface{}{}
 	idx := 1
 
@@ -278,7 +278,7 @@ func (s *ProductSearchStore) SearchClocks(filter map[string]string) ([]domain.Cl
 	var results []domain.Clock
 	for rows.Next() {
 		var c domain.Clock
-		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.Price, &c.Brand, &c.Type, &c.Material, &c.Stock, &c.Category); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.Price, &c.FirstPrice, &c.Brand, &c.Type, &c.Material, &c.Stock, &c.Category); err != nil {
 			return nil, err
 		}
 		results = append(results, c)

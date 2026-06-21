@@ -49,8 +49,8 @@ func (p *recordedProductEventPublisher) Publish(ctx context.Context, subject str
 func TestSearchShoesPublishesEvent(t *testing.T) {
 	store := fakeProductStore{
 		shoes: []domain.Shoes{
-			{Product: domain.Product{ID: "shoe-1", Brand: "Nike"}},
-			{Product: domain.Product{ID: "shoe-2", Brand: "Nike"}},
+			{Product: domain.Product{ID: "shoe-1", Brand: "Nike", FirstPrice: 129.99}},
+			{Product: domain.Product{ID: "shoe-2", Brand: "Nike", FirstPrice: 149.99}},
 		},
 	}
 	publisher := &recordedProductEventPublisher{}
@@ -62,6 +62,9 @@ func TestSearchShoesPublishesEvent(t *testing.T) {
 	}
 	if len(results) != 2 {
 		t.Fatalf("len(results) = %d, want 2", len(results))
+	}
+	if results[0].FirstPrice != 129.99 {
+		t.Fatalf("results[0].FirstPrice = %v, want 129.99", results[0].FirstPrice)
 	}
 
 	wantSubject := "product.search.shoes"
