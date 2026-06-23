@@ -60,6 +60,7 @@ func (h *ProductSearchHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/products/health", h.Health)
 	mux.HandleFunc("/api/v1/products/categories", h.GetCategories)
 	mux.HandleFunc("/api/v1/products/filters", h.GetFilters)
+	mux.HandleFunc("/api/v1/products/all", h.All)
 	mux.HandleFunc("/api/v1/products/search", h.Search)
 	mux.HandleFunc("/api/v1/products/consultations", h.SearchConsultations)
 	mux.HandleFunc("/api/v1/products/shoes", h.SearchShoes)
@@ -77,6 +78,22 @@ func (h *ProductSearchHandler) Health(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.respondJSON(w, http.StatusOK, HealthResponse{Status: "healthy"})
+}
+
+func (h *ProductSearchHandler) All(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	result, err := h.service.SearchAll()
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.respondJSON(w, http.StatusOK, map[string]any{
+		"total":   result.Total(),
+		"results": result,
+	})
 }
 
 // GetCategories returns available product categories

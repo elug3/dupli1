@@ -92,6 +92,7 @@ Errors: `401` missing or invalid token, `404` user not found.
 | Method | Path | Query params | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/products/health` | — | Health check |
+| `GET` | `/api/v1/products/all` | — | Return all products grouped by category |
 | `GET` | `/api/v1/products/categories` | — | List all product categories |
 | `GET` | `/api/v1/products/filters` | `category` (required) | List filter keys for a category |
 | `GET` | `/api/v1/products/search` | `category` (required) + category filters | Search across any category |
@@ -109,6 +110,23 @@ Categories: `consultations`, `shoes`, `outerwear`, `bottoms`, `bags`, `clocks`.
 Response `200`:
 ```json
 { "status": "healthy" }
+```
+
+### GET /api/v1/products/all
+
+Response `200`:
+```json
+{
+  "total": 42,
+  "results": {
+    "consultations": [ /* consultation objects */ ],
+    "shoes":         [ /* shoes objects */ ],
+    "outerwear":     [ /* outerwear objects */ ],
+    "bottoms":       [ /* bottoms objects */ ],
+    "bags":          [ /* bag objects */ ],
+    "clocks":        [ /* clock objects */ ]
+  }
+}
 ```
 
 ### GET /api/v1/products/categories

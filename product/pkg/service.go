@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/schick/pkg/product/domain"
-	"github.com/schick/pkg/product/ports"
+	"github.com/elug3/schick/product/pkg/domain"
+	"github.com/elug3/schick/product/pkg/ports"
 )
 
 const productSearchSubjectPrefix = "product.search."
@@ -116,6 +116,55 @@ func (s *ProductSearchService) SearchClocks(filter map[string]string) ([]domain.
 		return nil, err
 	}
 	return results, nil
+}
+
+type AllProductsResult struct {
+	Consultations []domain.Consultation `json:"consultations"`
+	Shoes         []domain.Shoes        `json:"shoes"`
+	Outerwear     []domain.Outerwear    `json:"outerwear"`
+	Bottoms       []domain.Bottoms      `json:"bottoms"`
+	Bags          []domain.Bag          `json:"bags"`
+	Clocks        []domain.Clock        `json:"clocks"`
+}
+
+func (r *AllProductsResult) Total() int {
+	return len(r.Consultations) + len(r.Shoes) + len(r.Outerwear) +
+		len(r.Bottoms) + len(r.Bags) + len(r.Clocks)
+}
+
+func (s *ProductSearchService) SearchAll() (*AllProductsResult, error) {
+	consultations, err := s.SearchConsultations(nil)
+	if err != nil {
+		return nil, err
+	}
+	shoes, err := s.SearchShoes(nil)
+	if err != nil {
+		return nil, err
+	}
+	outerwear, err := s.SearchOuterwear(nil)
+	if err != nil {
+		return nil, err
+	}
+	bottoms, err := s.SearchBottoms(nil)
+	if err != nil {
+		return nil, err
+	}
+	bags, err := s.SearchBags(nil)
+	if err != nil {
+		return nil, err
+	}
+	clocks, err := s.SearchClocks(nil)
+	if err != nil {
+		return nil, err
+	}
+	return &AllProductsResult{
+		Consultations: consultations,
+		Shoes:         shoes,
+		Outerwear:     outerwear,
+		Bottoms:       bottoms,
+		Bags:          bags,
+		Clocks:        clocks,
+	}, nil
 }
 
 func (s *ProductSearchService) Search(category string, filter map[string]string) (interface{}, error) {
