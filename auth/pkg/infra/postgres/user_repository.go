@@ -3,8 +3,9 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
-	"github.com/elug3/schick/pkg/auth/domain"
+	"github.com/elug3/schick/auth/pkg/domain"
 )
 
 // UserRepository implements ports.UserRepository using PostgreSQL.
@@ -28,7 +29,7 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find by email: %w", err)
 	}
 
 	return &user, nil
@@ -45,7 +46,7 @@ func (r *UserRepository) FindByID(ctx context.Context, id string) (*domain.User,
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find by id: %w", err)
 	}
 
 	return &user, nil
@@ -55,12 +56,18 @@ func (r *UserRepository) FindByID(ctx context.Context, id string) (*domain.User,
 func (r *UserRepository) Save(ctx context.Context, user *domain.User) error {
 	query := "INSERT INTO users (id, email, password) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET email = $2, password = $3"
 	_, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.Password)
-	return err
+	if err != nil {
+		return fmt.Errorf("save: %w", err)
+	}
+	return nil
 }
 
 // Delete deletes a user.
 func (r *UserRepository) Delete(ctx context.Context, id string) error {
 	query := "DELETE FROM users WHERE id = $1"
 	_, err := r.db.ExecContext(ctx, query, id)
-	return err
+	if err != nil {
+		return fmt.Errorf("delete: %w", err)
+	}
+	return nil
 }

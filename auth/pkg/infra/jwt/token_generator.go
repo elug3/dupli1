@@ -34,7 +34,7 @@ func (tg *TokenGenerator) Generate(ctx context.Context, userID string) (string, 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString([]byte(tg.secret))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("sign token: %w", err)
 	}
 
 	return tokenString, nil
@@ -43,14 +43,13 @@ func (tg *TokenGenerator) Generate(ctx context.Context, userID string) (string, 
 // Validate validates a JWT token and returns the user ID.
 func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (string, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// Ensure token uses HMAC signing
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return []byte(tg.secret), nil
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse token: %w", err)
 	}
 
 	if !token.Valid {

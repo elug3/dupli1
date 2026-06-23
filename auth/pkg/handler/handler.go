@@ -1,9 +1,10 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 
-	"github.com/elug3/schick/pkg/auth/service"
+	"github.com/elug3/schick/auth/pkg/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,13 +27,13 @@ type loginRequest struct {
 func (h *Handler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("login: parse request: %w", err).Error()})
 		return
 	}
 
 	token, err := h.svc.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Errorf("login: %w", err).Error()})
 		return
 	}
 
@@ -51,13 +52,13 @@ func (h *Handler) Refresh(c *gin.Context) {
 		RefreshToken string `json:"refresh_token" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("refresh: parse request: %w", err).Error()})
 		return
 	}
 
 	newToken, err := h.svc.Refresh(c.Request.Context(), payload.RefreshToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Errorf("refresh: %w", err).Error()})
 		return
 	}
 

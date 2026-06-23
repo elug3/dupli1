@@ -2,11 +2,12 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	"github.com/elug3/schick/pkg/auth/autherrors"
-	"github.com/elug3/schick/pkg/auth/domain"
-	"github.com/elug3/schick/pkg/auth/ports"
+	"github.com/elug3/schick/auth/pkg/autherrors"
+	"github.com/elug3/schick/auth/pkg/domain"
+	"github.com/elug3/schick/auth/pkg/ports"
 )
 
 const userRegisteredSubject = "user.registered"
@@ -38,10 +39,10 @@ func (s *Service) Register(ctx context.Context, email, password string) (*domain
 	// TODO: add validation, hashing, uniqueness check
 	u := domain.NewUser("", email, password)
 	if err := s.userRepo.Save(ctx, u); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("save user: %w", err)
 	}
 	if err := s.publishUserRegistered(ctx, u); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("publish event: %w", err)
 	}
 	return u, nil
 }
@@ -50,7 +51,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (*domain
 func (s *Service) Login(ctx context.Context, email, password string) (string, error) {
 	u, err := s.userRepo.FindByEmail(ctx, email)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("find user: %w", err)
 	}
 	if u == nil {
 		return "", autherrors.ErrInvalidCredentials
@@ -62,7 +63,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, er
 
 	token, err := s.tokenGen.Generate(ctx, u.ID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("generate token: %w", err)
 	}
 
 	return token, nil
@@ -80,10 +81,15 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (string, err
 	// TODO: validate/refresh tokens
 	userID, err := s.tokenGen.Validate(ctx, refreshToken)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("validate token: %w", err)
 	}
 
-	return s.tokenGen.Generate(ctx, userID)
+	newToken, err := s.tokenGen.Generate(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("generate token: %w", err)
+	}
+
+	return newToken, nil
 }
 
 func (s *Service) publishUserRegistered(ctx context.Context, u *domain.User) error {
