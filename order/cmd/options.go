@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/elug3/schick/pkg/order"
+	"github.com/elug3/schick/order/pkg"
 )
 
 type Options = order.ServerOptions
@@ -63,6 +63,9 @@ func applyEnv(opts *order.ServerOptions) {
 	}
 	if v := os.Getenv("SCHICK_INVENTORY_URL"); v != "" {
 		opts.InventoryURL = v
+	}
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		opts.JWTSecret = v
 	}
 }
 

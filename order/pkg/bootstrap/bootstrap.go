@@ -4,15 +4,17 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/elug3/schick/pkg/order/handler"
-	"github.com/elug3/schick/pkg/order/infra/httpinventory"
-	"github.com/elug3/schick/pkg/order/infra/memory"
-	"github.com/elug3/schick/pkg/order/ports"
-	"github.com/elug3/schick/pkg/order/service"
+	"github.com/elug3/schick/order/pkg/authjwt"
+	"github.com/elug3/schick/order/pkg/handler"
+	"github.com/elug3/schick/order/pkg/infra/httpinventory"
+	"github.com/elug3/schick/order/pkg/infra/memory"
+	"github.com/elug3/schick/order/pkg/ports"
+	"github.com/elug3/schick/order/pkg/service"
 )
 
 type Config struct {
 	InventoryURL string
+	JWTSecret    string
 	HTTPClient   *http.Client
 }
 
@@ -28,7 +30,13 @@ func Bootstrap(cfg Config) *App {
 	repo := memory.NewRepository()
 	inventory := httpinventory.NewClient(cfg.InventoryURL, cfg.HTTPClient)
 	svc := service.New(repo, inventory)
-	h := handler.New(svc)
+
+	var jwtValidator *authjwt.Validator
+	if cfg.JWTSecret != "" {
+		jwtValidator = authjwt.NewValidator(cfg.JWTSecret)
+	}
+
+	h := handler.New(svc, jwtValidator)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

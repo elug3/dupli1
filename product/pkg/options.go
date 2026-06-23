@@ -6,6 +6,7 @@ type SearchServerOptions struct {
 	Port               int
 	DatabaseConnString string
 	NATSURL            string
+	JWTSecret          string
 	ReadTimeout        int // in seconds
 	WriteTimeout       int // in seconds
 }

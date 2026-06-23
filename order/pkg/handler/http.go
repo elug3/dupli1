@@ -6,24 +6,26 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/elug3/schick/order/pkg/authjwt"
 	"github.com/elug3/schick/order/pkg/domain"
 	"github.com/elug3/schick/order/pkg/ports"
 	"github.com/elug3/schick/order/pkg/service"
 )
 
 type Handler struct {
-	svc *service.Service
+	svc          *service.Service
+	jwtValidator *authjwt.Validator
 }
 
-func New(svc *service.Service) *Handler {
-	return &Handler{svc: svc}
+func New(svc *service.Service, jwtValidator *authjwt.Validator) *Handler {
+	return &Handler{svc: svc, jwtValidator: jwtValidator}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.health)
 	mux.HandleFunc("/api/v1/orders/health", h.health)
-	mux.HandleFunc("/api/v1/orders", h.orders)
-	mux.HandleFunc("/api/v1/orders/", h.order)
+	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
+	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -34,44 +36,99 @@ func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// requireAuth extracts and validates the Bearer token, stores claims in context.
+// If no validator is configured (e.g. in tests), the request passes through.
+func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.jwtValidator == nil {
+			next(w, r)
+			return
+		}
+
+		authHeader := r.Header.Get("Authorization")
+		if len(authHeader) < 8 || !strings.EqualFold(authHeader[:7], "bearer ") {
+			respondError(w, http.StatusUnauthorized, "missing or malformed Authorization header")
+			return
+		}
+
+		claims, err := h.jwtValidator.Validate(authHeader[7:])
+		if err != nil {
+			respondError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+
+		next(w, r.WithContext(authjwt.WithClaims(r.Context(), claims)))
+	}
+}
+
 func (h *Handler) orders(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
-		var req struct {
-			CustomerID string             `json:"customer_id"`
-			Items      []domain.OrderItem `json:"items"`
-		}
-		if err := decodeJSON(r, &req); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		order, err := h.svc.CreateOrder(r.Context(), service.CreateOrderInput{
-			CustomerID: req.CustomerID,
-			Items:      req.Items,
-		})
-		if err != nil {
-			respondServiceError(w, err)
-			return
-		}
-		respondJSON(w, http.StatusCreated, order)
+		h.createOrder(w, r)
 	case http.MethodGet:
-		customerID := r.URL.Query().Get("customer_id")
-		if customerID == "" {
-			respondError(w, http.StatusBadRequest, "customer_id query parameter is required")
-			return
-		}
-		orders, err := h.svc.ListCustomerOrders(r.Context(), customerID)
-		if err != nil {
-			respondServiceError(w, err)
-			return
-		}
-		respondJSON(w, http.StatusOK, map[string]any{
-			"total":  len(orders),
-			"orders": orders,
-		})
+		h.listOrders(w, r)
 	default:
 		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
+	claims, _ := authjwt.FromContext(r.Context())
+
+	var req struct {
+		CustomerID string             `json:"customer_id"`
+		Items      []domain.OrderItem `json:"items"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// ABAC: customers may only create orders for themselves.
+	if h.jwtValidator != nil && claims.HasRole("customer") && !claims.HasRole("order_manager", "admin") {
+		if req.CustomerID != claims.UserID {
+			respondError(w, http.StatusForbidden, "forbidden: customer_id must match your user id")
+			return
+		}
+	}
+
+	order, err := h.svc.CreateOrder(r.Context(), service.CreateOrderInput{
+		CustomerID: req.CustomerID,
+		Items:      req.Items,
+	})
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusCreated, order)
+}
+
+func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {
+	claims, _ := authjwt.FromContext(r.Context())
+
+	customerID := r.URL.Query().Get("customer_id")
+	if customerID == "" {
+		respondError(w, http.StatusBadRequest, "customer_id query parameter is required")
+		return
+	}
+
+	// ABAC: customers may only list their own orders.
+	if h.jwtValidator != nil && claims.HasRole("customer") && !claims.HasRole("order_manager", "admin") {
+		if customerID != claims.UserID {
+			respondError(w, http.StatusForbidden, "forbidden: can only list your own orders")
+			return
+		}
+	}
+
+	orders, err := h.svc.ListCustomerOrders(r.Context(), customerID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"total":  len(orders),
+		"orders": orders,
+	})
 }
 
 func (h *Handler) order(w http.ResponseWriter, r *http.Request) {
@@ -82,48 +139,75 @@ func (h *Handler) order(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 1 && r.Method == http.MethodGet {
-		order, err := h.svc.GetOrder(r.Context(), parts[0])
-		if err != nil {
-			respondServiceError(w, err)
-			return
-		}
-		respondJSON(w, http.StatusOK, order)
+		h.getOrder(w, r, parts[0])
 		return
 	}
 
 	if len(parts) == 2 && parts[1] == "status" && r.Method == http.MethodPut {
-		var req struct {
-			Status domain.OrderStatus `json:"status"`
-		}
-		if err := decodeJSON(r, &req); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		var (
-			order *domain.Order
-			err   error
-		)
-		switch req.Status {
-		case domain.StatusConfirmed:
-			order, err = h.svc.ConfirmOrder(r.Context(), parts[0])
-		case domain.StatusCanceled:
-			order, err = h.svc.CancelOrder(r.Context(), parts[0])
-		case domain.StatusFulfilled:
-			order, err = h.svc.FulfillOrder(r.Context(), parts[0])
-		default:
-			respondError(w, http.StatusBadRequest, "unsupported status")
-			return
-		}
-		if err != nil {
-			respondServiceError(w, err)
-			return
-		}
-		respondJSON(w, http.StatusOK, order)
+		h.updateStatus(w, r, parts[0])
 		return
 	}
 
 	respondError(w, http.StatusNotFound, "not found")
+}
+
+func (h *Handler) getOrder(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+
+	order, err := h.svc.GetOrder(r.Context(), orderID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+
+	// ABAC: customers may only read their own orders.
+	if h.jwtValidator != nil && claims.HasRole("customer") && !claims.HasRole("order_manager", "admin") {
+		if order.CustomerID != claims.UserID {
+			respondError(w, http.StatusForbidden, "forbidden: you do not own this order")
+			return
+		}
+	}
+
+	respondJSON(w, http.StatusOK, order)
+}
+
+func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+
+	// RBAC: only order_manager or admin may change order status.
+	if h.jwtValidator != nil && !claims.HasRole("order_manager", "admin") {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient role")
+		return
+	}
+
+	var req struct {
+		Status domain.OrderStatus `json:"status"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var (
+		order *domain.Order
+		err   error
+	)
+	switch req.Status {
+	case domain.StatusConfirmed:
+		order, err = h.svc.ConfirmOrder(r.Context(), orderID)
+	case domain.StatusCanceled:
+		order, err = h.svc.CancelOrder(r.Context(), orderID)
+	case domain.StatusFulfilled:
+		order, err = h.svc.FulfillOrder(r.Context(), orderID)
+	default:
+		respondError(w, http.StatusBadRequest, "unsupported status")
+		return
+	}
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, order)
 }
 
 func respondServiceError(w http.ResponseWriter, err error) {

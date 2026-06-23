@@ -70,6 +70,7 @@ services:
     environment:
       DB_URL: postgres://schick:schick_dev@postgres:5432/products?sslmode=disable
       NATS_URL: nats://nats:4222
+      JWT_SECRET: dev-jwt-secret-do-not-use-in-production
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,6 +95,7 @@ services:
     environment:
       SCHICK_ORDER_ADDR: :8080
       SCHICK_INVENTORY_URL: http://schick-inventory:8080
+      JWT_SECRET: dev-jwt-secret-do-not-use-in-production
     depends_on:
       - schick-inventory
     restart: unless-stopped

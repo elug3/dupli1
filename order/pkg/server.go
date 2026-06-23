@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/elug3/schick/pkg/order/bootstrap"
+	"github.com/elug3/schick/order/pkg/bootstrap"
 )
 
 type Server struct {
@@ -27,6 +27,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 
 	app := bootstrap.Bootstrap(bootstrap.Config{
 		InventoryURL: opts.InventoryURL,
+		JWTSecret:    opts.JWTSecret,
 		HTTPClient:   bootstrap.DefaultHTTPClient(),
 	})
 	httpSrv := &http.Server{

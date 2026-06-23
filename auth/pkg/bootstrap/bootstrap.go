@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/elug3/schick/pkg/auth/handler"
-	"github.com/elug3/schick/pkg/auth/infra/jwt"
-	natsinfra "github.com/elug3/schick/pkg/auth/infra/nats"
-	"github.com/elug3/schick/pkg/auth/infra/postgres"
-	"github.com/elug3/schick/pkg/auth/ports"
-	"github.com/elug3/schick/pkg/auth/service"
+	"github.com/elug3/schick/auth/pkg/handler"
+	"github.com/elug3/schick/auth/pkg/infra/jwt"
+	natsinfra "github.com/elug3/schick/auth/pkg/infra/nats"
+	"github.com/elug3/schick/auth/pkg/infra/postgres"
+	"github.com/elug3/schick/auth/pkg/ports"
+	"github.com/elug3/schick/auth/pkg/service"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
@@ -42,7 +42,7 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		return nil, fmt.Errorf("token expiry must be > 0")
 	}
 
-	db, err := openPostgres(ctx, cfg.DBURL, cfg.MaxConns)
+	db, err := openPostgres(ctx, cfg.DBURL, cfg.MaxConns, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -67,13 +67,18 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		eventPublisher = natsPublisher
 	}
 
+	if err := migrateSchema(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+
 	userRepo := postgres.NewUserRepository(db)
 	tokenGen := jwt.NewTokenGenerator(
 		string(cfg.TokenSigningKey),
 		int64(cfg.TokenExpiry.Seconds()),
 	)
 	svc := service.NewService(userRepo, tokenGen, eventPublisher)
-	h := handler.NewHandler(svc)
+	h := handler.NewHandler(svc, cfg.Logger)
 	engine := newRouter(h, cfg.Debug)
 
 	app := &App{

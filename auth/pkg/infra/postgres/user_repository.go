@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/elug3/schick/auth/pkg/domain"
+	"github.com/lib/pq"
 )
 
 // UserRepository implements ports.UserRepository using PostgreSQL.
@@ -20,11 +21,11 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 
 // FindByEmail finds a user by email.
 func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
-	query := "SELECT id, email, password FROM users WHERE email = $1"
+	query := "SELECT id, email, password, roles FROM users WHERE email = $1"
 	row := r.db.QueryRowContext(ctx, query, email)
 
 	var user domain.User
-	err := row.Scan(&user.ID, &user.Email, &user.Password)
+	err := row.Scan(&user.ID, &user.Email, &user.Password, pq.Array(&user.Roles))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -37,11 +38,11 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain
 
 // FindByID finds a user by ID.
 func (r *UserRepository) FindByID(ctx context.Context, id string) (*domain.User, error) {
-	query := "SELECT id, email, password FROM users WHERE id = $1"
+	query := "SELECT id, email, password, roles FROM users WHERE id = $1"
 	row := r.db.QueryRowContext(ctx, query, id)
 
 	var user domain.User
-	err := row.Scan(&user.ID, &user.Email, &user.Password)
+	err := row.Scan(&user.ID, &user.Email, &user.Password, pq.Array(&user.Roles))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -52,10 +53,12 @@ func (r *UserRepository) FindByID(ctx context.Context, id string) (*domain.User,
 	return &user, nil
 }
 
-// Save saves a user.
+// Save creates or updates a user.
 func (r *UserRepository) Save(ctx context.Context, user *domain.User) error {
-	query := "INSERT INTO users (id, email, password) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET email = $2, password = $3"
-	_, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.Password)
+	query := `INSERT INTO users (id, email, password, roles)
+	          VALUES ($1, $2, $3, $4)
+	          ON CONFLICT (id) DO UPDATE SET email = $2, password = $3, roles = $4`
+	_, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.Password, pq.Array(user.Roles))
 	if err != nil {
 		return fmt.Errorf("save: %w", err)
 	}

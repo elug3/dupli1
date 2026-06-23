@@ -4,7 +4,7 @@ import (
 	"flag"
 	"os"
 
-	"github.com/schick/pkg/product"
+	"github.com/elug3/schick/product/pkg"
 )
 
 func ConfigureOptions(fs *flag.FlagSet, args []string) (product.SearchServerOptions, error) {
@@ -20,6 +20,9 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (product.SearchServerOpti
 		opts.NATSURL = v
 	} else if v := os.Getenv("NATS_URL"); v != "" {
 		opts.NATSURL = v
+	}
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		opts.JWTSecret = v
 	}
 
 	// Define command-line flags (these override environment variables)

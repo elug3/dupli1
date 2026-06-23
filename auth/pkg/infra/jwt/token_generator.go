@@ -3,9 +3,9 @@ package jwt
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
+	"github.com/elug3/schick/auth/pkg/ports"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -23,12 +23,16 @@ func NewTokenGenerator(secret string, expirySeconds int64) *TokenGenerator {
 	}
 }
 
-// Generate generates a JWT token for a user.
-func (tg *TokenGenerator) Generate(ctx context.Context, userID string) (string, error) {
+// Generate generates a JWT token for a user with their roles.
+func (tg *TokenGenerator) Generate(ctx context.Context, userID string, roles []string) (string, error) {
+	if roles == nil {
+		roles = []string{}
+	}
 	claims := jwt.MapClaims{
-		"user_id": userID,
-		"exp":     time.Now().Add(tg.expiryDuration).Unix(),
-		"iat":     time.Now().Unix(),
+		"sub":   userID,
+		"roles": roles,
+		"exp":   time.Now().Add(tg.expiryDuration).Unix(),
+		"iat":   time.Now().Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -40,8 +44,8 @@ func (tg *TokenGenerator) Generate(ctx context.Context, userID string) (string, 
 	return tokenString, nil
 }
 
-// Validate validates a JWT token and returns the user ID.
-func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (string, error) {
+// Validate validates a JWT token and returns the claims.
+func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (ports.Claims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -49,30 +53,57 @@ func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (str
 		return []byte(tg.secret), nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("parse token: %w", err)
+		return ports.Claims{}, fmt.Errorf("parse token: %w", err)
 	}
 
 	if !token.Valid {
-		return "", fmt.Errorf("invalid token")
+		return ports.Claims{}, fmt.Errorf("invalid token")
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
+	mapClaims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", fmt.Errorf("invalid token claims")
+		return ports.Claims{}, fmt.Errorf("invalid token claims")
 	}
 
-	raw, ok := claims["user_id"]
+	userID, err := extractSubject(mapClaims)
+	if err != nil {
+		return ports.Claims{}, err
+	}
+
+	roles := extractRoles(mapClaims)
+
+	return ports.Claims{UserID: userID, Roles: roles}, nil
+}
+
+func extractSubject(claims jwt.MapClaims) (string, error) {
+	// prefer standard "sub" claim, fall back to legacy "user_id"
+	if sub, ok := claims["sub"]; ok {
+		if s, ok := sub.(string); ok && s != "" {
+			return s, nil
+		}
+	}
+	if uid, ok := claims["user_id"]; ok {
+		if s, ok := uid.(string); ok && s != "" {
+			return s, nil
+		}
+	}
+	return "", fmt.Errorf("subject claim missing")
+}
+
+func extractRoles(claims jwt.MapClaims) []string {
+	raw, ok := claims["roles"]
 	if !ok {
-		return "", fmt.Errorf("user_id claim missing")
+		return []string{}
 	}
-
-	switch v := raw.(type) {
-	case string:
-		return v, nil
-	case float64:
-		// handle numeric user ids encoded as numbers
-		return strconv.FormatFloat(v, 'f', -1, 64), nil
-	default:
-		return "", fmt.Errorf("user_id claim has unexpected type")
+	slice, ok := raw.([]interface{})
+	if !ok {
+		return []string{}
 	}
+	roles := make([]string, 0, len(slice))
+	for _, v := range slice {
+		if s, ok := v.(string); ok {
+			roles = append(roles, s)
+		}
+	}
+	return roles
 }

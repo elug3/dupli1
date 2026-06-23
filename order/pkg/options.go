@@ -5,6 +5,7 @@ import "time"
 type ServerOptions struct {
 	Addr            string
 	InventoryURL    string
+	JWTSecret       string
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration

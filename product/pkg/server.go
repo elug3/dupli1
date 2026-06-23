@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	natsinfra "github.com/schick/pkg/product/infra/nats"
-	"github.com/schick/pkg/product/infra/pg"
-	"github.com/schick/pkg/product/ports"
+	natsinfra "github.com/elug3/schick/product/pkg/infra/nats"
+	"github.com/elug3/schick/product/pkg/infra/pg"
+	"github.com/elug3/schick/product/pkg/ports"
 )
 
 // ProductSearchServer is the read-only server for customers to search products
@@ -45,7 +45,7 @@ func NewSearchServer(opts SearchServerOptions) (*ProductSearchServer, error) {
 	}
 
 	service := NewProductSearchService(store, eventPublisher)
-	handler := NewProductSearchHandler(service)
+	handler := NewProductSearchHandler(service, opts.JWTSecret)
 	handler.RegisterRoutes(mux)
 
 	return &ProductSearchServer{

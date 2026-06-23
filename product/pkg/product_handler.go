@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/elug3/schick/product/pkg/authjwt"
 	"github.com/elug3/schick/product/pkg/domain"
 )
 
 type ProductSearchHandler struct {
-	service *ProductSearchService
+	service      *ProductSearchService
+	jwtValidator *authjwt.Validator
 }
 
 type SearchResponse struct {
@@ -48,9 +51,14 @@ var categoryFilters = map[string][]string{
 	"clocks":        {"brand", "type", "material"},
 }
 
-func NewProductSearchHandler(service *ProductSearchService) *ProductSearchHandler {
+func NewProductSearchHandler(service *ProductSearchService, jwtSecret string) *ProductSearchHandler {
+	var validator *authjwt.Validator
+	if jwtSecret != "" {
+		validator = authjwt.NewValidator(jwtSecret)
+	}
 	return &ProductSearchHandler{
-		service: service,
+		service:      service,
+		jwtValidator: validator,
 	}
 }
 
@@ -58,16 +66,40 @@ func NewProductSearchHandler(service *ProductSearchService) *ProductSearchHandle
 func (h *ProductSearchHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.Health)
 	mux.HandleFunc("/api/v1/products/health", h.Health)
-	mux.HandleFunc("/api/v1/products/categories", h.GetCategories)
-	mux.HandleFunc("/api/v1/products/filters", h.GetFilters)
-	mux.HandleFunc("/api/v1/products/all", h.All)
-	mux.HandleFunc("/api/v1/products/search", h.Search)
-	mux.HandleFunc("/api/v1/products/consultations", h.SearchConsultations)
-	mux.HandleFunc("/api/v1/products/shoes", h.SearchShoes)
-	mux.HandleFunc("/api/v1/products/outerwear", h.SearchOuterwear)
-	mux.HandleFunc("/api/v1/products/bottoms", h.SearchBottoms)
-	mux.HandleFunc("/api/v1/products/bags", h.SearchBags)
-	mux.HandleFunc("/api/v1/products/clocks", h.SearchClocks)
+	mux.HandleFunc("/api/v1/products/categories", h.requireAuth(h.GetCategories))
+	mux.HandleFunc("/api/v1/products/filters", h.requireAuth(h.GetFilters))
+	mux.HandleFunc("/api/v1/products/all", h.requireAuth(h.All))
+	mux.HandleFunc("/api/v1/products/search", h.requireAuth(h.Search))
+	mux.HandleFunc("/api/v1/products/consultations", h.requireAuth(h.SearchConsultations))
+	mux.HandleFunc("/api/v1/products/shoes", h.requireAuth(h.SearchShoes))
+	mux.HandleFunc("/api/v1/products/outerwear", h.requireAuth(h.SearchOuterwear))
+	mux.HandleFunc("/api/v1/products/bottoms", h.requireAuth(h.SearchBottoms))
+	mux.HandleFunc("/api/v1/products/bags", h.requireAuth(h.SearchBags))
+	mux.HandleFunc("/api/v1/products/clocks", h.requireAuth(h.SearchClocks))
+}
+
+// requireAuth validates the Bearer token. If no validator is configured the request passes through.
+func (h *ProductSearchHandler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.jwtValidator == nil {
+			next(w, r)
+			return
+		}
+
+		authHeader := r.Header.Get("Authorization")
+		if len(authHeader) < 8 || !strings.EqualFold(authHeader[:7], "bearer ") {
+			h.respondError(w, http.StatusUnauthorized, "missing or malformed Authorization header")
+			return
+		}
+
+		claims, err := h.jwtValidator.Validate(authHeader[7:])
+		if err != nil {
+			h.respondError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+
+		next(w, r.WithContext(authjwt.WithClaims(r.Context(), claims)))
+	}
 }
 
 // Health returns server health status
