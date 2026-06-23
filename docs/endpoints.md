@@ -1,170 +1,262 @@
 # API Endpoints
 
-All requests go through the nginx gateway at `http://localhost:80`.  
-The gateway prefix (`/auth/`, `/product/`, `/inventory/`, `/order/`) is stripped before forwarding.
+All services run on port `8080` internally. The nginx gateway (port `80`) strips its location prefix before proxying, so the path after the prefix goes through unchanged.
+
+| Gateway prefix | Upstream service |
+|---|---|
+| `/auth/` | `schick-auth:8080` |
+| `/product/` | `schick-product:8080` |
+| `/inventory/` | `schick-inventory:8080` |
+| `/order/` | `schick-order:8080` |
+
+**Example:** `GET /auth/health` → `schick-auth:8080/health`
 
 ---
 
-## Auth
+## Auth Service
+
+Base path (via gateway): `/auth`
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/auth/health` | Health check |
-| `POST` | `/auth/api/v1/auth/register` | Register a new user |
-| `POST` | `/auth/api/v1/auth/login` | Login and receive a refresh token |
-| `POST` | `/auth/api/v1/auth/logout` | Logout (invalidate session) |
-| `POST` | `/auth/api/v1/auth/refresh` | Exchange refresh token for access token |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `POST` | `/api/v1/auth/register` | Create a new user account |
+| `POST` | `/api/v1/auth/login` | Login and receive a refresh token |
+| `POST` | `/api/v1/auth/logout` | Invalidate the current session |
+| `POST` | `/api/v1/auth/refresh` | Exchange a refresh token for a new access token |
 
-### POST /auth/api/v1/auth/register
+### POST /api/v1/auth/register
+
+Request:
 ```json
-// Request
-{ "email": "user@example.com", "password": "min8chars" }
-
-// 201 Created
-{ "user_id": "abc123" }
+{ "email": "user@example.com", "password": "minlen8" }
 ```
 
-### POST /auth/api/v1/auth/login
+Response `201`:
 ```json
-// Request
+{ "user_id": "uuid" }
+```
+
+Errors: `400` bad request, `409` user already exists, `500` internal error.
+
+### POST /api/v1/auth/login
+
+Request:
+```json
 { "email": "user@example.com", "password": "secret" }
-
-// 200 OK
-{ "refresh_token": "<token>" }
 ```
 
-### POST /auth/api/v1/auth/refresh
+Response `200`:
 ```json
-// Request
 { "refresh_token": "<token>" }
-
-// 200 OK
-{ "token": "<access_token>" }
 ```
+
+Errors: `400` bad request, `401` invalid credentials.
+
+### POST /api/v1/auth/logout
+
+Response `204` (no body). Token invalidation is a TODO in the current implementation.
+
+### POST /api/v1/auth/refresh
+
+Request:
+```json
+{ "refresh_token": "<token>" }
+```
+
+Response `200`:
+```json
+{ "token": "<new_access_token>" }
+```
+
+Errors: `400` bad request, `401` invalid or expired token.
 
 ---
 
-## Product
+## Product Service
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/product/api/health` | Health check |
-| `GET` | `/product/api/categories` | List all categories |
-| `GET` | `/product/api/filters?category=<name>` | List filters for a category |
-| `GET` | `/product/api/products/search?category=<name>[&<filter>=<value>]` | Search across categories |
-| `GET` | `/product/api/products/consultations` | Search consultations |
-| `GET` | `/product/api/products/shoes` | Search shoes |
-| `GET` | `/product/api/products/outerwear` | Search outerwear |
-| `GET` | `/product/api/products/bottoms` | Search bottoms |
-| `GET` | `/product/api/products/bags` | Search bags |
-| `GET` | `/product/api/products/clocks` | Search clocks |
+Base path (via gateway): `/product`
 
-**Categories**: `consultations`, `shoes`, `outerwear`, `bottoms`, `bags`, `clocks`
+| Method | Path | Query params | Description |
+|---|---|---|---|
+| `GET` | `/api/health` | — | Health check |
+| `GET` | `/api/categories` | — | List all product categories |
+| `GET` | `/api/filters` | `category` (required) | List filter keys for a category |
+| `GET` | `/api/products/search` | `category` (required) + category filters | Search across any category |
+| `GET` | `/api/products/consultations` | `title`, `status` | Search consultations |
+| `GET` | `/api/products/shoes` | `brand`, `size`, `color`, `gender`, `material` | Search shoes |
+| `GET` | `/api/products/outerwear` | `brand`, `size`, `color`, `gender`, `material` | Search outerwear |
+| `GET` | `/api/products/bottoms` | `brand`, `size`, `color`, `gender`, `material` | Search bottoms |
+| `GET` | `/api/products/bags` | `brand`, `color`, `material` | Search bags |
+| `GET` | `/api/products/clocks` | `brand`, `type`, `material` | Search clocks |
 
-**Filters per category**:
+Categories: `consultations`, `shoes`, `outerwear`, `bottoms`, `bags`, `clocks`.
 
-| Category | Filters |
-|----------|---------|
-| `consultations` | `title`, `status` |
-| `shoes` | `brand`, `size`, `color`, `gender`, `material` |
-| `outerwear` | `brand`, `size`, `color`, `gender`, `material` |
-| `bottoms` | `brand`, `size`, `color`, `gender`, `material` |
-| `bags` | `brand`, `color`, `material` |
-| `clocks` | `brand`, `type`, `material` |
+### GET /api/categories
 
+Response `200`:
 ```json
-// GET /product/api/categories — 200 OK
 { "categories": ["consultations", "shoes", "outerwear", "bottoms", "bags", "clocks"] }
+```
 
-// GET /product/api/filters?category=shoes — 200 OK
+### GET /api/filters?category=shoes
+
+Response `200`:
+```json
 { "category": "shoes", "filters": ["brand", "size", "color", "gender", "material"] }
+```
 
-// GET /product/api/products/shoes?brand=Nike&size=42 — 200 OK
-{ "total": 3, "results": [...] }
+Errors: `400` missing category, `404` unknown category.
+
+### GET /api/products/search?category=shoes&brand=Nike
+
+Response `200`:
+```json
+{ "total": 1, "results": [ /* category-specific objects */ ] }
 ```
 
 ---
 
-## Inventory
+## Inventory Service
+
+Base path (via gateway): `/inventory`
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/inventory/health` | Health check |
-| `GET` | `/inventory/api/v1/inventory/{sku}` | Get stock for a SKU |
-| `PUT` | `/inventory/api/v1/inventory/{sku}` | Set stock quantity for a SKU |
-| `POST` | `/inventory/api/v1/inventory/{sku}/adjust` | Adjust stock by delta |
-| `POST` | `/inventory/api/v1/inventory/reservations` | Create a reservation |
-| `POST` | `/inventory/api/v1/inventory/reservations/{id}/commit` | Commit a reservation |
-| `POST` | `/inventory/api/v1/inventory/reservations/{id}/release` | Release a reservation |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `GET` | `/api/v1/inventory/{sku}` | Get a stock item by SKU |
+| `PUT` | `/api/v1/inventory/{sku}` | Create or overwrite stock quantity for a SKU |
+| `POST` | `/api/v1/inventory/{sku}/adjust` | Add or subtract stock quantity (delta) |
+| `POST` | `/api/v1/inventory/reservations` | Create a reservation |
+| `POST` | `/api/v1/inventory/reservations/{id}/commit` | Commit a reservation (deducts stock) |
+| `POST` | `/api/v1/inventory/reservations/{id}/release` | Release a reservation (restores stock) |
 
-### PUT /inventory/api/v1/inventory/{sku}
+### GET /api/v1/inventory/{sku}
+
+Response `200`:
 ```json
-// Request
-{ "quantity": 100 }
-
-// 200 OK — inventory item
+{
+  "sku": "SHOE-001",
+  "quantity": 100,
+  "reserved": 10,
+  "updated_at": "2026-06-23T12:00:00Z"
+}
 ```
 
-### POST /inventory/api/v1/inventory/{sku}/adjust
+### PUT /api/v1/inventory/{sku}
+
+Request:
 ```json
-// Request
+{ "quantity": 50 }
+```
+
+Response `200`: stock item object (same shape as GET).
+
+### POST /api/v1/inventory/{sku}/adjust
+
+Request:
+```json
 { "delta": -5 }
-
-// 200 OK — inventory item
 ```
 
-### POST /inventory/api/v1/inventory/reservations
+Response `200`: updated stock item. Errors: `400` insufficient stock.
+
+### POST /api/v1/inventory/reservations
+
+Request:
 ```json
-// Request
 {
-  "order_id": "order-123",
+  "order_id": "ord-abc",
   "items": [
-    { "sku": "SHOE-42-BLK", "quantity": 2 }
+    { "sku": "SHOE-001", "quantity": 2 }
   ]
 }
-
-// 201 Created
-{ "reservation_id": "res-456", "reservation": { ... } }
 ```
+
+Response `201`:
+```json
+{
+  "reservation_id": "res-xyz",
+  "reservation": {
+    "id": "res-xyz",
+    "order_id": "ord-abc",
+    "items": [ { "sku": "SHOE-001", "quantity": 2 } ],
+    "status": "active",
+    "created_at": "...",
+    "updated_at": "..."
+  }
+}
+```
+
+### POST /api/v1/inventory/reservations/{id}/commit
+
+### POST /api/v1/inventory/reservations/{id}/release
+
+Both return `200` with the updated reservation object. Errors: `404` not found, `400` reservation already closed.
 
 ---
 
-## Order
+## Order Service
+
+Base path (via gateway): `/order`
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/order/health` | Health check |
-| `POST` | `/order/api/v1/orders` | Create an order |
-| `GET` | `/order/api/v1/orders?customer_id=<id>` | List orders for a customer |
-| `GET` | `/order/api/v1/orders/{id}` | Get an order by ID |
-| `PUT` | `/order/api/v1/orders/{id}/status` | Update order status |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `POST` | `/api/v1/orders` | Create a new order |
+| `GET` | `/api/v1/orders?customer_id={id}` | List all orders for a customer |
+| `GET` | `/api/v1/orders/{id}` | Get a single order |
+| `PUT` | `/api/v1/orders/{id}/status` | Transition order status |
 
-### POST /order/api/v1/orders
+### POST /api/v1/orders
+
+Request:
 ```json
-// Request
 {
-  "customer_id": "cust-789",
+  "customer_id": "cust-123",
   "items": [
-    { "sku": "SHOE-42-BLK", "quantity": 1 }
+    { "sku": "SHOE-001", "quantity": 1, "unit_price_cents": 9900 }
   ]
 }
-
-// 201 Created — order object
 ```
 
-### PUT /order/api/v1/orders/{id}/status
+Response `201`: order object.
 
-Valid statuses: `confirmed`, `canceled`, `fulfilled`
+### GET /api/v1/orders?customer_id=cust-123
 
+Response `200`:
 ```json
-// Request
+{ "total": 2, "orders": [ /* order objects */ ] }
+```
+
+### GET /api/v1/orders/{id}
+
+Response `200`: order object.
+
+### PUT /api/v1/orders/{id}/status
+
+Request:
+```json
 { "status": "confirmed" }
-
-// 200 OK — order object
 ```
 
-### GET /order/api/v1/orders?customer_id=cust-789
+Valid status transitions:
+- `pending` → `confirmed`
+- `pending` → `canceled`
+- `confirmed` → `fulfilled`
+
+Response `200`: updated order object. Errors: `400` invalid transition, `404` not found.
+
+Order object shape:
 ```json
-// 200 OK
-{ "total": 2, "orders": [...] }
+{
+  "id": "ord-abc",
+  "customer_id": "cust-123",
+  "reservation_id": "res-xyz",
+  "items": [ { "sku": "SHOE-001", "quantity": 1, "unit_price_cents": 9900 } ],
+  "status": "pending",
+  "total_cents": 9900,
+  "created_at": "...",
+  "updated_at": "..."
+}
 ```
