@@ -4,12 +4,34 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/elug3/schick/auth/pkg/autherrors"
+	"github.com/elug3/schick/auth/pkg/domain"
 	"github.com/elug3/schick/auth/pkg/service"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 )
+
+type userResponse struct {
+	ID                  string     `json:"user_id"`
+	Email               string     `json:"email"`
+	Roles               []string   `json:"roles"`
+	IsActive            bool       `json:"is_active"`
+	LockedAt            *time.Time `json:"locked_at,omitempty"`
+	FailedLoginAttempts int        `json:"failed_login_attempts"`
+}
+
+func toUserResponse(u *domain.User) userResponse {
+	return userResponse{
+		ID:                  u.ID,
+		Email:               u.Email,
+		Roles:               u.Roles,
+		IsActive:            u.IsActive,
+		LockedAt:            u.LockedAt,
+		FailedLoginAttempts: u.FailedLoginAttempts,
+	}
+}
 
 // Handler holds service dependencies for HTTP handlers.
 type Handler struct {
@@ -164,7 +186,7 @@ func (h *Handler) Me(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"user_id": u.ID, "email": u.Email, "roles": u.Roles})
+	c.JSON(http.StatusOK, toUserResponse(u))
 }
 
 // ListUsers returns all users. Requires an admin bearer token.
@@ -201,14 +223,9 @@ func (h *Handler) ListUsers(c *gin.Context) {
 		return
 	}
 
-	type userDTO struct {
-		ID    string   `json:"user_id"`
-		Email string   `json:"email"`
-		Roles []string `json:"roles"`
-	}
-	out := make([]userDTO, len(users))
+	out := make([]userResponse, len(users))
 	for i, u := range users {
-		out[i] = userDTO{ID: u.ID, Email: u.Email, Roles: u.Roles}
+		out[i] = toUserResponse(u)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"users": out})

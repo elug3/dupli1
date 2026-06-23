@@ -81,7 +81,14 @@ Header: `Authorization: Bearer <access_token>`
 
 Response `200`:
 ```json
-{ "user_id": "uuid", "email": "user@example.com" }
+{
+  "user_id": "uuid",
+  "email": "user@example.com",
+  "roles": ["customer"],
+  "is_active": true,
+  "locked_at": null,
+  "failed_login_attempts": 0
+}
 ```
 
 Errors: `401` missing or invalid token, `404` user not found.
@@ -94,7 +101,14 @@ Response `200`:
 ```json
 {
   "users": [
-    { "user_id": "uuid", "email": "user@example.com", "roles": ["customer"] }
+    {
+      "user_id": "uuid",
+      "email": "user@example.com",
+      "roles": ["customer"],
+      "is_active": true,
+      "locked_at": null,
+      "failed_login_attempts": 0
+    }
   ]
 }
 ```
