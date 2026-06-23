@@ -1,29 +1,32 @@
 # API Endpoints
 
-All services run on port `8080` internally. The nginx gateway (port `80`) strips its location prefix before proxying, so the path after the prefix goes through unchanged.
+All services run on port `8080` internally. The nginx gateway (port `80`) proxies by path prefix with no stripping, so gateway paths are identical to service paths.
 
 | Gateway prefix | Upstream service |
 |---|---|
-| `/auth/` | `schick-auth:8080` |
-| `/product/` | `schick-product:8080` |
-| `/inventory/` | `schick-inventory:8080` |
-| `/order/` | `schick-order:8080` |
+| `/api/v1/auth/` | `schick-auth:8080` |
+| `/api/v1/products/` | `schick-product:8080` |
+| `/api/v1/inventory/` | `schick-inventory:8080` |
+| `/api/v1/orders` | `schick-order:8080` |
 
-**Example:** `GET /auth/health` → `schick-auth:8080/health`
+Each service also registers `/health` directly for internal/sidecar use.
 
 ---
 
 ## Auth Service
 
-Base path (via gateway): `/auth`
-
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/health` | Health check |
+| `GET` | `/api/v1/auth/health` | Health check |
 | `POST` | `/api/v1/auth/register` | Create a new user account |
 | `POST` | `/api/v1/auth/login` | Login and receive a refresh token |
 | `POST` | `/api/v1/auth/logout` | Invalidate the current session |
 | `POST` | `/api/v1/auth/refresh` | Exchange a refresh token for a new access token |
+| `GET` | `/api/v1/auth/me` | Return the authenticated user's profile |
+
+### GET /api/v1/auth/health
+
+Response `200`: `ok` (plain text)
 
 ### POST /api/v1/auth/register
 
@@ -71,35 +74,51 @@ Response `200`:
 
 Errors: `400` bad request, `401` invalid or expired token.
 
+### GET /api/v1/auth/me
+
+Header: `Authorization: Bearer <access_token>`
+
+Response `200`:
+```json
+{ "user_id": "uuid", "email": "user@example.com" }
+```
+
+Errors: `401` missing or invalid token, `404` user not found.
+
 ---
 
 ## Product Service
 
-Base path (via gateway): `/product`
-
 | Method | Path | Query params | Description |
 |---|---|---|---|
-| `GET` | `/api/health` | — | Health check |
-| `GET` | `/api/categories` | — | List all product categories |
-| `GET` | `/api/filters` | `category` (required) | List filter keys for a category |
-| `GET` | `/api/products/search` | `category` (required) + category filters | Search across any category |
-| `GET` | `/api/products/consultations` | `title`, `status` | Search consultations |
-| `GET` | `/api/products/shoes` | `brand`, `size`, `color`, `gender`, `material` | Search shoes |
-| `GET` | `/api/products/outerwear` | `brand`, `size`, `color`, `gender`, `material` | Search outerwear |
-| `GET` | `/api/products/bottoms` | `brand`, `size`, `color`, `gender`, `material` | Search bottoms |
-| `GET` | `/api/products/bags` | `brand`, `color`, `material` | Search bags |
-| `GET` | `/api/products/clocks` | `brand`, `type`, `material` | Search clocks |
+| `GET` | `/api/v1/products/health` | — | Health check |
+| `GET` | `/api/v1/products/categories` | — | List all product categories |
+| `GET` | `/api/v1/products/filters` | `category` (required) | List filter keys for a category |
+| `GET` | `/api/v1/products/search` | `category` (required) + category filters | Search across any category |
+| `GET` | `/api/v1/products/consultations` | `title`, `status` | Search consultations |
+| `GET` | `/api/v1/products/shoes` | `brand`, `size`, `color`, `gender`, `material` | Search shoes |
+| `GET` | `/api/v1/products/outerwear` | `brand`, `size`, `color`, `gender`, `material` | Search outerwear |
+| `GET` | `/api/v1/products/bottoms` | `brand`, `size`, `color`, `gender`, `material` | Search bottoms |
+| `GET` | `/api/v1/products/bags` | `brand`, `color`, `material` | Search bags |
+| `GET` | `/api/v1/products/clocks` | `brand`, `type`, `material` | Search clocks |
 
 Categories: `consultations`, `shoes`, `outerwear`, `bottoms`, `bags`, `clocks`.
 
-### GET /api/categories
+### GET /api/v1/products/health
+
+Response `200`:
+```json
+{ "status": "healthy" }
+```
+
+### GET /api/v1/products/categories
 
 Response `200`:
 ```json
 { "categories": ["consultations", "shoes", "outerwear", "bottoms", "bags", "clocks"] }
 ```
 
-### GET /api/filters?category=shoes
+### GET /api/v1/products/filters?category=shoes
 
 Response `200`:
 ```json
@@ -108,7 +127,7 @@ Response `200`:
 
 Errors: `400` missing category, `404` unknown category.
 
-### GET /api/products/search?category=shoes&brand=Nike
+### GET /api/v1/products/search?category=shoes&brand=Nike
 
 Response `200`:
 ```json
@@ -119,17 +138,22 @@ Response `200`:
 
 ## Inventory Service
 
-Base path (via gateway): `/inventory`
-
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/health` | Health check |
+| `GET` | `/api/v1/inventory/health` | Health check |
 | `GET` | `/api/v1/inventory/{sku}` | Get a stock item by SKU |
 | `PUT` | `/api/v1/inventory/{sku}` | Create or overwrite stock quantity for a SKU |
 | `POST` | `/api/v1/inventory/{sku}/adjust` | Add or subtract stock quantity (delta) |
 | `POST` | `/api/v1/inventory/reservations` | Create a reservation |
 | `POST` | `/api/v1/inventory/reservations/{id}/commit` | Commit a reservation (deducts stock) |
 | `POST` | `/api/v1/inventory/reservations/{id}/release` | Release a reservation (restores stock) |
+
+### GET /api/v1/inventory/health
+
+Response `200`:
+```json
+{ "status": "ok" }
+```
 
 ### GET /api/v1/inventory/{sku}
 
@@ -198,15 +222,20 @@ Both return `200` with the updated reservation object. Errors: `404` not found, 
 
 ## Order Service
 
-Base path (via gateway): `/order`
-
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/health` | Health check |
+| `GET` | `/api/v1/orders/health` | Health check |
 | `POST` | `/api/v1/orders` | Create a new order |
 | `GET` | `/api/v1/orders?customer_id={id}` | List all orders for a customer |
 | `GET` | `/api/v1/orders/{id}` | Get a single order |
 | `PUT` | `/api/v1/orders/{id}/status` | Transition order status |
+
+### GET /api/v1/orders/health
+
+Response `200`:
+```json
+{ "status": "ok" }
+```
 
 ### POST /api/v1/orders
 

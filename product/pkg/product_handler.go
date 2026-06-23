@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/schick/pkg/product/domain"
+	"github.com/elug3/schick/product/pkg/domain"
 )
 
 type ProductSearchHandler struct {
@@ -56,16 +56,17 @@ func NewProductSearchHandler(service *ProductSearchService) *ProductSearchHandle
 
 // RegisterRoutes registers all product handler routes
 func (h *ProductSearchHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/health", h.Health)
-	mux.HandleFunc("/api/categories", h.GetCategories)
-	mux.HandleFunc("/api/filters", h.GetFilters)
-	mux.HandleFunc("/api/products/search", h.Search)
-	mux.HandleFunc("/api/products/consultations", h.SearchConsultations)
-	mux.HandleFunc("/api/products/shoes", h.SearchShoes)
-	mux.HandleFunc("/api/products/outerwear", h.SearchOuterwear)
-	mux.HandleFunc("/api/products/bottoms", h.SearchBottoms)
-	mux.HandleFunc("/api/products/bags", h.SearchBags)
-	mux.HandleFunc("/api/products/clocks", h.SearchClocks)
+	mux.HandleFunc("/health", h.Health)
+	mux.HandleFunc("/api/v1/products/health", h.Health)
+	mux.HandleFunc("/api/v1/products/categories", h.GetCategories)
+	mux.HandleFunc("/api/v1/products/filters", h.GetFilters)
+	mux.HandleFunc("/api/v1/products/search", h.Search)
+	mux.HandleFunc("/api/v1/products/consultations", h.SearchConsultations)
+	mux.HandleFunc("/api/v1/products/shoes", h.SearchShoes)
+	mux.HandleFunc("/api/v1/products/outerwear", h.SearchOuterwear)
+	mux.HandleFunc("/api/v1/products/bottoms", h.SearchBottoms)
+	mux.HandleFunc("/api/v1/products/bags", h.SearchBags)
+	mux.HandleFunc("/api/v1/products/clocks", h.SearchClocks)
 }
 
 // Health returns server health status

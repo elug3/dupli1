@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elug3/schick/pkg/order/domain"
-	"github.com/elug3/schick/pkg/order/ports"
-	"github.com/elug3/schick/pkg/order/service"
+	"github.com/elug3/schick/order/pkg/domain"
+	"github.com/elug3/schick/order/pkg/ports"
+	"github.com/elug3/schick/order/pkg/service"
 )
 
 type Handler struct {
@@ -21,6 +21,7 @@ func New(svc *service.Service) *Handler {
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.health)
+	mux.HandleFunc("/api/v1/orders/health", h.health)
 	mux.HandleFunc("/api/v1/orders", h.orders)
 	mux.HandleFunc("/api/v1/orders/", h.order)
 }

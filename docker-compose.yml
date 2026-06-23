@@ -52,8 +52,6 @@ services:
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
       JWT_SECRET: dev-jwt-secret-do-not-use-in-production
-    ports:
-      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,8 +70,6 @@ services:
     environment:
       DB_URL: postgres://schick:schick_dev@postgres:5432/products?sslmode=disable
       NATS_URL: nats://nats:4222
-    ports:
-      - "8081:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,8 +84,6 @@ services:
         SERVICE: inventory
     environment:
       SCHICK_INVENTORY_ADDR: :8080
-    ports:
-      - "8082:8080"
     restart: unless-stopped
 
   schick-order:
@@ -100,10 +94,21 @@ services:
     environment:
       SCHICK_ORDER_ADDR: :8080
       SCHICK_INVENTORY_URL: http://schick-inventory:8080
-    ports:
-      - "8083:8080"
     depends_on:
       - schick-inventory
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - schick-auth
+      - schick-product
+      - schick-inventory
+      - schick-order
     restart: unless-stopped
 
 volumes:

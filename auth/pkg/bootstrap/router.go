@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"net/http"
 
-	"github.com/elug3/schick/pkg/auth/handler"
+	"github.com/elug3/schick/auth/pkg/handler"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,15 +17,19 @@ func newRouter(h *handler.Handler, debug bool) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
-	r.GET("/health", func(c *gin.Context) {
+	healthHandler := func(c *gin.Context) {
 		c.String(http.StatusOK, "ok")
-	})
+	}
+	r.GET("/health", healthHandler)
+	r.GET("/api/v1/auth/health", healthHandler)
 
 	v1 := r.Group("/api/v1/auth")
 	{
+		v1.POST("/register", h.Register)
 		v1.POST("/login", h.Login)
 		v1.POST("/logout", h.Logout)
 		v1.POST("/refresh", h.Refresh)
+		v1.GET("/me", h.Me)
 	}
 
 	return r
