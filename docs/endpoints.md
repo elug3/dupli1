@@ -23,6 +23,7 @@ Each service also registers `/health` directly for internal/sidecar use.
 | `POST` | `/api/v1/auth/logout` | Invalidate the current session |
 | `POST` | `/api/v1/auth/refresh` | Exchange a refresh token for a new access token |
 | `GET` | `/api/v1/auth/me` | Return the authenticated user's profile |
+| `GET` | `/api/v1/auth/users` | List all users (admin only) |
 
 ### GET /api/v1/auth/health
 
@@ -84,6 +85,21 @@ Response `200`:
 ```
 
 Errors: `401` missing or invalid token, `404` user not found.
+
+### GET /api/v1/auth/users
+
+Header: `Authorization: Bearer <access_token>` (must have the `admin` role)
+
+Response `200`:
+```json
+{
+  "users": [
+    { "user_id": "uuid", "email": "user@example.com", "roles": ["customer"] }
+  ]
+}
+```
+
+Errors: `401` missing or invalid token, `403` caller lacks admin role, `500` internal error.
 
 ---
 

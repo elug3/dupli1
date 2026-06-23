@@ -3,7 +3,7 @@ package ports
 import (
 	"context"
 
-	"github.com/elug3/schick/pkg/auth/domain"
+	"github.com/elug3/schick/auth/pkg/domain"
 )
 
 // UserRepository defines persistence operations for users.
@@ -19,4 +19,7 @@ type UserRepository interface {
 
 	// Delete removes a user by id.
 	Delete(ctx context.Context, id string) error
+
+	// ListAll returns all users.
+	ListAll(ctx context.Context) ([]*domain.User, error)
 }

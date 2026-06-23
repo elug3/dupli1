@@ -74,3 +74,26 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// ListAll returns all users ordered by email.
+func (r *UserRepository) ListAll(ctx context.Context) ([]*domain.User, error) {
+	query := "SELECT id, email, roles FROM users ORDER BY email"
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("list all: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*domain.User
+	for rows.Next() {
+		var u domain.User
+		if err := rows.Scan(&u.ID, &u.Email, pq.Array(&u.Roles)); err != nil {
+			return nil, fmt.Errorf("list all: scan: %w", err)
+		}
+		users = append(users, &u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list all: rows: %w", err)
+	}
+	return users, nil
+}

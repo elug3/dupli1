@@ -116,6 +116,15 @@ func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, 
 	return u, nil
 }
 
+// ListUsers returns all users. The caller is responsible for authorization.
+func (s *Service) ListUsers(ctx context.Context) ([]*domain.User, error) {
+	users, err := s.userRepo.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	return users, nil
+}
+
 func (s *Service) publishUserRegistered(ctx context.Context, u *domain.User) error {
 	if s.eventPublisher == nil {
 		return nil

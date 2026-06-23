@@ -30,6 +30,7 @@ func newRouter(h *handler.Handler, debug bool) *gin.Engine {
 		v1.POST("/logout", h.Logout)
 		v1.POST("/refresh", h.Refresh)
 		v1.GET("/me", h.Me)
+		v1.GET("/users", h.ListUsers)
 	}
 
 	return r

@@ -167,6 +167,53 @@ func (h *Handler) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user_id": u.ID, "email": u.Email, "roles": u.Roles})
 }
 
+// ListUsers returns all users. Requires an admin bearer token.
+func (h *Handler) ListUsers(c *gin.Context) {
+	ip := c.ClientIP()
+
+	authHeader := c.GetHeader("Authorization")
+	if len(authHeader) < 8 || authHeader[:7] != "Bearer " {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "list users: missing bearer token"})
+		return
+	}
+
+	caller, err := h.svc.GetMe(c.Request.Context(), authHeader[7:])
+	if err != nil {
+		if errors.Is(err, autherrors.ErrInvalidToken) || errors.Is(err, autherrors.ErrTokenExpired) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Errorf("list users: %w", err).Error()})
+		} else {
+			h.logger.Error().Str("event", "list_users_auth_error").Str("ip", ip).Err(err).Msg("list users: auth error")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("list users: %w", err).Error()})
+		}
+		return
+	}
+
+	if !caller.HasRole("admin") {
+		h.logger.Warn().Str("event", "list_users_forbidden").Str("user_id", caller.ID).Str("ip", ip).Msg("list users: forbidden")
+		c.JSON(http.StatusForbidden, gin.H{"error": "list users: admin role required"})
+		return
+	}
+
+	users, err := h.svc.ListUsers(c.Request.Context())
+	if err != nil {
+		h.logger.Error().Str("event", "list_users_error").Str("ip", ip).Err(err).Msg("list users: internal error")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("list users: %w", err).Error()})
+		return
+	}
+
+	type userDTO struct {
+		ID    string   `json:"user_id"`
+		Email string   `json:"email"`
+		Roles []string `json:"roles"`
+	}
+	out := make([]userDTO, len(users))
+	for i, u := range users {
+		out[i] = userDTO{ID: u.ID, Email: u.Email, Roles: u.Roles}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"users": out})
+}
+
 // Refresh exchanges a refresh token for a new access token.
 func (h *Handler) Refresh(c *gin.Context) {
 	ip := c.ClientIP()
