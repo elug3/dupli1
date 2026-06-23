@@ -1,3 +1,7 @@
+# LOCAL DEVELOPMENT ONLY
+# This docker-compose file is intended for local testing.
+# Production is deployed to AWS ECS — do not use this file for production.
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -47,9 +51,7 @@ services:
       DB_URL: postgres://schick:schick_dev@postgres:5432/schick_db?sslmode=disable
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
-      OWNER_EMAIL: ${OWNER_EMAIL:-admin@schick.co}
-      OWNER_PASSWORD: ${OWNER_PASSWORD:-Admin1234!}
+      JWT_SECRET: dev-jwt-secret-do-not-use-in-production
     ports:
       - "8080:8080"
     depends_on:
