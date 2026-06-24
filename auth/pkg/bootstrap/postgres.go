@@ -3,19 +3,18 @@ package bootstrap
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"net/url"
-	"strings"
+	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/rs/zerolog"
 )
 
-func openPostgres(ctx context.Context, connURL string, maxConns int) (*sql.DB, error) {
+func openPostgres(ctx context.Context, connURL string, maxConns int, log zerolog.Logger) (*sql.DB, error) {
 	if connURL == "" {
 		return nil, fmt.Errorf("database URL is required")
 	}
-
-	connURL = withSSLDisabled(connURL)
 
 	db, err := sql.Open("postgres", connURL)
 	if err != nil {
@@ -26,39 +25,44 @@ func openPostgres(ctx context.Context, connURL string, maxConns int) (*sql.DB, e
 		db.SetMaxOpenConns(maxConns)
 	}
 
-	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("ping postgres: %w", err)
-	}
+	log.Info().Msg("Connecting to database...")
 
-	return db, nil
-}
+	deadline := time.Now().Add(60 * time.Second)
+	hasDots := false
 
-// withSSLDisabled ensures postgres connections do not require SSL unless
-// sslmode is already set in the connection string.
-func withSSLDisabled(connURL string) string {
-	if strings.Contains(connURL, "sslmode=") {
-		return connURL
-	}
+	for {
+		pingCtx, cancel := context.WithTimeout(ctx, time.Second)
+		pingErr := db.PingContext(pingCtx)
+		cancel()
 
-	if strings.HasPrefix(connURL, "postgres://") || strings.HasPrefix(connURL, "postgresql://") {
-		parsed, err := url.Parse(connURL)
-		if err != nil {
-			sep := "?"
-			if strings.Contains(connURL, "?") {
-				sep = "&"
+		if pingErr == nil {
+			if hasDots {
+				fmt.Println()
 			}
-			return connURL + sep + "sslmode=disable"
+			log.Info().Msg("connected")
+			return db, nil
 		}
 
-		query := parsed.Query()
-		query.Set("sslmode", "disable")
-		parsed.RawQuery = query.Encode()
-		return parsed.String()
-	}
+		if ctx.Err() != nil || time.Now().After(deadline) {
+			if hasDots {
+				fmt.Println()
+			}
+			log.Error().Msg("connection timeout")
+			_ = db.Close()
+			return nil, errors.New("connection timeout")
+		}
 
-	if !strings.Contains(connURL, " ") {
-		return connURL + " sslmode=disable"
+		fmt.Print(".")
+		hasDots = true
+
+		select {
+		case <-ctx.Done():
+			fmt.Println()
+			log.Error().Msg("connection timeout")
+			_ = db.Close()
+			return nil, errors.New("connection timeout")
+		case <-time.After(time.Second):
+		}
 	}
-	return strings.TrimSpace(connURL) + " sslmode=disable"
 }
+

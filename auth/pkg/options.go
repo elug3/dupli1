@@ -43,6 +43,10 @@ type ServerOptions struct {
 	// Limits / misc
 	MaxConns int
 	Debug    bool
+
+	// Logging
+	LogOutput string // "json" (default) or "text"
+	LogLevel  string // "debug", "info" (default), "warn", "error"
 }
 
 // NewServerOptions returns ServerOptions populated with sensible defaults.
@@ -61,6 +65,8 @@ func NewServerOptions() *ServerOptions {
 		CookieHTTPOnly:     true,
 		MaxConns:           100,
 		Debug:              false,
+		LogOutput:          "json",
+		LogLevel:           "info",
 	}
 }
 
@@ -70,16 +76,16 @@ func (o *ServerOptions) Validate() error {
 		return fmt.Errorf("server options are nil")
 	}
 	if o.Addr == "" {
-		return fmt.Errorf("Addr is required")
+		return fmt.Errorf("--addr is required")
 	}
 	if len(o.TokenSigningKey) == 0 {
-		return fmt.Errorf("TokenSigningKey is required")
+		return fmt.Errorf("--jwt-secret is required")
 	}
 	if o.TokenExpiry <= 0 {
-		return fmt.Errorf("TokenExpiry must be > 0")
+		return fmt.Errorf("--token-expiry must be > 0")
 	}
 	if o.DBURL == "" {
-		return fmt.Errorf("DBURL is required")
+		return fmt.Errorf("--db is required")
 	}
 	return nil
 }

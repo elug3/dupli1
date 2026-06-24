@@ -1,6 +1,10 @@
 package bootstrap
 
-import "time"
+import (
+	"time"
+
+	"github.com/rs/zerolog"
+)
 
 // Config holds the dependencies required to wire the auth service.
 type Config struct {
@@ -12,4 +16,5 @@ type Config struct {
 	RefreshTokenExpiry time.Duration
 	Debug              bool
 	MaxConns           int
+	Logger             zerolog.Logger
 }

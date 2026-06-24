@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
+)
 
 // User represents a user entity in the domain.
 type User struct {
@@ -13,15 +17,19 @@ type User struct {
 	FailedLoginAttempts  int
 }
 
-// NewUser creates a new user.
-func NewUser(id, email, password string, roles ...string) *User {
+// NewUser creates a new user, hashing the plaintext password with bcrypt.
+func NewUser(id, email, password string, roles ...string) (*User, error) {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
 	return &User{
 		ID:       id,
 		Email:    email,
-		Password: password,
+		Password: string(hashed),
 		Roles:    roles,
 		IsActive: true,
-	}
+	}, nil
 }
 
 // IsLocked reports whether the account is currently locked.
@@ -51,8 +59,7 @@ func (u *User) HasRole(role string) bool {
 	return false
 }
 
-// ValidatePassword checks the provided password against the stored one.
-// NOTE: This is a placeholder — replace with proper hashing comparison.
+// ValidatePassword checks the provided plaintext password against the stored bcrypt hash.
 func (u *User) ValidatePassword(pw string) bool {
-	return u.Password == pw
+	return bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(pw)) == nil
 }

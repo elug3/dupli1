@@ -2,11 +2,13 @@ package auth
 
 import (
 	"context"
-	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"sync"
 
-	"github.com/elug3/schick/pkg/auth/bootstrap"
+	"github.com/elug3/schick/auth/pkg/bootstrap"
+	"github.com/rs/zerolog"
 )
 
 // Server represents the auth service HTTP server.
@@ -14,6 +16,7 @@ type Server struct {
 	opts     ServerOptions
 	http     *http.Server
 	app      *bootstrap.App
+	log      zerolog.Logger
 	mu       sync.RWMutex
 	stopped  chan struct{}
 	stopOnce sync.Once
@@ -25,6 +28,9 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		return nil, err
 	}
 
+	log := newLogger(opts.LogOutput, opts.LogLevel)
+	log.Info().Msg("Starting auth server...")
+
 	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
 		DBURL:              opts.DBURL,
 		RedisURL:           opts.RedisURL,
@@ -34,6 +40,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		RefreshTokenExpiry: opts.RefreshTokenExpiry,
 		Debug:              opts.Debug,
 		MaxConns:           opts.MaxConns,
+		Logger:             log,
 	})
 	if err != nil {
 		return nil, err
@@ -51,6 +58,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		opts:    opts,
 		http:    srv,
 		app:     app,
+		log:     log,
 		stopped: make(chan struct{}),
 	}, nil
 }
@@ -59,10 +67,8 @@ func NewServer(opts ServerOptions) (*Server, error) {
 func (s *Server) Run() error {
 	s.mu.RLock()
 	httpSrv := s.http
-	addr := httpSrv.Addr
 	s.mu.RUnlock()
 
-	fmt.Printf("Starting auth server on %s\n", addr)
 	err := httpSrv.ListenAndServe()
 	s.markStopped()
 	if err != nil && err != http.ErrServerClosed {
@@ -83,7 +89,7 @@ func (s *Server) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), s.opts.ShutdownTimeout)
 	defer cancel()
 
-	fmt.Println("Gracefully stopping auth server...")
+	s.log.Info().Msg("stopping")
 	err := s.http.Shutdown(ctx)
 	if closeErr := s.app.Close(); closeErr != nil && err == nil {
 		err = closeErr
@@ -106,4 +112,24 @@ func (s *Server) Wait() {
 func (s *Server) StopAndWait() {
 	_ = s.Stop()
 	s.Wait()
+}
+
+func newLogger(output, level string) zerolog.Logger {
+	var w io.Writer
+	if output == "json" {
+		w = os.Stdout
+	} else {
+		w = zerolog.ConsoleWriter{
+			Out:        os.Stdout,
+			NoColor:    true,
+			PartsOrder: []string{zerolog.MessageFieldName},
+		}
+	}
+
+	lvl, err := zerolog.ParseLevel(level)
+	if err != nil {
+		lvl = zerolog.InfoLevel
+	}
+
+	return zerolog.New(w).Level(lvl)
 }

@@ -1,31 +1,41 @@
 package main
 
 import (
-	"flag"
+	"context"
+	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/elug3/schick/pkg/auth"
+	auth "github.com/elug3/schick/auth/pkg"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // Options configures the schick-auth executable.
 type Options = auth.ServerOptions
 
-func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
+func newRootCmd() *cobra.Command {
+	root := newServeCmd()
+	root.Use = "schick-auth"
+	root.Short = "Auth server for the Schick platform"
+	root.AddCommand(newResetCmd())
+	return root
+}
+
+func newServeCmd() *cobra.Command {
 	opts := auth.NewServerOptions()
-	opts.DBURL = "postgres://schick:schick_dev@localhost:5432/schick_db?sslmode=disable"
 	applyEnv(opts)
 
-	host, port, err := splitAddr(opts.Addr)
-	if err != nil {
-		return Options{}, err
-	}
+	host, port, _ := splitAddr(opts.Addr)
 
 	var (
-		addr               string
+		addrFlag           string
+		hostFlag           = host
+		portFlag           = port
 		publicAddr         = opts.PublicAddr
 		dbURL              = opts.DBURL
 		redisURL           = opts.RedisURL
@@ -38,41 +48,93 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 		tokenExpiry        = opts.TokenExpiry.String()
 		refreshTokenExpiry = opts.RefreshTokenExpiry.String()
 		corsOrigins        = strings.Join(opts.CORSOrigins, ",")
+		logOutput          = opts.LogOutput
+		logLevel           = opts.LogLevel
 	)
 
 	if len(opts.TokenSigningKey) > 0 {
 		jwtSecret = string(opts.TokenSigningKey)
 	}
 
-	fs.StringVar(&host, "host", host, "Server host address")
-	fs.IntVar(&port, "port", port, "Server port number")
-	fs.StringVar(&addr, "addr", "", "Server listen address (overrides host/port)")
-	fs.StringVar(&publicAddr, "public-addr", publicAddr, "Publicly reachable base URL")
-	fs.StringVar(&dbURL, "db", dbURL, "Database connection URL")
-	fs.StringVar(&redisURL, "redis", redisURL, "Redis connection URL")
-	fs.StringVar(&natsURL, "nats", natsURL, "NATS connection URL")
-	fs.StringVar(&jwtSecret, "jwt-secret", jwtSecret, "JWT signing secret")
-	fs.IntVar(&readTimeoutSec, "read-timeout", readTimeoutSec, "Read timeout in seconds")
-	fs.IntVar(&writeTimeoutSec, "write-timeout", writeTimeoutSec, "Write timeout in seconds")
-	fs.IntVar(&idleTimeoutSec, "idle-timeout", idleTimeoutSec, "Idle timeout in seconds")
-	fs.IntVar(&shutdownTimeoutSec, "shutdown-timeout", shutdownTimeoutSec, "Graceful shutdown timeout in seconds")
-	fs.StringVar(&tokenExpiry, "token-expiry", tokenExpiry, "Access token lifetime")
-	fs.StringVar(&refreshTokenExpiry, "refresh-token-expiry", refreshTokenExpiry, "Refresh token lifetime")
-	fs.StringVar(&opts.CookieName, "cookie-name", opts.CookieName, "Session cookie name")
-	fs.BoolVar(&opts.CookieSecure, "cookie-secure", opts.CookieSecure, "Set Secure flag on session cookies")
-	fs.BoolVar(&opts.CookieHTTPOnly, "cookie-http-only", opts.CookieHTTPOnly, "Set HttpOnly flag on session cookies")
-	fs.StringVar(&corsOrigins, "cors-origins", corsOrigins, "Comma-separated CORS allowed origins")
-	fs.IntVar(&opts.MaxConns, "max-conns", opts.MaxConns, "Maximum concurrent connections")
-	fs.BoolVar(&opts.Debug, "debug", opts.Debug, "Enable debug mode")
+	cmd := &cobra.Command{
+		Short:         "Start the HTTP server (default command)",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			flags := cmd.Flags()
+			buildOpts(opts, flags, addrFlag, hostFlag, portFlag, publicAddr, dbURL, redisURL, natsURL, jwtSecret,
+				readTimeoutSec, writeTimeoutSec, idleTimeoutSec, shutdownTimeoutSec, tokenExpiry, refreshTokenExpiry, corsOrigins,
+				logOutput, logLevel)
 
-	if err := fs.Parse(args); err != nil {
-		return Options{}, err
+			if err := opts.Validate(); err != nil {
+				return err
+			}
+
+			srv, err := auth.NewServer(*opts)
+			if err != nil {
+				fmt.Println("stopping")
+				return err
+			}
+
+			interrupt, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer stop()
+
+			runErr := make(chan error, 1)
+			go func() { runErr <- srv.Run() }()
+
+			select {
+			case err := <-runErr:
+				return err
+			case <-interrupt.Done():
+			}
+
+			srv.StopAndWait()
+			return nil
+		},
 	}
 
-	if addr != "" {
-		opts.Addr = addr
+	f := cmd.Flags()
+	f.StringVar(&hostFlag, "host", hostFlag, "Server host address")
+	f.IntVar(&portFlag, "port", portFlag, "Server port number")
+	f.StringVar(&addrFlag, "addr", "", "Server listen address (overrides host/port)")
+	f.StringVar(&publicAddr, "public-addr", publicAddr, "Publicly reachable base URL")
+	f.StringVar(&dbURL, "db", dbURL, "Database connection URL")
+	f.StringVar(&redisURL, "redis", redisURL, "Redis connection URL")
+	f.StringVar(&natsURL, "nats", natsURL, "NATS connection URL")
+	f.StringVar(&jwtSecret, "jwt-secret", jwtSecret, "JWT signing secret")
+	f.IntVar(&readTimeoutSec, "read-timeout", readTimeoutSec, "Read timeout in seconds")
+	f.IntVar(&writeTimeoutSec, "write-timeout", writeTimeoutSec, "Write timeout in seconds")
+	f.IntVar(&idleTimeoutSec, "idle-timeout", idleTimeoutSec, "Idle timeout in seconds")
+	f.IntVar(&shutdownTimeoutSec, "shutdown-timeout", shutdownTimeoutSec, "Graceful shutdown timeout in seconds")
+	f.StringVar(&tokenExpiry, "token-expiry", tokenExpiry, "Access token lifetime")
+	f.StringVar(&refreshTokenExpiry, "refresh-token-expiry", refreshTokenExpiry, "Refresh token lifetime")
+	f.StringVar(&opts.CookieName, "cookie-name", opts.CookieName, "Session cookie name")
+	f.BoolVar(&opts.CookieSecure, "cookie-secure", opts.CookieSecure, "Set Secure flag on session cookies")
+	f.BoolVar(&opts.CookieHTTPOnly, "cookie-http-only", opts.CookieHTTPOnly, "Set HttpOnly flag on session cookies")
+	f.StringVar(&corsOrigins, "cors-origins", corsOrigins, "Comma-separated CORS allowed origins")
+	f.IntVar(&opts.MaxConns, "max-conns", opts.MaxConns, "Maximum concurrent connections")
+	f.BoolVar(&opts.Debug, "debug", opts.Debug, "Enable debug mode")
+	f.StringVar(&logOutput, "log-output", logOutput, "Log output format: json or text")
+	f.StringVar(&logLevel, "log-level", logLevel, "Log level: debug, info, warn, error")
+
+	return cmd
+}
+
+func buildOpts(
+	opts *Options,
+	flags *pflag.FlagSet,
+	addrFlag string, hostFlag string, portFlag int,
+	publicAddr, dbURL, redisURL, natsURL, jwtSecret string,
+	readTimeoutSec, writeTimeoutSec, idleTimeoutSec, shutdownTimeoutSec int,
+	tokenExpiry, refreshTokenExpiry, corsOrigins string,
+	logOutput, logLevel string,
+) {
+	_ = flags
+
+	if addrFlag != "" {
+		opts.Addr = addrFlag
 	} else {
-		opts.Addr = net.JoinHostPort(host, strconv.Itoa(port))
+		opts.Addr = net.JoinHostPort(hostFlag, strconv.Itoa(portFlag))
 	}
 
 	opts.PublicAddr = publicAddr
@@ -89,26 +151,20 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	opts.ShutdownTimeout = time.Duration(shutdownTimeoutSec) * time.Second
 
 	if tokenExpiry != "" {
-		d, err := time.ParseDuration(tokenExpiry)
-		if err != nil {
-			return Options{}, err
+		if d, err := time.ParseDuration(tokenExpiry); err == nil {
+			opts.TokenExpiry = d
 		}
-		opts.TokenExpiry = d
 	}
-
 	if refreshTokenExpiry != "" {
-		d, err := time.ParseDuration(refreshTokenExpiry)
-		if err != nil {
-			return Options{}, err
+		if d, err := time.ParseDuration(refreshTokenExpiry); err == nil {
+			opts.RefreshTokenExpiry = d
 		}
-		opts.RefreshTokenExpiry = d
 	}
-
 	if corsOrigins != "" {
 		opts.CORSOrigins = strings.Split(corsOrigins, ",")
 	}
-
-	return *opts, nil
+	opts.LogOutput = logOutput
+	opts.LogLevel = logLevel
 }
 
 func applyEnv(opts *auth.ServerOptions) {
@@ -149,6 +205,12 @@ func applyEnv(opts *auth.ServerOptions) {
 	setDurationEnv(&opts.ShutdownTimeout, "SCHICK_AUTH_SHUTDOWN_TIMEOUT")
 	setDurationEnv(&opts.TokenExpiry, "JWT_EXPIRATION")
 	setDurationEnv(&opts.RefreshTokenExpiry, "SCHICK_AUTH_REFRESH_TOKEN_EXPIRY")
+	if v := os.Getenv("SCHICK_AUTH_LOG_OUTPUT"); v != "" {
+		opts.LogOutput = v
+	}
+	if v := os.Getenv("SCHICK_AUTH_LOG_LEVEL"); v != "" {
+		opts.LogLevel = v
+	}
 }
 
 func setDurationEnv(target *time.Duration, key string) {
@@ -167,11 +229,9 @@ func splitAddr(addr string) (string, int, error) {
 		}
 		return "", 0, err
 	}
-
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return "", 0, err
 	}
-
 	return host, port, nil
 }

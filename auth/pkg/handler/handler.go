@@ -74,6 +74,14 @@ func (h *Handler) Login(c *gin.Context) {
 				Str("ip", ip).
 				Str("user_agent", ua).
 				Msg("login failed: invalid credentials")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Errorf("login: %w", err).Error()})
+		} else if errors.Is(err, autherrors.ErrAccountLocked) {
+			h.logger.Warn().
+				Str("event", "login_locked").
+				Str("email", req.Email).
+				Str("ip", ip).
+				Msg("login failed: account locked")
+			c.JSON(http.StatusForbidden, gin.H{"error": fmt.Errorf("login: %w", err).Error()})
 		} else {
 			h.logger.Error().
 				Str("event", "login_error").
@@ -81,8 +89,8 @@ func (h *Handler) Login(c *gin.Context) {
 				Str("ip", ip).
 				Err(err).
 				Msg("login failed: internal error")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("login: %w", err).Error()})
 		}
-		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Errorf("login: %w", err).Error()})
 		return
 	}
 

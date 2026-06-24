@@ -10,17 +10,16 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
+	adminId    = "00000000-0000-0000-0000-000000000001"
 	adminEmail = "admin@dupli1.com"
 )
 
 func newResetCmd() *cobra.Command {
-	defaultDB := "postgres://schick:schick_dev@localhost:5432/schick_db?sslmode=disable"
-	if v := os.Getenv("DB_URL"); v != "" {
-		defaultDB = v
-	}
+	defaultDB := os.Getenv("DB_URL")
 
 	var dbURL string
 	var email string
@@ -31,10 +30,16 @@ func newResetCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			password, err := generatePassword(16)
+			plainPassword, err := generatePassword(16)
 			if err != nil {
 				return fmt.Errorf("generate password: %w", err)
 			}
+
+			hashed, err := bcrypt.GenerateFromPassword([]byte(plainPassword), bcrypt.DefaultCost)
+			if err != nil {
+				return fmt.Errorf("hash password: %w", err)
+			}
+			password := string(hashed)
 
 			db, err := sql.Open("postgres", dbURL)
 			if err != nil {
@@ -52,13 +57,13 @@ func newResetCmd() *cobra.Command {
 				VALUES ($1, $2, $3, $4)
 				ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, password = EXCLUDED.password, roles = EXCLUDED.roles`
 
-			if _, err := db.ExecContext(context.Background(), query, "1", email, password, "{admin}"); err != nil {
+			if _, err := db.ExecContext(context.Background(), query, adminId, email, password, "{admin}"); err != nil {
 				return fmt.Errorf("upsert admin: %w", err)
 			}
 
 			fmt.Printf("Admin account reset successfully.\n")
 			fmt.Printf("  Email:    %s\n", email)
-			fmt.Printf("  Password: %s\n", password)
+			fmt.Printf("  Password: %s\n", plainPassword)
 			return nil
 		},
 	}

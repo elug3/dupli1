@@ -11,4 +11,5 @@ var (
 	ErrTokenExpired       = errors.New("token expired")
 	ErrInvalidEmail       = errors.New("invalid email")
 	ErrWeakPassword       = errors.New("password is too weak")
+	ErrAccountLocked      = errors.New("account is locked")
 )
