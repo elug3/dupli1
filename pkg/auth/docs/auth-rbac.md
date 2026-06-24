@@ -1,82 +1,75 @@
-# Auth RBAC Implementation Brief
+# Auth RBAC
 
-## Goal
+Role-based access control for the auth service.
 
-Implement role-based access control for the auth package with `owner`, `admin`, and `user` roles.
+## Status: Implemented
 
-Keep public registration open and assign new users the `user` role by default.
+RBAC is live. Roles are stored in PostgreSQL and checked on every admin request — they are not embedded in JWTs.
 
-Use database-backed authorization checks so role updates take effect immediately on the next request.
+## Roles
 
-## Current State
+| Role | Description |
+|------|-------------|
+| `owner` | Full access; seeded on first startup |
+| `admin` | User management (list, create, update role, delete) |
+| `user` | Default for new registrations; no admin access |
 
-Users currently have only `id`, `email`, and `password`.
+## Public Auth Routes
 
-JWTs currently carry `user_id`, token `type`, expiry fields, and optional `session_id`.
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/auth/register` | Register (assigns `user` role) |
+| POST | `/api/v1/auth/login` | Login, returns token pair |
+| POST | `/api/v1/auth/refresh` | Refresh tokens |
+| POST | `/api/v1/auth/logout` | Invalidate refresh token |
+| GET | `/api/v1/auth/me` | Current user (includes `role`) |
 
-There is no middleware or admin route group yet.
+## Admin Routes
 
-## Target Model
+Admin routes live at `/api/v1/users` (not `/api/v1/auth/admin` as originally planned in the design brief).
 
-Roles:
+Requires `Authorization: Bearer <access_token>` from a user with `owner` or `admin` role.
 
-- `owner`
-- `admin`
-- `user`
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/users` | List all users |
+| POST | `/api/v1/users` | Create user (optional `role` field) |
+| GET | `/api/v1/users/{id}` | Get user by ID |
+| PUT | `/api/v1/users/{id}/role` | Update user role |
+| DELETE | `/api/v1/users/{id}` | Delete user |
 
-Permissions:
+## Authorization Flow
 
-- `users.read`
-- `roles.read`
-- `users.roles.update`
-- `users.owner.update`
+1. `RequireAdmin()` middleware extracts Bearer token
+2. Validates access token via JWT
+3. Loads user from Postgres by token claims
+4. Checks `user.Role` is `owner` or `admin`
+5. Returns `401` for missing/invalid tokens, `403` for insufficient role
 
-Role behavior:
+Role changes take effect on the next request without re-issuing tokens.
 
-- `owner` has all permissions.
-- `admin` can list users and roles, and can update non-owner roles.
-- `user` has no admin permissions.
+## Owner Bootstrap
 
-## Implementation Rules
+On first startup, if `OWNER_EMAIL` and `OWNER_PASSWORD` are set and no owner exists, an owner account is created automatically.
 
-Do not embed roles or permissions in JWTs.
+Docker Compose defaults:
 
-Validate the access token, load the current user from Postgres, compute permissions, and authorize per request.
-
-Add admin routes under `/api/v1/auth/admin`.
-
-Add startup bootstrap for a first owner using config or environment-provided email and password.
-
-Preserve existing login, register, refresh, and logout behavior unless RBAC explicitly requires a change.
-
-## Safety Rules
-
-Only `owner` may grant or revoke `owner`.
-
-Never allow removal of the final remaining `owner`.
-
-Unknown roles must fail validation.
-
-Missing or invalid tokens must return `401`.
-
-Valid tokens without the required permission must return `403`.
-
-## Verification
-
-Add service tests for `owner`, `admin`, and `user` permission behavior.
-
-Add route tests for `401`, `403`, and successful admin access.
-
-Confirm role changes apply on the next request without issuing a new token.
-
-Run:
-
-```sh
-go test ./...
+```
+OWNER_EMAIL=admin@schick.com
+OWNER_PASSWORD=password
 ```
 
-## Assumptions
+## Safety Rules (enforced in service layer)
 
-This document is an implementation brief, not a persistent global AI behavior guide.
+- Valid roles: `user`, `admin`, `owner`
+- Unknown roles fail validation
+- Missing or invalid tokens return `401`
+- Valid tokens without admin role return `403`
 
-No code should be changed as part of creating this document.
+## Tests
+
+```bash
+cd pkg/auth && go test ./...
+```
+
+Coverage includes service-level permission behavior and handler route tests.

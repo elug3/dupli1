@@ -16,6 +16,8 @@ Authorization: Bearer <access_token>
 
 Access tokens are short-lived (default 15 min). Use the refresh endpoint to issue new ones without re-authenticating.
 
+Admin routes require a token belonging to a user with the `owner` or `admin` role.
+
 ---
 
 ## Gateway
@@ -46,7 +48,7 @@ ok
 
 ### `POST /api/v1/auth/register`
 
-Create a new user account.
+Create a new user account. New users receive the `user` role.
 
 **Request body**
 ```json
@@ -112,7 +114,8 @@ Return the currently authenticated user's profile.
 ```json
 {
   "id":    "03f95d58-4840-46d4-9c92-fe48364d2e75",
-  "email": "user@example.com"
+  "email": "user@example.com",
+  "role":  "user"
 }
 ```
 
@@ -168,9 +171,80 @@ Invalidate the session associated with a refresh token. The access token remains
 
 ---
 
-## Product Service — `/api`
+## Auth Admin — `/api/v1/users`
 
-All product endpoints are read-only (GET). No authentication required.
+Requires `Authorization: Bearer <access_token>` from a user with `owner` or `admin` role.
+
+### `GET /api/v1/users`
+
+List all users.
+
+**Response `200`**
+```json
+[
+  {
+    "id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
+    "email": "admin@schick.com",
+    "role": "owner",
+    "createdAt": "2026-01-15T10:00:00Z"
+  }
+]
+```
+
+---
+
+### `POST /api/v1/users`
+
+Create a user with an optional role (`user`, `admin`, or `owner`; defaults to `user`).
+
+**Request body**
+```json
+{
+  "email": "new@example.com",
+  "password": "minlen8",
+  "role": "user"
+}
+```
+
+**Response `201`** — user object (same shape as list item)
+
+---
+
+### `GET /api/v1/users/{id}`
+
+Get a single user by ID.
+
+**Response `200`** — user object
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `404` | User not found |
+
+---
+
+### `PUT /api/v1/users/{id}/role`
+
+Update a user's role.
+
+**Request body**
+```json
+{ "role": "admin" }
+```
+
+**Response `200`** — updated user object
+
+---
+
+### `DELETE /api/v1/users/{id}`
+
+Delete a user.
+
+**Response `204`** — no body
+
+---
+
+## Product Service — `/api`
 
 ### `GET /api/health`
 
@@ -183,173 +257,190 @@ Product service liveness check.
 
 ---
 
-### `GET /api/categories`
-
-List all available product categories.
-
-**Response `200`**
-```json
-{
-  "categories": ["consultations", "shoes", "outerwear", "bottoms", "bags", "clocks"]
-}
-```
-
----
-
-### `GET /api/filters`
-
-List the filterable fields for a given category.
-
-**Query params**
-| Param | Required | Description |
-|-------|----------|-------------|
-| `category` | yes | One of the values returned by `/api/categories` |
-
-**Response `200`**
-```json
-{
-  "category": "shoes",
-  "filters":  ["brand", "size", "color", "gender", "material"]
-}
-```
-
-**Errors**
-| Status | Meaning |
-|--------|---------|
-| `400` | `category` param missing |
-| `404` | Unknown category |
-
----
-
-### `GET /api/products/search`
-
-Generic search across any category.
-
-**Query params**
-| Param | Required | Description |
-|-------|----------|-------------|
-| `category` | yes | Category to search within |
-| *(filter fields)* | no | See per-category filter tables below |
-
-**Response `200`**
-```json
-{
-  "total":   2,
-  "results": [ /* category-specific objects */ ]
-}
-```
-
-**Errors**
-| Status | Meaning |
-|--------|---------|
-| `400` | `category` param missing |
-| `500` | Unknown category value |
-
----
-
-### `GET /api/products/consultations`
-
-| Filter | Match type |
-|--------|-----------|
-| `title` | case-insensitive substring |
-| `status` | exact |
-
-**Result object**
-```json
-{
-  "ID": "1", "Title": "Style Consultation", "Description": "...",
-  "Duration": 60, "Price": 75.00, "Status": "available"
-}
-```
-
----
-
-### `GET /api/products/shoes`
-
-| Filter | Match type |
-|--------|-----------|
-| `brand` | case-insensitive substring |
-| `size` | exact |
-| `color` | exact |
-| `gender` | exact |
-| `material` | exact |
-
-**Result object**
-```json
-{
-  "ID": "1", "Name": "Air Max 90", "Description": "...",
-  "Price": 120.00, "Brand": "Nike", "Color": "White",
-  "Material": "Leather", "Stock": 50, "Category": "shoes",
-  "Size": "42", "Gender": "Unisex"
-}
-```
-
----
-
-### `GET /api/products/outerwear`
-
-| Filter | Match type |
-|--------|-----------|
-| `brand` | case-insensitive substring |
-| `size` | exact |
-| `color` | exact |
-| `gender` | exact |
-| `material` | exact |
-
-**Result object** — same fields as shoes, with `Size` and `Gender`.
-
----
-
-### `GET /api/products/bottoms`
-
-| Filter | Match type |
-|--------|-----------|
-| `brand` | case-insensitive substring |
-| `size` | exact |
-| `color` | exact |
-| `gender` | exact |
-| `material` | exact |
-
-**Result object** — same fields as shoes, with `Size` and `Gender`.
-
----
-
 ### `GET /api/products/bags`
 
+Search bags. No authentication required.
+
 | Filter | Match type |
 |--------|-----------|
 | `brand` | case-insensitive substring |
 | `color` | exact |
 | `material` | exact |
 
-**Result object**
+**Response `200`**
 ```json
 {
-  "ID": "1", "Name": "Tote Pro", "Description": "...",
-  "Price": 45.00, "Brand": "Generic", "Color": "Beige",
-  "Material": "Canvas", "Capacity": "15L", "Stock": 100, "Category": "bags"
+  "total": 1,
+  "results": [
+    {
+      "id": "BOT-001",
+      "name": "Cassette Bag",
+      "description": "...",
+      "price": 2500.00,
+      "brand": "Bottega Veneta",
+      "color": "Green",
+      "material": "Leather",
+      "stock": 5,
+      "category": "bags",
+      "capacity": "Medium"
+    }
+  ]
 }
 ```
 
 ---
 
-### `GET /api/products/clocks`
+### `POST /api/coupons/redeem`
 
-| Filter | Match type |
-|--------|-----------|
-| `brand` | case-insensitive substring |
-| `type` | exact (`Analog`, `Digital`, `Smart`) |
-| `material` | exact |
+Redeem a coupon code. No authentication required.
 
-**Result object**
+**Request body**
+```json
+{ "code": "SUMMER20" }
+```
+
+**Response `200`** — coupon object
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `404` | Invalid coupon code |
+
+---
+
+### Product CRUD (authenticated)
+
+All routes below require `Authorization: Bearer <access_token>`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/products` | List all products |
+| POST | `/api/products` | Create product |
+| GET | `/api/products/{id}` | Get product by ID |
+| PUT | `/api/products/{id}` | Update product |
+| DELETE | `/api/products/{id}` | Delete product |
+| PUT | `/api/products/{id}/image` | Upload image (multipart field `image`) |
+| GET | `/api/coupons` | List coupons |
+| POST | `/api/coupons` | Create coupon |
+| PUT | `/api/coupons/{code}` | Update coupon |
+| DELETE | `/api/coupons/{code}` | Delete coupon |
+
+Product IDs are generated from the brand prefix (e.g. `BOT-001`). Image upload appends to the `imageUrls` array.
+
+---
+
+## Inventory Service — `/api/v1/inventory`
+
+In-memory store. No authentication today.
+
+### `GET /health`
+
+**Response `200`**
+```json
+{ "status": "ok" }
+```
+
+### `GET /api/v1/inventory/{sku}`
+
+Get stock for a SKU.
+
+### `PUT /api/v1/inventory/{sku}`
+
+Set stock quantity.
+
+**Request body**
+```json
+{ "quantity": 100 }
+```
+
+### `POST /api/v1/inventory/{sku}/adjust`
+
+Adjust stock by delta.
+
+**Request body**
+```json
+{ "delta": -5 }
+```
+
+### `POST /api/v1/inventory/reservations`
+
+Reserve stock for an order.
+
+**Request body**
 ```json
 {
-  "ID": "1", "Name": "Seiko 5", "Description": "...",
-  "Price": 150.00, "Brand": "Seiko",
-  "Type": "Analog", "Material": "Steel",
-  "Stock": 20, "Category": "clocks"
+  "order_id": "ord-123",
+  "items": [{ "sku": "BOT-001", "quantity": 1 }]
 }
 ```
+
+**Response `201`**
+```json
+{
+  "reservation_id": "...",
+  "reservation": { }
+}
+```
+
+### `POST /api/v1/inventory/reservations/{id}/commit`
+
+Commit a reservation (deduct stock).
+
+### `POST /api/v1/inventory/reservations/{id}/release`
+
+Release a reservation (return stock).
+
+---
+
+## Order Service — `/api/v1/orders`
+
+In-memory store. Calls inventory service to reserve stock. No authentication today.
+
+### `GET /health`
+
+**Response `200`**
+```json
+{ "status": "ok" }
+```
+
+### `POST /api/v1/orders`
+
+Create an order and reserve inventory.
+
+**Request body**
+```json
+{
+  "customer_id": "cust-1",
+  "items": [{ "sku": "BOT-001", "quantity": 1, "price": 2500.00 }]
+}
+```
+
+**Response `201`** — order object
+
+### `GET /api/v1/orders?customer_id={id}`
+
+List orders for a customer.
+
+### `GET /api/v1/orders/{id}`
+
+Get order by ID.
+
+### `PUT /api/v1/orders/{id}/status`
+
+Transition order status.
+
+**Request body**
+```json
+{ "status": "confirmed" }
+```
+
+Supported values: `confirmed`, `canceled`, `fulfilled`.
+
+---
+
+## Notification Service
+
+Health check only (`GET /health`). Outbound messaging is not implemented.
 
 ---
 
@@ -391,14 +482,14 @@ Order service liveness check.
 
 ## Common error shape
 
-All error responses use the same JSON envelope:
+All error responses use a JSON envelope:
 
 **Auth service** (Gin)
 ```json
 { "error": "human-readable message" }
 ```
 
-**Product service** (stdlib)
+**Other services** (stdlib)
 ```json
 { "error": "human-readable message", "code": 400 }
 ```
@@ -416,19 +507,24 @@ All error responses use the same JSON envelope:
 | GET | `/api/v1/auth/me` | Bearer | auth |
 | POST | `/api/v1/auth/refresh` | — | auth |
 | POST | `/api/v1/auth/logout` | — | auth |
+| GET | `/api/v1/users` | Admin | auth |
+| POST | `/api/v1/users` | Admin | auth |
+| GET | `/api/v1/users/{id}` | Admin | auth |
+| PUT | `/api/v1/users/{id}/role` | Admin | auth |
+| DELETE | `/api/v1/users/{id}` | Admin | auth |
 | GET | `/api/health` | — | product |
-| GET | `/api/categories` | — | product |
-| GET | `/api/filters` | — | product |
-| GET | `/api/products/search` | — | product |
-| GET | `/api/products/consultations` | — | product |
-| GET | `/api/products/shoes` | — | product |
-| GET | `/api/products/outerwear` | — | product |
-| GET | `/api/products/bottoms` | — | product |
 | GET | `/api/products/bags` | — | product |
-| GET | `/api/products/clocks` | — | product |
-| GET | `/health` | — | order |
-| POST | `/api/v1/checkout/sessions` | — | order |
-| GET | `/api/v1/checkout/sessions/{id}` | — | order |
-| POST | `/api/v1/checkout/sessions/{id}/complete` | — | order |
-| POST | `/api/v1/orders` | — | order |
+| POST | `/api/coupons/redeem` | — | product |
+| GET/POST | `/api/products` | Bearer | product |
+| GET/PUT/DELETE | `/api/products/{id}` | Bearer | product |
+| PUT | `/api/products/{id}/image` | Bearer | product |
+| GET/POST/PUT/DELETE | `/api/coupons` | Bearer | product |
+| GET/PUT | `/api/v1/inventory/{sku}` | — | inventory |
+| POST | `/api/v1/inventory/{sku}/adjust` | — | inventory |
+| POST | `/api/v1/inventory/reservations` | — | inventory |
+| POST | `/api/v1/inventory/reservations/{id}/commit` | — | inventory |
+| POST | `/api/v1/inventory/reservations/{id}/release` | — | inventory |
+| POST/GET | `/api/v1/orders` | — | order |
 | GET | `/api/v1/orders/{id}` | — | order |
+| PUT | `/api/v1/orders/{id}/status` | — | order |
+| GET | `/health` | — | notification |

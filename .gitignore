@@ -1,0 +1,20 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# AWS credentials
+*credentials*
+*accessKeys*
+
+# Go build artifacts
+*.exe
+*.test
+cmd/schick-product/schick-product
+cmd/schick-proxy/schick-proxy
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/terraform.tfvars
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*

@@ -13,7 +13,7 @@ import (
 var usageStr = `
 Usage: schick-product [OPTIONS]
 
-A product search server that serves product catalog APIs over HTTP.
+Product catalog server for bags, coupons, and image uploads.
 
 Options:
   -host string
@@ -21,11 +21,9 @@ Options:
   -port int
       Server port number (default: 8080; also SERVER_PORT env)
   -db string
-<<<<<<< cursor/schick-auth-main-1b99
-      Database connection string (default: postgresql://localhost/products)
-  -nats string
-      NATS connection URL
->>>>>>> main
+      Database connection string (also SCHICK_PRODUCT_DB or DB_URL env)
+  -jwt-secret string
+      JWT secret for validating access tokens (also JWT_SECRET env)
   -read-timeout int
       Read timeout in seconds (also SCHICK_PRODUCT_READ_TIMEOUT env)
   -write-timeout int
@@ -34,16 +32,14 @@ Options:
       Show this help message
 
 Environment variables:
-  SERVER_HOST, SERVER_PORT, DB_URL, SCHICK_PRODUCT_DB,
+  SERVER_HOST, SERVER_PORT, DB_URL, SCHICK_PRODUCT_DB, JWT_SECRET,
+  S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET,
   SCHICK_PRODUCT_READ_TIMEOUT, SCHICK_PRODUCT_WRITE_TIMEOUT
 
 Examples:
   schick-product
   schick-product -port 9000 -host 0.0.0.0
-<<<<<<< cursor/schick-auth-main-1b99
-  schick-product -db postgresql://prod-db/products -port 3000
-  DB_URL=postgresql://prod-db/products schick-product
->>>>>>> main
+  SCHICK_PRODUCT_DB=postgres://schick:schick_dev@localhost:5433/products schick-product
 `
 
 func main() {
@@ -60,7 +56,7 @@ func main() {
 
 	srv, err := product.NewServer(opts)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "NewSearchServer: %v\n", err)
+		fmt.Fprintf(os.Stderr, "NewServer: %v\n", err)
 		os.Exit(1)
 	}
 

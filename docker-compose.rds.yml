@@ -1,0 +1,36 @@
+# Overlay for connecting auth/product services to Amazon RDS instead of local Postgres.
+#
+# Prerequisites:
+#   1. AWS credentials with Secrets Manager read access
+#   2. VPN to the production VPC (RDS is not publicly accessible)
+#   3. Run: bash infra/scripts/fetch-rds-env.sh
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.rds.yml --env-file .env.rds up --build
+
+services:
+  postgres-auth:
+    profiles: ["local-db"]
+
+  postgres-product:
+    profiles: ["local-db"]
+
+  schick-auth:
+    environment:
+      DB_URL: ${DB_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      OWNER_EMAIL: ${OWNER_EMAIL}
+      OWNER_PASSWORD: ${OWNER_PASSWORD}
+    depends_on: {}
+
+  schick-product:
+    environment:
+      SCHICK_PRODUCT_DB: ${SCHICK_PRODUCT_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-schick}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-schick_dev}
+      S3_BUCKET: ${S3_BUCKET:-product-images}
+    depends_on:
+      minio:
+        condition: service_healthy
