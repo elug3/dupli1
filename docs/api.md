@@ -444,6 +444,42 @@ Health check only (`GET /health`). Outbound messaging is not implemented.
 
 ---
 
+## Order Service — `/api/v1`
+
+Checkout sessions and order lifecycle APIs are served by `schick-order` (port **8083** locally). See [checkout-session.md](checkout-session.md) for the full checkout flow.
+
+### `GET /health`
+
+Order service liveness check.
+
+**Response `200`**
+```json
+{ "status": "ok" }
+```
+
+### Checkout sessions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/checkout/sessions` | Create checkout session |
+| GET | `/api/v1/checkout/sessions/{id}` | Get session |
+| PUT | `/api/v1/checkout/sessions/{id}/items` | Replace all items |
+| POST | `/api/v1/checkout/sessions/{id}/items` | Add or update one item |
+| DELETE | `/api/v1/checkout/sessions/{id}/items/{sku}` | Remove item |
+| POST | `/api/v1/checkout/sessions/{id}/coupon` | Apply coupon |
+| POST | `/api/v1/checkout/sessions/{id}/complete` | Complete checkout → order |
+
+### Orders
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/orders` | Create order directly |
+| GET | `/api/v1/orders?customer_id=` | List customer orders |
+| GET | `/api/v1/orders/{id}` | Get order |
+| PUT | `/api/v1/orders/{id}/status` | Confirm, cancel, or fulfill |
+
+---
+
 ## Common error shape
 
 All error responses use a JSON envelope:

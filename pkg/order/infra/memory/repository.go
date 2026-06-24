@@ -10,14 +10,16 @@ import (
 )
 
 type Repository struct {
-	mu     sync.RWMutex
-	orders map[string]*domain.Order
-	nextID int
+	mu       sync.RWMutex
+	orders   map[string]*domain.Order
+	sessions map[string]*domain.CheckoutSession
+	nextID   int
 }
 
 func NewRepository() *Repository {
 	return &Repository{
-		orders: make(map[string]*domain.Order),
+		orders:   make(map[string]*domain.Order),
+		sessions: make(map[string]*domain.CheckoutSession),
 	}
 }
 
@@ -31,6 +33,18 @@ func (r *Repository) NextOrderID(ctx context.Context) (string, error) {
 
 	r.nextID++
 	return fmt.Sprintf("ord_%06d", r.nextID), nil
+}
+
+func (r *Repository) NextCheckoutSessionID(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.nextID++
+	return fmt.Sprintf("cs_%06d", r.nextID), nil
 }
 
 func (r *Repository) Save(ctx context.Context, order *domain.Order) error {
@@ -77,9 +91,43 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	return orders, nil
 }
 
+func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.CheckoutSession) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.sessions[session.ID] = cloneCheckoutSession(session)
+	return nil
+}
+
+func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain.CheckoutSession, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	session, ok := r.sessions[id]
+	if !ok {
+		return nil, ports.ErrNotFound
+	}
+	return cloneCheckoutSession(session), nil
+}
+
 func cloneOrder(order *domain.Order) *domain.Order {
 	copied := *order
 	copied.Items = make([]domain.OrderItem, len(order.Items))
 	copy(copied.Items, order.Items)
+	return &copied
+}
+
+func cloneCheckoutSession(session *domain.CheckoutSession) *domain.CheckoutSession {
+	copied := *session
+	copied.Items = make([]domain.OrderItem, len(session.Items))
+	copy(copied.Items, session.Items)
 	return &copied
 }

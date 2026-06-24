@@ -19,12 +19,6 @@ func New(svc *service.Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/health", h.health)
-	mux.HandleFunc("/api/v1/orders", h.orders)
-	mux.HandleFunc("/api/v1/orders/", h.order)
-}
-
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -129,7 +123,13 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ports.ErrNotFound):
 		respondError(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition):
+	case errors.Is(err, ports.ErrCouponInvalid):
+		respondError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ports.ErrCouponUnavailable):
+		respondError(w, http.StatusServiceUnavailable, err.Error())
+	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition),
+		errors.Is(err, domain.ErrInvalidCheckoutSession), errors.Is(err, domain.ErrSessionNotOpen),
+		errors.Is(err, domain.ErrSessionExpired), errors.Is(err, domain.ErrEmptyCheckout):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:
 		respondError(w, http.StatusInternalServerError, err.Error())
