@@ -28,6 +28,7 @@ func newRouter(h *handler.Handler, debug bool) *gin.Engine {
 		v1.POST("/register", h.Register)
 		v1.POST("/login", h.Login)
 		v1.POST("/logout", h.Logout)
+		v1.GET("/me", h.Me)
 		v1.POST("/refresh", h.Refresh)
 		v1.GET("/me", h.Me)
 		v1.GET("/users", h.ListUsers)

@@ -3,22 +3,37 @@
 # Production is deployed to AWS ECS — do not use this file for production.
 
 services:
-  postgres:
+  postgres-auth:
     image: postgres:16-alpine
     environment:
+      POSTGRES_DB: schick_db
       POSTGRES_USER: schick
       POSTGRES_PASSWORD: schick_dev
-      POSTGRES_DB: schick_db
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "5432:5432"
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U schick -d schick_db"]
       interval: 5s
       timeout: 5s
       retries: 10
+
+  postgres-product:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: products
+      POSTGRES_USER: schick
+      POSTGRES_PASSWORD: schick_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-product-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schick -d products"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -42,76 +57,167 @@ services:
       timeout: 3s
       retries: 10
 
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-schick}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-schick_dev}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+        mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-schick} ${MINIO_SECRET_KEY:-schick_dev} &&
+        mc mb --ignore-existing local/product-images &&
+        mc anonymous set download local/product-images
+      "
+    restart: "no"
+
   schick-auth:
     build:
       context: .
-      args:
-        SERVICE: auth
+      dockerfile: cmd/schick-auth/Dockerfile
+    ports:
+      - "8080:8080"
     environment:
-      DB_URL: postgres://schick:schick_dev@postgres:5432/schick_db?sslmode=disable
+      DB_URL: postgres://schick:schick_dev@postgres-auth:5432/schick_db?sslmode=disable
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
-      JWT_SECRET: dev-jwt-secret-do-not-use-in-production
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
+      SCHICK_AUTH_ADDR: :8080
+      OWNER_EMAIL: admin@schick.com
+      OWNER_PASSWORD: password
     depends_on:
-      postgres:
+      postgres-auth:
         condition: service_healthy
       redis:
         condition: service_healthy
       nats:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     restart: unless-stopped
 
   schick-product:
     build:
       context: .
-      args:
-        SERVICE: product
-    command: ["-host", "0.0.0.0"]
+      dockerfile: cmd/schick-product/Dockerfile
+    ports:
+      - "8081:8080"
     environment:
-      DB_URL: postgres://schick:schick_dev@postgres:5432/products?sslmode=disable
-      NATS_URL: nats://nats:4222
-      JWT_SECRET: dev-jwt-secret-do-not-use-in-production
+      SCHICK_PRODUCT_DB: postgres://schick:schick_dev@postgres-product:5432/products?sslmode=disable
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8080"
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-schick}
+      S3_SECRET_KEY: ${MINIO_SECRET_KEY:-schick_dev}
+      S3_BUCKET: product-images
     depends_on:
-      postgres:
+      postgres-product:
         condition: service_healthy
-      nats:
+      minio:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     restart: unless-stopped
 
   schick-inventory:
     build:
       context: .
-      args:
-        SERVICE: inventory
+      dockerfile: cmd/schick-inventory/Dockerfile
+    ports:
+      - "8082:8080"
     environment:
       SCHICK_INVENTORY_ADDR: :8080
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     restart: unless-stopped
 
   schick-order:
     build:
       context: .
-      args:
-        SERVICE: order
+      dockerfile: cmd/schick-order/Dockerfile
+    ports:
+      - "8083:8080"
     environment:
       SCHICK_ORDER_ADDR: :8080
       SCHICK_INVENTORY_URL: http://schick-inventory:8080
-      JWT_SECRET: dev-jwt-secret-do-not-use-in-production
+      SCHICK_PRODUCT_URL: http://schick-product:8080
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
     depends_on:
-      - schick-inventory
+      schick-inventory:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     restart: unless-stopped
 
-  nginx:
-    image: nginx:alpine
+  schick-notification:
+    build:
+      context: .
+      dockerfile: cmd/schick-notification/Dockerfile
     ports:
-      - "8080:80"
+      - "8084:8080"
+    environment:
+      SCHICK_NOTIFICATION_ADDR: :8080
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  schick-proxy:
+    build:
+      context: cmd/schick-proxy
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
     volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
     depends_on:
-      - schick-auth
-      - schick-product
-      - schick-inventory
-      - schick-order
+      schick-auth:
+        condition: service_healthy
+      schick-product:
+        condition: service_healthy
+      schick-inventory:
+        condition: service_healthy
+      schick-order:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  postgres-auth-data:
+  postgres-product-data:
+  minio-data:

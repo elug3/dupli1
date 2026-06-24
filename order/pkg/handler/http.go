@@ -26,6 +26,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/orders/health", h.health)
 	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
 	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
+	mux.HandleFunc("/api/v1/checkout/sessions", h.requireAuth(h.checkoutSessions))
+	mux.HandleFunc("/api/v1/checkout/sessions/", h.requireAuth(h.checkoutSession))
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {

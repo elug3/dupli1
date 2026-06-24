@@ -31,6 +31,10 @@ func (r *fakeUserRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *fakeUserRepository) ListAll(ctx context.Context) ([]*domain.User, error) {
+	return nil, nil
+}
+
 type fakeTokenGenerator struct{}
 
 func (g fakeTokenGenerator) Generate(ctx context.Context, userID string, roles []string) (string, error) {
@@ -76,6 +80,8 @@ func (r *stubUserRepository) Save(_ context.Context, u *domain.User) error {
 }
 
 func (r *stubUserRepository) Delete(_ context.Context, _ string) error { return nil }
+
+func (r *stubUserRepository) ListAll(_ context.Context) ([]*domain.User, error) { return nil, nil }
 
 type recordedEventPublisher struct {
 	subject string
@@ -135,7 +141,7 @@ func TestRegisterPublishesUserRegisteredEvent(t *testing.T) {
 }
 
 func TestLogin_ForwardsUserRolesToTokenGenerator(t *testing.T) {
-	user := domain.NewUser("u-1", "user@example.com", "pass", "order_manager")
+	user, _ := domain.NewUser("u-1", "user@example.com", "pass", "order_manager")
 	repo := &stubUserRepository{user: user}
 	gen := &capturingTokenGenerator{}
 	svc := NewService(repo, gen)
@@ -152,7 +158,7 @@ func TestLogin_ForwardsUserRolesToTokenGenerator(t *testing.T) {
 }
 
 func TestRefresh_FetchesFreshRolesFromDB(t *testing.T) {
-	user := domain.NewUser("u-2", "user@example.com", "pass", "admin")
+	user, _ := domain.NewUser("u-2", "user@example.com", "pass", "admin")
 	repo := &stubUserRepository{user: user}
 	gen := &capturingTokenGenerator{}
 	svc := NewService(repo, gen)

@@ -34,62 +34,6 @@ func NewProductSearchService(store ports.ProductStore, eventPublisher ...ports.E
 	return s
 }
 
-func (s *ProductSearchService) SearchConsultations(filter map[string]string) ([]domain.Consultation, error) {
-	if s.store == nil {
-		return nil, fmt.Errorf("store not initialized")
-	}
-	results, err := s.store.SearchConsultations(filter)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.publishSearchEvent("consultations", filter, len(results)); err != nil {
-		return nil, err
-	}
-	return results, nil
-}
-
-func (s *ProductSearchService) SearchShoes(filter map[string]string) ([]domain.Shoes, error) {
-	if s.store == nil {
-		return nil, fmt.Errorf("store not initialized")
-	}
-	results, err := s.store.SearchShoes(filter)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.publishSearchEvent("shoes", filter, len(results)); err != nil {
-		return nil, err
-	}
-	return results, nil
-}
-
-func (s *ProductSearchService) SearchOuterwear(filter map[string]string) ([]domain.Outerwear, error) {
-	if s.store == nil {
-		return nil, fmt.Errorf("store not initialized")
-	}
-	results, err := s.store.SearchOuterwear(filter)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.publishSearchEvent("outerwear", filter, len(results)); err != nil {
-		return nil, err
-	}
-	return results, nil
-}
-
-func (s *ProductSearchService) SearchBottoms(filter map[string]string) ([]domain.Bottoms, error) {
-	if s.store == nil {
-		return nil, fmt.Errorf("store not initialized")
-	}
-	results, err := s.store.SearchBottoms(filter)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.publishSearchEvent("bottoms", filter, len(results)); err != nil {
-		return nil, err
-	}
-	return results, nil
-}
-
 func (s *ProductSearchService) SearchBags(filter map[string]string) ([]domain.Bag, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
@@ -104,86 +48,11 @@ func (s *ProductSearchService) SearchBags(filter map[string]string) ([]domain.Ba
 	return results, nil
 }
 
-func (s *ProductSearchService) SearchClocks(filter map[string]string) ([]domain.Clock, error) {
+func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	results, err := s.store.SearchClocks(filter)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.publishSearchEvent("clocks", filter, len(results)); err != nil {
-		return nil, err
-	}
-	return results, nil
-}
-
-type AllProductsResult struct {
-	Consultations []domain.Consultation `json:"consultations"`
-	Shoes         []domain.Shoes        `json:"shoes"`
-	Outerwear     []domain.Outerwear    `json:"outerwear"`
-	Bottoms       []domain.Bottoms      `json:"bottoms"`
-	Bags          []domain.Bag          `json:"bags"`
-	Clocks        []domain.Clock        `json:"clocks"`
-}
-
-func (r *AllProductsResult) Total() int {
-	return len(r.Consultations) + len(r.Shoes) + len(r.Outerwear) +
-		len(r.Bottoms) + len(r.Bags) + len(r.Clocks)
-}
-
-func (s *ProductSearchService) SearchAll() (*AllProductsResult, error) {
-	consultations, err := s.SearchConsultations(nil)
-	if err != nil {
-		return nil, err
-	}
-	shoes, err := s.SearchShoes(nil)
-	if err != nil {
-		return nil, err
-	}
-	outerwear, err := s.SearchOuterwear(nil)
-	if err != nil {
-		return nil, err
-	}
-	bottoms, err := s.SearchBottoms(nil)
-	if err != nil {
-		return nil, err
-	}
-	bags, err := s.SearchBags(nil)
-	if err != nil {
-		return nil, err
-	}
-	clocks, err := s.SearchClocks(nil)
-	if err != nil {
-		return nil, err
-	}
-	return &AllProductsResult{
-		Consultations: consultations,
-		Shoes:         shoes,
-		Outerwear:     outerwear,
-		Bottoms:       bottoms,
-		Bags:          bags,
-		Clocks:        clocks,
-	}, nil
-}
-
-func (s *ProductSearchService) Search(category string, filter map[string]string) (interface{}, error) {
-	switch category {
-	case "consultations":
-		return s.SearchConsultations(filter)
-	case "shoes":
-		return s.SearchShoes(filter)
-	case "outerwear":
-		return s.SearchOuterwear(filter)
-	case "bottoms":
-		return s.SearchBottoms(filter)
-	case "bags":
-		return s.SearchBags(filter)
-	case "clocks":
-		return s.SearchClocks(filter)
-	default:
-		return nil, fmt.Errorf("unknown category: %s", category)
-	}
+	return s.store.CreateProduct(p)
 }
 
 func (s *ProductSearchService) publishSearchEvent(category string, filter map[string]string, resultCount int) error {

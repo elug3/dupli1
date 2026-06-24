@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/elug3/schick/pkg/order"
+	"github.com/elug3/schick/order/pkg"
 )
 
 var usageStr = `
@@ -24,6 +24,8 @@ Options:
       Server listen address (overrides host/port)
   -inventory-url string
       Inventory service base URL
+  -product-url string
+      Product service base URL for coupon redemption
   -help
       Show this help message
 `

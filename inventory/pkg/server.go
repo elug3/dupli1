@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/elug3/schick/pkg/inventory/bootstrap"
+	"github.com/elug3/schick/inventory/pkg/bootstrap"
 )
 
 type Server struct {

@@ -47,6 +47,10 @@ type ServerOptions struct {
 	// Logging
 	LogOutput string // "json" (default) or "text"
 	LogLevel  string // "debug", "info" (default), "warn", "error"
+
+	// OwnerEmail and OwnerPassword seed the initial owner account on first startup.
+	OwnerEmail    string
+	OwnerPassword string
 }
 
 // NewServerOptions returns ServerOptions populated with sensible defaults.
@@ -83,6 +87,9 @@ func (o *ServerOptions) Validate() error {
 	}
 	if o.TokenExpiry <= 0 {
 		return fmt.Errorf("--token-expiry must be > 0")
+	}
+	if o.RefreshTokenExpiry <= 0 {
+		return fmt.Errorf("RefreshTokenExpiry must be > 0")
 	}
 	if o.DBURL == "" {
 		return fmt.Errorf("--db is required")

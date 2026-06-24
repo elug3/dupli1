@@ -27,6 +27,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 
 	app := bootstrap.Bootstrap(bootstrap.Config{
 		InventoryURL: opts.InventoryURL,
+		ProductURL:   opts.ProductURL,
 		JWTSecret:    opts.JWTSecret,
 		HTTPClient:   bootstrap.DefaultHTTPClient(),
 	})

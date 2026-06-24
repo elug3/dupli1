@@ -5,11 +5,45 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/rs/zerolog"
 )
+
+// withPostgresSSLMode appends or preserves an sslmode parameter.
+// URL-format DSNs get sslmode=require unless the host ends in ".local".
+// Key-value DSNs get sslmode=disable.
+// Existing sslmode values are never overwritten.
+func withPostgresSSLMode(dsn string) string {
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		// URL format
+		if strings.Contains(dsn, "sslmode=") {
+			return dsn
+		}
+		u, err := url.Parse(dsn)
+		if err != nil {
+			return dsn
+		}
+		host := u.Hostname()
+		mode := "require"
+		if strings.HasSuffix(host, ".local") || host == "localhost" || host == "127.0.0.1" {
+			mode = "disable"
+		}
+		sep := "?"
+		if u.RawQuery != "" {
+			sep = "&"
+		}
+		return dsn + sep + "sslmode=" + mode
+	}
+	// Key-value DSN format
+	if strings.Contains(dsn, "sslmode=") {
+		return dsn
+	}
+	return dsn + " sslmode=disable"
+}
 
 func openPostgres(ctx context.Context, connURL string, maxConns int, log zerolog.Logger) (*sql.DB, error) {
 	if connURL == "" {

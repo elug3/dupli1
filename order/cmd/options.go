@@ -24,6 +24,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	var (
 		addr               string
 		inventoryURL       = opts.InventoryURL
+		productURL         = opts.ProductURL
 		readTimeoutSec     = int(opts.ReadTimeout / time.Second)
 		writeTimeoutSec    = int(opts.WriteTimeout / time.Second)
 		idleTimeoutSec     = int(opts.IdleTimeout / time.Second)
@@ -34,6 +35,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	fs.IntVar(&port, "port", port, "Server port number")
 	fs.StringVar(&addr, "addr", "", "Server listen address (overrides host/port)")
 	fs.StringVar(&inventoryURL, "inventory-url", inventoryURL, "Inventory service base URL")
+	fs.StringVar(&productURL, "product-url", productURL, "Product service base URL for coupon redemption")
 	fs.IntVar(&readTimeoutSec, "read-timeout", readTimeoutSec, "Read timeout in seconds")
 	fs.IntVar(&writeTimeoutSec, "write-timeout", writeTimeoutSec, "Write timeout in seconds")
 	fs.IntVar(&idleTimeoutSec, "idle-timeout", idleTimeoutSec, "Idle timeout in seconds")
@@ -49,6 +51,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 		opts.Addr = net.JoinHostPort(host, strconv.Itoa(port))
 	}
 	opts.InventoryURL = inventoryURL
+	opts.ProductURL = productURL
 	opts.ReadTimeout = time.Duration(readTimeoutSec) * time.Second
 	opts.WriteTimeout = time.Duration(writeTimeoutSec) * time.Second
 	opts.IdleTimeout = time.Duration(idleTimeoutSec) * time.Second
@@ -63,6 +66,9 @@ func applyEnv(opts *order.ServerOptions) {
 	}
 	if v := os.Getenv("SCHICK_INVENTORY_URL"); v != "" {
 		opts.InventoryURL = v
+	}
+	if v := os.Getenv("SCHICK_PRODUCT_URL"); v != "" {
+		opts.ProductURL = v
 	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.JWTSecret = v

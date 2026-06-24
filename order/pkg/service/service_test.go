@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/elug3/schick/pkg/order/domain"
-	"github.com/elug3/schick/pkg/order/infra/memory"
-	"github.com/elug3/schick/pkg/order/ports"
-	"github.com/elug3/schick/pkg/order/service"
+	"github.com/elug3/schick/order/pkg/domain"
+	"github.com/elug3/schick/order/pkg/infra/memory"
+	"github.com/elug3/schick/order/pkg/ports"
+	"github.com/elug3/schick/order/pkg/service"
 )
 
 type fakeInventory struct {

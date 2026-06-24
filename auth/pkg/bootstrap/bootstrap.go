@@ -99,5 +99,10 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		},
 	}
 
+	if err := seedOwner(ctx, cfg, userRepo); err != nil {
+		_ = app.Close()
+		return nil, err
+	}
+
 	return app, nil
 }

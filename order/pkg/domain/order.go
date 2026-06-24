@@ -32,12 +32,15 @@ type Order struct {
 	ReservationID string      `json:"reservation_id"`
 	Items         []OrderItem `json:"items"`
 	Status        OrderStatus `json:"status"`
+	CouponCode    string      `json:"coupon_code,omitempty"`
+	SubtotalCents int64       `json:"subtotal_cents"`
+	DiscountCents int64       `json:"discount_cents"`
 	TotalCents    int64       `json:"total_cents"`
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
 }
 
-func NewOrder(id, customerID, reservationID string, items []OrderItem, now time.Time) (*Order, error) {
+func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCode string, discountCents int64, now time.Time) (*Order, error) {
 	id = strings.TrimSpace(id)
 	customerID = strings.TrimSpace(customerID)
 	reservationID = strings.TrimSpace(reservationID)
@@ -46,16 +49,19 @@ func NewOrder(id, customerID, reservationID string, items []OrderItem, now time.
 	}
 
 	copiedItems := make([]OrderItem, len(items))
-	var total int64
+	var subtotal int64
 	for i, item := range items {
 		item.SKU = strings.ToUpper(strings.TrimSpace(item.SKU))
 		if item.SKU == "" || item.Quantity <= 0 || item.UnitPriceCents < 0 {
 			return nil, ErrInvalidOrder
 		}
-		total += int64(item.Quantity) * item.UnitPriceCents
+		subtotal += int64(item.Quantity) * item.UnitPriceCents
 		copiedItems[i] = item
 	}
 	if len(copiedItems) == 0 {
+		return nil, ErrInvalidOrder
+	}
+	if discountCents < 0 || discountCents > subtotal {
 		return nil, ErrInvalidOrder
 	}
 
@@ -65,7 +71,10 @@ func NewOrder(id, customerID, reservationID string, items []OrderItem, now time.
 		ReservationID: reservationID,
 		Items:         copiedItems,
 		Status:        StatusPending,
-		TotalCents:    total,
+		CouponCode:    strings.ToUpper(strings.TrimSpace(couponCode)),
+		SubtotalCents: subtotal,
+		DiscountCents: discountCents,
+		TotalCents:    subtotal - discountCents,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}, nil

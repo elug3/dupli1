@@ -1,0 +1,9 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+crash.log
+crash.*.log
+
+# Keep lock file for reproducible provider versions.
+!.terraform.lock.hcl

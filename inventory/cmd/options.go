@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/elug3/schick/pkg/inventory"
+	"github.com/elug3/schick/inventory/pkg"
 )
 
 type Options = inventory.ServerOptions

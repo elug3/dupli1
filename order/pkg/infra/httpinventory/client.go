@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elug3/schick/pkg/order/ports"
+	"github.com/elug3/schick/order/pkg/ports"
 )
 
 type Client struct {

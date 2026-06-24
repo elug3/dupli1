@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/elug3/schick/pkg/inventory"
+	"github.com/elug3/schick/inventory/pkg"
 )
 
 var usageStr = `

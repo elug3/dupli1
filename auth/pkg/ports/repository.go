@@ -14,12 +14,12 @@ type UserRepository interface {
 	// FindByID returns a user by ID or (nil, nil) when not found.
 	FindByID(ctx context.Context, id string) (*domain.User, error)
 
+	// ListAll returns all users ordered by creation time.
+	ListAll(ctx context.Context) ([]*domain.User, error)
+
 	// Save creates or updates a user.
 	Save(ctx context.Context, u *domain.User) error
 
 	// Delete removes a user by id.
 	Delete(ctx context.Context, id string) error
-
-	// ListAll returns all users.
-	ListAll(ctx context.Context) ([]*domain.User, error)
 }

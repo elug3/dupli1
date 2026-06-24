@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/elug3/schick/pkg/order/domain"
+	"github.com/elug3/schick/order/pkg/domain"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -14,4 +14,7 @@ type Repository interface {
 	Save(ctx context.Context, order *domain.Order) error
 	Get(ctx context.Context, id string) (*domain.Order, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error)
+	NextCheckoutSessionID(ctx context.Context) (string, error)
+	SaveCheckoutSession(ctx context.Context, session *domain.CheckoutSession) error
+	GetCheckoutSession(ctx context.Context, id string) (*domain.CheckoutSession, error)
 }

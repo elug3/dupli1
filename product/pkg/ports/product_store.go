@@ -1,12 +1,12 @@
 package ports
 
-import "github.com/schick/pkg/product/domain"
+import "github.com/elug3/schick/product/pkg/domain"
 
 type ProductStore interface {
-	SearchConsultations(filter map[string]string) ([]domain.Consultation, error)
-	SearchShoes(filter map[string]string) ([]domain.Shoes, error)
-	SearchOuterwear(filter map[string]string) ([]domain.Outerwear, error)
-	SearchBottoms(filter map[string]string) ([]domain.Bottoms, error)
 	SearchBags(filter map[string]string) ([]domain.Bag, error)
-	SearchClocks(filter map[string]string) ([]domain.Clock, error)
+	ListProducts() ([]domain.Product, error)
+	GetProduct(id string) (*domain.Product, error)
+	CreateProduct(p domain.Product) (*domain.Product, error)
+	UpdateProduct(p domain.Product) (*domain.Product, error)
+	DeleteProduct(id string) error
 }

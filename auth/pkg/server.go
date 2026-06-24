@@ -40,7 +40,9 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		RefreshTokenExpiry: opts.RefreshTokenExpiry,
 		Debug:              opts.Debug,
 		MaxConns:           opts.MaxConns,
-		Logger:             log,
+		Logger:        log,
+		OwnerEmail:    opts.OwnerEmail,
+		OwnerPassword: opts.OwnerPassword,
 	})
 	if err != nil {
 		return nil, err
