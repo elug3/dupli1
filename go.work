@@ -1,14 +1,9 @@
 go 1.26.3
 
 use (
-	./cmd/schick-auth
-	./cmd/schick-inventory
+	./auth
 	./cmd/schick-notification
-	./cmd/schick-order
-	./cmd/schick-product
-	./pkg/auth
-	./pkg/inventory
-	./pkg/notification
-	./pkg/order
-	./pkg/product
+	./inventory
+	./order
+	./product
 )
