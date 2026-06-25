@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/elug3/schick/pkg/notification"
+	notification "github.com/elug3/schick/notification/pkg"
 )
 
 type Options = notification.ServerOptions

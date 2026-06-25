@@ -29,7 +29,7 @@ jobs:
             dockerfile: cmd/schick-inventory/Dockerfile
             context: .
           - service: schick-notification
-            dockerfile: cmd/schick-notification/Dockerfile
+            dockerfile: notification/Dockerfile
             context: .
           - service: schick-order
             dockerfile: cmd/schick-order/Dockerfile

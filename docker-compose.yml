@@ -185,7 +185,7 @@ services:
   schick-notification:
     build:
       context: .
-      dockerfile: cmd/schick-notification/Dockerfile
+      dockerfile: notification/Dockerfile
     ports:
       - "8084:8080"
     environment:
