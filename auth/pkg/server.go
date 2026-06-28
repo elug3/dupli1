@@ -66,12 +66,20 @@ func NewServer(opts ServerOptions) (*Server, error) {
 }
 
 // Run starts the server and blocks until it stops or returns an error.
+// Uses TLS when both TLSCertFile and TLSKeyFile are set in ServerOptions.
 func (s *Server) Run() error {
 	s.mu.RLock()
 	httpSrv := s.http
+	certFile := s.opts.TLSCertFile
+	keyFile := s.opts.TLSKeyFile
 	s.mu.RUnlock()
 
-	err := httpSrv.ListenAndServe()
+	var err error
+	if certFile != "" && keyFile != "" {
+		err = httpSrv.ListenAndServeTLS(certFile, keyFile)
+	} else {
+		err = httpSrv.ListenAndServe()
+	}
 	s.markStopped()
 	if err != nil && err != http.ErrServerClosed {
 		return err
@@ -133,5 +141,5 @@ func newLogger(output, level string) zerolog.Logger {
 		lvl = zerolog.InfoLevel
 	}
 
-	return zerolog.New(w).Level(lvl)
+	return zerolog.New(w).With().Timestamp().Logger().Level(lvl)
 }

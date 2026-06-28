@@ -10,13 +10,19 @@ import (
 func migrateSchema(ctx context.Context, db *sql.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS users (
-			id       TEXT PRIMARY KEY,
-			email    TEXT UNIQUE NOT NULL,
-			password TEXT NOT NULL,
-			roles    TEXT[] NOT NULL DEFAULT '{}'
+			id                    TEXT PRIMARY KEY,
+			email                 TEXT UNIQUE NOT NULL,
+			password              TEXT NOT NULL,
+			roles                 TEXT[]    NOT NULL DEFAULT '{}',
+			is_active             BOOLEAN   NOT NULL DEFAULT TRUE,
+			locked_at             TIMESTAMPTZ,
+			failed_login_attempts INT       NOT NULL DEFAULT 0
 		)`,
-		// Idempotent: adds roles column to existing deployments that predate it.
+		// Idempotent column additions for existing deployments.
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS roles TEXT[] NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT NOT NULL DEFAULT 0`,
 	}
 
 	for _, stmt := range stmts {

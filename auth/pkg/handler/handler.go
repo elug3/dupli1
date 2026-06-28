@@ -34,6 +34,7 @@ func toUserResponse(u *domain.User) userResponse {
 }
 
 // Handler holds service dependencies for HTTP handlers.
+// Access control is enforced via RequireAuth / RequireRole middleware in the router.
 type Handler struct {
 	svc    *service.Service
 	logger zerolog.Logger
@@ -49,7 +50,7 @@ type loginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-// Login handles user login and returns a refresh token in JSON.
+// Login handles user login and returns a refresh token.
 func (h *Handler) Login(c *gin.Context) {
 	ip := c.ClientIP()
 	ua := c.GetHeader("User-Agent")
@@ -134,6 +135,8 @@ func (h *Handler) Register(c *gin.Context) {
 				Str("ip", ip).
 				Msg("register failed: user already exists")
 			c.JSON(http.StatusConflict, gin.H{"error": fmt.Errorf("register: %w", err).Error()})
+		} else if errors.Is(err, autherrors.ErrInvalidEmail) || errors.Is(err, autherrors.ErrWeakPassword) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("register: %w", err).Error()})
 		} else {
 			h.logger.Error().
 				Str("event", "register_error").
@@ -157,72 +160,38 @@ func (h *Handler) Register(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"user_id": u.ID})
 }
 
-// Logout invalidates a user's session.
+type logoutRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// Logout revokes a refresh token. The refresh token is provided in the request body.
 func (h *Handler) Logout(c *gin.Context) {
 	ip := c.ClientIP()
-	// TODO: extract userID from context/session and call service.Logout
-	h.logger.Info().
-		Str("event", "logout").
-		Str("ip", ip).
-		Msg("logout requested")
+
+	var req logoutRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("logout: parse request: %w", err).Error()})
+		return
+	}
+
+	if err := h.svc.Logout(c.Request.Context(), req.RefreshToken); err != nil {
+		h.logger.Error().Str("event", "logout_error").Str("ip", ip).Err(err).Msg("logout: internal error")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("logout: %w", err).Error()})
+		return
+	}
+
+	h.logger.Info().Str("event", "logout").Str("ip", ip).Msg("logout successful")
 	c.Status(http.StatusNoContent)
 }
 
-// Me returns the authenticated user's profile from a Bearer access token.
+// Me returns the authenticated user's profile. Requires RequireAuth middleware.
 func (h *Handler) Me(c *gin.Context) {
-	ip := c.ClientIP()
-
-	authHeader := c.GetHeader("Authorization")
-	if len(authHeader) < 8 || authHeader[:7] != "Bearer " {
-		h.logger.Warn().Str("event", "me_missing_token").Str("ip", ip).Msg("me: missing or malformed Authorization header")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "me: missing bearer token"})
-		return
-	}
-	token := authHeader[7:]
-
-	u, err := h.svc.GetMe(c.Request.Context(), token)
-	if err != nil {
-		if errors.Is(err, autherrors.ErrInvalidToken) || errors.Is(err, autherrors.ErrTokenExpired) {
-			h.logger.Warn().Str("event", "me_invalid_token").Str("ip", ip).Err(err).Msg("me: invalid token")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Errorf("me: %w", err).Error()})
-		} else if errors.Is(err, autherrors.ErrUserNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Errorf("me: %w", err).Error()})
-		} else {
-			h.logger.Error().Str("event", "me_error").Str("ip", ip).Err(err).Msg("me: internal error")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("me: %w", err).Error()})
-		}
-		return
-	}
-
-	c.JSON(http.StatusOK, toUserResponse(u))
+	c.JSON(http.StatusOK, toUserResponse(callerFromContext(c)))
 }
 
-// ListUsers returns all users. Requires an admin bearer token.
+// ListUsers returns all users. Requires RequireAuth + RequireRole("admin") middleware.
 func (h *Handler) ListUsers(c *gin.Context) {
 	ip := c.ClientIP()
-
-	authHeader := c.GetHeader("Authorization")
-	if len(authHeader) < 8 || authHeader[:7] != "Bearer " {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "list users: missing bearer token"})
-		return
-	}
-
-	caller, err := h.svc.GetMe(c.Request.Context(), authHeader[7:])
-	if err != nil {
-		if errors.Is(err, autherrors.ErrInvalidToken) || errors.Is(err, autherrors.ErrTokenExpired) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Errorf("list users: %w", err).Error()})
-		} else {
-			h.logger.Error().Str("event", "list_users_auth_error").Str("ip", ip).Err(err).Msg("list users: auth error")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("list users: %w", err).Error()})
-		}
-		return
-	}
-
-	if !caller.HasRole("admin") {
-		h.logger.Warn().Str("event", "list_users_forbidden").Str("user_id", caller.ID).Str("ip", ip).Msg("list users: forbidden")
-		c.JSON(http.StatusForbidden, gin.H{"error": "list users: admin role required"})
-		return
-	}
 
 	users, err := h.svc.ListUsers(c.Request.Context())
 	if err != nil {
@@ -239,7 +208,7 @@ func (h *Handler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"users": out})
 }
 
-// Refresh exchanges a refresh token for a new access token.
+// Refresh exchanges a refresh token for a new short-lived access token.
 func (h *Handler) Refresh(c *gin.Context) {
 	ip := c.ClientIP()
 

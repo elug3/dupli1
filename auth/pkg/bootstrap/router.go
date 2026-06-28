@@ -25,13 +25,23 @@ func newRouter(h *handler.Handler, debug bool) *gin.Engine {
 
 	v1 := r.Group("/api/v1/auth")
 	{
+		// Public — no authentication required.
 		v1.POST("/register", h.Register)
 		v1.POST("/login", h.Login)
-		v1.POST("/logout", h.Logout)
-		v1.GET("/me", h.Me)
 		v1.POST("/refresh", h.Refresh)
-		v1.GET("/me", h.Me)
-		v1.GET("/users", h.ListUsers)
+		v1.POST("/logout", h.Logout) // authenticates via refresh_token in request body
+
+		// Authenticated — require a valid Bearer access token.
+		authed := v1.Group("", h.RequireAuth())
+		{
+			authed.GET("/me", h.Me)
+		}
+
+		// Admin-only — require a valid Bearer access token with the "admin" role.
+		admin := v1.Group("", h.RequireAuth(), handler.RequireRole("admin"))
+		{
+			admin.GET("/users", h.ListUsers)
+		}
 	}
 
 	return r

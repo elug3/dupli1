@@ -10,6 +10,7 @@ import (
 	"github.com/elug3/schick/auth/pkg/infra/jwt"
 	natsinfra "github.com/elug3/schick/auth/pkg/infra/nats"
 	"github.com/elug3/schick/auth/pkg/infra/postgres"
+	redisinfra "github.com/elug3/schick/auth/pkg/infra/redis"
 	"github.com/elug3/schick/auth/pkg/ports"
 	"github.com/elug3/schick/auth/pkg/service"
 	"github.com/gin-gonic/gin"
@@ -40,6 +41,9 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	}
 	if cfg.TokenExpiry <= 0 {
 		return nil, fmt.Errorf("token expiry must be > 0")
+	}
+	if cfg.RefreshTokenExpiry <= 0 {
+		return nil, fmt.Errorf("refresh token expiry must be > 0")
 	}
 
 	db, err := openPostgres(ctx, cfg.DBURL, cfg.MaxConns, cfg.Logger)
@@ -73,11 +77,29 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	}
 
 	userRepo := postgres.NewUserRepository(db)
-	tokenGen := jwt.NewTokenGenerator(
+
+	accessTokenGen := jwt.NewTokenGenerator(
 		string(cfg.TokenSigningKey),
 		int64(cfg.TokenExpiry.Seconds()),
 	)
-	svc := service.NewService(userRepo, tokenGen, eventPublisher)
+	refreshTokenGen := jwt.NewTokenGenerator(
+		string(cfg.TokenSigningKey),
+		int64(cfg.RefreshTokenExpiry.Seconds()),
+	)
+
+	var sessionStore ports.SessionStore
+	if redisClient != nil {
+		sessionStore = redisinfra.NewSessionCache(redisClient)
+	}
+
+	svc := service.NewService(
+		userRepo,
+		accessTokenGen,
+		service.WithRefreshTokenGen(refreshTokenGen, cfg.RefreshTokenExpiry),
+		service.WithSessionStore(sessionStore),
+		service.WithEventPublisher(eventPublisher),
+	)
+
 	h := handler.NewHandler(svc, cfg.Logger)
 	engine := newRouter(h, cfg.Debug)
 

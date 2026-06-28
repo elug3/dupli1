@@ -2,9 +2,11 @@ package jwt
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/elug3/schick/auth/pkg/autherrors"
 	"github.com/elug3/schick/auth/pkg/ports"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -45,6 +47,8 @@ func (tg *TokenGenerator) Generate(ctx context.Context, userID string, roles []s
 }
 
 // Validate validates a JWT token and returns the claims.
+// Returns autherrors.ErrTokenExpired when the token has expired,
+// and autherrors.ErrInvalidToken for any other validation failure.
 func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (ports.Claims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -53,21 +57,24 @@ func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (por
 		return []byte(tg.secret), nil
 	})
 	if err != nil {
-		return ports.Claims{}, fmt.Errorf("parse token: %w", err)
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return ports.Claims{}, autherrors.ErrTokenExpired
+		}
+		return ports.Claims{}, autherrors.ErrInvalidToken
 	}
 
 	if !token.Valid {
-		return ports.Claims{}, fmt.Errorf("invalid token")
+		return ports.Claims{}, autherrors.ErrInvalidToken
 	}
 
 	mapClaims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return ports.Claims{}, fmt.Errorf("invalid token claims")
+		return ports.Claims{}, autherrors.ErrInvalidToken
 	}
 
 	userID, err := extractSubject(mapClaims)
 	if err != nil {
-		return ports.Claims{}, err
+		return ports.Claims{}, autherrors.ErrInvalidToken
 	}
 
 	roles := extractRoles(mapClaims)

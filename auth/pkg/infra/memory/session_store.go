@@ -2,12 +2,14 @@ package memory
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
+
+	"github.com/elug3/schick/auth/pkg/ports"
 )
 
-var ErrSessionNotFound = errors.New("session not found")
+// ErrSessionNotFound is kept for backwards compatibility; prefer ports.ErrSessionNotFound.
+var ErrSessionNotFound = ports.ErrSessionNotFound
 
 type sessionEntry struct {
 	value     string
@@ -23,6 +25,34 @@ type SessionStore struct {
 func NewSessionStore() *SessionStore {
 	return &SessionStore{
 		sessions: make(map[string]sessionEntry),
+	}
+}
+
+// GC starts a background goroutine that evicts expired entries at the given interval.
+// The goroutine stops when ctx is cancelled.
+func (s *SessionStore) GC(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.evictExpired()
+			}
+		}
+	}()
+}
+
+func (s *SessionStore) evictExpired() {
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, entry := range s.sessions {
+		if now.After(entry.expiresAt) {
+			delete(s.sessions, key)
+		}
 	}
 }
 

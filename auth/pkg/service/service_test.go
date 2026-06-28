@@ -97,9 +97,9 @@ func (p *recordedEventPublisher) Publish(ctx context.Context, subject string, ev
 func TestRegisterPublishesUserRegisteredEvent(t *testing.T) {
 	repo := &fakeUserRepository{}
 	publisher := &recordedEventPublisher{}
-	svc := NewService(repo, fakeTokenGenerator{}, publisher)
+	svc := NewService(repo, fakeTokenGenerator{}, WithEventPublisher(publisher))
 
-	user, err := svc.Register(context.Background(), "customer@example.com", "secret")
+	user, err := svc.Register(context.Background(), "customer@example.com", "supersecret")
 	if err != nil {
 		t.Fatalf("Register returned error: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestRegisterAssignsCustomerRole(t *testing.T) {
 	repo := &fakeUserRepository{}
 	svc := NewService(repo, fakeTokenGenerator{})
 
-	user, err := svc.Register(context.Background(), "customer@example.com", "secret")
+	user, err := svc.Register(context.Background(), "customer@example.com", "supersecret")
 	if err != nil {
 		t.Fatalf("Register returned error: %v", err)
 	}

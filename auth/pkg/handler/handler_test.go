@@ -103,9 +103,11 @@ func newStack(t *testing.T) *stack {
 	{
 		v1.POST("/register", h.Register)
 		v1.POST("/login", h.Login)
-		v1.POST("/logout", h.Logout)
-		v1.GET("/me", h.Me)
 		v1.POST("/refresh", h.Refresh)
+		v1.POST("/logout", h.Logout)
+
+		authed := v1.Group("", h.RequireAuth())
+		authed.GET("/me", h.Me)
 	}
 
 	return &stack{repo: repo, router: r}

@@ -2,8 +2,10 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/elug3/schick/auth/pkg/ports"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -22,9 +24,13 @@ func (sc *SessionCache) Set(ctx context.Context, key string, value string, expir
 	return sc.client.Set(ctx, key, value, expiry).Err()
 }
 
-// Get retrieves a session.
+// Get retrieves a session. Returns ports.ErrSessionNotFound when the key is absent or expired.
 func (sc *SessionCache) Get(ctx context.Context, key string) (string, error) {
-	return sc.client.Get(ctx, key).Result()
+	val, err := sc.client.Get(ctx, key).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", ports.ErrSessionNotFound
+	}
+	return val, err
 }
 
 // Delete removes a session.

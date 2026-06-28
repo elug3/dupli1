@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/elug3/schick/auth/pkg/autherrors"
@@ -19,12 +21,58 @@ func newID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-const userRegisteredSubject = "user.registered"
+const (
+	userRegisteredSubject = "user.registered"
+	maxFailedAttempts     = 5
+)
 
+// Service holds all auth business logic.
 type Service struct {
-	userRepo       ports.UserRepository
-	tokenGen       ports.TokenGenerator
-	eventPublisher ports.EventPublisher
+	userRepo           ports.UserRepository
+	tokenGen           ports.TokenGenerator // issues short-lived access tokens
+	refreshTokenGen    ports.TokenGenerator // issues long-lived refresh tokens
+	sessionStore       ports.SessionStore   // persists active refresh tokens; nil = revocation disabled
+	refreshTokenExpiry time.Duration
+	eventPublisher     ports.EventPublisher
+}
+
+// ServiceOption configures a Service.
+type ServiceOption func(*Service)
+
+// WithRefreshTokenGen sets the token generator and expiry used for refresh tokens.
+func WithRefreshTokenGen(gen ports.TokenGenerator, expiry time.Duration) ServiceOption {
+	return func(s *Service) {
+		s.refreshTokenGen = gen
+		s.refreshTokenExpiry = expiry
+	}
+}
+
+// WithSessionStore enables refresh-token revocation via a persistent store.
+func WithSessionStore(store ports.SessionStore) ServiceOption {
+	return func(s *Service) {
+		s.sessionStore = store
+	}
+}
+
+// WithEventPublisher sets the integration-event publisher.
+func WithEventPublisher(pub ports.EventPublisher) ServiceOption {
+	return func(s *Service) {
+		s.eventPublisher = pub
+	}
+}
+
+// NewService creates a new auth Service.
+// tokenGen issues short-lived access tokens; use WithRefreshTokenGen to set a
+// separate long-lived generator. If omitted, the same generator is used for both.
+func NewService(userRepo ports.UserRepository, tokenGen ports.TokenGenerator, opts ...ServiceOption) *Service {
+	s := &Service{userRepo: userRepo, tokenGen: tokenGen}
+	for _, o := range opts {
+		o(s)
+	}
+	if s.refreshTokenGen == nil {
+		s.refreshTokenGen = tokenGen
+	}
+	return s
 }
 
 type userRegisteredEvent struct {
@@ -34,17 +82,14 @@ type userRegisteredEvent struct {
 	Occurred  time.Time `json:"occurred_at"`
 }
 
-// NewService creates a new auth Service with required dependencies.
-func NewService(userRepo ports.UserRepository, tokenGen ports.TokenGenerator, eventPublisher ...ports.EventPublisher) *Service {
-	s := &Service{userRepo: userRepo, tokenGen: tokenGen}
-	if len(eventPublisher) > 0 {
-		s.eventPublisher = eventPublisher[0]
-	}
-	return s
-}
-
 // Register creates a new user. Roles defaults to ["customer"] when empty.
 func (s *Service) Register(ctx context.Context, email, password string, roles ...string) (*domain.User, error) {
+	if !strings.Contains(email, "@") || strings.HasPrefix(email, "@") || strings.HasSuffix(email, "@") {
+		return nil, autherrors.ErrInvalidEmail
+	}
+	if len(password) < 8 {
+		return nil, autherrors.ErrWeakPassword
+	}
 	if len(roles) == 0 {
 		roles = []string{"customer"}
 	}
@@ -56,12 +101,13 @@ func (s *Service) Register(ctx context.Context, email, password string, roles ..
 		return nil, fmt.Errorf("save user: %w", err)
 	}
 	if err := s.publishUserRegistered(ctx, u); err != nil {
+		_ = s.userRepo.Delete(ctx, u.ID)
 		return nil, fmt.Errorf("publish event: %w", err)
 	}
 	return u, nil
 }
 
-// Login validates credentials and returns a token.
+// Login validates credentials, tracks failed attempts, and returns a refresh token.
 func (s *Service) Login(ctx context.Context, email, password string) (string, error) {
 	u, err := s.userRepo.FindByEmail(ctx, email)
 	if err != nil {
@@ -76,29 +122,55 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, er
 	}
 
 	if !u.ValidatePassword(password) {
+		u.FailedLoginAttempts++
+		if u.FailedLoginAttempts >= maxFailedAttempts {
+			u.Lock()
+		}
+		_ = s.userRepo.Save(ctx, u)
 		return "", autherrors.ErrInvalidCredentials
 	}
 
-	token, err := s.tokenGen.Generate(ctx, u.ID, u.Roles)
+	if u.FailedLoginAttempts > 0 {
+		u.FailedLoginAttempts = 0
+		_ = s.userRepo.Save(ctx, u)
+	}
+
+	token, err := s.refreshTokenGen.Generate(ctx, u.ID, u.Roles)
 	if err != nil {
 		return "", fmt.Errorf("generate token: %w", err)
+	}
+
+	if s.sessionStore != nil {
+		if err := s.sessionStore.Set(ctx, token, u.ID, s.refreshTokenExpiry); err != nil {
+			return "", fmt.Errorf("store session: %w", err)
+		}
 	}
 
 	return token, nil
 }
 
-// Logout handles logout logic (e.g., invalidate session).
-func (s *Service) Logout(ctx context.Context, userID string) error {
-	// TODO: implement session invalidation
-	_ = userID
-	return nil
+// Logout revokes a refresh token from the session store.
+func (s *Service) Logout(ctx context.Context, refreshToken string) error {
+	if s.sessionStore == nil {
+		return nil
+	}
+	return s.sessionStore.Delete(ctx, refreshToken)
 }
 
-// Refresh validates a token and issues a new one with fresh roles from the DB.
+// Refresh validates a refresh token and issues a new short-lived access token.
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (string, error) {
-	claims, err := s.tokenGen.Validate(ctx, refreshToken)
+	claims, err := s.refreshTokenGen.Validate(ctx, refreshToken)
 	if err != nil {
-		return "", fmt.Errorf("validate token: %w", err)
+		return "", err
+	}
+
+	if s.sessionStore != nil {
+		if _, err := s.sessionStore.Get(ctx, refreshToken); err != nil {
+			if errors.Is(err, ports.ErrSessionNotFound) {
+				return "", autherrors.ErrInvalidToken
+			}
+			return "", fmt.Errorf("session store: %w", err)
+		}
 	}
 
 	u, err := s.userRepo.FindByID(ctx, claims.UserID)
@@ -121,7 +193,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (string, err
 func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, error) {
 	claims, err := s.tokenGen.Validate(ctx, accessToken)
 	if err != nil {
-		return nil, fmt.Errorf("validate token: %w", autherrors.ErrInvalidToken)
+		return nil, err // ErrTokenExpired or ErrInvalidToken from tokenGen
 	}
 
 	u, err := s.userRepo.FindByID(ctx, claims.UserID)
