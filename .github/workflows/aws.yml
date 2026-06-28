@@ -43,10 +43,9 @@ jobs:
             context: .
             build_args: SERVICE=product
           - service: schick-proxy
-            dockerfile: cmd/schick-proxy/Dockerfile
-            context: cmd/schick-proxy
+            dockerfile: api/Dockerfile
+            context: .
             build_args: ""
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
