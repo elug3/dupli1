@@ -24,6 +24,7 @@ type Product struct {
 	Category    string   `json:"category"`
 	Status      string   `json:"status"` // "active" | "draft" | "archived"
 	ImageURLs   []string `json:"imageUrls,omitempty"`
+	Tags        []string `json:"tags,omitempty"` // "new", "hot", "top"
 	CreatedAt   string   `json:"createdAt"`
 }
 
