@@ -209,8 +209,8 @@ services:
 
   schick-proxy:
     build:
-      context: cmd/schick-proxy
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api/Dockerfile
     ports:
       - "8080:80"
       - "80:80"
