@@ -83,6 +83,13 @@ func (h *Handler) Login(c *gin.Context) {
 				Str("ip", ip).
 				Msg("login failed: account locked")
 			c.JSON(http.StatusForbidden, gin.H{"error": fmt.Errorf("login: %w", err).Error()})
+		} else if errors.Is(err, autherrors.ErrAccountDeactivated) {
+			h.logger.Warn().
+				Str("event", "login_deactivated").
+				Str("email", req.Email).
+				Str("ip", ip).
+				Msg("login failed: account deactivated")
+			c.JSON(http.StatusForbidden, gin.H{"error": fmt.Errorf("login: %w", err).Error()})
 		} else {
 			h.logger.Error().
 				Str("event", "login_error").
@@ -297,12 +304,12 @@ func (h *Handler) Refresh(c *gin.Context) {
 
 	newToken, err := h.svc.Refresh(c.Request.Context(), payload.RefreshToken)
 	if err != nil {
-		if errors.Is(err, autherrors.ErrInvalidToken) || errors.Is(err, autherrors.ErrTokenExpired) {
+		if errors.Is(err, autherrors.ErrInvalidToken) || errors.Is(err, autherrors.ErrTokenExpired) || errors.Is(err, autherrors.ErrAccountDeactivated) {
 			h.logger.Warn().
-				Str("event", "refresh_invalid_token").
+				Str("event", "refresh_rejected").
 				Str("ip", ip).
 				Err(err).
-				Msg("refresh failed: invalid or expired token")
+				Msg("refresh failed: invalid, expired, or deactivated")
 		} else {
 			h.logger.Error().
 				Str("event", "refresh_error").

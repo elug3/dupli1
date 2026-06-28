@@ -13,10 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const (
-	adminId    = "00000000-0000-0000-0000-000000000001"
-	adminEmail = "admin@dupli1.com"
-)
+const adminId = "00000000-0000-0000-0000-000000000001"
 
 func newResetCmd() *cobra.Command {
 	defaultDB := os.Getenv("DB_URL")
@@ -30,6 +27,9 @@ func newResetCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if email == "" {
+				return fmt.Errorf("--email is required")
+			}
 			plainPassword, err := generatePassword(16)
 			if err != nil {
 				return fmt.Errorf("generate password: %w", err)
@@ -69,7 +69,7 @@ func newResetCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&dbURL, "db", defaultDB, "Database connection URL")
-	cmd.Flags().StringVar(&email, "email", adminEmail, "Admin account email")
+	cmd.Flags().StringVar(&email, "email", "", "Admin account email (required)")
 
 	return cmd
 }

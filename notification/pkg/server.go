@@ -41,6 +41,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", health)
+	mux.HandleFunc("/api/v1/notification/health", health)
 
 	return &Server{
 		opts: opts,

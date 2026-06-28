@@ -121,6 +121,10 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, er
 		return "", autherrors.ErrAccountLocked
 	}
 
+	if !u.IsActive {
+		return "", autherrors.ErrAccountDeactivated
+	}
+
 	if !u.ValidatePassword(password) {
 		u.FailedLoginAttempts++
 		if u.FailedLoginAttempts >= maxFailedAttempts {
@@ -179,6 +183,9 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (string, err
 	}
 	if u == nil {
 		return "", autherrors.ErrUserNotFound
+	}
+	if !u.IsActive {
+		return "", autherrors.ErrAccountDeactivated
 	}
 
 	newToken, err := s.tokenGen.Generate(ctx, u.ID, u.Roles)

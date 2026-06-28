@@ -32,6 +32,6 @@ func seedOwner(ctx context.Context, cfg Config, repo ports.UserRepository) error
 		return fmt.Errorf("seed owner: save: %w", err)
 	}
 
-	fmt.Printf("owner user seeded: %s\n", cfg.OwnerEmail)
+	cfg.Logger.Info().Str("event", "owner_seeded").Str("email", cfg.OwnerEmail).Msg("owner user seeded")
 	return nil
 }

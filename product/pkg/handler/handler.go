@@ -35,6 +35,7 @@ func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponServ
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", h.Health)
+	mux.HandleFunc("GET /api/v1/product/health", h.Health)
 	mux.HandleFunc("GET /api/products/bags", h.SearchBags)
 	mux.HandleFunc("POST /api/coupons/redeem", h.RedeemCoupon)
 }

@@ -22,8 +22,11 @@ type ServerOptions struct {
 	IdleTimeout     time.Duration
 	ShutdownTimeout time.Duration
 
-	// Token settings
-	TokenSigningKey    []byte
+	// Token settings — provide JWTPrivateKeyFile or JWTPrivateKeyPEM for RS256/JWKS.
+	// When neither is set, an ephemeral RSA key is generated on startup (dev only).
+	JWTPrivateKeyFile  string // path to PEM-encoded RSA private key
+	JWTPrivateKeyPEM   []byte // raw PEM bytes (populated from JWTPrivateKeyFile)
+	JWTKeyID           string // "kid" in the JWKS document (default: "default")
 	TokenExpiry        time.Duration
 	RefreshTokenExpiry time.Duration
 
@@ -81,9 +84,6 @@ func (o *ServerOptions) Validate() error {
 	}
 	if o.Addr == "" {
 		return fmt.Errorf("--addr is required")
-	}
-	if len(o.TokenSigningKey) == 0 {
-		return fmt.Errorf("--jwt-secret is required")
 	}
 	if o.TokenExpiry <= 0 {
 		return fmt.Errorf("--token-expiry must be > 0")

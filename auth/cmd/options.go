@@ -40,7 +40,8 @@ func newServeCmd() *cobra.Command {
 		dbURL              = opts.DBURL
 		redisURL           = opts.RedisURL
 		natsURL            = opts.NATSURL
-		jwtSecret          string
+		jwtPrivateKeyFile  = opts.JWTPrivateKeyFile
+		jwtKeyID           = opts.JWTKeyID
 		readTimeoutSec     = int(opts.ReadTimeout / time.Second)
 		writeTimeoutSec    = int(opts.WriteTimeout / time.Second)
 		idleTimeoutSec     = int(opts.IdleTimeout / time.Second)
@@ -50,11 +51,9 @@ func newServeCmd() *cobra.Command {
 		corsOrigins        = strings.Join(opts.CORSOrigins, ",")
 		logOutput          = opts.LogOutput
 		logLevel           = opts.LogLevel
+		ownerEmail         = opts.OwnerEmail
+		ownerPassword      = opts.OwnerPassword
 	)
-
-	if len(opts.TokenSigningKey) > 0 {
-		jwtSecret = string(opts.TokenSigningKey)
-	}
 
 	cmd := &cobra.Command{
 		Short:         "Start the HTTP server (default command)",
@@ -62,9 +61,10 @@ func newServeCmd() *cobra.Command {
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flags := cmd.Flags()
-			buildOpts(opts, flags, addrFlag, hostFlag, portFlag, publicAddr, dbURL, redisURL, natsURL, jwtSecret,
+			buildOpts(opts, flags, addrFlag, hostFlag, portFlag, publicAddr, dbURL, redisURL, natsURL,
+				jwtPrivateKeyFile, jwtKeyID,
 				readTimeoutSec, writeTimeoutSec, idleTimeoutSec, shutdownTimeoutSec, tokenExpiry, refreshTokenExpiry, corsOrigins,
-				logOutput, logLevel)
+				logOutput, logLevel, ownerEmail, ownerPassword)
 
 			if err := opts.Validate(); err != nil {
 				return err
@@ -101,7 +101,8 @@ func newServeCmd() *cobra.Command {
 	f.StringVar(&dbURL, "db", dbURL, "Database connection URL")
 	f.StringVar(&redisURL, "redis", redisURL, "Redis connection URL")
 	f.StringVar(&natsURL, "nats", natsURL, "NATS connection URL")
-	f.StringVar(&jwtSecret, "jwt-secret", jwtSecret, "JWT signing secret")
+	f.StringVar(&jwtPrivateKeyFile, "jwt-private-key-file", jwtPrivateKeyFile, "Path to PEM-encoded RSA private key for RS256/JWKS mode")
+	f.StringVar(&jwtKeyID, "jwt-key-id", jwtKeyID, "Key ID (kid) to use in the JWKS document")
 	f.IntVar(&readTimeoutSec, "read-timeout", readTimeoutSec, "Read timeout in seconds")
 	f.IntVar(&writeTimeoutSec, "write-timeout", writeTimeoutSec, "Write timeout in seconds")
 	f.IntVar(&idleTimeoutSec, "idle-timeout", idleTimeoutSec, "Idle timeout in seconds")
@@ -116,6 +117,8 @@ func newServeCmd() *cobra.Command {
 	f.BoolVar(&opts.Debug, "debug", opts.Debug, "Enable debug mode")
 	f.StringVar(&logOutput, "log-output", logOutput, "Log output format: json or text")
 	f.StringVar(&logLevel, "log-level", logLevel, "Log level: debug, info, warn, error")
+	f.StringVar(&ownerEmail, "owner-email", ownerEmail, "Email for the initial owner account (seeded on first startup)")
+	f.StringVar(&ownerPassword, "owner-password", ownerPassword, "Password for the initial owner account")
 
 	return cmd
 }
@@ -124,10 +127,12 @@ func buildOpts(
 	opts *Options,
 	flags *pflag.FlagSet,
 	addrFlag string, hostFlag string, portFlag int,
-	publicAddr, dbURL, redisURL, natsURL, jwtSecret string,
+	publicAddr, dbURL, redisURL, natsURL string,
+	jwtPrivateKeyFile, jwtKeyID string,
 	readTimeoutSec, writeTimeoutSec, idleTimeoutSec, shutdownTimeoutSec int,
 	tokenExpiry, refreshTokenExpiry, corsOrigins string,
 	logOutput, logLevel string,
+	ownerEmail, ownerPassword string,
 ) {
 	_ = flags
 
@@ -141,9 +146,8 @@ func buildOpts(
 	opts.DBURL = dbURL
 	opts.RedisURL = redisURL
 	opts.NATSURL = natsURL
-	if jwtSecret != "" {
-		opts.TokenSigningKey = []byte(jwtSecret)
-	}
+	opts.JWTPrivateKeyFile = jwtPrivateKeyFile
+	opts.JWTKeyID = jwtKeyID
 
 	opts.ReadTimeout = time.Duration(readTimeoutSec) * time.Second
 	opts.WriteTimeout = time.Duration(writeTimeoutSec) * time.Second
@@ -165,6 +169,8 @@ func buildOpts(
 	}
 	opts.LogOutput = logOutput
 	opts.LogLevel = logLevel
+	opts.OwnerEmail = ownerEmail
+	opts.OwnerPassword = ownerPassword
 }
 
 func applyEnv(opts *auth.ServerOptions) {
@@ -192,11 +198,20 @@ func applyEnv(opts *auth.ServerOptions) {
 	} else if v := os.Getenv("NATS_URL"); v != "" {
 		opts.NATSURL = v
 	}
-	if v := os.Getenv("JWT_SECRET"); v != "" {
-		opts.TokenSigningKey = []byte(v)
+	if v := os.Getenv("JWT_PRIVATE_KEY_FILE"); v != "" {
+		opts.JWTPrivateKeyFile = v
+	}
+	if v := os.Getenv("JWT_KEY_ID"); v != "" {
+		opts.JWTKeyID = v
 	}
 	if v := os.Getenv("SCHICK_AUTH_DEBUG"); v != "" {
 		opts.Debug = strings.EqualFold(v, "true") || v == "1"
+	}
+	if v := os.Getenv("OWNER_EMAIL"); v != "" {
+		opts.OwnerEmail = v
+	}
+	if v := os.Getenv("OWNER_PASSWORD"); v != "" {
+		opts.OwnerPassword = v
 	}
 
 	setDurationEnv(&opts.ReadTimeout, "SCHICK_AUTH_READ_TIMEOUT")

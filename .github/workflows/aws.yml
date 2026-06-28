@@ -23,23 +23,29 @@ jobs:
       matrix:
         include:
           - service: schick-auth
-            dockerfile: cmd/schick-auth/Dockerfile
+            dockerfile: Dockerfile
             context: .
+            build_args: SERVICE=auth
           - service: schick-inventory
-            dockerfile: cmd/schick-inventory/Dockerfile
+            dockerfile: Dockerfile
             context: .
+            build_args: SERVICE=inventory
           - service: schick-notification
-            dockerfile: notification/Dockerfile
+            dockerfile: Dockerfile
             context: .
+            build_args: SERVICE=notification
           - service: schick-order
-            dockerfile: cmd/schick-order/Dockerfile
+            dockerfile: Dockerfile
             context: .
+            build_args: SERVICE=order
           - service: schick-product
-            dockerfile: cmd/schick-product/Dockerfile
+            dockerfile: Dockerfile
             context: .
+            build_args: SERVICE=product
           - service: schick-proxy
             dockerfile: cmd/schick-proxy/Dockerfile
             context: cmd/schick-proxy
+            build_args: ""
 
     steps:
       - name: Checkout
@@ -67,6 +73,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
           push: false
           tags: ${{ matrix.service }}:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha,scope=${{ matrix.service }}
@@ -90,6 +97,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

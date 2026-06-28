@@ -3,11 +3,12 @@ package bootstrap
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/elug3/schick/auth/pkg/handler"
-	"github.com/elug3/schick/auth/pkg/infra/jwt"
+	jwtinfra "github.com/elug3/schick/auth/pkg/infra/jwt"
 	natsinfra "github.com/elug3/schick/auth/pkg/infra/nats"
 	"github.com/elug3/schick/auth/pkg/infra/postgres"
 	redisinfra "github.com/elug3/schick/auth/pkg/infra/redis"
@@ -36,14 +37,16 @@ func (a *App) Close() error {
 
 // Bootstrap wires infrastructure, services, handlers, and HTTP routes.
 func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
-	if len(cfg.TokenSigningKey) == 0 {
-		return nil, fmt.Errorf("token signing key is required")
-	}
 	if cfg.TokenExpiry <= 0 {
 		return nil, fmt.Errorf("token expiry must be > 0")
 	}
 	if cfg.RefreshTokenExpiry <= 0 {
 		return nil, fmt.Errorf("refresh token expiry must be > 0")
+	}
+
+	accessTokenGen, refreshTokenGen, jwksJSON, err := buildTokenGenerators(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	db, err := openPostgres(ctx, cfg.DBURL, cfg.MaxConns, cfg.Logger)
@@ -78,15 +81,6 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 
 	userRepo := postgres.NewUserRepository(db)
 
-	accessTokenGen := jwt.NewTokenGenerator(
-		string(cfg.TokenSigningKey),
-		int64(cfg.TokenExpiry.Seconds()),
-	)
-	refreshTokenGen := jwt.NewTokenGenerator(
-		string(cfg.TokenSigningKey),
-		int64(cfg.RefreshTokenExpiry.Seconds()),
-	)
-
 	var sessionStore ports.SessionStore
 	if redisClient != nil {
 		sessionStore = redisinfra.NewSessionCache(redisClient)
@@ -101,7 +95,7 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	)
 
 	h := handler.NewHandler(svc, cfg.Logger)
-	engine := newRouter(h, cfg.Debug)
+	engine := newRouter(h, cfg.Debug, jwksJSON, redisClient, cfg.CORSOrigins)
 
 	app := &App{
 		Engine:  engine,
@@ -127,4 +121,47 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	}
 
 	return app, nil
+}
+
+// buildTokenGenerators creates RS256 access and refresh token generators.
+// When JWTPrivateKeyPEM is empty, an ephemeral 2048-bit RSA key is generated
+// (dev mode only — tokens are invalidated on restart).
+func buildTokenGenerators(cfg Config) (access ports.TokenGenerator, refresh ports.TokenGenerator, jwksJSON []byte, err error) {
+	if len(cfg.JWTPrivateKeyPEM) > 0 {
+		access, jwksJSON, err = newRSAGeneratorWithJWKS(cfg.JWTPrivateKeyPEM, cfg.JWTKeyID, int64(cfg.TokenExpiry.Seconds()))
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		refresh, _, err = newRSAGeneratorWithJWKS(cfg.JWTPrivateKeyPEM, cfg.JWTKeyID, int64(cfg.RefreshTokenExpiry.Seconds()))
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return access, refresh, jwksJSON, nil
+	}
+
+	// No key configured — generate a throwaway RSA key. Tokens are invalid across restarts.
+	cfg.Logger.Warn().Msg("no JWT_PRIVATE_KEY_FILE configured — generating ephemeral RSA-2048 key; tokens will be invalidated on restart")
+	key, genErr := jwtinfra.GenerateRSAKey(2048)
+	if genErr != nil {
+		return nil, nil, nil, fmt.Errorf("generate ephemeral RSA key: %w", genErr)
+	}
+	rsaAccess := jwtinfra.NewRSATokenGenerator(key, cfg.JWTKeyID, int64(cfg.TokenExpiry.Seconds()))
+	rsaRefresh := jwtinfra.NewRSATokenGenerator(key, cfg.JWTKeyID, int64(cfg.RefreshTokenExpiry.Seconds()))
+	jwksJSON, err = json.Marshal(rsaAccess.PublicJWKS())
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("marshal JWKS: %w", err)
+	}
+	return rsaAccess, rsaRefresh, jwksJSON, nil
+}
+
+func newRSAGeneratorWithJWKS(pemBytes []byte, keyID string, expirySeconds int64) (*jwtinfra.RSATokenGenerator, []byte, error) {
+	gen, err := jwtinfra.NewRSATokenGeneratorFromPEM(pemBytes, keyID, expirySeconds)
+	if err != nil {
+		return nil, nil, err
+	}
+	jwksJSON, err := json.Marshal(gen.PublicJWKS())
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal JWKS: %w", err)
+	}
+	return gen, jwksJSON, nil
 }

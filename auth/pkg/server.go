@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -31,18 +32,28 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	log := newLogger(opts.LogOutput, opts.LogLevel)
 	log.Info().Msg("Starting auth server...")
 
+	if opts.JWTPrivateKeyFile != "" && len(opts.JWTPrivateKeyPEM) == 0 {
+		pem, err := os.ReadFile(opts.JWTPrivateKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("read JWT private key file %q: %w", opts.JWTPrivateKeyFile, err)
+		}
+		opts.JWTPrivateKeyPEM = pem
+	}
+
 	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
 		DBURL:              opts.DBURL,
 		RedisURL:           opts.RedisURL,
 		NATSURL:            opts.NATSURL,
-		TokenSigningKey:    opts.TokenSigningKey,
+		JWTPrivateKeyPEM:   opts.JWTPrivateKeyPEM,
+		JWTKeyID:           opts.JWTKeyID,
 		TokenExpiry:        opts.TokenExpiry,
 		RefreshTokenExpiry: opts.RefreshTokenExpiry,
+		CORSOrigins:        opts.CORSOrigins,
 		Debug:              opts.Debug,
 		MaxConns:           opts.MaxConns,
-		Logger:        log,
-		OwnerEmail:    opts.OwnerEmail,
-		OwnerPassword: opts.OwnerPassword,
+		Logger:             log,
+		OwnerEmail:         opts.OwnerEmail,
+		OwnerPassword:      opts.OwnerPassword,
 	})
 	if err != nil {
 		return nil, err
