@@ -208,6 +208,76 @@ func (h *Handler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"users": out})
 }
 
+// SetUserRole replaces the role list for a user. Requires "admin" role.
+func (h *Handler) SetUserRole(c *gin.Context) {
+	userID := c.Param("id")
+	var body struct {
+		Roles []string `json:"roles" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("set role: parse request: %w", err).Error()})
+		return
+	}
+	u, err := h.svc.SetUserRole(c.Request.Context(), userID, body.Roles)
+	if err != nil {
+		if errors.Is(err, autherrors.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		} else {
+			h.logger.Error().Str("event", "set_role_error").Str("user_id", userID).Err(err).Msg("set role failed")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set role: %w", err).Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, toUserResponse(u))
+}
+
+// UpdateUserPassword sets a new password for a user. Requires "admin" or "user_manager" role.
+func (h *Handler) UpdateUserPassword(c *gin.Context) {
+	userID := c.Param("id")
+	var body struct {
+		Password string `json:"password" binding:"required,min=8"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("update password: parse request: %w", err).Error()})
+		return
+	}
+	if err := h.svc.UpdateUserPassword(c.Request.Context(), userID, body.Password); err != nil {
+		if errors.Is(err, autherrors.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		} else if errors.Is(err, autherrors.ErrWeakPassword) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("update password: %w", err).Error()})
+		} else {
+			h.logger.Error().Str("event", "update_password_error").Str("user_id", userID).Err(err).Msg("update password failed")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("update password: %w", err).Error()})
+		}
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// SetUserStatus activates or deactivates a user. Requires "admin" or "user_manager" role.
+func (h *Handler) SetUserStatus(c *gin.Context) {
+	userID := c.Param("id")
+	var body struct {
+		IsActive bool `json:"is_active"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("set status: parse request: %w", err).Error()})
+		return
+	}
+	u, err := h.svc.SetUserStatus(c.Request.Context(), userID, body.IsActive)
+	if err != nil {
+		if errors.Is(err, autherrors.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		} else {
+			h.logger.Error().Str("event", "set_status_error").Str("user_id", userID).Err(err).Msg("set status failed")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set status: %w", err).Error()})
+		}
+		return
+	}
+	c.JSON(http.StatusOK, toUserResponse(u))
+}
+
 // Refresh exchanges a refresh token for a new short-lived access token.
 func (h *Handler) Refresh(c *gin.Context) {
 	ip := c.ClientIP()

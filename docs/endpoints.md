@@ -15,21 +15,26 @@ Each service also registers `/health` directly for internal/sidecar use.
 
 ## Auth Service
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/v1/auth/health` | Health check |
-| `POST` | `/api/v1/auth/register` | Create a new user account |
-| `POST` | `/api/v1/auth/login` | Login and receive a refresh token |
-| `POST` | `/api/v1/auth/logout` | Invalidate the current session |
-| `POST` | `/api/v1/auth/refresh` | Exchange a refresh token for a new access token |
-| `GET` | `/api/v1/auth/me` | Return the authenticated user's profile |
-| `GET` | `/api/v1/auth/users` | List all users (admin only) |
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/auth/health` | — | Health check |
+| `POST` | `/api/v1/auth/register` | `admin`, `user_manager` | Create a new user account |
+| `POST` | `/api/v1/auth/login` | — | Login and receive a refresh token |
+| `POST` | `/api/v1/auth/logout` | — | Invalidate the current session |
+| `POST` | `/api/v1/auth/refresh` | — | Exchange a refresh token for a new access token |
+| `GET` | `/api/v1/auth/me` | Bearer | Return the authenticated user's profile |
+| `GET` | `/api/v1/auth/users` | `admin` | List all users |
+| `PATCH` | `/api/v1/auth/users/:id/roles` | `admin` | Replace a user's roles |
+| `PATCH` | `/api/v1/auth/users/:id/password` | `admin`, `user_manager` | Set a new password for a user |
+| `PATCH` | `/api/v1/auth/users/:id/status` | `admin`, `user_manager` | Activate or deactivate a user |
 
 ### GET /api/v1/auth/health
 
 Response `200`: `ok` (plain text)
 
 ### POST /api/v1/auth/register
+
+Header: `Authorization: Bearer <access_token>` (must have `admin` or `user_manager` role)
 
 Request:
 ```json
@@ -41,7 +46,7 @@ Response `201`:
 { "user_id": "uuid" }
 ```
 
-Errors: `400` bad request, `409` user already exists, `500` internal error.
+Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `409` user already exists, `500` internal error.
 
 ### POST /api/v1/auth/login
 
@@ -114,6 +119,45 @@ Response `200`:
 ```
 
 Errors: `401` missing or invalid token, `403` caller lacks admin role, `500` internal error.
+
+### PATCH /api/v1/auth/users/:id/roles
+
+Header: `Authorization: Bearer <access_token>` (must have the `admin` role)
+
+Request:
+```json
+{ "roles": ["admin", "user_manager"] }
+```
+
+Response `200`: user object (same shape as list item).
+
+Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `404` user not found, `500` internal error.
+
+### PATCH /api/v1/auth/users/:id/password
+
+Header: `Authorization: Bearer <access_token>` (must have `admin` or `user_manager` role)
+
+Request:
+```json
+{ "password": "newpassword" }
+```
+
+Response `204` (no body).
+
+Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `404` user not found, `422` password too short, `500` internal error.
+
+### PATCH /api/v1/auth/users/:id/status
+
+Header: `Authorization: Bearer <access_token>` (must have `admin` or `user_manager` role)
+
+Request:
+```json
+{ "is_active": false }
+```
+
+Response `200`: user object (same shape as list item).
+
+Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `404` user not found, `500` internal error.
 
 ---
 

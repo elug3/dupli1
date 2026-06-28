@@ -49,6 +49,23 @@ func RequireRole(role string) gin.HandlerFunc {
 	}
 }
 
+// RequireAnyRole returns a middleware that rejects callers who have none of the given roles.
+// Must be chained after RequireAuth.
+func RequireAnyRole(roles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		u := callerFromContext(c)
+		if u != nil {
+			for _, r := range roles {
+				if u.HasRole(r) {
+					c.Next()
+					return
+				}
+			}
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient role"})
+	}
+}
+
 func callerFromContext(c *gin.Context) *domain.User {
 	v, _ := c.Get(callerKey)
 	u, _ := v.(*domain.User)

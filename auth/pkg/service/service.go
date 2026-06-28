@@ -207,6 +207,56 @@ func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, 
 	return u, nil
 }
 
+// SetUserRole replaces the role list for the given user.
+func (s *Service) SetUserRole(ctx context.Context, userID string, roles []string) (*domain.User, error) {
+	u, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("find user: %w", err)
+	}
+	if u == nil {
+		return nil, autherrors.ErrUserNotFound
+	}
+	u.SetRoles(roles)
+	if err := s.userRepo.Save(ctx, u); err != nil {
+		return nil, fmt.Errorf("save user: %w", err)
+	}
+	return u, nil
+}
+
+// UpdateUserPassword hashes newPassword and persists it for the given user.
+func (s *Service) UpdateUserPassword(ctx context.Context, userID, newPassword string) error {
+	if len(newPassword) < 8 {
+		return autherrors.ErrWeakPassword
+	}
+	u, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("find user: %w", err)
+	}
+	if u == nil {
+		return autherrors.ErrUserNotFound
+	}
+	if err := u.UpdatePassword(newPassword); err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	return s.userRepo.Save(ctx, u)
+}
+
+// SetUserStatus sets the active/inactive status for the given user.
+func (s *Service) SetUserStatus(ctx context.Context, userID string, isActive bool) (*domain.User, error) {
+	u, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("find user: %w", err)
+	}
+	if u == nil {
+		return nil, autherrors.ErrUserNotFound
+	}
+	u.SetActive(isActive)
+	if err := s.userRepo.Save(ctx, u); err != nil {
+		return nil, fmt.Errorf("save user: %w", err)
+	}
+	return u, nil
+}
+
 // ListUsers returns all users. The caller is responsible for authorization.
 func (s *Service) ListUsers(ctx context.Context) ([]*domain.User, error) {
 	users, err := s.userRepo.ListAll(ctx)

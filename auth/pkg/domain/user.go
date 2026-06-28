@@ -63,3 +63,23 @@ func (u *User) HasRole(role string) bool {
 func (u *User) ValidatePassword(pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(pw)) == nil
 }
+
+// SetRoles replaces the user's role list.
+func (u *User) SetRoles(roles []string) {
+	u.Roles = roles
+}
+
+// UpdatePassword hashes plaintext and replaces the stored password.
+func (u *User) UpdatePassword(plaintext string) error {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(plaintext), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	u.Password = string(hashed)
+	return nil
+}
+
+// SetActive sets the user's active status.
+func (u *User) SetActive(active bool) {
+	u.IsActive = active
+}

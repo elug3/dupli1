@@ -48,7 +48,9 @@ ok
 
 ### `POST /api/v1/auth/register`
 
-Create a new user account. New users receive the `user` role.
+Create a new user account. Requires `admin` or `user_manager` role.
+
+**Headers** — `Authorization: Bearer <access_token>`
 
 **Request body**
 ```json
@@ -72,6 +74,8 @@ Create a new user account. New users receive the `user` role.
 | Status | Meaning |
 |--------|---------|
 | `400` | Validation failed (bad email, password too short) |
+| `401` | Missing or invalid access token |
+| `403` | Caller does not have `admin` or `user_manager` role |
 | `409` | Email already registered |
 
 ---
@@ -171,76 +175,99 @@ Invalidate the session associated with a refresh token. The access token remains
 
 ---
 
-## Auth Admin — `/api/v1/users`
+## Auth Admin — `/api/v1/auth/users`
 
-Requires `Authorization: Bearer <access_token>` from a user with `owner` or `admin` role.
+Requires `Authorization: Bearer <access_token>`.
 
-### `GET /api/v1/users`
+### `GET /api/v1/auth/users`
 
-List all users.
+List all users. Requires `admin` role.
 
 **Response `200`**
 ```json
-[
-  {
-    "id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
-    "email": "admin@schick.com",
-    "role": "owner",
-    "createdAt": "2026-01-15T10:00:00Z"
-  }
-]
-```
-
----
-
-### `POST /api/v1/users`
-
-Create a user with an optional role (`user`, `admin`, or `owner`; defaults to `user`).
-
-**Request body**
-```json
 {
-  "email": "new@example.com",
-  "password": "minlen8",
-  "role": "user"
+  "users": [
+    {
+      "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
+      "email": "admin@schick.com",
+      "roles": ["admin"],
+      "is_active": true,
+      "locked_at": null,
+      "failed_login_attempts": 0
+    }
+  ]
 }
 ```
-
-**Response `201`** — user object (same shape as list item)
-
----
-
-### `GET /api/v1/users/{id}`
-
-Get a single user by ID.
-
-**Response `200`** — user object
 
 **Errors**
 | Status | Meaning |
 |--------|---------|
-| `404` | User not found |
+| `401` | Missing or invalid access token |
+| `403` | Caller does not have `admin` role |
 
 ---
 
-### `PUT /api/v1/users/{id}/role`
+### `PATCH /api/v1/auth/users/{id}/roles`
 
-Update a user's role.
+Replace the role list for a user. Requires `admin` role.
 
 **Request body**
 ```json
-{ "role": "admin" }
+{ "roles": ["user_manager"] }
 ```
 
 **Response `200`** — updated user object
 
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `400` | Missing or malformed body |
+| `401` | Missing or invalid access token |
+| `403` | Caller does not have `admin` role |
+| `404` | User not found |
+
 ---
 
-### `DELETE /api/v1/users/{id}`
+### `PATCH /api/v1/auth/users/{id}/password`
 
-Delete a user.
+Set a new password for a user. Requires `admin` or `user_manager` role.
+
+**Request body**
+```json
+{ "password": "newpassword" }
+```
 
 **Response `204`** — no body
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `400` | Missing or malformed body |
+| `401` | Missing or invalid access token |
+| `403` | Caller does not have `admin` or `user_manager` role |
+| `404` | User not found |
+| `422` | Password too short (min 8 chars) |
+
+---
+
+### `PATCH /api/v1/auth/users/{id}/status`
+
+Activate or deactivate a user. Requires `admin` or `user_manager` role.
+
+**Request body**
+```json
+{ "is_active": false }
+```
+
+**Response `200`** — updated user object
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `400` | Missing or malformed body |
+| `401` | Missing or invalid access token |
+| `403` | Caller does not have `admin` or `user_manager` role |
+| `404` | User not found |
 
 ---
 
@@ -502,16 +529,15 @@ All error responses use a JSON envelope:
 |--------|------|-------|---------|
 | GET | `/gateway/health` | — | nginx |
 | GET | `/health` | — | auth |
-| POST | `/api/v1/auth/register` | — | auth |
+| POST | `/api/v1/auth/register` | `admin`, `user_manager` | auth |
 | POST | `/api/v1/auth/login` | — | auth |
 | GET | `/api/v1/auth/me` | Bearer | auth |
 | POST | `/api/v1/auth/refresh` | — | auth |
 | POST | `/api/v1/auth/logout` | — | auth |
-| GET | `/api/v1/users` | Admin | auth |
-| POST | `/api/v1/users` | Admin | auth |
-| GET | `/api/v1/users/{id}` | Admin | auth |
-| PUT | `/api/v1/users/{id}/role` | Admin | auth |
-| DELETE | `/api/v1/users/{id}` | Admin | auth |
+| GET | `/api/v1/auth/users` | `admin` | auth |
+| PATCH | `/api/v1/auth/users/{id}/roles` | `admin` | auth |
+| PATCH | `/api/v1/auth/users/{id}/password` | `admin`, `user_manager` | auth |
+| PATCH | `/api/v1/auth/users/{id}/status` | `admin`, `user_manager` | auth |
 | GET | `/api/health` | — | product |
 | GET | `/api/products/bags` | — | product |
 | POST | `/api/coupons/redeem` | — | product |
