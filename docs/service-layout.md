@@ -114,9 +114,11 @@ Planned: email, push, SMS, and event-triggered notifications.
 | `/health` | auth |
 | `/api/v1/auth/` | auth |
 | `/api/v1/users` | auth |
+| `/api/products/` | product |
+| `/api/coupons/` | product |
+| `/api/health` | product |
 | `/api/v1/inventory/` | inventory |
 | `/api/v1/orders` | order |
-| `/api/` | product |
 
 Inventory, order, and notification are also reachable on their direct ports (8082–8084) when running via Docker Compose.
 

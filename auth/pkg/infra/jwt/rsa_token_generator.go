@@ -37,10 +37,16 @@ type RSATokenGenerator struct {
 	privateKey     *rsa.PrivateKey
 	keyID          string
 	expiryDuration time.Duration
+	tokenType      string // "access" or "refresh"; omitted when empty
 }
 
 // NewRSATokenGenerator creates a token generator from an existing RSA key.
 func NewRSATokenGenerator(key *rsa.PrivateKey, keyID string, expirySeconds int64) *RSATokenGenerator {
+	return NewRSATokenGeneratorWithType(key, keyID, expirySeconds, "")
+}
+
+// NewRSATokenGeneratorWithType creates a token generator that stamps a type claim.
+func NewRSATokenGeneratorWithType(key *rsa.PrivateKey, keyID string, expirySeconds int64, tokenType string) *RSATokenGenerator {
 	if keyID == "" {
 		keyID = "default"
 	}
@@ -48,12 +54,13 @@ func NewRSATokenGenerator(key *rsa.PrivateKey, keyID string, expirySeconds int64
 		privateKey:     key,
 		keyID:          keyID,
 		expiryDuration: time.Duration(expirySeconds) * time.Second,
+		tokenType:      tokenType,
 	}
 }
 
 // NewRSATokenGeneratorFromPEM parses a PEM-encoded RSA private key and creates a token generator.
 // Supports PKCS#1 ("RSA PRIVATE KEY") and PKCS#8 ("PRIVATE KEY") formats.
-func NewRSATokenGeneratorFromPEM(pemBytes []byte, keyID string, expirySeconds int64) (*RSATokenGenerator, error) {
+func NewRSATokenGeneratorFromPEM(pemBytes []byte, keyID string, expirySeconds int64, tokenType string) (*RSATokenGenerator, error) {
 	block, _ := pem.Decode(pemBytes)
 	if block == nil {
 		return nil, fmt.Errorf("failed to decode PEM block from private key")
@@ -81,7 +88,7 @@ func NewRSATokenGeneratorFromPEM(pemBytes []byte, keyID string, expirySeconds in
 		return nil, fmt.Errorf("unsupported PEM block type: %q", block.Type)
 	}
 
-	return NewRSATokenGenerator(privateKey, keyID, expirySeconds), nil
+	return NewRSATokenGeneratorWithType(privateKey, keyID, expirySeconds, tokenType), nil
 }
 
 // GenerateRSAKey creates a new RSA private key with the given bit size.
@@ -99,6 +106,9 @@ func (g *RSATokenGenerator) Generate(ctx context.Context, userID string, roles [
 		"roles": roles,
 		"exp":   time.Now().Add(g.expiryDuration).Unix(),
 		"iat":   time.Now().Unix(),
+	}
+	if g.tokenType != "" {
+		claims["type"] = g.tokenType
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)

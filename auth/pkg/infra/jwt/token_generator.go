@@ -15,13 +15,20 @@ import (
 type TokenGenerator struct {
 	secret         string
 	expiryDuration time.Duration
+	tokenType      string
 }
 
 // NewTokenGenerator creates a new JWT token generator.
 func NewTokenGenerator(secret string, expirySeconds int64) *TokenGenerator {
+	return NewTokenGeneratorWithType(secret, expirySeconds, "access")
+}
+
+// NewTokenGeneratorWithType creates a JWT token generator that stamps a type claim.
+func NewTokenGeneratorWithType(secret string, expirySeconds int64, tokenType string) *TokenGenerator {
 	return &TokenGenerator{
 		secret:         secret,
 		expiryDuration: time.Duration(expirySeconds) * time.Second,
+		tokenType:      tokenType,
 	}
 }
 
@@ -35,6 +42,9 @@ func (tg *TokenGenerator) Generate(ctx context.Context, userID string, roles []s
 		"roles": roles,
 		"exp":   time.Now().Add(tg.expiryDuration).Unix(),
 		"iat":   time.Now().Unix(),
+	}
+	if tg.tokenType != "" {
+		claims["type"] = tg.tokenType
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

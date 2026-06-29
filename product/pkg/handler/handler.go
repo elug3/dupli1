@@ -37,6 +37,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", h.Health)
 	mux.HandleFunc("GET /api/v1/product/health", h.Health)
 	mux.HandleFunc("GET /api/products/bags", h.SearchBags)
+	mux.HandleFunc("GET /api/products/{id}", h.PublicGetProduct)
 	mux.HandleFunc("POST /api/coupons/redeem", h.RedeemCoupon)
 }
 
@@ -55,12 +56,10 @@ func (h *Handler) ListProductsHandler() http.Handler {
 	return http.HandlerFunc(h.ListProducts)
 }
 
-// SingleProductHandler returns an http.Handler for GET|PUT|DELETE /api/products/{id}.
+// SingleProductHandler returns an http.Handler for PUT|DELETE /api/products/{id}.
 func (h *Handler) SingleProductHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
-		case http.MethodGet:
-			h.GetProduct(w, r)
 		case http.MethodPut:
 			h.UpdateProduct(w, r)
 		case http.MethodDelete:
@@ -103,6 +102,29 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 		products = []domain.Product{}
 	}
 	h.respondJSON(w, http.StatusOK, products)
+}
+
+// GetProductHandler returns an http.Handler for authenticated GET /api/products/{id}/manage.
+func (h *Handler) GetProductHandler() http.Handler {
+	return http.HandlerFunc(h.GetProduct)
+}
+
+func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		h.respondError(w, http.StatusBadRequest, "missing product id")
+		return
+	}
+	product, err := h.svc.GetPublicProduct(id)
+	if err != nil {
+		h.respondError(w, http.StatusNotFound, "product not found")
+		return
+	}
+	h.respondJSON(w, http.StatusOK, product)
 }
 
 func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {

@@ -35,7 +35,7 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	h.RegisterRoutes(mux)
 	mux.Handle("GET /api/products", h.ListProductsHandler())
 	mux.Handle("POST /api/products", h.CreateProductHandler())
-	mux.Handle("GET /api/products/{id}", h.SingleProductHandler())
+	mux.Handle("GET /api/products/{id}/manage", h.GetProductHandler())
 	mux.Handle("PUT /api/products/{id}", h.SingleProductHandler())
 	mux.Handle("DELETE /api/products/{id}", h.SingleProductHandler())
 	mux.Handle("PUT /api/products/{id}/image", h.UploadImageHandler())
@@ -75,9 +75,9 @@ func TestHealthMethodNotAllowed(t *testing.T) {
 
 func TestSearchBags(t *testing.T) {
 	store := memory.NewProductStore()
-	store.Bags = []domain.Bag{
-		{Product: domain.Product{ID: "BAG-001", Name: "Canvas Tote", Brand: "Baggu", Price: 45.0}},
-		{Product: domain.Product{ID: "HER-001", Name: "Leather Backpack", Brand: "Herschel", Price: 120.0}},
+	store.Products = []domain.Product{
+		{ID: "BAG-001", Name: "Canvas Tote", Brand: "Baggu", Price: 45.0, Category: "bags", Status: "active"},
+		{ID: "HER-001", Name: "Leather Backpack", Brand: "Herschel", Price: 120.0, Category: "bags", Status: "active"},
 	}
 	mux := newMux(store)
 	rec := httptest.NewRecorder()
@@ -163,21 +163,56 @@ func TestListProducts(t *testing.T) {
 func TestGetProduct(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta"},
+		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active"},
 	}
 	mux, _ := newFullMux(store)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/BOT-001", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/BOT-001/manage", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
 	}
 }
 
+func TestPublicGetProduct(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active", Cost: 99},
+	}
+	mux := newMux(store)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/BOT-001", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var p domain.Product
+	if err := json.NewDecoder(rec.Body).Decode(&p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Cost != 0 {
+		t.Fatalf("want cost redacted, got %v", p.Cost)
+	}
+}
+
+func TestPublicGetProductDraftHidden(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Mini Bag", Status: "draft"},
+	}
+	mux := newMux(store)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/BOT-001", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d", rec.Code)
+	}
+}
+
 func TestGetProductNotFound(t *testing.T) {
 	mux, _ := newFullMux(memory.NewProductStore())
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/NOPE-999", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/NOPE-999/manage", nil))
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d", rec.Code)

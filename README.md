@@ -98,6 +98,7 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 |--------|------|-------------|
 | GET | `/api/health` | Health check |
 | GET | `/api/products/bags` | Search bags (`?brand=`, `?color=`, `?material=`) |
+| GET | `/api/products/{id}` | Public product detail (active products only) |
 | POST | `/api/coupons/redeem` | Redeem a coupon code |
 
 **Requires `Authorization: Bearer <token>`**
@@ -106,7 +107,7 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 |--------|------|-------------|
 | GET | `/api/products` | List all products |
 | POST | `/api/products` | Create product |
-| GET | `/api/products/{id}` | Get product |
+| GET | `/api/products/{id}/manage` | Get product (admin, includes drafts/cost) |
 | PUT | `/api/products/{id}` | Update product |
 | DELETE | `/api/products/{id}` | Delete product |
 | PUT | `/api/products/{id}/image` | Upload product image (multipart `image` field) |

@@ -128,11 +128,11 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 // (dev mode only — tokens are invalidated on restart).
 func buildTokenGenerators(cfg Config) (access ports.TokenGenerator, refresh ports.TokenGenerator, jwksJSON []byte, err error) {
 	if len(cfg.JWTPrivateKeyPEM) > 0 {
-		access, jwksJSON, err = newRSAGeneratorWithJWKS(cfg.JWTPrivateKeyPEM, cfg.JWTKeyID, int64(cfg.TokenExpiry.Seconds()))
+		access, jwksJSON, err = newRSAGeneratorWithJWKS(cfg.JWTPrivateKeyPEM, cfg.JWTKeyID, int64(cfg.TokenExpiry.Seconds()), "access")
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		refresh, _, err = newRSAGeneratorWithJWKS(cfg.JWTPrivateKeyPEM, cfg.JWTKeyID, int64(cfg.RefreshTokenExpiry.Seconds()))
+		refresh, _, err = newRSAGeneratorWithJWKS(cfg.JWTPrivateKeyPEM, cfg.JWTKeyID, int64(cfg.RefreshTokenExpiry.Seconds()), "refresh")
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -145,8 +145,8 @@ func buildTokenGenerators(cfg Config) (access ports.TokenGenerator, refresh port
 	if genErr != nil {
 		return nil, nil, nil, fmt.Errorf("generate ephemeral RSA key: %w", genErr)
 	}
-	rsaAccess := jwtinfra.NewRSATokenGenerator(key, cfg.JWTKeyID, int64(cfg.TokenExpiry.Seconds()))
-	rsaRefresh := jwtinfra.NewRSATokenGenerator(key, cfg.JWTKeyID, int64(cfg.RefreshTokenExpiry.Seconds()))
+	rsaAccess := jwtinfra.NewRSATokenGeneratorWithType(key, cfg.JWTKeyID, int64(cfg.TokenExpiry.Seconds()), "access")
+	rsaRefresh := jwtinfra.NewRSATokenGeneratorWithType(key, cfg.JWTKeyID, int64(cfg.RefreshTokenExpiry.Seconds()), "refresh")
 	jwksJSON, err = json.Marshal(rsaAccess.PublicJWKS())
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("marshal JWKS: %w", err)
@@ -154,8 +154,8 @@ func buildTokenGenerators(cfg Config) (access ports.TokenGenerator, refresh port
 	return rsaAccess, rsaRefresh, jwksJSON, nil
 }
 
-func newRSAGeneratorWithJWKS(pemBytes []byte, keyID string, expirySeconds int64) (*jwtinfra.RSATokenGenerator, []byte, error) {
-	gen, err := jwtinfra.NewRSATokenGeneratorFromPEM(pemBytes, keyID, expirySeconds)
+func newRSAGeneratorWithJWKS(pemBytes []byte, keyID string, expirySeconds int64, tokenType string) (*jwtinfra.RSATokenGenerator, []byte, error) {
+	gen, err := jwtinfra.NewRSATokenGeneratorFromPEM(pemBytes, keyID, expirySeconds, tokenType)
 	if err != nil {
 		return nil, nil, err
 	}

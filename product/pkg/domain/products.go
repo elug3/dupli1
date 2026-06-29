@@ -24,6 +24,7 @@ type Product struct {
 	Category    string   `json:"category"`
 	Status      string   `json:"status"` // "active" | "draft" | "archived"
 	ImageURLs   []string `json:"imageUrls,omitempty"`
+	Capacity    string   `json:"capacity,omitempty"`
 	Tags        []string `json:"tags,omitempty"` // "new", "hot", "top"
 	CreatedAt   string   `json:"createdAt"`
 }
@@ -49,10 +50,9 @@ type Bottoms struct {
 	Gender string
 }
 
-// Bag represents bags, purses, backpacks, and similar items
+// Bag represents bags, purses, backpacks, and similar items.
 type Bag struct {
 	Product
-	Capacity string `json:"capacity"`
 }
 
 // Clock represents timepieces

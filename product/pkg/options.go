@@ -7,6 +7,7 @@ type SearchServerOptions struct {
 	DatabaseConnString string
 	NATSURL            string
 	JWTSecret          string
+	JWKSURL            string
 	ReadTimeout        int // in seconds
 	WriteTimeout       int // in seconds
 }
@@ -25,6 +26,7 @@ type ServerOptions struct {
 	Port               int
 	DatabaseConnString string
 	JWTSecret          string
+	JWKSURL            string
 	ReadTimeout        int // in seconds
 	WriteTimeout       int // in seconds
 	S3Endpoint         string
