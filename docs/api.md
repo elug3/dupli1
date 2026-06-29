@@ -271,7 +271,7 @@ Activate or deactivate a user. Requires `admin` or `user_manager` role.
 
 ---
 
-## Product Service — `/api`
+## Product Service — `/api/v1/products`
 
 ### `GET /api/v1/products/health`
 
