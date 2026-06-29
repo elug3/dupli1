@@ -6,12 +6,12 @@ Guidance for AI agents working in the Schick repository.
 
 Schick is a Go microservice backend for a fashion bag marketplace. The repo contains:
 
-- Six HTTP services under `cmd/schick-*`
-- Service packages under `pkg/*` (auth, product, inventory, order, notification)
+- Five HTTP services in `auth/`, `product/`, `inventory/`, `order/`, `notification/` (each with `cmd/` + `pkg/`)
+- nginx gateway in `api/` (`schick-proxy` in Docker Compose)
 - Docker Compose for local development
 - Terraform and GitHub Actions for AWS ECS deployment
 
-See [docs/current-state.md](docs/current-state.md) for the authoritative snapshot of what is implemented today.
+See [docs/current-state.md](docs/current-state.md) for the authoritative snapshot of what is implemented today. See [docs/service-layout.md](docs/service-layout.md) for directory and module layout.
 
 ## Cursor Cloud specific instructions
 
@@ -19,7 +19,7 @@ See [docs/current-state.md](docs/current-state.md) for the authoritative snapsho
 
 | Tool | Version / notes |
 |------|-----------------|
-| Go | 1.22+ (`/usr/bin/go`) — workspace uses Go 1.26 |
+| Go | 1.22+ (`/usr/bin/go`) — modules target Go 1.26 |
 | PostgreSQL | 16 — `localhost:5432` |
 | Redis | 7 — `localhost:6379` |
 
@@ -59,48 +59,49 @@ cp .env.example .env   # set JWT_SECRET, OWNER_EMAIL, OWNER_PASSWORD
 docker compose up --build
 ```
 
-Gateway: `https://localhost` (self-signed cert; use `curl -k` or trust `certs/server.crt`).
+Gateway (HTTP): `http://localhost:8080` or `http://localhost` (port 80). TLS certs exist in `certs/` but are not wired into local nginx yet.
 
-Direct service ports (bypassing proxy):
+Direct service ports (bypass gateway):
 
-| Service | Port |
-|---------|------|
-| `schick-auth` | 8080 |
+| Service | Host port |
+|---------|-----------|
+| `schick-auth` | 18080 |
 | `schick-product` | 8081 |
 | `schick-inventory` | 8082 |
 | `schick-order` | 8083 |
 | `schick-notification` | 8084 |
-| `schick-proxy` | 80 / 443 |
 
 ### Running a single service (without Docker)
 
 ```bash
-# From repo root — uses go.work
-cd pkg/auth && go test ./...
-cd pkg/product && go test ./...
+cd auth && go test ./...
+cd product && go test ./...
 
 # Auth server
-cd cmd/schick-auth && go run . -help
+cd auth/cmd && go run . -help
 
 # Product server
-cd cmd/schick-product && go run . -help
+cd product/cmd && go run . -help
 ```
 
 ### Testing
 
-Run tests per module (root `go test ./...` does not work because the root `go.mod` is a workspace stub):
+Run tests per service module (root `go test ./...` does not work — the root `go.mod` is a stub):
 
 ```bash
-cd pkg/auth && go test ./...
-cd pkg/product && go test ./...
-cd pkg/inventory && go test ./...
-cd pkg/order && go test ./...
+cd auth && go test ./...
+cd product && go test ./...
+cd inventory && go test ./...
+cd order && go test ./...
 ```
 
 ### Gotchas
 
-- **Module paths differ:** auth/inventory/order use `github.com/elug3/schick/pkg/...`; product uses `github.com/schick/pkg/product`.
-- **Inventory and order** use in-memory stores today (no Postgres).
+- **Module paths:** all services use `github.com/elug3/schick/<service>` (e.g. `github.com/elug3/schick/product`). There is no top-level `go.work`.
+- **Auth token flow:** login returns only a `refresh_token`; call `POST /api/v1/auth/refresh` to obtain a short-lived access token in the `token` field.
+- **Product JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint).
+- **Order JWT:** when `JWT_SECRET` is set, order/checkout require Bearer tokens validated with HMAC — not aligned with auth RS256 yet.
+- **Inventory and order** use in-memory stores (no Postgres).
 - **Notification** is a health-only stub; no outbound messaging yet.
-- **Redis and NATS** are optional for auth (session cache and event publishing); not wired in Docker Compose by default.
+- **Redis and NATS** are optional for auth (rate limits, session cache, events); Redis is wired in Compose.
 - **SMTP, payment, and OAuth providers** are external; no local mocks are bundled.
