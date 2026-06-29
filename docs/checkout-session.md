@@ -185,9 +185,11 @@ After completion, use the existing order APIs to confirm, cancel, or fulfill the
 
 | Path | Role |
 |------|------|
-| `pkg/order/domain/checkout_session.go` | Session entity and totals logic |
-| `pkg/order/service/checkout.go` | Use cases |
-| `pkg/order/ports/repository.go` | Order and checkout session persistence |
-| `pkg/order/ports/coupon.go` | Coupon redemption port |
-| `pkg/order/infra/httpcoupon/` | Product service HTTP adapter |
-| `pkg/order/handler/checkout.go` | HTTP routes |
+| `order/pkg/domain/checkout_session.go` | Session entity and totals logic |
+| `order/pkg/service/checkout.go` | Use cases |
+| `order/pkg/ports/repository.go` | Order and checkout session persistence |
+| `order/pkg/ports/coupon.go` | Coupon redemption port |
+| `order/pkg/infra/httpcoupon/` | Product service HTTP adapter |
+| `order/pkg/handler/checkout.go` | HTTP routes |
+
+Order and checkout routes require `Authorization: Bearer <token>` when `JWT_SECRET` is configured. See [current-state.md](current-state.md) for the RS256 alignment gap with auth.

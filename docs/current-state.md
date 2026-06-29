@@ -1,148 +1,149 @@
 # Current Code State
 
-Snapshot of the Schick repository as of the latest implementation. Use this document to understand what exists today versus what is planned.
+Authoritative snapshot of what is implemented in the Schick repository today.
 
 ## Overview
 
-Schick is a fashion bag marketplace backend implemented as Go microservices behind an nginx reverse proxy. Local development uses Docker Compose; production deploys to AWS ECS Fargate with Amazon RDS PostgreSQL.
+Schick is a fashion bag marketplace backend: Go microservices behind an nginx gateway. Local dev uses Docker Compose; production uses AWS ECS Fargate and Amazon RDS PostgreSQL.
 
 | Area | Status |
 |------|--------|
 | Auth (login, JWT, RBAC) | Implemented |
-| Product catalog (bags, coupons, images) | Implemented |
+| Product catalog (bags, coupons, images, PDP) | Implemented |
 | Inventory (stock, reservations) | Implemented (in-memory) |
-| Orders (checkout, lifecycle) | Implemented (in-memory) |
+| Orders + checkout sessions | Implemented (in-memory) |
 | Notifications | Stub (health only) |
 | User profiles, chat, analytics | Not started |
 
+## Repository layout
+
+Services live in **per-service directories**, not `cmd/schick-*` / `pkg/*` at the repo root:
+
+```text
+auth/, product/, inventory/, order/, notification/   # each has cmd/ + pkg/
+api/nginx.conf                                      # gateway
+```
+
+See [service-layout.md](service-layout.md) for details.
+
 ## Services
 
-### schick-auth (port 8080)
+### schick-auth
 
-- **Stack:** Gin, PostgreSQL, optional Redis/NATS
-- **Persistence:** `schick_db` on `postgres-auth` (port 5432)
+- **Host port (Compose):** 18080 → container 8080
+- **Stack:** Gin, PostgreSQL, Redis, optional NATS
+- **Persistence:** `schick_db` on `postgres-auth`
 - **Features:**
-  - Register, login, logout, refresh tokens
-  - Access tokens (15 min) + refresh tokens (24 h)
-  - Roles: `owner`, `admin`, `user` (stored in DB, not in JWT)
-  - Admin user CRUD at `/api/v1/users`
-  - Owner seeded on first startup from `OWNER_EMAIL` / `OWNER_PASSWORD`
-- **Tests:** `pkg/auth` — bootstrap, handler, service, postgres
+  - Login returns a **refresh token**; `POST /refresh` returns a short-lived **access token** (`token` field)
+  - RS256 JWT + JWKS at `/api/v1/auth/.well-known/jwks.json`
+  - Access tokens include `type: "access"`; refresh tokens include `type: "refresh"`
+  - Roles: `owner`, `admin`, `user_manager`, `customer`
+  - Register requires `admin` or `user_manager` (not public)
+  - User admin at `/api/v1/auth/users`
+  - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD`
+  - Login/refresh rate-limited per IP via Redis
+- **Tests:** `cd auth && go test ./...`
 
-### schick-product (port 8081)
+### schick-product
 
+- **Host port:** 8081
 - **Stack:** stdlib HTTP, PostgreSQL, MinIO/S3
-- **Persistence:** `products` on `postgres-product` (port 5433)
+- **Persistence:** `products` on `postgres-product`
 - **Features:**
-  - Public bag search with brand/color/material filters
-  - Product CRUD (auth required) with brand-prefixed IDs
-  - Coupon CRUD and public redemption
-  - Image upload to MinIO (auth required)
-  - Schema auto-migration on startup
-- **Tests:** `pkg/product` — handler, service (root package)
+  - Public: `GET /api/v1/products/bags`, `GET /api/v1/products/{id}`, coupon redeem
+  - Admin CRUD at `/api/v1/products`, `GET /api/v1/products/{id}/manage`
+  - Bag search reads `products` where `category = 'bags'` and `status = 'active'`
+  - Protected routes validate RS256 via `AUTH_JWKS_URL`
+  - Inline schema migration on startup
+- **Tests:** `cd product && go test ./...`
 
-### schick-inventory (port 8082)
+### schick-inventory
 
-- **Stack:** stdlib HTTP
-- **Persistence:** In-memory only
+- **Host port:** 8082
+- **Persistence:** In-memory
+- **Features:** Stock and reservations at `/api/v1/inventory/*`
+- **Auth:** None
+- **Tests:** `cd inventory && go test ./...`
+
+### schick-order
+
+- **Host port:** 8083
+- **Persistence:** In-memory
 - **Features:**
-  - Get/set/adjust stock by SKU
-  - Reservation create, commit, release
-- **Tests:** `pkg/inventory` — service
+  - Checkout sessions at `/api/v1/checkout/sessions` (see [checkout-session.md](checkout-session.md))
+  - Order lifecycle at `/api/v1/orders`
+  - Calls inventory to reserve stock; calls product to redeem coupons
+- **Auth:** Bearer JWT when `JWT_SECRET` is set (HMAC validator — **not aligned with auth RS256 yet**)
+- **Tests:** `cd order && go test ./...`
 
-### schick-order (port 8083)
+### schick-notification
 
-- **Stack:** stdlib HTTP, HTTP client to inventory
-- **Persistence:** In-memory only
-- **Features:**
-  - Create order (reserves inventory)
-  - Confirm, cancel, fulfill status transitions
-  - List orders by customer ID
-- **Tests:** `pkg/order` — service
+- **Host port:** 8084
+- **Status:** `GET /health` only
 
-### schick-notification (port 8084)
+### schick-proxy
 
-- **Stack:** stdlib HTTP
-- **Status:** Health endpoint only; no outbound messaging
+- **Host ports:** 8080 and 80 (HTTP), 443 exposed but TLS not configured in nginx
+- **Config:** [api/nginx.conf](../api/nginx.conf)
+- **Health:** `GET /gateway/health` → `ok`
 
-### schick-proxy (ports 80/443)
+## Data stores
 
-- **Stack:** nginx
-- **Routes:** auth, product, inventory, order (see [service-layout.md](service-layout.md))
-- **TLS:** Self-signed cert in `certs/` for local dev; ALB terminates TLS in production
+| Store | Used by | Local |
+|-------|---------|-------|
+| PostgreSQL `schick_db` | auth | `postgres-auth:5432` |
+| PostgreSQL `products` | product | `postgres-product:5433` |
+| MinIO `product-images` | product | `minio:9000` |
+| In-memory | inventory, order | process-local |
+| Redis | auth | `redis:6379` (in Compose) |
+| NATS | auth (optional) | `nats:4222` (in Compose) |
 
-## Data Stores
+## API surface (summary)
 
-| Store | Used by | Local | Production |
-|-------|---------|-------|------------|
-| PostgreSQL `schick_db` | auth | `postgres-auth:5432` | RDS |
-| PostgreSQL `products` | product | `postgres-product:5433` | RDS |
-| MinIO `product-images` | product | `minio:9000` | S3 (planned) |
-| In-memory | inventory, order | process-local | process-local |
-| Redis | auth (optional) | not in compose | optional |
-| NATS | auth, product (optional) | not in compose | optional |
+| Service | Public | Authenticated |
+|---------|--------|---------------|
+| auth | login, refresh, logout | register (admin/user_manager), me, user admin |
+| product | health, bag search, PDP, coupon redeem | product/coupon CRUD, image upload |
+| inventory | all routes | — |
+| order | health only | orders, checkout (when JWT configured) |
+| notification | health | — |
 
-## Go Workspace
+Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md).
 
-The repo uses `go.work` to link independent modules:
+## Go modules
 
-```
-cmd/schick-auth, cmd/schick-inventory, cmd/schick-notification,
-cmd/schick-order, cmd/schick-product,
-pkg/auth, pkg/inventory, pkg/notification, pkg/order, pkg/product
-```
+| Module | Path |
+|--------|------|
+| `github.com/elug3/schick` | root stub |
+| `github.com/elug3/schick/auth` | `auth/` |
+| `github.com/elug3/schick/product` | `product/` |
+| `github.com/elug3/schick/inventory` | `inventory/` |
+| `github.com/elug3/schick/order` | `order/` |
+| `github.com/elug3/schick/notification` | `notification/` |
 
-Module paths are not unified:
+## Known gaps
 
-- `github.com/elug3/schick/pkg/auth` (and inventory, order, notification cmd modules)
-- `github.com/schick/pkg/product`
+1. **Order JWT** — HMAC `JWT_SECRET` validator; does not consume auth JWKS/RS256 tokens
+2. **Local TLS** — certs in `certs/` are not wired into nginx; gateway is HTTP only
+3. **Inventory/order persistence** — in-memory; data lost on restart
+4. **Notification** — no outbound messaging
+5. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
+6. **Planned packages not started** — user, chat, analytics, shared lib
 
-Root `go.mod` (`github.com/elug3/schick`) is a workspace stub. Run tests per package directory.
-
-## API Surface
-
-See [api.md](api.md) for the full reference. Summary:
-
-| Service | Public endpoints | Authenticated endpoints |
-|---------|-----------------|------------------------|
-| auth | register, login, refresh, logout | me, user admin |
-| product | health, bag search, coupon redeem | product CRUD, coupon CRUD, image upload |
-| inventory | all endpoints | none |
-| order | all endpoints | none |
-| notification | health | none |
-
-## Architecture Compliance
-
-Services follow hexagonal/DDD layout per [ARCHITECTURE.md](../ARCHITECTURE.md):
-
-- `domain/`, `service/`, `ports/`, `infra/`, `handler/`, `bootstrap/` present in auth, product, inventory, order
-- Config in `bootstrap/config.go` or root `options.go` (not top-level `config.go`)
-- Errors in `autherrors/` (auth only); other services inline errors
-- No `pkg/shared/` yet
-
-## Known Gaps
-
-1. **Notification** — no email/push/SMS implementation
-2. **Inventory/order persistence** — in-memory only; data lost on restart
-3. **Module path inconsistency** — `elug3/schick` vs `schick/pkg/product`
-4. **No auth on inventory/order** — endpoints are open
-5. **No migrations directory** — product schema migrates inline; auth uses bootstrap DDL
-6. **Planned packages not started** — user, chat, analytics, config
-
-## Running and Testing
+## Running and testing
 
 ```bash
-# Full stack
 cp .env.example .env
 docker compose up --build
 
-# Tests (per module)
-cd pkg/auth && go test ./...
-cd pkg/product && go test ./...
-cd pkg/inventory && go test ./...
-cd pkg/order && go test ./...
+# Gateway (HTTP)
+curl http://localhost:8080/gateway/health
+
+# Tests (per service directory)
+cd auth && go test ./...
+cd product && go test ./...
 ```
 
 ## Deployment
 
-Production: ECS Fargate in `us-east-1`, RDS PostgreSQL 16, Secrets Manager for credentials. See [deployment-aws.md](deployment-aws.md).
+Production: ECS Fargate, RDS PostgreSQL 16, Secrets Manager. See [deployment-aws.md](deployment-aws.md).

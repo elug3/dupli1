@@ -1,14 +1,18 @@
 # API Endpoints
 
-All services run on port `8080` internally. The nginx gateway (port `80`) proxies by path prefix with no stripping, so gateway paths are identical to service paths.
+All services listen on port `8080` inside Docker. The nginx gateway proxies by path prefix with no stripping, so gateway paths match service paths.
 
 | Gateway prefix | Upstream service |
 |---|---|
+| `/gateway/health` | nginx (static) |
 | `/api/v1/auth/` | `schick-auth:8080` |
-| `/api/v1/products/` | `schick-product:8080` |
-| `/api/v1/coupons/` | `schick-product:8080` |
+| `/api/v1/products` | `schick-product:8080` |
+| `/api/v1/coupons` | `schick-product:8080` |
 | `/api/v1/inventory/` | `schick-inventory:8080` |
 | `/api/v1/orders` | `schick-order:8080` |
+| `/api/v1/checkout` | `schick-order:8080` |
+
+Local gateway: `http://localhost:8080` (also host port 80).
 
 Each service also registers `/health` directly for internal/sidecar use.
 
@@ -65,7 +69,12 @@ Errors: `400` bad request, `401` invalid credentials.
 
 ### POST /api/v1/auth/logout
 
-Response `204` (no body). Token invalidation is a TODO in the current implementation.
+Request:
+```json
+{ "refresh_token": "<token>" }
+```
+
+Response `204` (no body).
 
 ### POST /api/v1/auth/refresh
 
@@ -312,13 +321,24 @@ Both return `200` with the updated reservation object. Errors: `404` not found, 
 
 ## Order Service
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/v1/orders/health` | Health check |
-| `POST` | `/api/v1/orders` | Create a new order |
-| `GET` | `/api/v1/orders?customer_id={id}` | List all orders for a customer |
-| `GET` | `/api/v1/orders/{id}` | Get a single order |
-| `PUT` | `/api/v1/orders/{id}/status` | Transition order status |
+Requires `Authorization: Bearer <token>` when `JWT_SECRET` is set on the order service (HMAC validator in Compose). Customers may only use their own `customer_id`. See [checkout-session.md](checkout-session.md).
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/orders/health` | — | Health check |
+| `POST` | `/api/v1/checkout/sessions` | Bearer* | Create checkout session |
+| `GET` | `/api/v1/checkout/sessions/{id}` | Bearer* | Get session |
+| `PUT` | `/api/v1/checkout/sessions/{id}/items` | Bearer* | Replace all items |
+| `POST` | `/api/v1/checkout/sessions/{id}/items` | Bearer* | Add or update one item |
+| `DELETE` | `/api/v1/checkout/sessions/{id}/items/{sku}` | Bearer* | Remove item |
+| `POST` | `/api/v1/checkout/sessions/{id}/coupon` | Bearer* | Apply coupon |
+| `POST` | `/api/v1/checkout/sessions/{id}/complete` | Bearer* | Complete checkout |
+| `POST` | `/api/v1/orders` | Bearer* | Create a new order |
+| `GET` | `/api/v1/orders?customer_id={id}` | Bearer* | List all orders for a customer |
+| `GET` | `/api/v1/orders/{id}` | Bearer* | Get a single order |
+| `PUT` | `/api/v1/orders/{id}/status` | Bearer* | Transition order status |
+
+\* Required when `JWT_SECRET` is configured; optional in tests with no validator.
 
 ### GET /api/v1/orders/health
 

@@ -1,164 +1,135 @@
 # Services Layout
 
-This document describes how Schick's microservice Go backend is organized, what each service owns, and how new service code should be placed.
+How the Schick Go backend is organized, what each service owns, and where to add new code.
 
-## Directory Map
+## Directory map
 
 ```text
 schick/
-├── cmd/
-│   ├── schick-auth/          # Auth server entrypoint + Dockerfile
-│   ├── schick-product/       # Product server entrypoint + Dockerfile
-│   ├── schick-inventory/     # Inventory server entrypoint + Dockerfile
-│   ├── schick-order/         # Order server entrypoint + Dockerfile
-│   ├── schick-notification/  # Notification server entrypoint + Dockerfile
-│   └── schick-proxy/         # nginx reverse proxy
-├── pkg/
-│   ├── auth/                 # Identity, tokens, RBAC
-│   ├── product/              # Bag catalog, coupons, images
-│   ├── inventory/            # Stock and reservations
-│   ├── order/                # Order lifecycle
-│   └── notification/         # Outbound messaging (stub)
-├── docs/                     # API, deployment, and state documentation
+├── auth/                     # Auth service module
+│   ├── cmd/                  # CLI entrypoint (cobra)
+│   └── pkg/                  # domain, service, ports, infra, handler, bootstrap
+├── product/                  # Product catalog module
+│   ├── cmd/
+│   └── pkg/
+├── inventory/
+│   ├── cmd/
+│   └── pkg/
+├── order/
+│   ├── cmd/
+│   └── pkg/
+├── notification/
+│   ├── cmd/
+│   └── pkg/
+├── api/
+│   ├── nginx.conf            # Gateway routing (schick-proxy image)
+│   └── Dockerfile
 ├── infra/
-│   ├── terraform/            # RDS, secrets, IAM
-│   └── scripts/              # RDS cutover helpers
-├── docker-compose.yml        # Local development stack
-├── go.work                   # Go workspace linking all modules
-└── .env.example              # Local environment template
+│   ├── terraform/
+│   └── scripts/
+├── certs/                    # Self-signed TLS material (not wired in local nginx yet)
+├── Dockerfile                # Multi-service image (SERVICE build arg)
+├── docker-compose.yml
+├── go.mod                    # Workspace stub module
+└── docs/
 ```
 
-There is no monolithic `cmd/server` or shared `internal/` package. Each service is an independent Go module wired through `go.work`.
+Each service is an independent Go module (`auth/go.mod`, `product/go.mod`, …). There is no top-level `go.work` file; run and test from each service directory.
 
-## Layer Responsibilities
+## Layer responsibilities
 
-Every service package follows hexagonal architecture (see [ARCHITECTURE.md](../ARCHITECTURE.md)):
+Every service package follows hexagonal architecture ([ARCHITECTURE.md](../ARCHITECTURE.md)):
 
-1. **Entrypoints (`cmd/schick-*`)** parse flags/env, construct `ServerOptions`, and call `pkg/<service>.NewServer()`.
-2. **Bootstrap (`pkg/<service>/bootstrap/`)** wires database clients, repositories, services, handlers, and routes.
-3. **Handlers (`handler/`)** translate HTTP requests into service calls. No business logic.
-4. **Services (`service/`)** contain use cases and domain rules. Depend only on `domain/` and `ports/`.
-5. **Ports (`ports/`)** define interfaces for repositories, external clients, and event publishers.
-6. **Infra (`infra/`)** implements ports (Postgres, Redis, S3, in-memory, HTTP clients).
-7. **Domain (`domain/`)** holds entities and value objects with no external dependencies.
+1. **Entrypoints (`<service>/cmd/`)** — parse flags/env and start the HTTP server.
+2. **Bootstrap (`<service>/pkg/bootstrap/`)** — wire DB clients, repositories, services, handlers, routes.
+3. **Handlers (`handler/`)** — HTTP translation only.
+4. **Services (`service/`)** — use cases; depend on `domain/` and `ports/` only.
+5. **Ports (`ports/`)** — interfaces for repositories and external clients.
+6. **Infra (`infra/`)** — Postgres, Redis, S3, HTTP clients, in-memory fakes.
+7. **Domain (`domain/`)** — entities and business rules.
 
-Configuration lives in `bootstrap/config.go` (or `options.go` at the package root), not in a separate top-level `config.go` as the architecture guide originally specified.
+Configuration lives in `bootstrap/config.go` and/or package `options.go`.
 
-## Service Packages
+## Service packages
 
-### Auth (`pkg/auth`)
+### Auth (`auth/pkg`)
 
-**Module:** `github.com/elug3/schick/pkg/auth`  
+**Module:** `github.com/elug3/schick/auth`  
 **Framework:** Gin  
-**Storage:** PostgreSQL (required), Redis (optional session cache), NATS (optional events)
+**Storage:** PostgreSQL (required), Redis (rate limits + session cache in Compose), NATS (optional events)
 
 Owns:
 
-- Registration, login, logout, token refresh
-- JWT access/refresh token pair
-- Role-based access control (`owner`, `admin`, `user`)
-- Admin user management at `/api/v1/users`
-- Owner seeding on first startup via `OWNER_EMAIL` / `OWNER_PASSWORD`
+- Login, logout, refresh, RS256 JWT + JWKS
+- RBAC roles: `owner`, `admin`, `user_manager`, `customer`
+- User admin at `/api/v1/auth/users` (not `/api/v1/users`)
+- Owner seeding via `OWNER_EMAIL` / `OWNER_PASSWORD`
 
-### Product (`pkg/product`)
+### Product (`product/pkg`)
 
-**Module:** `github.com/schick/pkg/product`  
+**Module:** `github.com/elug3/schick/product`  
 **Framework:** stdlib `net/http`  
-**Storage:** PostgreSQL (products), MinIO/S3 (images)
+**Storage:** PostgreSQL (`products` table), MinIO/S3 (images)
 
 Owns:
 
-- Bag search (`GET /api/v1/products/bags`)
-- Product CRUD with brand-prefixed IDs (`BOT-001`)
-- Coupon management and redemption
-- Image upload (multipart, appends to `imageUrls`)
-- JWT middleware for protected routes (validates access tokens only)
+- Public bag search, PDP, coupon redeem
+- Admin product/coupon CRUD and image upload
+- JWT validation via `AUTH_JWKS_URL` (RS256 JWKS from auth)
 
-### Inventory (`pkg/inventory`)
+### Inventory (`inventory/pkg`)
 
-**Module:** `github.com/elug3/schick/pkg/inventory`  
-**Framework:** stdlib `net/http`  
-**Storage:** In-memory (no persistence yet)
+**Module:** `github.com/elug3/schick/inventory`  
+**Storage:** In-memory
 
-Owns:
+Owns stock and reservations at `/api/v1/inventory/*`. No authentication today.
 
-- Per-SKU stock get/set/adjust
-- Reservation create/commit/release
+### Order (`order/pkg`)
 
-### Order (`pkg/order`)
+**Module:** `github.com/elug3/schick/order`  
+**Storage:** In-memory
 
-**Module:** `github.com/elug3/schick/pkg/order`  
-**Framework:** stdlib `net/http`  
-**Storage:** In-memory (no persistence yet)
+Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/checkout/sessions`. Requires Bearer JWT when `JWT_SECRET` is set (HMAC only today — see [current-state.md](current-state.md)).
 
-Owns:
+### Notification (`notification/pkg`)
 
-- Order creation (calls inventory to reserve stock)
-- Order status transitions (confirmed, canceled, fulfilled)
-- Customer order listing
+**Module:** `github.com/elug3/schick/notification`  
+**Status:** Health endpoint only
 
-### Notification (`pkg/notification`)
+## Gateway routing
 
-**Module:** `github.com/elug3/schick/pkg/notification`  
-**Status:** Stub — health endpoint only
-
-Planned: email, push, SMS, and event-triggered notifications.
-
-## Gateway Routing
-
-`schick-proxy` (nginx) routes external traffic:
+`schick-proxy` uses [api/nginx.conf](../api/nginx.conf). Local gateway: **HTTP** on port **8080** (also mapped to host port 80).
 
 | Path prefix | Backend |
 |-------------|---------|
-| `/gateway/health` | nginx (local response) |
-| `/health` | auth |
-| `/api/v1/auth/` | auth |
-| `/api/v1/users` | auth |
-| `/api/v1/products/` | product |
-| `/api/v1/coupons/` | product |
-| `/api/v1/inventory/` | inventory |
-| `/api/v1/orders` | order |
+| `/gateway/health` | nginx (static `ok`) |
+| `/api/v1/auth/` | schick-auth |
+| `/api/v1/products` | schick-product |
+| `/api/v1/coupons` | schick-product |
+| `/api/v1/inventory/` | schick-inventory |
+| `/api/v1/orders` | schick-order |
+| `/api/v1/checkout` | schick-order |
 
-Inventory, order, and notification are also reachable on their direct ports (8082–8084) when running via Docker Compose.
+Checkout sessions are served by order (`/api/v1/checkout/sessions`).
 
-## Dependency Direction
+Direct host ports (bypass gateway): auth **18080**, product **8081**, inventory **8082**, order **8083**, notification **8084**.
 
-```text
-cmd/schick-<service>
-  -> pkg/<service>/server.go
-      -> bootstrap/
-          -> handler/ -> service/ -> ports/
-                              -> domain/
-          -> infra/ (implements ports)
+## Adding a new service
+
+1. Create `<service>/pkg/` with `domain/`, `service/`, `ports/`, `infra/`, `handler/`, `bootstrap/`, and `server.go`.
+2. Add `<service>/go.mod` and ensure the root build includes `SERVICE=<service>` in [Dockerfile](../Dockerfile).
+3. Add `<service>/cmd/main.go`.
+4. Add the service to `docker-compose.yml`.
+5. Add nginx `location` blocks in [api/nginx.conf](../api/nginx.conf).
+6. Update [docs/api.md](api.md), [docs/current-state.md](current-state.md), and [README.md](../README.md).
+
+## Testing
+
+```bash
+cd auth && go test ./...
+cd product && go test ./...
+cd inventory && go test ./...
+cd order && go test ./...
 ```
 
-Rules:
-
-- Handlers may depend on services; services must not depend on handlers.
-- Services may depend on ports and domain only.
-- Infra implements ports; it must not contain business logic.
-- Cross-service calls go through HTTP client adapters in `infra/` (e.g. order → inventory).
-
-## Adding a New Service
-
-1. Create `pkg/<service>/` with `domain/`, `service/`, `ports/`, `infra/`, `handler/`, `bootstrap/`, and `server.go`.
-2. Add `go.mod` for the package and include it in `go.work`.
-3. Create `cmd/schick-<service>/main.go` and `Dockerfile`.
-4. Add the service to `docker-compose.yml`.
-5. Add nginx location blocks in `cmd/schick-proxy/nginx.conf` and `nginx-alb.conf`.
-6. Update `docs/api.md`, `docs/current-state.md`, and `README.md`.
-
-## Testing Expectations
-
-- Unit test service business rules with fake repositories.
-- Test handlers with `httptest` and in-memory stores.
-- Run tests per module: `cd pkg/<service> && go test ./...`
-- Root `go test ./...` does not work because the root `go.mod` is a workspace stub.
-
-## Not Yet Implemented
-
-The following packages described in early design docs do not exist:
-
-- `pkg/user`, `pkg/chat`, `pkg/analytics`, `pkg/config`
-- `cmd/server`, `cmd/migrate`, `internal/`, `migrations/`
-- `pkg/shared/`
+Root `go test ./...` does not work — the root `go.mod` is a stub.

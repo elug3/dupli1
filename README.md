@@ -1,17 +1,17 @@
 # Schick
 
-Go microservice backend for a fashion bag marketplace. Six services behind an nginx proxy, wired with Docker Compose for local dev and deployed to AWS ECS Fargate in production.
+Go microservice backend for a fashion bag marketplace. Five services behind an nginx proxy, wired with Docker Compose for local dev and deployed to AWS ECS Fargate in production.
 
 ## Services
 
 | Service | Local port | Description |
 |---------|------------|-------------|
-| `schick-auth` | 18080 | JWT login/register, RS256 tokens, JWKS endpoint, RBAC user admin |
+| `schick-auth` | 18080 | JWT login/refresh, RS256 tokens, JWKS, RBAC user admin |
 | `schick-product` | 8081 | Bag catalog, coupons, product CRUD, image upload |
 | `schick-inventory` | 8082 | Stock and reservation APIs (in-memory) |
-| `schick-order` | 8083 | Checkout and order lifecycle APIs (in-memory) |
-| `schick-notification` | 8084 | Notification service stub (health only) |
-| `schick-proxy` | 80 / 443 | nginx reverse proxy |
+| `schick-order` | 8083 | Checkout sessions and order lifecycle (in-memory) |
+| `schick-notification` | 8084 | Notification stub (health only) |
+| `schick-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
 | `postgres-auth` | 5432 | Auth DB |
 | `postgres-product` | 5433 | Product DB |
 | `redis` | 6379 | Rate limiter backing store |
@@ -22,11 +22,15 @@ Go microservice backend for a fashion bag marketplace. Six services behind an ng
 ### Local (Docker Compose)
 
 ```bash
-cp .env.example .env   # set OWNER_EMAIL, OWNER_PASSWORD
+cp .env.example .env   # set OWNER_EMAIL, OWNER_PASSWORD, JWT_SECRET
 docker compose up --build
 ```
 
-API gateway: `https://localhost` (self-signed cert — pass `-k` to curl or trust `certs/server.crt`).
+API gateway: `http://localhost:8080` (also mapped to host port 80).
+
+```bash
+curl http://localhost:8080/gateway/health
+```
 
 All services share a single root [Dockerfile](Dockerfile) built with a `SERVICE` build arg (e.g. `--build-arg SERVICE=auth`). Docker Compose sets this automatically.
 
@@ -48,37 +52,37 @@ See [docs/deployment-aws.md](docs/deployment-aws.md) for production ECS + RDS se
 
 ```
 schick/
-├── auth/                 # Auth service
-│   ├── cmd/              # CLI entrypoint (cobra, applyEnv)
-│   └── pkg/              # bootstrap/, handler/, service/, infra/, domain/, ports/
-├── product/              # Product service
+├── auth/                 # Auth service (cmd/ + pkg/)
+├── product/              # Product catalog
 ├── inventory/            # Inventory service
-├── order/                # Order service
+├── order/                # Order + checkout
 ├── notification/         # Notification stub
-├── docker/nginx/         # nginx config
+├── api/
+│   ├── nginx.conf        # Gateway routing
+│   └── Dockerfile
 ├── infra/
 │   ├── terraform/        # RDS and secrets
 │   └── scripts/          # RDS cutover helpers
-├── certs/                # Self-signed TLS cert for local dev
+├── certs/                # TLS material (not wired into local nginx yet)
 ├── Dockerfile            # Multi-service build (SERVICE build arg)
 └── docs/                 # API reference and deployment guides
 ```
 
-Each service follows hexagonal architecture: `domain/`, `service/`, `ports/`, `infra/`, `handler/`, `bootstrap/`. See [ARCHITECTURE.md](ARCHITECTURE.md).
+Each service follows hexagonal architecture: `domain/`, `service/`, `ports/`, `infra/`, `handler/`, `bootstrap/`. See [ARCHITECTURE.md](ARCHITECTURE.md) and [docs/service-layout.md](docs/service-layout.md).
 
 ## API
 
-Full reference: [docs/api.md](docs/api.md).
+Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](docs/endpoints.md).
 
 ### Auth (`schick-auth` :18080)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/health` | — | Health check |
-| GET | `/.well-known/jwks.json` | — | RS256 public key set |
-| POST | `/api/v1/auth/login` | — | Login, returns access + refresh tokens |
-| POST | `/api/v1/auth/refresh` | — | Exchange refresh token |
-| POST | `/api/v1/auth/logout` | — | Invalidate refresh token |
+| GET | `/api/v1/auth/.well-known/jwks.json` | — | RS256 public key set |
+| POST | `/api/v1/auth/login` | — | Login; returns refresh token |
+| POST | `/api/v1/auth/refresh` | — | Exchange refresh token for access token |
+| POST | `/api/v1/auth/logout` | — | Revoke refresh token |
 | GET | `/api/v1/auth/me` | Bearer | Current user profile |
 | POST | `/api/v1/auth/register` | `admin` / `user_manager` | Create user account |
 | GET | `/api/v1/auth/users` | `admin` | List users |
@@ -86,9 +90,11 @@ Full reference: [docs/api.md](docs/api.md).
 | PATCH | `/api/v1/auth/users/{id}/password` | `admin` / `user_manager` | Set user password |
 | PATCH | `/api/v1/auth/users/{id}/status` | `admin` / `user_manager` | Activate / deactivate user |
 
-Login and refresh are rate-limited per IP (10 req/min and 30 req/min respectively) via Redis.
+**Token flow:** `POST /login` returns `{ "refresh_token": "..." }`. Call `POST /refresh` with that token to get `{ "token": "<access_jwt>" }`. Send the access token as `Authorization: Bearer <token>` on protected routes.
 
-Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on startup when `JWT_PRIVATE_KEY_FILE` is not set. In production, mount a stable PEM key.
+Login and refresh are rate-limited per IP via Redis.
+
+Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on startup when `JWT_PRIVATE_KEY_FILE` is not set.
 
 ### Products (`schick-product` :8081)
 
@@ -101,7 +107,7 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 | GET | `/api/v1/products/{id}` | Public product detail (active products only) |
 | POST | `/api/v1/coupons/redeem` | Redeem a coupon code |
 
-**Requires `Authorization: Bearer <token>`**
+**Requires `Authorization: Bearer <access_token>`** (validated via JWKS)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -120,7 +126,7 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Health check |
+| GET | `/api/v1/inventory/health` | Health check |
 | GET | `/api/v1/inventory/{sku}` | Get stock for SKU |
 | PUT | `/api/v1/inventory/{sku}` | Set stock quantity |
 | POST | `/api/v1/inventory/{sku}/adjust` | Adjust stock by delta |
@@ -130,13 +136,22 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 
 ### Orders (`schick-order` :8083)
 
+Requires `Authorization: Bearer <token>` when `JWT_SECRET` is set (HMAC validator in Compose — see [docs/current-state.md](docs/current-state.md)).
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Health check |
-| POST | `/api/v1/orders` | Create order |
+| GET | `/api/v1/orders/health` | Health check |
+| POST | `/api/v1/checkout/sessions` | Create checkout session |
+| GET | `/api/v1/checkout/sessions/{id}` | Get session |
+| PUT/POST/DELETE | `/api/v1/checkout/sessions/{id}/items` | Manage cart items |
+| POST | `/api/v1/checkout/sessions/{id}/coupon` | Apply coupon |
+| POST | `/api/v1/checkout/sessions/{id}/complete` | Complete checkout |
+| POST | `/api/v1/orders` | Create order directly |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
 | PUT | `/api/v1/orders/{id}/status` | Confirm, cancel, or fulfill order |
+
+See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow.
 
 ### Product IDs
 
@@ -150,7 +165,7 @@ Gucci          → GUC-001, GUC-002, …
 ### Image Upload
 
 ```bash
-curl -k -X PUT https://localhost/api/v1/products/BOT-001/image \
+curl -X PUT http://localhost:8080/api/v1/products/BOT-001/image \
   -H "Authorization: Bearer $TOKEN" \
   -F "image=@photo.jpg"
 ```
@@ -178,13 +193,22 @@ Returns the updated product with `imageUrls` populated.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SCHICK_PRODUCT_DB` | — | Postgres connection string |
-| `JWT_SECRET` | `dev-jwt-secret-do-not-use-in-production` | Signing secret (HS256 fallback) |
+| `AUTH_JWKS_URL` | — | JWKS URL for RS256 token validation (set in Compose) |
+| `JWT_SECRET` | — | HS256 fallback when JWKS is unavailable |
 | `SERVER_HOST` | `localhost` | Listen host |
 | `SERVER_PORT` | `8080` | Listen port |
 | `S3_ENDPOINT` | — | MinIO/S3 endpoint URL |
 | `S3_ACCESS_KEY` | — | S3 access key |
 | `S3_SECRET_KEY` | — | S3 secret key |
 | `S3_BUCKET` | `product-images` | Bucket name |
+
+### Order service
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `JWT_SECRET` | — | When set, enables Bearer auth on order/checkout routes |
+| `SCHICK_INVENTORY_URL` | — | Inventory service base URL |
+| `SCHICK_PRODUCT_URL` | — | Product service base URL (coupon redeem) |
 
 ### MinIO
 

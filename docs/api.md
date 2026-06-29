@@ -1,22 +1,24 @@
 # Schick API Reference
 
-All traffic is routed through the nginx gateway. In production use `https://your-domain`. Locally use `https://localhost` (self-signed cert — pass `-k` to curl or add the cert to your trust store).
-
-HTTP requests are automatically redirected to HTTPS.
+All traffic is routed through the nginx gateway. Locally use **HTTP** at `http://localhost:8080` or `http://localhost` (port 80). Production terminates TLS at the load balancer or gateway.
 
 ---
 
 ## Authentication
 
-Protected routes require an `Authorization` header with a Bearer access token obtained from the login or refresh endpoints.
+Protected routes require an `Authorization` header with a Bearer **access** token:
 
 ```
 Authorization: Bearer <access_token>
 ```
 
-Access tokens are short-lived (default 15 min). Use the refresh endpoint to issue new ones without re-authenticating.
+**Token flow**
 
-Admin routes require a token belonging to a user with the `owner` or `admin` role.
+1. `POST /api/v1/auth/login` → `{ "refresh_token": "<jwt>" }`
+2. `POST /api/v1/auth/refresh` with that refresh token → `{ "token": "<access_jwt>" }`
+3. Use the access token on protected routes until it expires (default 15 min), then refresh again.
+
+Admin routes require a token belonging to a user with the `owner` or `admin` role (or `user_manager` where noted).
 
 ---
 
@@ -26,7 +28,7 @@ Admin routes require a token belonging to a user with the `owner` or `admin` rol
 
 Nginx liveness check — responds without touching any backend service.
 
-**Response `200`**
+**Response `200`** (plain text)
 ```
 ok
 ```
@@ -35,14 +37,18 @@ ok
 
 ## Auth Service — `/api/v1/auth`
 
-### `GET /health`
+### `GET /health` or `GET /api/v1/auth/health`
 
 Auth service liveness check.
 
-**Response `200`**
+**Response `200`** (plain text)
 ```
 ok
 ```
+
+### `GET /api/v1/auth/.well-known/jwks.json`
+
+RS256 public key set for verifying access tokens issued by auth.
 
 ---
 
@@ -82,7 +88,7 @@ Create a new user account. Requires `admin` or `user_manager` role.
 
 ### `POST /api/v1/auth/login`
 
-Authenticate and receive token pair.
+Authenticate and receive a refresh token.
 
 **Request body**
 ```json
@@ -95,7 +101,6 @@ Authenticate and receive token pair.
 **Response `200`**
 ```json
 {
-  "access_token":  "<jwt>",
   "refresh_token": "<jwt>"
 }
 ```
@@ -105,6 +110,7 @@ Authenticate and receive token pair.
 |--------|---------|
 | `400` | Missing or malformed body |
 | `401` | Invalid credentials |
+| `403` | Account locked or deactivated |
 
 ---
 
@@ -117,9 +123,12 @@ Return the currently authenticated user's profile.
 **Response `200`**
 ```json
 {
-  "id":    "03f95d58-4840-46d4-9c92-fe48364d2e75",
+  "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
   "email": "user@example.com",
-  "role":  "user"
+  "roles": ["customer"],
+  "is_active": true,
+  "locked_at": null,
+  "failed_login_attempts": 0
 }
 ```
 
@@ -133,7 +142,7 @@ Return the currently authenticated user's profile.
 
 ### `POST /api/v1/auth/refresh`
 
-Exchange a refresh token for a new token pair. Invalidates the supplied refresh token.
+Exchange a refresh token for a new access token.
 
 **Request body**
 ```json
@@ -143,8 +152,7 @@ Exchange a refresh token for a new token pair. Invalidates the supplied refresh 
 **Response `200`**
 ```json
 {
-  "access_token":  "<jwt>",
-  "refresh_token": "<jwt>"
+  "token": "<access_jwt>"
 }
 ```
 
@@ -158,7 +166,7 @@ Exchange a refresh token for a new token pair. Invalidates the supplied refresh 
 
 ### `POST /api/v1/auth/logout`
 
-Invalidate the session associated with a refresh token. The access token remains valid until it expires naturally.
+Revoke a refresh token. The access token remains valid until it expires.
 
 **Request body**
 ```json
@@ -171,7 +179,7 @@ Invalidate the session associated with a refresh token. The access token remains
 | Status | Meaning |
 |--------|---------|
 | `400` | Missing or malformed body |
-| `401` | Refresh token invalid |
+| `500` | Internal error |
 
 ---
 
@@ -351,7 +359,7 @@ Public product detail page (PDP). No authentication required. Returns only `stat
 
 ### Product CRUD (authenticated)
 
-All routes below require `Authorization: Bearer <access_token>` from the auth service. Product validates RS256 tokens via JWKS (`AUTH_JWKS_URL`).
+All routes below require `Authorization: Bearer <access_token>`. Product validates RS256 tokens via JWKS (`AUTH_JWKS_URL`).
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -374,7 +382,7 @@ Product IDs are generated from the brand prefix (e.g. `BOT-001`). Image upload a
 
 In-memory store. No authentication today.
 
-### `GET /health`
+### `GET /api/v1/inventory/health`
 
 **Response `200`**
 ```json
@@ -433,65 +441,15 @@ Release a reservation (return stock).
 
 ---
 
-## Order Service — `/api/v1/orders`
-
-In-memory store. Calls inventory service to reserve stock. No authentication today.
-
-### `GET /health`
-
-**Response `200`**
-```json
-{ "status": "ok" }
-```
-
-### `POST /api/v1/orders`
-
-Create an order and reserve inventory.
-
-**Request body**
-```json
-{
-  "customer_id": "cust-1",
-  "items": [{ "sku": "BOT-001", "quantity": 1, "price": 2500.00 }]
-}
-```
-
-**Response `201`** — order object
-
-### `GET /api/v1/orders?customer_id={id}`
-
-List orders for a customer.
-
-### `GET /api/v1/orders/{id}`
-
-Get order by ID.
-
-### `PUT /api/v1/orders/{id}/status`
-
-Transition order status.
-
-**Request body**
-```json
-{ "status": "confirmed" }
-```
-
-Supported values: `confirmed`, `canceled`, `fulfilled`.
-
----
-
-## Notification Service
-
-Health check only (`GET /health`). Outbound messaging is not implemented.
-
----
-
 ## Order Service — `/api/v1`
 
-Checkout sessions and order lifecycle APIs are served by `schick-order` (port **8083** locally). See [checkout-session.md](checkout-session.md) for the full checkout flow.
+In-memory store. Calls inventory to reserve stock and product to redeem coupons.
 
-### `GET /health`
+When `JWT_SECRET` is set, order and checkout routes require `Authorization: Bearer <token>` (HMAC validator — see [current-state.md](current-state.md) for RS256 alignment). Customers may only access their own `customer_id`.
 
-Order service liveness check.
+See [checkout-session.md](checkout-session.md) for the full checkout flow.
+
+### `GET /api/v1/orders/health`
 
 **Response `200`**
 ```json
@@ -519,6 +477,22 @@ Order service liveness check.
 | GET | `/api/v1/orders/{id}` | Get order |
 | PUT | `/api/v1/orders/{id}/status` | Confirm, cancel, or fulfill |
 
+**Create order request**
+```json
+{
+  "customer_id": "cust-1",
+  "items": [{ "sku": "BOT-001", "quantity": 1, "unit_price_cents": 250000 }]
+}
+```
+
+Supported status transitions: `pending` → `confirmed` | `canceled`; `confirmed` → `fulfilled`.
+
+---
+
+## Notification Service
+
+Health check only (`GET /health`). Outbound messaging is not implemented.
+
 ---
 
 ## Common error shape
@@ -542,7 +516,8 @@ All error responses use a JSON envelope:
 | Method | Path | Auth? | Service |
 |--------|------|-------|---------|
 | GET | `/gateway/health` | — | nginx |
-| GET | `/health` | — | auth |
+| GET | `/api/v1/auth/health` | — | auth |
+| GET | `/api/v1/auth/.well-known/jwks.json` | — | auth |
 | POST | `/api/v1/auth/register` | `admin`, `user_manager` | auth |
 | POST | `/api/v1/auth/login` | — | auth |
 | GET | `/api/v1/auth/me` | Bearer | auth |
@@ -561,12 +536,17 @@ All error responses use a JSON envelope:
 | PUT/DELETE | `/api/v1/products/{id}` | Bearer | product |
 | PUT | `/api/v1/products/{id}/image` | Bearer | product |
 | GET/POST/PUT/DELETE | `/api/v1/coupons` | Bearer | product |
+| GET | `/api/v1/inventory/health` | — | inventory |
 | GET/PUT | `/api/v1/inventory/{sku}` | — | inventory |
 | POST | `/api/v1/inventory/{sku}/adjust` | — | inventory |
 | POST | `/api/v1/inventory/reservations` | — | inventory |
 | POST | `/api/v1/inventory/reservations/{id}/commit` | — | inventory |
 | POST | `/api/v1/inventory/reservations/{id}/release` | — | inventory |
-| POST/GET | `/api/v1/orders` | — | order |
-| GET | `/api/v1/orders/{id}` | — | order |
-| PUT | `/api/v1/orders/{id}/status` | — | order |
+| POST/GET | `/api/v1/checkout/sessions` | Bearer* | order |
+| GET/PUT/POST/DELETE | `/api/v1/checkout/sessions/{id}/...` | Bearer* | order |
+| POST/GET | `/api/v1/orders` | Bearer* | order |
+| GET | `/api/v1/orders/{id}` | Bearer* | order |
+| PUT | `/api/v1/orders/{id}/status` | Bearer* | order |
 | GET | `/health` | — | notification |
+
+\* Bearer required when `JWT_SECRET` is configured on the order service.
