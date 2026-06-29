@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"net/http"
 
+	"github.com/elug3/schick/auth/pkg/domain"
 	"github.com/elug3/schick/auth/pkg/handler"
 	redisinfra "github.com/elug3/schick/auth/pkg/infra/redis"
 	"github.com/gin-gonic/gin"
@@ -40,7 +41,11 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 	v1 := r.Group("/api/v1/auth")
 	{
 		// Public — no authentication required.
-		v1.POST("/register", h.RequireAuth(), handler.RequireAnyRole("admin", "user_manager"), h.Register)
+		v1.POST("/register", h.RequireAuth(), handler.RequireAnyRole(
+			domain.RoleAdmin,
+			domain.RoleUserManager,
+			domain.RoleCustomerRegistrar,
+		), h.Register)
 		v1.POST("/login", loginLimiter.Middleware(), h.Login)
 		v1.POST("/refresh", refreshLimiter.Middleware(), h.Refresh)
 		v1.POST("/logout", h.Logout) // authenticates via refresh_token in request body
@@ -52,14 +57,14 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 		}
 
 		// Admin-only — require a valid Bearer access token with the "admin" role.
-		admin := v1.Group("", h.RequireAuth(), handler.RequireRole("admin"))
+		admin := v1.Group("", h.RequireAuth(), handler.RequireRole(domain.RoleAdmin))
 		{
 			admin.GET("/users", h.ListUsers)
 			admin.PATCH("/users/:id/roles", h.SetUserRole)
 		}
 
 		// User management — require "admin" or "user_manager" role.
-		userMgmt := v1.Group("", h.RequireAuth(), handler.RequireAnyRole("admin", "user_manager"))
+		userMgmt := v1.Group("", h.RequireAuth(), handler.RequireAnyRole(domain.RoleAdmin, domain.RoleUserManager))
 		{
 			userMgmt.PATCH("/users/:id/password", h.UpdateUserPassword)
 			userMgmt.PATCH("/users/:id/status", h.SetUserStatus)

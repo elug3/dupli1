@@ -61,9 +61,10 @@ Configuration lives in `bootstrap/config.go` and/or package `options.go`.
 Owns:
 
 - Login, logout, refresh, RS256 JWT + JWKS
-- RBAC roles: `owner`, `admin`, `user_manager`, `customer`
+- RBAC roles: `owner`, `admin`, `user_manager`, `customer_registrar`, `customer`
 - User admin at `/api/v1/auth/users` (not `/api/v1/users`)
 - Owner seeding via `OWNER_EMAIL` / `OWNER_PASSWORD`
+- Service account seeding via `SCHICK_WEB_SERVICE_EMAIL` / `SCHICK_WEB_SERVICE_PASSWORD` (`customer_registrar`)
 
 ### Product (`product/pkg`)
 
@@ -73,9 +74,9 @@ Owns:
 
 Owns:
 
-- Public bag search, PDP, coupon redeem
-- Admin product/coupon CRUD and image upload
-- JWT validation via `AUTH_JWKS_URL` (RS256 JWKS from auth)
+- Public bag search (`GET /api/v1/products/bags`), PDP, coupon redeem
+- Admin product/coupon CRUD with brand-prefixed IDs (`BOT-001`), image upload (multipart, appends to `imageUrls`)
+- JWT validation via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only)
 
 ### Inventory (`inventory/pkg`)
 

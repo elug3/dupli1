@@ -53,6 +53,8 @@ func newServeCmd() *cobra.Command {
 		logLevel           = opts.LogLevel
 		ownerEmail         = opts.OwnerEmail
 		ownerPassword      = opts.OwnerPassword
+		webServiceEmail    = opts.WebServiceEmail
+		webServicePassword = opts.WebServicePassword
 	)
 
 	cmd := &cobra.Command{
@@ -64,7 +66,7 @@ func newServeCmd() *cobra.Command {
 			buildOpts(opts, flags, addrFlag, hostFlag, portFlag, publicAddr, dbURL, redisURL, natsURL,
 				jwtPrivateKeyFile, jwtKeyID,
 				readTimeoutSec, writeTimeoutSec, idleTimeoutSec, shutdownTimeoutSec, tokenExpiry, refreshTokenExpiry, corsOrigins,
-				logOutput, logLevel, ownerEmail, ownerPassword)
+				logOutput, logLevel, ownerEmail, ownerPassword, webServiceEmail, webServicePassword)
 
 			if err := opts.Validate(); err != nil {
 				return err
@@ -119,6 +121,8 @@ func newServeCmd() *cobra.Command {
 	f.StringVar(&logLevel, "log-level", logLevel, "Log level: debug, info, warn, error")
 	f.StringVar(&ownerEmail, "owner-email", ownerEmail, "Email for the initial owner account (seeded on first startup)")
 	f.StringVar(&ownerPassword, "owner-password", ownerPassword, "Password for the initial owner account")
+	f.StringVar(&webServiceEmail, "web-service-email", webServiceEmail, "Email for the schick-web service account (seeded on first startup)")
+	f.StringVar(&webServicePassword, "web-service-password", webServicePassword, "Password for the schick-web service account")
 
 	return cmd
 }
@@ -133,6 +137,7 @@ func buildOpts(
 	tokenExpiry, refreshTokenExpiry, corsOrigins string,
 	logOutput, logLevel string,
 	ownerEmail, ownerPassword string,
+	webServiceEmail, webServicePassword string,
 ) {
 	_ = flags
 
@@ -171,6 +176,8 @@ func buildOpts(
 	opts.LogLevel = logLevel
 	opts.OwnerEmail = ownerEmail
 	opts.OwnerPassword = ownerPassword
+	opts.WebServiceEmail = webServiceEmail
+	opts.WebServicePassword = webServicePassword
 }
 
 func applyEnv(opts *auth.ServerOptions) {
@@ -212,6 +219,12 @@ func applyEnv(opts *auth.ServerOptions) {
 	}
 	if v := os.Getenv("OWNER_PASSWORD"); v != "" {
 		opts.OwnerPassword = v
+	}
+	if v := os.Getenv("SCHICK_WEB_SERVICE_EMAIL"); v != "" {
+		opts.WebServiceEmail = v
+	}
+	if v := os.Getenv("SCHICK_WEB_SERVICE_PASSWORD"); v != "" {
+		opts.WebServicePassword = v
 	}
 
 	setDurationEnv(&opts.ReadTimeout, "SCHICK_AUTH_READ_TIMEOUT")

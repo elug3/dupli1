@@ -84,7 +84,7 @@ Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](doc
 | POST | `/api/v1/auth/refresh` | — | Exchange refresh token for access token |
 | POST | `/api/v1/auth/logout` | — | Revoke refresh token |
 | GET | `/api/v1/auth/me` | Bearer | Current user profile |
-| POST | `/api/v1/auth/register` | `admin` / `user_manager` | Create user account |
+| POST | `/api/v1/auth/register` | `admin` / `user_manager` / `customer_registrar` | Create user account |
 | GET | `/api/v1/auth/users` | `admin` | List users |
 | PATCH | `/api/v1/auth/users/{id}/roles` | `admin` | Set user roles |
 | PATCH | `/api/v1/auth/users/{id}/password` | `admin` / `user_manager` | Set user password |
@@ -187,6 +187,8 @@ Returns the updated product with `imageUrls` populated.
 | `SCHICK_AUTH_ADDR` | `:8080` | Listen address |
 | `OWNER_EMAIL` | — | Seed owner email (skips seeding if empty) |
 | `OWNER_PASSWORD` | — | Seed owner password |
+| `SCHICK_WEB_SERVICE_EMAIL` | — | Seed schick-web service account email |
+| `SCHICK_WEB_SERVICE_PASSWORD` | — | Seed schick-web service account password |
 
 ### Product service
 

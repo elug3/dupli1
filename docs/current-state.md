@@ -37,10 +37,11 @@ See [service-layout.md](service-layout.md) for details.
   - Login returns a **refresh token**; `POST /refresh` returns a short-lived **access token** (`token` field)
   - RS256 JWT + JWKS at `/api/v1/auth/.well-known/jwks.json`
   - Access tokens include `type: "access"`; refresh tokens include `type: "refresh"`
-  - Roles: `owner`, `admin`, `user_manager`, `customer`
-  - Register requires `admin` or `user_manager` (not public)
+  - Roles: `owner`, `admin`, `user_manager`, `customer_registrar`, `customer`
+  - Register requires `admin`, `user_manager`, or `customer_registrar` (not public)
   - User admin at `/api/v1/auth/users`
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD`
+  - `schick-web` service account seeded from `SCHICK_WEB_SERVICE_EMAIL` / `SCHICK_WEB_SERVICE_PASSWORD`
   - Login/refresh rate-limited per IP via Redis
 - **Tests:** `cd auth && go test ./...`
 

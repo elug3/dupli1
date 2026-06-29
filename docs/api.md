@@ -54,7 +54,7 @@ RS256 public key set for verifying access tokens issued by auth.
 
 ### `POST /api/v1/auth/register`
 
-Create a new user account. Requires `admin` or `user_manager` role.
+Create a new user account. Requires `admin`, `user_manager`, or `customer_registrar` role.
 
 **Headers** — `Authorization: Bearer <access_token>`
 
@@ -81,8 +81,23 @@ Create a new user account. Requires `admin` or `user_manager` role.
 |--------|---------|
 | `400` | Validation failed (bad email, password too short) |
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `admin` or `user_manager` role |
+| `403` | Caller does not have `admin`, `user_manager`, or `customer_registrar` role |
 | `409` | Email already registered |
+
+---
+
+### Service account: schick-web
+
+The `schick-web` BFF uses a seeded machine account with the `customer_registrar` role. It can call `POST /api/v1/auth/register` to create customer accounts, but cannot manage passwords, roles, or user status.
+
+Configure on `schick-auth` startup:
+
+| Variable | Purpose |
+|----------|---------|
+| `SCHICK_WEB_SERVICE_EMAIL` | Service account email (skip seeding when empty) |
+| `SCHICK_WEB_SERVICE_PASSWORD` | Service account password (required when email is set) |
+
+`schick-web` should log in with these credentials server-side, cache/refresh the access token, and call register from the backend only — never expose the service password to browsers.
 
 ---
 
@@ -359,7 +374,7 @@ Public product detail page (PDP). No authentication required. Returns only `stat
 
 ### Product CRUD (authenticated)
 
-All routes below require `Authorization: Bearer <access_token>`. Product validates RS256 tokens via JWKS (`AUTH_JWKS_URL`).
+All routes below require `Authorization: Bearer <access_token>` from auth. Product validates RS256 tokens via JWKS (`AUTH_JWKS_URL`).
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -518,7 +533,7 @@ All error responses use a JSON envelope:
 | GET | `/gateway/health` | — | nginx |
 | GET | `/api/v1/auth/health` | — | auth |
 | GET | `/api/v1/auth/.well-known/jwks.json` | — | auth |
-| POST | `/api/v1/auth/register` | `admin`, `user_manager` | auth |
+| POST | `/api/v1/auth/register` | `admin`, `user_manager`, `customer_registrar` | auth |
 | POST | `/api/v1/auth/login` | — | auth |
 | GET | `/api/v1/auth/me` | Bearer | auth |
 | POST | `/api/v1/auth/refresh` | — | auth |
