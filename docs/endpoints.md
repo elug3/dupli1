@@ -19,7 +19,7 @@ Each service also registers `/health` directly for internal/sidecar use.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/auth/health` | — | Health check |
-| `POST` | `/api/v1/auth/register` | `admin`, `user_manager` | Create a new user account |
+| `POST` | `/api/v1/auth/register` | `admin`, `user_manager`, `customer_registrar` | Create a new user account |
 | `POST` | `/api/v1/auth/login` | — | Login and receive a refresh token |
 | `POST` | `/api/v1/auth/logout` | — | Invalidate the current session |
 | `POST` | `/api/v1/auth/refresh` | — | Exchange a refresh token for a new access token |
@@ -29,13 +29,15 @@ Each service also registers `/health` directly for internal/sidecar use.
 | `PATCH` | `/api/v1/auth/users/:id/password` | `admin`, `user_manager` | Set a new password for a user |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `admin`, `user_manager` | Activate or deactivate a user |
 
+**schick-web service account:** set `SCHICK_WEB_SERVICE_EMAIL` and `SCHICK_WEB_SERVICE_PASSWORD` on `schick-auth` to seed a machine user with `customer_registrar`. That role may register customers only.
+
 ### GET /api/v1/auth/health
 
 Response `200`: `ok` (plain text)
 
 ### POST /api/v1/auth/register
 
-Header: `Authorization: Bearer <access_token>` (must have `admin` or `user_manager` role)
+Header: `Authorization: Bearer <access_token>` (must have `admin`, `user_manager`, or `customer_registrar` role)
 
 Request:
 ```json

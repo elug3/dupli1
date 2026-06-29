@@ -80,7 +80,7 @@ Full reference: [docs/api.md](docs/api.md).
 | POST | `/api/v1/auth/refresh` | — | Exchange refresh token |
 | POST | `/api/v1/auth/logout` | — | Invalidate refresh token |
 | GET | `/api/v1/auth/me` | Bearer | Current user profile |
-| POST | `/api/v1/auth/register` | `admin` / `user_manager` | Create user account |
+| POST | `/api/v1/auth/register` | `admin` / `user_manager` / `customer_registrar` | Create user account |
 | GET | `/api/v1/auth/users` | `admin` | List users |
 | PATCH | `/api/v1/auth/users/{id}/roles` | `admin` | Set user roles |
 | PATCH | `/api/v1/auth/users/{id}/password` | `admin` / `user_manager` | Set user password |
