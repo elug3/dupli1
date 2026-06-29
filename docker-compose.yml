@@ -103,6 +103,8 @@ services:
       SCHICK_AUTH_ADDR: :8080
       OWNER_EMAIL: admin@schick.com
       OWNER_PASSWORD: password
+      SCHICK_WEB_SERVICE_EMAIL: schick-web@internal.schick
+      SCHICK_WEB_SERVICE_PASSWORD: schick-web-dev-secret
     depends_on:
       postgres-auth:
         condition: service_healthy

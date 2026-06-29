@@ -54,6 +54,8 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		Logger:             log,
 		OwnerEmail:         opts.OwnerEmail,
 		OwnerPassword:      opts.OwnerPassword,
+		WebServiceEmail:    opts.WebServiceEmail,
+		WebServicePassword: opts.WebServicePassword,
 	})
 	if err != nil {
 		return nil, err

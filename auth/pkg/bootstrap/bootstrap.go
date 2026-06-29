@@ -119,6 +119,10 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		_ = app.Close()
 		return nil, err
 	}
+	if err := seedWebServiceAccount(ctx, cfg, userRepo); err != nil {
+		_ = app.Close()
+		return nil, err
+	}
 
 	return app, nil
 }

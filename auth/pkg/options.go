@@ -54,6 +54,10 @@ type ServerOptions struct {
 	// OwnerEmail and OwnerPassword seed the initial owner account on first startup.
 	OwnerEmail    string
 	OwnerPassword string
+
+	// WebServiceEmail and WebServicePassword seed the schick-web service account.
+	WebServiceEmail    string
+	WebServicePassword string
 }
 
 // NewServerOptions returns ServerOptions populated with sensible defaults.
