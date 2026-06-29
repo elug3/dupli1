@@ -131,6 +131,7 @@ services:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
+      AUTH_JWKS_URL: http://schick-auth:8080/api/v1/auth/.well-known/jwks.json
       S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-schick}
       S3_SECRET_KEY: ${MINIO_SECRET_KEY:-schick_dev}
@@ -138,10 +139,12 @@ services:
     depends_on:
       postgres-product:
         condition: service_healthy
+      schick-auth:
+        condition: service_healthy
       minio:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/products/health"]
       interval: 5s
       timeout: 3s
       retries: 10

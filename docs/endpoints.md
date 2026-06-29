@@ -6,6 +6,7 @@ All services run on port `8080` internally. The nginx gateway (port `80`) proxie
 |---|---|
 | `/api/v1/auth/` | `schick-auth:8080` |
 | `/api/v1/products/` | `schick-product:8080` |
+| `/api/v1/coupons/` | `schick-product:8080` |
 | `/api/v1/inventory/` | `schick-inventory:8080` |
 | `/api/v1/orders` | `schick-order:8080` |
 
@@ -163,21 +164,24 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role,
 
 ## Product Service
 
-| Method | Path | Query params | Description |
+| Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/products/health` | — | Health check |
-| `GET` | `/api/v1/products/all` | — | Return all products grouped by category |
-| `GET` | `/api/v1/products/categories` | — | List all product categories |
-| `GET` | `/api/v1/products/filters` | `category` (required) | List filter keys for a category |
-| `GET` | `/api/v1/products/search` | `category` (required) + category filters | Search across any category |
-| `GET` | `/api/v1/products/consultations` | `title`, `status` | Search consultations |
-| `GET` | `/api/v1/products/shoes` | `brand`, `size`, `color`, `gender`, `material` | Search shoes |
-| `GET` | `/api/v1/products/outerwear` | `brand`, `size`, `color`, `gender`, `material` | Search outerwear |
-| `GET` | `/api/v1/products/bottoms` | `brand`, `size`, `color`, `gender`, `material` | Search bottoms |
-| `GET` | `/api/v1/products/bags` | `brand`, `color`, `material` | Search bags |
-| `GET` | `/api/v1/products/clocks` | `brand`, `type`, `material` | Search clocks |
+| `GET` | `/api/v1/products/bags` | — | Search active bag products (`category=bags`) |
+| `GET` | `/api/v1/products/{id}` | — | Public product detail (active products only; cost omitted) |
+| `POST` | `/api/v1/coupons/redeem` | — | Redeem a coupon code |
+| `GET` | `/api/v1/products` | Bearer | List all products (admin) |
+| `POST` | `/api/v1/products` | Bearer | Create product |
+| `GET` | `/api/v1/products/{id}/manage` | Bearer | Get product by ID including drafts and cost |
+| `PUT` | `/api/v1/products/{id}` | Bearer | Update product |
+| `DELETE` | `/api/v1/products/{id}` | Bearer | Delete product |
+| `PUT` | `/api/v1/products/{id}/image` | Bearer | Upload product image |
+| `GET` | `/api/v1/coupons` | Bearer | List coupons |
+| `POST` | `/api/v1/coupons` | Bearer | Create coupon |
+| `PUT` | `/api/v1/coupons/{code}` | Bearer | Update coupon |
+| `DELETE` | `/api/v1/coupons/{code}` | Bearer | Delete coupon |
 
-Categories: `consultations`, `shoes`, `outerwear`, `bottoms`, `bags`, `clocks`.
+Bag search reads from the `products` table (`category = 'bags'`, `status = 'active'`). Product service validates RS256 access tokens via `AUTH_JWKS_URL` (JWKS from auth).
 
 ### GET /api/v1/products/health
 
@@ -186,45 +190,39 @@ Response `200`:
 { "status": "healthy" }
 ```
 
-### GET /api/v1/products/all
+### GET /api/v1/products/bags
+
+Query params: `brand` (partial match), `color`, `material`.
 
 Response `200`:
 ```json
 {
-  "total": 42,
-  "results": {
-    "consultations": [ /* consultation objects */ ],
-    "shoes":         [ /* shoes objects */ ],
-    "outerwear":     [ /* outerwear objects */ ],
-    "bottoms":       [ /* bottoms objects */ ],
-    "bags":          [ /* bag objects */ ],
-    "clocks":        [ /* clock objects */ ]
-  }
+  "total": 1,
+  "results": [
+    {
+      "id": "BOT-001",
+      "name": "Cassette Bag",
+      "price": 2500.00,
+      "brand": "Bottega Veneta",
+      "color": "Green",
+      "material": "Leather",
+      "stock": 5,
+      "category": "bags",
+      "status": "active",
+      "imageUrls": ["https://cdn.example/bot-001.jpg"],
+      "capacity": "Medium"
+    }
+  ]
 }
 ```
 
-### GET /api/v1/products/categories
+### GET /api/v1/products/{id}
 
-Response `200`:
-```json
-{ "categories": ["consultations", "shoes", "outerwear", "bottoms", "bags", "clocks"] }
-```
+Public storefront PDP. Returns `404` for draft/archived products. `cost` is omitted.
 
-### GET /api/v1/products/filters?category=shoes
+### GET /api/v1/products/{id}/manage
 
-Response `200`:
-```json
-{ "category": "shoes", "filters": ["brand", "size", "color", "gender", "material"] }
-```
-
-Errors: `400` missing category, `404` unknown category.
-
-### GET /api/v1/products/search?category=shoes&brand=Nike
-
-Response `200`:
-```json
-{ "total": 1, "results": [ /* category-specific objects */ ] }
-```
+Authenticated admin read. Returns any status including `cost`.
 
 ---
 

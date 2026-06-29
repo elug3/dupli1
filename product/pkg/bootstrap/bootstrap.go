@@ -2,8 +2,10 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
+	"github.com/elug3/schick/product/pkg/authjwt"
 	"github.com/elug3/schick/product/pkg/handler"
 	"github.com/elug3/schick/product/pkg/infra/pg"
 	s3store "github.com/elug3/schick/product/pkg/infra/s3"
@@ -42,6 +44,12 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		}
 	}
 
+	validator, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
+	if err != nil {
+		store.Close()
+		return nil, fmt.Errorf("auth validator: %w", err)
+	}
+
 	svc := service.NewProductSearchService(store, imgStore)
 	couponSvc := service.NewCouponService()
 	h := handler.NewHandler(svc, couponSvc)
@@ -50,21 +58,21 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	h.RegisterRoutes(mux)
 
 	auth := func(next http.Handler) http.Handler {
-		return middleware.RequireAuth(cfg.JWTSecret, next)
+		return middleware.RequireAuth(validator, next)
 	}
 
-	mux.Handle("GET /api/products", auth(h.ListProductsHandler()))
-	mux.Handle("POST /api/products", auth(h.CreateProductHandler()))
-	mux.Handle("GET /api/products/{id}", auth(h.SingleProductHandler()))
-	mux.Handle("PUT /api/products/{id}", auth(h.SingleProductHandler()))
-	mux.Handle("DELETE /api/products/{id}", auth(h.SingleProductHandler()))
+	mux.Handle("GET "+handler.RouteProducts, auth(h.ListProductsHandler()))
+	mux.Handle("POST "+handler.RouteProducts, auth(h.CreateProductHandler()))
+	mux.Handle("GET "+handler.RouteManageProduct, auth(h.GetProductHandler()))
+	mux.Handle("PUT "+handler.RouteProductByID, auth(h.SingleProductHandler()))
+	mux.Handle("DELETE "+handler.RouteProductByID, auth(h.SingleProductHandler()))
 
-	mux.Handle("PUT /api/products/{id}/image", auth(h.UploadImageHandler()))
+	mux.Handle("PUT "+handler.RouteProductImage, auth(h.UploadImageHandler()))
 
-	mux.Handle("GET /api/coupons", auth(http.HandlerFunc(h.ListCoupons)))
-	mux.Handle("POST /api/coupons", auth(http.HandlerFunc(h.CreateCoupon)))
-	mux.Handle("PUT /api/coupons/{code}", auth(http.HandlerFunc(h.UpdateCoupon)))
-	mux.Handle("DELETE /api/coupons/{code}", auth(http.HandlerFunc(h.DeleteCoupon)))
+	mux.Handle("GET "+handler.RouteCoupons, auth(http.HandlerFunc(h.ListCoupons)))
+	mux.Handle("POST "+handler.RouteCoupons, auth(http.HandlerFunc(h.CreateCoupon)))
+	mux.Handle("PUT "+handler.RouteCouponByCode, auth(http.HandlerFunc(h.UpdateCoupon)))
+	mux.Handle("DELETE "+handler.RouteCouponByCode, auth(http.HandlerFunc(h.DeleteCoupon)))
 
 	return &App{
 		Handler: mux,

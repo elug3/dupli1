@@ -38,7 +38,7 @@ func (c *Client) Redeem(ctx context.Context, code string) (*ports.Coupon, error)
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/coupons/redeem", strings.NewReader(string(body)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/coupons/redeem", strings.NewReader(string(body)))
 	if err != nil {
 		return nil, err
 	}

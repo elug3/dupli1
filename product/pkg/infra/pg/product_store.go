@@ -60,6 +60,7 @@ func (s *ProductSearchStore) migrate() error {
 		{"image_url", "TEXT NOT NULL DEFAULT ''"},
 		{"cost", "NUMERIC(10,2) NOT NULL DEFAULT 0"},
 		{"image_urls", "TEXT[] NOT NULL DEFAULT '{}'"},
+		{"capacity", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		s.pool.Exec(ctx, fmt.Sprintf(
 			"ALTER TABLE products ADD COLUMN IF NOT EXISTS %s %s", col.name, col.def,
@@ -142,27 +143,37 @@ func toTextArray(ss []string) pgtype.TextArray {
 
 // ── queries ───────────────────────────────────────────────────────────────────
 
-const selectCols = `id, name, description, price, cost, brand, color, material, stock, category, status, image_urls, created_at`
+const selectCols = `id, name, description, price, cost, brand, color, material, stock, category, status, image_urls, capacity, created_at`
 
 func scanProduct(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
 	var createdAt time.Time
 	var imageURLs pgtype.TextArray
+	var capacity string
 	err := scan(
 		&p.ID, &p.Name, &p.Description, &p.Price, &p.Cost,
 		&p.Brand, &p.Color, &p.Material, &p.Stock,
-		&p.Category, &p.Status, &imageURLs, &createdAt,
+		&p.Category, &p.Status, &imageURLs, &capacity, &createdAt,
 	)
 	if err != nil {
 		return domain.Product{}, err
 	}
 	p.ImageURLs = scanTextArray(imageURLs)
+	p.Capacity = capacity
 	p.CreatedAt = createdAt.Format(time.RFC3339)
 	return p, nil
 }
 
+func scanBag(scan func(...any) error) (domain.Bag, error) {
+	p, err := scanProduct(scan)
+	if err != nil {
+		return domain.Bag{}, err
+	}
+	return domain.Bag{Product: p}, nil
+}
+
 func (s *ProductSearchStore) SearchBags(filter map[string]string) ([]domain.Bag, error) {
-	query := "SELECT id, name, description, price, brand, color, material, capacity, stock FROM bags WHERE 1=1"
+	query := "SELECT " + selectCols + " FROM products WHERE category = 'bags' AND status = 'active'"
 	args := []interface{}{}
 	idx := 1
 
@@ -191,10 +202,11 @@ func (s *ProductSearchStore) SearchBags(filter map[string]string) ([]domain.Bag,
 
 	var results []domain.Bag
 	for rows.Next() {
-		var b domain.Bag
-		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.Price, &b.Brand, &b.Color, &b.Material, &b.Capacity, &b.Stock); err != nil {
+		b, err := scanBag(rows.Scan)
+		if err != nil {
 			return nil, err
 		}
+		b.Product.Cost = 0
 		results = append(results, b)
 	}
 
@@ -222,6 +234,18 @@ func (s *ProductSearchStore) ListProducts() ([]domain.Product, error) {
 	return results, rows.Err()
 }
 
+func (s *ProductSearchStore) GetActiveProduct(id string) (*domain.Product, error) {
+	row := s.pool.QueryRow(context.Background(),
+		`SELECT `+selectCols+` FROM products WHERE id = $1 AND status = 'active'`, id,
+	)
+	p, err := scanProduct(row.Scan)
+	if err != nil {
+		return nil, err
+	}
+	p.Cost = 0
+	return &p, nil
+}
+
 func (s *ProductSearchStore) GetProduct(id string) (*domain.Product, error) {
 	row := s.pool.QueryRow(context.Background(),
 		`SELECT `+selectCols+` FROM products WHERE id = $1`, id,
@@ -247,12 +271,12 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(context.Background(),
-		`INSERT INTO products (id, name, description, price, cost, brand, color, material, stock, category, status, image_urls)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		`INSERT INTO products (id, name, description, price, cost, brand, color, material, stock, category, status, image_urls, capacity)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description, p.Price, p.Cost,
 		p.Brand, p.Color, p.Material, p.Stock, p.Category, p.Status,
-		toTextArray(p.ImageURLs),
+		toTextArray(p.ImageURLs), p.Capacity,
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, err
@@ -265,12 +289,12 @@ func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, e
 	var createdAt time.Time
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE products
-		 SET name=$2, description=$3, price=$4, cost=$5, brand=$6, color=$7, material=$8, stock=$9, category=$10, status=$11, image_urls=$12
+		 SET name=$2, description=$3, price=$4, cost=$5, brand=$6, color=$7, material=$8, stock=$9, category=$10, status=$11, image_urls=$12, capacity=$13
 		 WHERE id=$1
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description, p.Price, p.Cost,
 		p.Brand, p.Color, p.Material, p.Stock, p.Category, p.Status,
-		toTextArray(p.ImageURLs),
+		toTextArray(p.ImageURLs), p.Capacity,
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, err

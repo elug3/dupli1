@@ -40,6 +40,13 @@ func (s *ProductSearchService) GetProduct(id string) (*domain.Product, error) {
 	return s.store.GetProduct(id)
 }
 
+func (s *ProductSearchService) GetPublicProduct(id string) (*domain.Product, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("store not initialized")
+	}
+	return s.store.GetActiveProduct(id)
+}
+
 func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")

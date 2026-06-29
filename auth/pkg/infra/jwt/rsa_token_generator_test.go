@@ -185,7 +185,7 @@ func TestRSA_PublicJWKS_NandEMatchKey(t *testing.T) {
 
 func TestRSA_NewFromPEM_PKCS1(t *testing.T) {
 	pemBytes := encodePKCS1(t, testRSAKey)
-	gen, err := jwtinfra.NewRSATokenGeneratorFromPEM(pemBytes, "kid", 3600)
+	gen, err := jwtinfra.NewRSATokenGeneratorFromPEM(pemBytes, "kid", 3600, "")
 	if err != nil {
 		t.Fatalf("NewRSATokenGeneratorFromPEM PKCS1: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestRSA_NewFromPEM_PKCS1(t *testing.T) {
 
 func TestRSA_NewFromPEM_PKCS8(t *testing.T) {
 	pemBytes := encodePKCS8(t, testRSAKey)
-	gen, err := jwtinfra.NewRSATokenGeneratorFromPEM(pemBytes, "kid", 3600)
+	gen, err := jwtinfra.NewRSATokenGeneratorFromPEM(pemBytes, "kid", 3600, "")
 	if err != nil {
 		t.Fatalf("NewRSATokenGeneratorFromPEM PKCS8: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestRSA_NewFromPEM_PKCS8(t *testing.T) {
 }
 
 func TestRSA_NewFromPEM_InvalidPEM(t *testing.T) {
-	if _, err := jwtinfra.NewRSATokenGeneratorFromPEM([]byte("not-a-pem"), "kid", 3600); err == nil {
+	if _, err := jwtinfra.NewRSATokenGeneratorFromPEM([]byte("not-a-pem"), "kid", 3600, ""); err == nil {
 		t.Fatal("expected error for invalid PEM, got nil")
 	}
 }
@@ -234,7 +234,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgevZzL1gdAFr88hD2
 cV4nQeiws4tLf2HxcDsGAQb4EaKhRANCAARxy5u39/yqw2tI98mV/Kato6xNnSM5
 0fXxMDnbYMCISHpYjx7BKV9lMoaRxVVBHBbRtCGDfSMgCCVBvH9IAJQ
 -----END PRIVATE KEY-----`)
-	_, err := jwtinfra.NewRSATokenGeneratorFromPEM(ecPEM, "kid", 3600)
+	_, err := jwtinfra.NewRSATokenGeneratorFromPEM(ecPEM, "kid", 3600, "")
 	if err == nil {
 		t.Fatal("expected error for non-RSA key, got nil")
 	}

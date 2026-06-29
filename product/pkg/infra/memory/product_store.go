@@ -10,7 +10,6 @@ import (
 
 // ProductStore is an in-memory implementation of ports.ProductStore, for use in tests.
 type ProductStore struct {
-	Bags     []domain.Bag
 	Products []domain.Product
 }
 
@@ -18,8 +17,26 @@ func NewProductStore() *ProductStore {
 	return &ProductStore{}
 }
 
-func (s *ProductStore) SearchBags(_ map[string]string) ([]domain.Bag, error) {
-	return s.Bags, nil
+func (s *ProductStore) SearchBags(filter map[string]string) ([]domain.Bag, error) {
+	var results []domain.Bag
+	for _, p := range s.Products {
+		if p.Category != "bags" || p.Status != "active" {
+			continue
+		}
+		if brand := filter["brand"]; brand != "" && !strings.Contains(strings.ToLower(p.Brand), strings.ToLower(brand)) {
+			continue
+		}
+		if color := filter["color"]; color != "" && p.Color != color {
+			continue
+		}
+		if material := filter["material"]; material != "" && p.Material != material {
+			continue
+		}
+		public := p
+		public.Cost = 0
+		results = append(results, domain.Bag{Product: public})
+	}
+	return results, nil
 }
 
 func (s *ProductStore) ListProducts() ([]domain.Product, error) {
@@ -33,6 +50,19 @@ func (s *ProductStore) GetProduct(id string) (*domain.Product, error) {
 		}
 	}
 	return nil, fmt.Errorf("product not found: %s", id)
+}
+
+func (s *ProductStore) GetActiveProduct(id string) (*domain.Product, error) {
+	p, err := s.GetProduct(id)
+	if err != nil {
+		return nil, err
+	}
+	if p.Status != "active" {
+		return nil, fmt.Errorf("product not found: %s", id)
+	}
+	public := *p
+	public.Cost = 0
+	return &public, nil
 }
 
 func brandPrefix(brand string) string {
@@ -67,6 +97,9 @@ func (s *ProductStore) nextProductID(brand string) string {
 func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) {
 	if p.ID == "" {
 		p.ID = s.nextProductID(p.Brand)
+	}
+	if p.Status == "" {
+		p.Status = "active"
 	}
 	s.Products = append(s.Products, p)
 	return &p, nil

@@ -271,9 +271,9 @@ Activate or deactivate a user. Requires `admin` or `user_manager` role.
 
 ---
 
-## Product Service — `/api`
+## Product Service — `/api/v1/products`
 
-### `GET /api/health`
+### `GET /api/v1/products/health`
 
 Product service liveness check.
 
@@ -284,7 +284,7 @@ Product service liveness check.
 
 ---
 
-### `GET /api/products/bags`
+### `GET /api/v1/products/bags`
 
 Search bags. No authentication required.
 
@@ -309,7 +309,8 @@ Search bags. No authentication required.
       "material": "Leather",
       "stock": 5,
       "category": "bags",
-      "capacity": "Medium"
+      "capacity": "Medium",
+      "imageUrls": ["https://cdn.example/bot-001.jpg"]
     }
   ]
 }
@@ -317,7 +318,7 @@ Search bags. No authentication required.
 
 ---
 
-### `POST /api/coupons/redeem`
+### `POST /api/v1/coupons/redeem`
 
 Redeem a coupon code. No authentication required.
 
@@ -335,22 +336,35 @@ Redeem a coupon code. No authentication required.
 
 ---
 
+### `GET /api/v1/products/{id}`
+
+Public product detail page (PDP). No authentication required. Returns only `status = active` products and omits `cost`.
+
+**Response `200`** — product object
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `404` | Product not found or not active |
+
+---
+
 ### Product CRUD (authenticated)
 
-All routes below require `Authorization: Bearer <access_token>`.
+All routes below require `Authorization: Bearer <access_token>` from the auth service. Product validates RS256 tokens via JWKS (`AUTH_JWKS_URL`).
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/products` | List all products |
-| POST | `/api/products` | Create product |
-| GET | `/api/products/{id}` | Get product by ID |
-| PUT | `/api/products/{id}` | Update product |
-| DELETE | `/api/products/{id}` | Delete product |
-| PUT | `/api/products/{id}/image` | Upload image (multipart field `image`) |
-| GET | `/api/coupons` | List coupons |
-| POST | `/api/coupons` | Create coupon |
-| PUT | `/api/coupons/{code}` | Update coupon |
-| DELETE | `/api/coupons/{code}` | Delete coupon |
+| GET | `/api/v1/products` | List all products |
+| POST | `/api/v1/products` | Create product |
+| GET | `/api/v1/products/{id}/manage` | Get product by ID (includes drafts and cost) |
+| PUT | `/api/v1/products/{id}` | Update product |
+| DELETE | `/api/v1/products/{id}` | Delete product |
+| PUT | `/api/v1/products/{id}/image` | Upload image (multipart field `image`) |
+| GET | `/api/v1/coupons` | List coupons |
+| POST | `/api/v1/coupons` | Create coupon |
+| PUT | `/api/v1/coupons/{code}` | Update coupon |
+| DELETE | `/api/v1/coupons/{code}` | Delete coupon |
 
 Product IDs are generated from the brand prefix (e.g. `BOT-001`). Image upload appends to the `imageUrls` array.
 
@@ -538,13 +552,15 @@ All error responses use a JSON envelope:
 | PATCH | `/api/v1/auth/users/{id}/roles` | `admin` | auth |
 | PATCH | `/api/v1/auth/users/{id}/password` | `admin`, `user_manager` | auth |
 | PATCH | `/api/v1/auth/users/{id}/status` | `admin`, `user_manager` | auth |
-| GET | `/api/health` | — | product |
-| GET | `/api/products/bags` | — | product |
-| POST | `/api/coupons/redeem` | — | product |
-| GET/POST | `/api/products` | Bearer | product |
-| GET/PUT/DELETE | `/api/products/{id}` | Bearer | product |
-| PUT | `/api/products/{id}/image` | Bearer | product |
-| GET/POST/PUT/DELETE | `/api/coupons` | Bearer | product |
+| GET | `/api/v1/products/health` | — | product |
+| GET | `/api/v1/products/bags` | — | product |
+| GET | `/api/v1/products/{id}` | — | product |
+| POST | `/api/v1/coupons/redeem` | — | product |
+| GET/POST | `/api/v1/products` | Bearer | product |
+| GET | `/api/v1/products/{id}/manage` | Bearer | product |
+| PUT/DELETE | `/api/v1/products/{id}` | Bearer | product |
+| PUT | `/api/v1/products/{id}/image` | Bearer | product |
+| GET/POST/PUT/DELETE | `/api/v1/coupons` | Bearer | product |
 | GET/PUT | `/api/v1/inventory/{sku}` | — | inventory |
 | POST | `/api/v1/inventory/{sku}/adjust` | — | inventory |
 | POST | `/api/v1/inventory/reservations` | — | inventory |

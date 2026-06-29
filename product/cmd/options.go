@@ -45,6 +45,9 @@ func applyEnv(opts *product.ServerOptions) {
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.JWTSecret = v
 	}
+	if v := os.Getenv("AUTH_JWKS_URL"); v != "" {
+		opts.JWKSURL = v
+	}
 	setIntEnv(&opts.ReadTimeout, "SCHICK_PRODUCT_READ_TIMEOUT")
 	setIntEnv(&opts.WriteTimeout, "SCHICK_PRODUCT_WRITE_TIMEOUT")
 	if v := os.Getenv("S3_ENDPOINT"); v != "" {

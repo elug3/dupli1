@@ -23,6 +23,10 @@ func (s fakeProductStore) GetProduct(id string) (*domain.Product, error) {
 	return nil, nil
 }
 
+func (s fakeProductStore) GetActiveProduct(id string) (*domain.Product, error) {
+	return nil, nil
+}
+
 func (s fakeProductStore) CreateProduct(p domain.Product) (*domain.Product, error) {
 	return nil, nil
 }
