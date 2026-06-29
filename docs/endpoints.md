@@ -5,8 +5,8 @@ All services run on port `8080` internally. The nginx gateway (port `80`) proxie
 | Gateway prefix | Upstream service |
 |---|---|
 | `/api/v1/auth/` | `schick-auth:8080` |
-| `/api/products/` | `schick-product:8080` |
-| `/api/coupons/` | `schick-product:8080` |
+| `/api/v1/products/` | `schick-product:8080` |
+| `/api/v1/coupons/` | `schick-product:8080` |
 | `/api/v1/inventory/` | `schick-inventory:8080` |
 | `/api/v1/orders` | `schick-order:8080` |
 
@@ -166,31 +166,31 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role,
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/health` | — | Health check |
-| `GET` | `/api/products/bags` | — | Search active bag products (`category=bags`) |
-| `GET` | `/api/products/{id}` | — | Public product detail (active products only; cost omitted) |
-| `POST` | `/api/coupons/redeem` | — | Redeem a coupon code |
-| `GET` | `/api/products` | Bearer | List all products (admin) |
-| `POST` | `/api/products` | Bearer | Create product |
-| `GET` | `/api/products/{id}/manage` | Bearer | Get product by ID including drafts and cost |
-| `PUT` | `/api/products/{id}` | Bearer | Update product |
-| `DELETE` | `/api/products/{id}` | Bearer | Delete product |
-| `PUT` | `/api/products/{id}/image` | Bearer | Upload product image |
-| `GET` | `/api/coupons` | Bearer | List coupons |
-| `POST` | `/api/coupons` | Bearer | Create coupon |
-| `PUT` | `/api/coupons/{code}` | Bearer | Update coupon |
-| `DELETE` | `/api/coupons/{code}` | Bearer | Delete coupon |
+| `GET` | `/api/v1/products/health` | — | Health check |
+| `GET` | `/api/v1/products/bags` | — | Search active bag products (`category=bags`) |
+| `GET` | `/api/v1/products/{id}` | — | Public product detail (active products only; cost omitted) |
+| `POST` | `/api/v1/coupons/redeem` | — | Redeem a coupon code |
+| `GET` | `/api/v1/products` | Bearer | List all products (admin) |
+| `POST` | `/api/v1/products` | Bearer | Create product |
+| `GET` | `/api/v1/products/{id}/manage` | Bearer | Get product by ID including drafts and cost |
+| `PUT` | `/api/v1/products/{id}` | Bearer | Update product |
+| `DELETE` | `/api/v1/products/{id}` | Bearer | Delete product |
+| `PUT` | `/api/v1/products/{id}/image` | Bearer | Upload product image |
+| `GET` | `/api/v1/coupons` | Bearer | List coupons |
+| `POST` | `/api/v1/coupons` | Bearer | Create coupon |
+| `PUT` | `/api/v1/coupons/{code}` | Bearer | Update coupon |
+| `DELETE` | `/api/v1/coupons/{code}` | Bearer | Delete coupon |
 
 Bag search reads from the `products` table (`category = 'bags'`, `status = 'active'`). Product service validates RS256 access tokens via `AUTH_JWKS_URL` (JWKS from auth).
 
-### GET /api/health
+### GET /api/v1/products/health
 
 Response `200`:
 ```json
 { "status": "healthy" }
 ```
 
-### GET /api/products/bags
+### GET /api/v1/products/bags
 
 Query params: `brand` (partial match), `color`, `material`.
 
@@ -216,11 +216,11 @@ Response `200`:
 }
 ```
 
-### GET /api/products/{id}
+### GET /api/v1/products/{id}
 
 Public storefront PDP. Returns `404` for draft/archived products. `cost` is omitted.
 
-### GET /api/products/{id}/manage
+### GET /api/v1/products/{id}/manage
 
 Authenticated admin read. Returns any status including `cost`.
 

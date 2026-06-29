@@ -68,7 +68,7 @@ Owns:
 
 Owns:
 
-- Bag search (`GET /api/products/bags`)
+- Bag search (`GET /api/v1/products/bags`)
 - Product CRUD with brand-prefixed IDs (`BOT-001`)
 - Coupon management and redemption
 - Image upload (multipart, appends to `imageUrls`)
@@ -114,9 +114,8 @@ Planned: email, push, SMS, and event-triggered notifications.
 | `/health` | auth |
 | `/api/v1/auth/` | auth |
 | `/api/v1/users` | auth |
-| `/api/products/` | product |
-| `/api/coupons/` | product |
-| `/api/health` | product |
+| `/api/v1/products/` | product |
+| `/api/v1/coupons/` | product |
 | `/api/v1/inventory/` | inventory |
 | `/api/v1/orders` | order |
 

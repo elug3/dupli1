@@ -33,12 +33,12 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	h := handler.NewHandler(svc, couponSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
-	mux.Handle("GET /api/products", h.ListProductsHandler())
-	mux.Handle("POST /api/products", h.CreateProductHandler())
-	mux.Handle("GET /api/products/{id}/manage", h.GetProductHandler())
-	mux.Handle("PUT /api/products/{id}", h.SingleProductHandler())
-	mux.Handle("DELETE /api/products/{id}", h.SingleProductHandler())
-	mux.Handle("PUT /api/products/{id}/image", h.UploadImageHandler())
+	mux.Handle("GET "+handler.RouteProducts, h.ListProductsHandler())
+	mux.Handle("POST "+handler.RouteProducts, h.CreateProductHandler())
+	mux.Handle("GET "+handler.RouteManageProduct, h.GetProductHandler())
+	mux.Handle("PUT "+handler.RouteProductByID, h.SingleProductHandler())
+	mux.Handle("DELETE "+handler.RouteProductByID, h.SingleProductHandler())
+	mux.Handle("PUT "+handler.RouteProductImage, h.UploadImageHandler())
 	return mux, h
 }
 
@@ -47,7 +47,7 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 func TestHealth(t *testing.T) {
 	mux := newMux(memory.NewProductStore())
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteHealth, nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
@@ -64,7 +64,7 @@ func TestHealth(t *testing.T) {
 func TestHealthMethodNotAllowed(t *testing.T) {
 	mux := newMux(memory.NewProductStore())
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/health", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteHealth, nil))
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("want 405, got %d", rec.Code)
@@ -81,7 +81,7 @@ func TestSearchBags(t *testing.T) {
 	}
 	mux := newMux(store)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/bags", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteSearchBags, nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
@@ -106,7 +106,7 @@ func TestCreateProductBrandPrefixID(t *testing.T) {
 		Price: 2500,
 	})
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/products", bytes.NewReader(body)))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteProducts, bytes.NewReader(body)))
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("want 201, got %d: %s", rec.Code, rec.Body.String())
@@ -126,7 +126,7 @@ func TestCreateProductSequentialIDs(t *testing.T) {
 	for i := 1; i <= 3; i++ {
 		body, _ := json.Marshal(domain.Product{Name: fmt.Sprintf("Bag %d", i), Brand: "Gucci"})
 		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/products", bytes.NewReader(body)))
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteProducts, bytes.NewReader(body)))
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("create %d: want 201, got %d", i, rec.Code)
 		}
@@ -146,7 +146,7 @@ func TestListProducts(t *testing.T) {
 	}
 	mux, _ := newFullMux(store)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteProducts, nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
@@ -167,7 +167,7 @@ func TestGetProduct(t *testing.T) {
 	}
 	mux, _ := newFullMux(store)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/BOT-001/manage", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/products/BOT-001/manage", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
@@ -181,7 +181,7 @@ func TestPublicGetProduct(t *testing.T) {
 	}
 	mux := newMux(store)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/BOT-001", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/products/BOT-001", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
@@ -202,7 +202,7 @@ func TestPublicGetProductDraftHidden(t *testing.T) {
 	}
 	mux := newMux(store)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/BOT-001", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/products/BOT-001", nil))
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d", rec.Code)
@@ -212,7 +212,7 @@ func TestPublicGetProductDraftHidden(t *testing.T) {
 func TestGetProductNotFound(t *testing.T) {
 	mux, _ := newFullMux(memory.NewProductStore())
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/products/NOPE-999/manage", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/products/NOPE-999/manage", nil))
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d", rec.Code)
@@ -224,7 +224,7 @@ func TestDeleteProduct(t *testing.T) {
 	store.Products = []domain.Product{{ID: "BOT-001", Name: "Mini Bag"}}
 	mux, _ := newFullMux(store)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/products/BOT-001", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, "/api/v1/products/BOT-001", nil))
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("want 204, got %d", rec.Code)
@@ -245,7 +245,7 @@ func TestUploadImageNoStore(t *testing.T) {
 	fw.Write([]byte("fake-image-data"))
 	w.Close()
 
-	req := httptest.NewRequest(http.MethodPut, "/api/products/BOT-001/image", &buf)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/products/BOT-001/image", &buf)
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -267,7 +267,7 @@ func TestUploadImageProductNotFound(t *testing.T) {
 	fw.Write([]byte("fake-image-data"))
 	w.Close()
 
-	req := httptest.NewRequest(http.MethodPut, "/api/products/NOPE-999/image", &buf)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/products/NOPE-999/image", &buf)
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -285,7 +285,7 @@ func TestRedeemCoupon(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"code": "SUMMER30"})
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/coupons/redeem", bytes.NewReader(body)))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteRedeemCoupon, bytes.NewReader(body)))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
@@ -307,7 +307,7 @@ func TestRedeemCouponInvalid(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"code": "NOTREAL"})
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/coupons/redeem", bytes.NewReader(body)))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteRedeemCoupon, bytes.NewReader(body)))
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d", rec.Code)
@@ -319,7 +319,7 @@ func TestRedeemCouponMissingCode(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]string{"code": ""})
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/coupons/redeem", bytes.NewReader(body)))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteRedeemCoupon, bytes.NewReader(body)))
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", rec.Code)

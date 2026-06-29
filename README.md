@@ -96,25 +96,25 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/health` | Health check |
-| GET | `/api/products/bags` | Search bags (`?brand=`, `?color=`, `?material=`) |
-| GET | `/api/products/{id}` | Public product detail (active products only) |
-| POST | `/api/coupons/redeem` | Redeem a coupon code |
+| GET | `/api/v1/products/health` | Health check |
+| GET | `/api/v1/products/bags` | Search bags (`?brand=`, `?color=`, `?material=`) |
+| GET | `/api/v1/products/{id}` | Public product detail (active products only) |
+| POST | `/api/v1/coupons/redeem` | Redeem a coupon code |
 
 **Requires `Authorization: Bearer <token>`**
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/products` | List all products |
-| POST | `/api/products` | Create product |
-| GET | `/api/products/{id}/manage` | Get product (admin, includes drafts/cost) |
-| PUT | `/api/products/{id}` | Update product |
-| DELETE | `/api/products/{id}` | Delete product |
-| PUT | `/api/products/{id}/image` | Upload product image (multipart `image` field) |
-| GET | `/api/coupons` | List coupons |
-| POST | `/api/coupons` | Create coupon |
-| PUT | `/api/coupons/{code}` | Update coupon |
-| DELETE | `/api/coupons/{code}` | Delete coupon |
+| GET | `/api/v1/products` | List all products |
+| POST | `/api/v1/products` | Create product |
+| GET | `/api/v1/products/{id}/manage` | Get product (admin, includes drafts/cost) |
+| PUT | `/api/v1/products/{id}` | Update product |
+| DELETE | `/api/v1/products/{id}` | Delete product |
+| PUT | `/api/v1/products/{id}/image` | Upload product image (multipart `image` field) |
+| GET | `/api/v1/coupons` | List coupons |
+| POST | `/api/v1/coupons` | Create coupon |
+| PUT | `/api/v1/coupons/{code}` | Update coupon |
+| DELETE | `/api/v1/coupons/{code}` | Delete coupon |
 
 ### Inventory (`schick-inventory` :8082)
 
@@ -150,7 +150,7 @@ Gucci          → GUC-001, GUC-002, …
 ### Image Upload
 
 ```bash
-curl -k -X PUT https://localhost/api/products/BOT-001/image \
+curl -k -X PUT https://localhost/api/v1/products/BOT-001/image \
   -H "Authorization: Bearer $TOKEN" \
   -F "image=@photo.jpg"
 ```

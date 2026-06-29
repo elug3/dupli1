@@ -20,7 +20,7 @@ sequenceDiagram
     Order-->>Client: session with subtotal
 
     Client->>Order: POST /api/v1/checkout/sessions/{id}/coupon
-    Order->>Product: POST /api/coupons/redeem
+    Order->>Product: POST /api/v1/coupons/redeem
     Product-->>Order: discount fraction
     Order-->>Client: session with discount + total
 
