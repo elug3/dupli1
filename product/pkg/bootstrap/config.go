@@ -5,6 +5,7 @@ type Config struct {
 	DatabaseConnString string
 	JWTSecret          string
 	JWKSURL            string
+	NATSURL            string
 	S3Endpoint         string
 	S3AccessKey        string
 	S3SecretKey        string

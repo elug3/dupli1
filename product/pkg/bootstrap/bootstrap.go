@@ -7,6 +7,7 @@ import (
 
 	"github.com/elug3/schick/product/pkg/authjwt"
 	"github.com/elug3/schick/product/pkg/handler"
+	natsinfra "github.com/elug3/schick/product/pkg/infra/nats"
 	"github.com/elug3/schick/product/pkg/infra/pg"
 	s3store "github.com/elug3/schick/product/pkg/infra/s3"
 	"github.com/elug3/schick/product/pkg/middleware"
@@ -16,8 +17,9 @@ import (
 
 // App holds wired product service dependencies and the HTTP handler.
 type App struct {
-	Handler http.Handler
-	close   func() error
+	Handler       http.Handler
+	natsPublisher *natsinfra.Publisher
+	close         func() error
 }
 
 // Close releases infrastructure resources opened during bootstrap.
@@ -50,7 +52,18 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		return nil, fmt.Errorf("auth validator: %w", err)
 	}
 
-	svc := service.NewProductSearchService(store, imgStore)
+	var eventPublisher ports.EventPublisher
+	var natsPublisher *natsinfra.Publisher
+	if cfg.NATSURL != "" {
+		natsPublisher, err = natsinfra.NewPublisher(cfg.NATSURL)
+		if err != nil {
+			store.Close()
+			return nil, err
+		}
+		eventPublisher = natsPublisher
+	}
+
+	svc := service.NewProductSearchService(store, imgStore, eventPublisher)
 	couponSvc := service.NewCouponService()
 	h := handler.NewHandler(svc, couponSvc)
 
@@ -75,8 +88,12 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	mux.Handle("DELETE "+handler.RouteCouponByCode, auth(http.HandlerFunc(h.DeleteCoupon)))
 
 	return &App{
-		Handler: mux,
+		Handler:       mux,
+		natsPublisher: natsPublisher,
 		close: func() error {
+			if natsPublisher != nil {
+				natsPublisher.Close()
+			}
 			store.Close()
 			return nil
 		},

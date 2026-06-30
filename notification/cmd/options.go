@@ -23,6 +23,10 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 
 	var (
 		addr               string
+		natsURL            = opts.NATSURL
+		telegramToken      = opts.TelegramToken
+		orderChatID        = opts.OrderChatID
+		productChatID      = opts.ProductChatID
 		readTimeoutSec     = int(opts.ReadTimeout / time.Second)
 		writeTimeoutSec    = int(opts.WriteTimeout / time.Second)
 		idleTimeoutSec     = int(opts.IdleTimeout / time.Second)
@@ -32,6 +36,10 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	fs.StringVar(&host, "host", host, "Server host address")
 	fs.IntVar(&port, "port", port, "Server port number")
 	fs.StringVar(&addr, "addr", "", "Server listen address (overrides host/port)")
+	fs.StringVar(&natsURL, "nats-url", natsURL, "NATS server URL")
+	fs.StringVar(&telegramToken, "telegram-token", telegramToken, "Telegram bot token")
+	fs.StringVar(&orderChatID, "telegram-order-chat-id", orderChatID, "Telegram chat ID for order manager alerts")
+	fs.StringVar(&productChatID, "telegram-product-chat-id", productChatID, "Telegram chat ID for product manager alerts")
 	fs.IntVar(&readTimeoutSec, "read-timeout", readTimeoutSec, "Read timeout in seconds")
 	fs.IntVar(&writeTimeoutSec, "write-timeout", writeTimeoutSec, "Write timeout in seconds")
 	fs.IntVar(&idleTimeoutSec, "idle-timeout", idleTimeoutSec, "Idle timeout in seconds")
@@ -46,6 +54,10 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	} else {
 		opts.Addr = net.JoinHostPort(host, strconv.Itoa(port))
 	}
+	opts.NATSURL = natsURL
+	opts.TelegramToken = telegramToken
+	opts.OrderChatID = orderChatID
+	opts.ProductChatID = productChatID
 	opts.ReadTimeout = time.Duration(readTimeoutSec) * time.Second
 	opts.WriteTimeout = time.Duration(writeTimeoutSec) * time.Second
 	opts.IdleTimeout = time.Duration(idleTimeoutSec) * time.Second
@@ -57,6 +69,20 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 func applyEnv(opts *notification.ServerOptions) {
 	if v := os.Getenv("SCHICK_NOTIFICATION_ADDR"); v != "" {
 		opts.Addr = v
+	}
+	if v := os.Getenv("SCHICK_NOTIFICATION_NATS_URL"); v != "" {
+		opts.NATSURL = v
+	} else if v := os.Getenv("NATS_URL"); v != "" {
+		opts.NATSURL = v
+	}
+	if v := os.Getenv("TELEGRAM_BOT_TOKEN"); v != "" {
+		opts.TelegramToken = v
+	}
+	if v := os.Getenv("TELEGRAM_ORDER_CHAT_ID"); v != "" {
+		opts.OrderChatID = v
+	}
+	if v := os.Getenv("TELEGRAM_PRODUCT_CHAT_ID"); v != "" {
+		opts.ProductChatID = v
 	}
 }
 

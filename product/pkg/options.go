@@ -25,6 +25,7 @@ type ServerOptions struct {
 	Host               string
 	Port               int
 	DatabaseConnString string
+	NATSURL            string
 	JWTSecret          string
 	JWKSURL            string
 	ReadTimeout        int // in seconds

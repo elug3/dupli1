@@ -7,6 +7,7 @@ type ServerOptions struct {
 	InventoryURL    string
 	ProductURL      string
 	JWTSecret       string
+	NATSURL         string
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
