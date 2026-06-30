@@ -25,12 +25,16 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		return nil, fmt.Errorf("InventoryURL is required")
 	}
 
-	app := bootstrap.Bootstrap(bootstrap.Config{
+	app, err := bootstrap.Bootstrap(bootstrap.Config{
 		InventoryURL: opts.InventoryURL,
 		ProductURL:   opts.ProductURL,
 		JWTSecret:    opts.JWTSecret,
+		NATSURL:      opts.NATSURL,
 		HTTPClient:   bootstrap.DefaultHTTPClient(),
 	})
+	if err != nil {
+		return nil, err
+	}
 	httpSrv := &http.Server{
 		Addr:         opts.Addr,
 		Handler:      app.Router,
@@ -62,7 +66,11 @@ func (s *Server) Stop() error {
 	defer cancel()
 
 	fmt.Println("Gracefully stopping order server...")
-	return s.http.Shutdown(ctx)
+	err := s.http.Shutdown(ctx)
+	if closeErr := s.app.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 func (s *Server) Wait() {

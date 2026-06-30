@@ -30,11 +30,22 @@ type CreateOrderInput struct {
 	DiscountCents int64
 }
 
+type orderItemEvent struct {
+	SKU            string `json:"sku"`
+	Quantity       int    `json:"quantity"`
+	UnitPriceCents int64  `json:"unit_price_cents"`
+}
+
 type orderEvent struct {
-	EventType string             `json:"event_type"`
-	OrderID   string             `json:"order_id"`
-	Status    domain.OrderStatus `json:"status"`
-	Occurred  time.Time          `json:"occurred_at"`
+	EventType     string           `json:"event_type"`
+	OrderID       string           `json:"order_id"`
+	CustomerID    string           `json:"customer_id"`
+	Status        domain.OrderStatus `json:"status"`
+	SubtotalCents int64            `json:"subtotal_cents"`
+	DiscountCents int64            `json:"discount_cents"`
+	TotalCents    int64            `json:"total_cents"`
+	Items         []orderItemEvent `json:"items"`
+	Occurred      time.Time        `json:"occurred_at"`
 }
 
 func New(repo ports.Repository, inventory ports.InventoryClient, eventPublisher ...ports.EventPublisher) *Service {
@@ -175,11 +186,24 @@ func (s *Service) publish(ctx context.Context, subject string, order *domain.Ord
 	if s.eventPublisher == nil {
 		return nil
 	}
+	items := make([]orderItemEvent, len(order.Items))
+	for i, item := range order.Items {
+		items[i] = orderItemEvent{
+			SKU:            item.SKU,
+			Quantity:       item.Quantity,
+			UnitPriceCents: item.UnitPriceCents,
+		}
+	}
 	return s.eventPublisher.Publish(ctx, subject, orderEvent{
-		EventType: subject,
-		OrderID:   order.ID,
-		Status:    order.Status,
-		Occurred:  s.now(),
+		EventType:     subject,
+		OrderID:       order.ID,
+		CustomerID:    order.CustomerID,
+		Status:        order.Status,
+		SubtotalCents: order.SubtotalCents,
+		DiscountCents: order.DiscountCents,
+		TotalCents:    order.TotalCents,
+		Items:         items,
+		Occurred:      s.now(),
 	})
 }
 

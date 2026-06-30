@@ -62,6 +62,11 @@ func applyEnv(opts *product.ServerOptions) {
 	if v := os.Getenv("S3_BUCKET"); v != "" {
 		opts.S3Bucket = v
 	}
+	if v := os.Getenv("SCHICK_PRODUCT_NATS_URL"); v != "" {
+		opts.NATSURL = v
+	} else if v := os.Getenv("NATS_URL"); v != "" {
+		opts.NATSURL = v
+	}
 }
 
 func setIntEnv(target *int, key string) {

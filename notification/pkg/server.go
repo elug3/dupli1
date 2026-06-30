@@ -2,15 +2,20 @@ package notification
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/elug3/schick/notification/pkg/bootstrap"
 )
 
 type ServerOptions struct {
 	Addr            string
+	NATSURL         string
+	TelegramToken   string
+	OrderChatID     string
+	ProductChatID   string
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
@@ -29,7 +34,7 @@ func NewServerOptions() *ServerOptions {
 
 type Server struct {
 	opts     ServerOptions
-	http     *http.Server
+	app      *bootstrap.App
 	stopped  chan struct{}
 	stopOnce sync.Once
 }
@@ -39,26 +44,31 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		return nil, fmt.Errorf("Addr is required")
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", health)
-	mux.HandleFunc("/api/v1/notification/health", health)
+	app, err := bootstrap.Bootstrap(bootstrap.Config{
+		Addr:            opts.Addr,
+		NATSURL:         opts.NATSURL,
+		TelegramToken:   opts.TelegramToken,
+		OrderChatID:     opts.OrderChatID,
+		ProductChatID:   opts.ProductChatID,
+		ReadTimeout:     opts.ReadTimeout,
+		WriteTimeout:    opts.WriteTimeout,
+		IdleTimeout:     opts.IdleTimeout,
+		ShutdownTimeout: opts.ShutdownTimeout,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	return &Server{
-		opts: opts,
-		http: &http.Server{
-			Addr:         opts.Addr,
-			Handler:      mux,
-			ReadTimeout:  opts.ReadTimeout,
-			WriteTimeout: opts.WriteTimeout,
-			IdleTimeout:  opts.IdleTimeout,
-		},
+		opts:    opts,
+		app:     app,
 		stopped: make(chan struct{}),
 	}, nil
 }
 
 func (s *Server) Run() error {
-	fmt.Printf("Starting notification server on %s\n", s.http.Addr)
-	err := s.http.ListenAndServe()
+	fmt.Printf("Starting notification server on %s\n", s.app.HTTP.Addr)
+	err := s.app.HTTP.ListenAndServe()
 	s.markStopped()
 	if err != nil && err != http.ErrServerClosed {
 		return err
@@ -71,7 +81,11 @@ func (s *Server) Stop() error {
 	defer cancel()
 
 	fmt.Println("Gracefully stopping notification server...")
-	return s.http.Shutdown(ctx)
+	err := s.app.HTTP.Shutdown(ctx)
+	if closeErr := s.app.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 func (s *Server) Wait() {
@@ -87,21 +101,4 @@ func (s *Server) markStopped() {
 	s.stopOnce.Do(func() {
 		close(s.stopped)
 	})
-}
-
-func health(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondJSON(w, http.StatusMethodNotAllowed, map[string]any{
-			"error": "method not allowed",
-			"code":  http.StatusMethodNotAllowed,
-		})
-		return
-	}
-	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func respondJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
 }

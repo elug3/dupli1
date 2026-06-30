@@ -26,6 +26,7 @@ func NewSearchServer(opts SearchServerOptions) (*ProductSearchServer, error) {
 		DatabaseConnString: opts.DatabaseConnString,
 		JWTSecret:          opts.JWTSecret,
 		JWKSURL:            opts.JWKSURL,
+		NATSURL:            opts.NATSURL,
 	})
 	if err != nil {
 		return nil, err
@@ -113,6 +114,7 @@ func NewServer(opts ServerOptions) (*ProductServer, error) {
 		DatabaseConnString: opts.DatabaseConnString,
 		JWTSecret:          opts.JWTSecret,
 		JWKSURL:            opts.JWKSURL,
+		NATSURL:            opts.NATSURL,
 		S3Endpoint:         opts.S3Endpoint,
 		S3AccessKey:        opts.S3AccessKey,
 		S3SecretKey:        opts.S3SecretKey,

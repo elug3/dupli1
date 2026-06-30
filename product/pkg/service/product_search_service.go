@@ -4,19 +4,51 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/elug3/schick/product/pkg/domain"
 	"github.com/elug3/schick/product/pkg/ports"
 )
 
-type ProductSearchService struct {
-	store      ports.ProductStore
-	imageStore ports.ImageStore
+const (
+	productCreatedSubject       = "product.created"
+	productUpdatedSubject       = "product.updated"
+	productDeletedSubject       = "product.deleted"
+	productImageUploadedSubject = "product.image_uploaded"
+)
+
+type productEvent struct {
+	EventType string    `json:"event_type"`
+	ProductID string    `json:"product_id"`
+	Name      string    `json:"name"`
+	Brand     string    `json:"brand"`
+	Category  string    `json:"category"`
+	Status    string    `json:"status"`
+	Price     float64   `json:"price"`
+	ImageURL  string    `json:"image_url,omitempty"`
+	Occurred  time.Time `json:"occurred_at"`
 }
 
-func NewProductSearchService(store ports.ProductStore, imageStore ports.ImageStore) *ProductSearchService {
-	return &ProductSearchService{store: store, imageStore: imageStore}
+type ProductSearchService struct {
+	store          ports.ProductStore
+	imageStore     ports.ImageStore
+	eventPublisher ports.EventPublisher
+	now            func() time.Time
+}
+
+func NewProductSearchService(store ports.ProductStore, imageStore ports.ImageStore, eventPublisher ...ports.EventPublisher) *ProductSearchService {
+	s := &ProductSearchService{
+		store:      store,
+		imageStore: imageStore,
+		now: func() time.Time {
+			return time.Now().UTC()
+		},
+	}
+	if len(eventPublisher) > 0 {
+		s.eventPublisher = eventPublisher[0]
+	}
+	return s
 }
 
 func (s *ProductSearchService) SearchBags(filter map[string]string) ([]domain.Bag, error) {
@@ -51,21 +83,42 @@ func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product,
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	return s.store.CreateProduct(p)
+	created, err := s.store.CreateProduct(p)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.publish(context.Background(), productCreatedSubject, created, ""); err != nil {
+		return nil, err
+	}
+	return created, nil
 }
 
 func (s *ProductSearchService) UpdateProduct(p domain.Product) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	return s.store.UpdateProduct(p)
+	updated, err := s.store.UpdateProduct(p)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.publish(context.Background(), productUpdatedSubject, updated, ""); err != nil {
+		return nil, err
+	}
+	return updated, nil
 }
 
 func (s *ProductSearchService) DeleteProduct(id string) error {
 	if s.store == nil {
 		return fmt.Errorf("store not initialized")
 	}
-	return s.store.DeleteProduct(id)
+	existing, err := s.store.GetProduct(id)
+	if err != nil {
+		return err
+	}
+	if err := s.store.DeleteProduct(id); err != nil {
+		return err
+	}
+	return s.publish(context.Background(), productDeletedSubject, existing, "")
 }
 
 // UploadImage uploads a file to the image store and appends its URL to the product's ImageURLs.
@@ -83,5 +136,29 @@ func (s *ProductSearchService) UploadImage(ctx context.Context, productID string
 		return nil, err
 	}
 	p.ImageURLs = append(p.ImageURLs, url)
-	return s.store.UpdateProduct(*p)
+	updated, err := s.store.UpdateProduct(*p)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.publish(ctx, productImageUploadedSubject, updated, url); err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
+func (s *ProductSearchService) publish(ctx context.Context, subject string, product *domain.Product, imageURL string) error {
+	if s.eventPublisher == nil || product == nil {
+		return nil
+	}
+	return s.eventPublisher.Publish(ctx, subject, productEvent{
+		EventType: subject,
+		ProductID: product.ID,
+		Name:      product.Name,
+		Brand:     product.Brand,
+		Category:  product.Category,
+		Status:    product.Status,
+		Price:     product.Price,
+		ImageURL:  imageURL,
+		Occurred:  s.now(),
+	})
 }
