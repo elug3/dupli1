@@ -1,4 +1,4 @@
-# Schick
+# Dupli1
 
 Go microservice backend for a fashion bag marketplace. Five services behind an nginx proxy, wired with Docker Compose for local dev and deployed to AWS ECS Fargate in production.
 
@@ -6,12 +6,12 @@ Go microservice backend for a fashion bag marketplace. Five services behind an n
 
 | Service | Local port | Description |
 |---------|------------|-------------|
-| `schick-auth` | 18080 | JWT login/refresh, RS256 tokens, JWKS, RBAC user admin |
-| `schick-product` | 8081 | Bag catalog, coupons, product CRUD, image upload |
-| `schick-inventory` | 8082 | Stock and reservation APIs (in-memory) |
-| `schick-order` | 8083 | Checkout sessions and order lifecycle (in-memory) |
-| `schick-notification` | 8084 | Notification stub (health only) |
-| `schick-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
+| `dupli1-auth` | 18080 | JWT login/refresh, RS256 tokens, JWKS, RBAC user admin |
+| `dupli1-product` | 8081 | Bag catalog, coupons, product CRUD, image upload |
+| `dupli1-inventory` | 8082 | Stock and reservation APIs (in-memory) |
+| `dupli1-order` | 8083 | Checkout sessions and order lifecycle (in-memory) |
+| `dupli1-notification` | 8084 | Notification stub (health only) |
+| `dupli1-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
 | `postgres-auth` | 5432 | Auth DB |
 | `postgres-product` | 5433 | Product DB |
 | `redis` | 6379 | Rate limiter backing store |
@@ -51,7 +51,7 @@ See [docs/deployment-aws.md](docs/deployment-aws.md) for production ECS + RDS se
 ## Project Structure
 
 ```
-schick/
+dupli1/
 ├── auth/                 # Auth service (cmd/ + pkg/)
 ├── product/              # Product catalog
 ├── inventory/            # Inventory service
@@ -74,7 +74,7 @@ Each service follows hexagonal architecture: `domain/`, `service/`, `ports/`, `i
 
 Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](docs/endpoints.md).
 
-### Auth (`schick-auth` :18080)
+### Auth (`dupli1-auth` :18080)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
@@ -96,7 +96,7 @@ Login and refresh are rate-limited per IP via Redis.
 
 Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on startup when `JWT_PRIVATE_KEY_FILE` is not set.
 
-### Products (`schick-product` :8081)
+### Products (`dupli1-product` :8081)
 
 **Public**
 
@@ -122,7 +122,7 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 | PUT | `/api/v1/coupons/{code}` | Update coupon |
 | DELETE | `/api/v1/coupons/{code}` | Delete coupon |
 
-### Inventory (`schick-inventory` :8082)
+### Inventory (`dupli1-inventory` :8082)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -134,7 +134,7 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 | POST | `/api/v1/inventory/reservations/{id}/commit` | Commit reservation |
 | POST | `/api/v1/inventory/reservations/{id}/release` | Release reservation |
 
-### Orders (`schick-order` :8083)
+### Orders (`dupli1-order` :8083)
 
 Requires `Authorization: Bearer <token>` when `JWT_SECRET` is set (HMAC validator in Compose — see [docs/current-state.md](docs/current-state.md)).
 
@@ -184,17 +184,17 @@ Returns the updated product with `imageUrls` populated.
 | `JWT_PRIVATE_KEY_FILE` | — | Path to PEM-encoded RSA private key (RS256); ephemeral key used in dev if unset |
 | `JWT_KEY_ID` | `default` | `kid` value in the JWKS document |
 | `JWT_EXPIRATION` | `15m` | Access token lifetime |
-| `SCHICK_AUTH_ADDR` | `:8080` | Listen address |
+| `DUPLI1_AUTH_ADDR` | `:8080` | Listen address |
 | `OWNER_EMAIL` | — | Seed owner email (skips seeding if empty) |
 | `OWNER_PASSWORD` | — | Seed owner password |
-| `SCHICK_WEB_SERVICE_EMAIL` | — | Seed schick-web service account email |
-| `SCHICK_WEB_SERVICE_PASSWORD` | — | Seed schick-web service account password |
+| `DUPLI1_WEB_SERVICE_EMAIL` | — | Seed dupli1-web service account email |
+| `DUPLI1_WEB_SERVICE_PASSWORD` | — | Seed dupli1-web service account password |
 
 ### Product service
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCHICK_PRODUCT_DB` | — | Postgres connection string |
+| `DUPLI1_PRODUCT_DB` | — | Postgres connection string |
 | `AUTH_JWKS_URL` | — | JWKS URL for RS256 token validation (set in Compose) |
 | `JWT_SECRET` | — | HS256 fallback when JWKS is unavailable |
 | `SERVER_HOST` | `localhost` | Listen host |
@@ -209,15 +209,15 @@ Returns the updated product with `imageUrls` populated.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `JWT_SECRET` | — | When set, enables Bearer auth on order/checkout routes |
-| `SCHICK_INVENTORY_URL` | — | Inventory service base URL |
-| `SCHICK_PRODUCT_URL` | — | Product service base URL (coupon redeem) |
+| `DUPLI1_INVENTORY_URL` | — | Inventory service base URL |
+| `DUPLI1_PRODUCT_URL` | — | Product service base URL (coupon redeem) |
 
 ### MinIO
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MINIO_ACCESS_KEY` | `schick` | Root user |
-| `MINIO_SECRET_KEY` | `schick_dev` | Root password |
+| `MINIO_ACCESS_KEY` | `dupli1` | Root user |
+| `MINIO_SECRET_KEY` | `dupli1_dev` | Root password |
 
 ## Testing
 

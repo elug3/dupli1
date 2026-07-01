@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/elug3/schick/product/pkg/domain"
-	"github.com/elug3/schick/product/pkg/ports"
+	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/ports"
 )
 
 const (

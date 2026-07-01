@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/elug3/schick/inventory/pkg/domain"
-	"github.com/elug3/schick/inventory/pkg/infra/memory"
-	"github.com/elug3/schick/inventory/pkg/service"
+	"github.com/elug3/dupli1/inventory/pkg/domain"
+	"github.com/elug3/dupli1/inventory/pkg/infra/memory"
+	"github.com/elug3/dupli1/inventory/pkg/service"
 )
 
 func TestReserveAndCommitStock(t *testing.T) {

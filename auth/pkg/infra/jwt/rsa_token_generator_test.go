@@ -11,7 +11,7 @@ import (
 	"math/big"
 	"testing"
 
-	jwtinfra "github.com/elug3/schick/auth/pkg/infra/jwt"
+	jwtinfra "github.com/elug3/dupli1/auth/pkg/infra/jwt"
 )
 
 // testRSAKey is generated once per test binary run (2048-bit is fast enough).

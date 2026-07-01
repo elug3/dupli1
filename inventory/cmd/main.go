@@ -7,11 +7,11 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/elug3/schick/inventory/pkg"
+	"github.com/elug3/dupli1/inventory/pkg"
 )
 
 var usageStr = `
-Usage: schick-inventory [OPTIONS]
+Usage: dupli1-inventory [OPTIONS]
 
 An inventory server application that serves stock and reservation APIs over HTTP.
 
@@ -27,7 +27,7 @@ Options:
 `
 
 func main() {
-	fs := flag.NewFlagSet("schick-inventory", flag.ExitOnError)
+	fs := flag.NewFlagSet("dupli1-inventory", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, usageStr)
 	}

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elug3/schick/auth/pkg/domain"
-	"github.com/elug3/schick/auth/pkg/handler"
-	jwtgen "github.com/elug3/schick/auth/pkg/infra/jwt"
-	"github.com/elug3/schick/auth/pkg/service"
+	"github.com/elug3/dupli1/auth/pkg/domain"
+	"github.com/elug3/dupli1/auth/pkg/handler"
+	jwtgen "github.com/elug3/dupli1/auth/pkg/infra/jwt"
+	"github.com/elug3/dupli1/auth/pkg/service"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -64,7 +64,7 @@ func TestCustomerRegistrarCanRegisterButNotManageUsers(t *testing.T) {
 
 	registrar, err := domain.NewUser(
 		uuid.New().String(),
-		"schick-web@internal.schick",
+		"dupli1-web@internal.dupli1",
 		"service-secret",
 		domain.RoleCustomerRegistrar,
 	)

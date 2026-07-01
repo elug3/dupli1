@@ -17,18 +17,18 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: schick
-          POSTGRES_PASSWORD: schick_dev
-          POSTGRES_DB: schick_db
+          POSTGRES_USER: dupli1
+          POSTGRES_PASSWORD: dupli1_dev
+          POSTGRES_DB: dupli1_db
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U schick -d schick_db"
+          --health-cmd "pg_isready -U dupli1 -d dupli1_db"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      POSTGRES_URL: postgres://schick:schick_dev@localhost:5432/schick_db?sslmode=disable
+      POSTGRES_URL: postgres://dupli1:dupli1_dev@localhost:5432/dupli1_db?sslmode=disable
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elug3/schick/order/pkg/domain"
-	"github.com/elug3/schick/order/pkg/service"
+	"github.com/elug3/dupli1/order/pkg/domain"
+	"github.com/elug3/dupli1/order/pkg/service"
 )
 
 func (h *Handler) checkoutSessions(w http.ResponseWriter, r *http.Request) {

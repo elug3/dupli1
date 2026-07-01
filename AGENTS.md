@@ -1,13 +1,13 @@
 # AGENTS.md
 
-Guidance for AI agents working in the Schick repository.
+Guidance for AI agents working in the Dupli1 repository.
 
 ## Repository status
 
-Schick is a Go microservice backend for a fashion bag marketplace. The repo contains:
+Dupli1 is a Go microservice backend for a fashion bag marketplace. The repo contains:
 
 - Five HTTP services in `auth/`, `product/`, `inventory/`, `order/`, `notification/` (each with `cmd/` + `pkg/`)
-- nginx gateway in `api/` (`schick-proxy` in Docker Compose)
+- nginx gateway in `api/` (`dupli1-proxy` in Docker Compose)
 - Docker Compose for local development
 - Terraform and GitHub Actions for AWS ECS deployment
 
@@ -42,13 +42,13 @@ Docker Compose provides two Postgres instances:
 
 | Service | Host port | Database | User | Password |
 |---------|-----------|----------|------|----------|
-| `postgres-auth` | 5432 | `schick_db` | `schick` | `schick_dev` |
-| `postgres-product` | 5433 | `products` | `schick` | `schick_dev` |
+| `postgres-auth` | 5432 | `dupli1_db` | `dupli1` | `dupli1_dev` |
+| `postgres-product` | 5433 | `products` | `dupli1` | `dupli1_dev` |
 
 Connection strings:
 
-- Auth: `postgres://schick:schick_dev@localhost:5432/schick_db?sslmode=disable`
-- Product: `postgres://schick:schick_dev@localhost:5433/products?sslmode=disable`
+- Auth: `postgres://dupli1:dupli1_dev@localhost:5432/dupli1_db?sslmode=disable`
+- Product: `postgres://dupli1:dupli1_dev@localhost:5433/products?sslmode=disable`
 
 Production uses **Amazon RDS** — see [docs/deployment-aws.md](docs/deployment-aws.md) and [infra/terraform/README.md](infra/terraform/README.md).
 
@@ -65,11 +65,11 @@ Direct service ports (bypass gateway):
 
 | Service | Host port |
 |---------|-----------|
-| `schick-auth` | 18080 |
-| `schick-product` | 8081 |
-| `schick-inventory` | 8082 |
-| `schick-order` | 8083 |
-| `schick-notification` | 8084 |
+| `dupli1-auth` | 18080 |
+| `dupli1-product` | 8081 |
+| `dupli1-inventory` | 8082 |
+| `dupli1-order` | 8083 |
+| `dupli1-notification` | 8084 |
 
 ### Running a single service (without Docker)
 
@@ -97,7 +97,7 @@ cd order && go test ./...
 
 ### Gotchas
 
-- **Module paths:** all services use `github.com/elug3/schick/<service>` (e.g. `github.com/elug3/schick/product`). There is no top-level `go.work`.
+- **Module paths:** all services use `github.com/elug3/dupli1/<service>` (e.g. `github.com/elug3/dupli1/product`). There is no top-level `go.work`.
 - **Auth token flow:** login returns only a `refresh_token`; call `POST /api/v1/auth/refresh` to obtain a short-lived access token in the `token` field.
 - **Product JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint).
 - **Order JWT:** when `JWT_SECRET` is set, order/checkout require Bearer tokens validated with HMAC — not aligned with auth RS256 yet.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Pull Schick production RDS connection strings from AWS Secrets Manager
+# Pull Dupli1 production RDS connection strings from AWS Secrets Manager
 # and write a local .env.rds file for docker compose or direct service runs.
 #
 # Prerequisites:
@@ -15,7 +15,7 @@ set -euo pipefail
 AWS_REGION="${AWS_REGION:-us-east-1}"
 OUTPUT_FILE="${OUTPUT_FILE:-.env.rds}"
 JWT_SECRET="${JWT_SECRET:-dev-secret-change-in-production}"
-OWNER_EMAIL="${OWNER_EMAIL:-admin@schick.com}"
+OWNER_EMAIL="${OWNER_EMAIL:-admin@dupli1.com}"
 OWNER_PASSWORD="${OWNER_PASSWORD:-password}"
 
 require_cmd() {
@@ -30,7 +30,7 @@ require_cmd jq
 
 SECRET_ARN="${DB_SECRET_ARN:-$(aws secretsmanager list-secrets \
   --region "$AWS_REGION" \
-  --query "SecretList[?contains(Name, 'schick/production/database')].ARN | [0]" \
+  --query "SecretList[?contains(Name, 'dupli1/production/database')].ARN | [0]" \
   --output text)}"
 
 if [[ -z "$SECRET_ARN" || "$SECRET_ARN" == "None" ]]; then
@@ -59,14 +59,14 @@ DB_URL=${AUTH_DB_URL}
 OWNER_EMAIL=${OWNER_EMAIL}
 OWNER_PASSWORD=${OWNER_PASSWORD}
 
-SCHICK_PRODUCT_DB=${PRODUCT_DB_URL}
+DUPLI1_PRODUCT_DB=${PRODUCT_DB_URL}
 S3_ENDPOINT=http://localhost:9000
-S3_ACCESS_KEY=schick
-S3_SECRET_KEY=schick_dev
+S3_ACCESS_KEY=dupli1
+S3_SECRET_KEY=dupli1_dev
 S3_BUCKET=product-images
 
-MINIO_ACCESS_KEY=schick
-MINIO_SECRET_KEY=schick_dev
+MINIO_ACCESS_KEY=dupli1
+MINIO_SECRET_KEY=dupli1_dev
 EOF
 
 chmod 600 "$OUTPUT_FILE"

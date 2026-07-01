@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	notification "github.com/elug3/schick/notification/pkg"
+	notification "github.com/elug3/dupli1/notification/pkg"
 )
 
 type Options = notification.ServerOptions
@@ -67,10 +67,10 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 }
 
 func applyEnv(opts *notification.ServerOptions) {
-	if v := os.Getenv("SCHICK_NOTIFICATION_ADDR"); v != "" {
+	if v := os.Getenv("DUPLI1_NOTIFICATION_ADDR"); v != "" {
 		opts.Addr = v
 	}
-	if v := os.Getenv("SCHICK_NOTIFICATION_NATS_URL"); v != "" {
+	if v := os.Getenv("DUPLI1_NOTIFICATION_NATS_URL"); v != "" {
 		opts.NATSURL = v
 	} else if v := os.Getenv("NATS_URL"); v != "" {
 		opts.NATSURL = v

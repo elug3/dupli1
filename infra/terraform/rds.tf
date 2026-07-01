@@ -3,9 +3,9 @@ resource "random_password" "db_master" {
   special = false
 }
 
-resource "aws_db_subnet_group" "schick" {
+resource "aws_db_subnet_group" "dupli1" {
   name        = "${var.project_name}-${var.environment}-rds"
-  description = "Private subnets for Schick RDS"
+  description = "Private subnets for Dupli1 RDS"
   subnet_ids  = var.private_subnet_ids
 
   tags = {
@@ -17,7 +17,7 @@ resource "aws_db_subnet_group" "schick" {
 
 resource "aws_security_group" "rds" {
   name        = "${var.project_name}-${var.environment}-rds"
-  description = "Allow PostgreSQL from Schick ECS tasks"
+  description = "Allow PostgreSQL from Dupli1 ECS tasks"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -42,10 +42,10 @@ resource "aws_security_group" "rds" {
   }
 }
 
-resource "aws_db_parameter_group" "schick" {
+resource "aws_db_parameter_group" "dupli1" {
   name        = "${var.project_name}-${var.environment}-postgres16"
   family      = "postgres16"
-  description = "Schick PostgreSQL 16 parameters"
+  description = "Dupli1 PostgreSQL 16 parameters"
 
   tags = {
     Name        = "${var.project_name}-${var.environment}-postgres16"
@@ -54,7 +54,7 @@ resource "aws_db_parameter_group" "schick" {
   }
 }
 
-resource "aws_db_instance" "schick" {
+resource "aws_db_instance" "dupli1" {
   identifier = "${var.project_name}-${var.environment}"
 
   engine         = "postgres"
@@ -70,9 +70,9 @@ resource "aws_db_instance" "schick" {
   username = var.db_username
   password = random_password.db_master.result
 
-  db_subnet_group_name   = aws_db_subnet_group.schick.name
+  db_subnet_group_name   = aws_db_subnet_group.dupli1.name
   vpc_security_group_ids = [aws_security_group.rds.id]
-  parameter_group_name   = aws_db_parameter_group.schick.name
+  parameter_group_name   = aws_db_parameter_group.dupli1.name
 
   publicly_accessible = false
   multi_az            = false

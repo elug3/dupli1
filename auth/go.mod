@@ -1,4 +1,4 @@
-module github.com/elug3/schick/auth
+module github.com/elug3/dupli1/auth
 
 go 1.26.3
 

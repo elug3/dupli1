@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elug3/schick/auth/pkg/autherrors"
-	"github.com/elug3/schick/auth/pkg/bootstrap"
-	"github.com/elug3/schick/auth/pkg/domain"
-	"github.com/elug3/schick/auth/pkg/handler"
-	jwtgen "github.com/elug3/schick/auth/pkg/infra/jwt"
-	"github.com/elug3/schick/auth/pkg/infra/memory"
-	"github.com/elug3/schick/auth/pkg/service"
+	"github.com/elug3/dupli1/auth/pkg/autherrors"
+	"github.com/elug3/dupli1/auth/pkg/bootstrap"
+	"github.com/elug3/dupli1/auth/pkg/domain"
+	"github.com/elug3/dupli1/auth/pkg/handler"
+	jwtgen "github.com/elug3/dupli1/auth/pkg/infra/jwt"
+	"github.com/elug3/dupli1/auth/pkg/infra/memory"
+	"github.com/elug3/dupli1/auth/pkg/service"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -114,7 +114,7 @@ func newStack(t *testing.T) *stack {
 
 	registrar, err := domain.NewUser(
 		uuid.New().String(),
-		"registrar@internal.schick",
+		"registrar@internal.dupli1",
 		"registrar-secret",
 		domain.RoleCustomerRegistrar,
 	)

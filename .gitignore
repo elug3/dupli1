@@ -10,8 +10,7 @@
 # Go build artifacts
 *.exe
 *.test
-cmd/schick-product/schick-product
-cmd/schick-proxy/schick-proxy
+product/cmd/dupli1-product
 
 # Terraform
 infra/terraform/.terraform/

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/elug3/schick/order/pkg"
+	"github.com/elug3/dupli1/order/pkg"
 )
 
 type Options = order.ServerOptions
@@ -64,19 +64,19 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 }
 
 func applyEnv(opts *order.ServerOptions) {
-	if v := os.Getenv("SCHICK_ORDER_ADDR"); v != "" {
+	if v := os.Getenv("DUPLI1_ORDER_ADDR"); v != "" {
 		opts.Addr = v
 	}
-	if v := os.Getenv("SCHICK_INVENTORY_URL"); v != "" {
+	if v := os.Getenv("DUPLI1_INVENTORY_URL"); v != "" {
 		opts.InventoryURL = v
 	}
-	if v := os.Getenv("SCHICK_PRODUCT_URL"); v != "" {
+	if v := os.Getenv("DUPLI1_PRODUCT_URL"); v != "" {
 		opts.ProductURL = v
 	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.JWTSecret = v
 	}
-	if v := os.Getenv("SCHICK_ORDER_NATS_URL"); v != "" {
+	if v := os.Getenv("DUPLI1_ORDER_NATS_URL"); v != "" {
 		opts.NATSURL = v
 	} else if v := os.Getenv("NATS_URL"); v != "" {
 		opts.NATSURL = v

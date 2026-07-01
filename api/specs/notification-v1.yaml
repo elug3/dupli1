@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Schick Notification API
+  title: Dupli1 Notification API
   version: v1
   description: |
-    Private notification service API for the Schick marketplace.
+    Private notification service API for the Dupli1 marketplace.
 
     Currently exposes a health endpoint only. Outbound messaging is handled
     asynchronously via NATS event subscriptions (Telegram notifier) and is not
@@ -14,7 +14,7 @@ info:
 
 servers:
   - url: http://localhost:8084
-    description: Direct schick-notification service (not routed via gateway)
+    description: Direct dupli1-notification service (not routed via gateway)
 
 tags:
   - name: Health

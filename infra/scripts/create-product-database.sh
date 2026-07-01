@@ -17,7 +17,7 @@ require_cmd jq
 
 SECRET_ARN="${DB_SECRET_ARN:-$(aws secretsmanager list-secrets \
   --region "$AWS_REGION" \
-  --query "SecretList[?contains(Name, 'schick/production/database')].ARN | [0]" \
+  --query "SecretList[?contains(Name, 'dupli1/production/database')].ARN | [0]" \
   --output text)}"
 
 if [[ -z "$SECRET_ARN" || "$SECRET_ARN" == "None" ]]; then
@@ -41,7 +41,7 @@ echo "Ensuring database '$PRODUCT_DB_NAME' exists on $DB_HOST..."
 NETWORK_JSON="$(aws ecs describe-services \
   --region "$AWS_REGION" \
   --cluster "$CLUSTER" \
-  --services schick-auth \
+  --services dupli1-auth \
   --query 'services[0].networkConfiguration.awsvpcConfiguration' \
   --output json)"
 
@@ -59,7 +59,7 @@ TASK_DEF_FILE="$(mktemp)"
 jq -n \
   --arg cmd "$INIT_CMD" \
   '{
-    family: "schick-db-init",
+    family: "dupli1-db-init",
     networkMode: "awsvpc",
     requiresCompatibilities: ["FARGATE"],
     cpu: "256",

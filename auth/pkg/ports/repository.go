@@ -3,7 +3,7 @@ package ports
 import (
 	"context"
 
-	"github.com/elug3/schick/auth/pkg/domain"
+	"github.com/elug3/dupli1/auth/pkg/domain"
 )
 
 // UserRepository defines persistence operations for users.

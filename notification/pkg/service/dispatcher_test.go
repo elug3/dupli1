@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elug3/schick/notification/pkg/service"
+	"github.com/elug3/dupli1/notification/pkg/service"
 )
 
 type recordedNotifier struct {

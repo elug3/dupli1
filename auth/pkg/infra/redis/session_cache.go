@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/elug3/schick/auth/pkg/ports"
+	"github.com/elug3/dupli1/auth/pkg/ports"
 	"github.com/redis/go-redis/v9"
 )
 

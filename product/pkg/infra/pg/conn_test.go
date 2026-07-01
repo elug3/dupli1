@@ -8,16 +8,16 @@ func TestWithPostgresSSLMode(t *testing.T) {
 		want string
 	}{
 		{
-			in:   "postgres://schick:schick_dev@localhost:5432/products?sslmode=disable",
-			want: "postgres://schick:schick_dev@localhost:5432/products?sslmode=disable",
+			in:   "postgres://dupli1:dupli1_dev@localhost:5432/products?sslmode=disable",
+			want: "postgres://dupli1:dupli1_dev@localhost:5432/products?sslmode=disable",
 		},
 		{
-			in:   "postgres://schick:secret@schick-production.abc123.us-east-1.rds.amazonaws.com:5432/products",
-			want: "postgres://schick:secret@schick-production.abc123.us-east-1.rds.amazonaws.com:5432/products?sslmode=require",
+			in:   "postgres://dupli1:secret@dupli1-production.abc123.us-east-1.rds.amazonaws.com:5432/products",
+			want: "postgres://dupli1:secret@dupli1-production.abc123.us-east-1.rds.amazonaws.com:5432/products?sslmode=require",
 		},
 		{
-			in:   "host=localhost user=schick password=secret dbname=products",
-			want: "host=localhost user=schick password=secret dbname=products sslmode=disable",
+			in:   "host=localhost user=dupli1 password=secret dbname=products",
+			want: "host=localhost user=dupli1 password=secret dbname=products sslmode=disable",
 		},
 	}
 

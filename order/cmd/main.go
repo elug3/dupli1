@@ -7,11 +7,11 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/elug3/schick/order/pkg"
+	"github.com/elug3/dupli1/order/pkg"
 )
 
 var usageStr = `
-Usage: schick-order [OPTIONS]
+Usage: dupli1-order [OPTIONS]
 
 An order server application that serves checkout and order lifecycle APIs over HTTP.
 
@@ -31,7 +31,7 @@ Options:
 `
 
 func main() {
-	fs := flag.NewFlagSet("schick-order", flag.ExitOnError)
+	fs := flag.NewFlagSet("dupli1-order", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, usageStr)
 	}

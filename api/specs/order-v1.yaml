@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Schick Order API
+  title: Dupli1 Order API
   version: v1
   description: |
-    Private order lifecycle and checkout session API for the Schick marketplace.
+    Private order lifecycle and checkout session API for the Dupli1 marketplace.
 
     **Authentication:** When `JWT_SECRET` is configured, protected routes require
     `Authorization: Bearer <token>` validated with HS256 (not yet aligned with auth RS256/JWKS).
@@ -17,7 +17,7 @@ servers:
   - url: http://localhost:8080
     description: Local nginx gateway
   - url: http://localhost:8083
-    description: Direct schick-order service
+    description: Direct dupli1-order service
 
 tags:
   - name: Health
@@ -332,7 +332,7 @@ paths:
       operationId: checkoutApplyCoupon
       security:
         - bearerAuth: []
-      description: Redeems the coupon via the product service (`SCHICK_PRODUCT_URL`).
+      description: Redeems the coupon via the product service (`DUPLI1_PRODUCT_URL`).
       parameters:
         - $ref: '#/components/parameters/SessionId'
       requestBody:

@@ -3,9 +3,9 @@ package bootstrap
 import (
 	"net/http"
 
-	"github.com/elug3/schick/auth/pkg/domain"
-	"github.com/elug3/schick/auth/pkg/handler"
-	redisinfra "github.com/elug3/schick/auth/pkg/infra/redis"
+	"github.com/elug3/dupli1/auth/pkg/domain"
+	"github.com/elug3/dupli1/auth/pkg/handler"
+	redisinfra "github.com/elug3/dupli1/auth/pkg/infra/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )

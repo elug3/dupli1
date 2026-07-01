@@ -7,18 +7,18 @@ COPY pkg/inventory/go.mod pkg/inventory/
 COPY pkg/notification/go.mod pkg/notification/
 COPY pkg/order/go.mod pkg/order/
 COPY pkg/product/go.mod pkg/product/go.sum pkg/product/
-COPY cmd/schick-auth/go.mod cmd/schick-auth/
-COPY cmd/schick-inventory/go.mod cmd/schick-inventory/
-COPY cmd/schick-notification/go.mod cmd/schick-notification/
-COPY cmd/schick-order/go.mod cmd/schick-order/
-COPY cmd/schick-product/go.mod cmd/schick-product/
+COPY cmd/dupli1-auth/go.mod cmd/dupli1-auth/
+COPY cmd/dupli1-inventory/go.mod cmd/dupli1-inventory/
+COPY cmd/dupli1-notification/go.mod cmd/dupli1-notification/
+COPY cmd/dupli1-order/go.mod cmd/dupli1-order/
+COPY cmd/dupli1-product/go.mod cmd/dupli1-product/
 # Full source for what we build
 COPY pkg/order/ pkg/order/
-COPY cmd/schick-order/ cmd/schick-order/
-RUN go build -o /schick-order ./cmd/schick-order
+COPY cmd/dupli1-order/ cmd/dupli1-order/
+RUN go build -o /dupli1-order ./cmd/dupli1-order
 
 FROM alpine:3.21
 RUN adduser -D -u 1000 app
 USER app
-COPY --from=builder /schick-order /schick-order
-ENTRYPOINT ["/schick-order"]
+COPY --from=builder /dupli1-order /dupli1-order
+ENTRYPOINT ["/dupli1-order"]

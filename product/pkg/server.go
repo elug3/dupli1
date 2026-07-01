@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/elug3/schick/product/pkg/bootstrap"
+	"github.com/elug3/dupli1/product/pkg/bootstrap"
 )
 
 // ProductSearchServer is the read-only server for customers to search products.

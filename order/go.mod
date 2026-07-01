@@ -1,4 +1,4 @@
-module github.com/elug3/schick/order
+module github.com/elug3/dupli1/order
 
 go 1.26.3
 

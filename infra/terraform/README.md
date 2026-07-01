@@ -1,15 +1,15 @@
-# Schick AWS RDS
+# Dupli1 AWS RDS
 
-Terraform for the production PostgreSQL database used by `schick-auth` and `schick-product`.
+Terraform for the production PostgreSQL database used by `dupli1-auth` and `dupli1-product`.
 
 ## What this creates
 
-- RDS PostgreSQL 16 (`schick-production`) in private subnets
+- RDS PostgreSQL 16 (`dupli1-production`) in private subnets
 - Dedicated RDS security group (port 5432 from ECS tasks only)
 - Secrets Manager entries:
-  - `schick/production/database`
-  - `schick/production/auth-db-url`
-  - `schick/production/product-db-url`
+  - `dupli1/production/database`
+  - `dupli1/production/auth-db-url`
+  - `dupli1/production/product-db-url`
 
 Local development continues to use Docker Compose Postgres containers. Production ECS services read connection strings from Secrets Manager.
 
@@ -62,13 +62,13 @@ docker compose -f docker-compose.yml -f docker-compose.rds.yml --env-file .env.r
 
 | Service | Env var | Database |
 |---------|---------|----------|
-| `schick-auth` | `DB_URL` | `schick_db` |
-| `schick-product` | `SCHICK_PRODUCT_DB` | `products` |
+| `dupli1-auth` | `DB_URL` | `dupli1_db` |
+| `dupli1-product` | `DUPLI1_PRODUCT_DB` | `products` |
 
 Production URLs use `sslmode=require`. Auth automatically selects SSL mode based on host (local/docker → disable, RDS → require).
 
 ## Notes
 
-- RDS creates `schick_db` on first boot. Run `create-product-database.sh` for `products`.
-- The legacy `schick-postgres` ECS service is no longer needed after cutover.
+- RDS creates `dupli1_db` on first boot. Run `create-product-database.sh` for `products`.
+- The legacy `dupli1-postgres` ECS service is no longer needed after cutover.
 - Rotate credentials via Secrets Manager and redeploy ECS services.

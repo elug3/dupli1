@@ -55,7 +55,7 @@ type ServerOptions struct {
 	OwnerEmail    string
 	OwnerPassword string
 
-	// WebServiceEmail and WebServicePassword seed the schick-web service account.
+	// WebServiceEmail and WebServicePassword seed the dupli1-web service account.
 	WebServiceEmail    string
 	WebServicePassword string
 }
@@ -71,7 +71,7 @@ func NewServerOptions() *ServerOptions {
 		ShutdownTimeout:    10 * time.Second,
 		TokenExpiry:        15 * time.Minute,
 		RefreshTokenExpiry: 24 * time.Hour,
-		CookieName:     "schick_session",
+		CookieName:     "dupli1_session",
 		CookieSecure:   true,
 		CookieHTTPOnly: true,
 		MaxConns:           100,

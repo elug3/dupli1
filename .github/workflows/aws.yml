@@ -22,27 +22,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - service: schick-auth
+          - service: dupli1-auth
             dockerfile: Dockerfile
             context: .
             build_args: SERVICE=auth
-          - service: schick-inventory
+          - service: dupli1-inventory
             dockerfile: Dockerfile
             context: .
             build_args: SERVICE=inventory
-          - service: schick-notification
+          - service: dupli1-notification
             dockerfile: Dockerfile
             context: .
             build_args: SERVICE=notification
-          - service: schick-order
+          - service: dupli1-order
             dockerfile: Dockerfile
             context: .
             build_args: SERVICE=order
-          - service: schick-product
+          - service: dupli1-product
             dockerfile: Dockerfile
             context: .
             build_args: SERVICE=product
-          - service: schick-proxy
+          - service: dupli1-proxy
             dockerfile: api/Dockerfile
             context: .
             build_args: ""
@@ -112,12 +112,12 @@ jobs:
       fail-fast: false
       matrix:
         service:
-          - schick-auth
-          - schick-inventory
-          - schick-notification
-          - schick-order
-          - schick-product
-          - schick-proxy
+          - dupli1-auth
+          - dupli1-inventory
+          - dupli1-notification
+          - dupli1-order
+          - dupli1-product
+          - dupli1-proxy
 
     steps:
       - name: Configure AWS credentials

@@ -1,10 +1,10 @@
 # Current Code State
 
-Authoritative snapshot of what is implemented in the Schick repository today.
+Authoritative snapshot of what is implemented in the Dupli1 repository today.
 
 ## Overview
 
-Schick is a fashion bag marketplace backend: Go microservices behind an nginx gateway. Local dev uses Docker Compose; production uses AWS ECS Fargate and Amazon RDS PostgreSQL.
+Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx gateway. Local dev uses Docker Compose; production uses AWS ECS Fargate and Amazon RDS PostgreSQL.
 
 | Area | Status |
 |------|--------|
@@ -17,7 +17,7 @@ Schick is a fashion bag marketplace backend: Go microservices behind an nginx ga
 
 ## Repository layout
 
-Services live in **per-service directories**, not `cmd/schick-*` / `pkg/*` at the repo root:
+Services live in **per-service directories**, not `cmd/dupli1-*` / `pkg/*` at the repo root:
 
 ```text
 auth/, product/, inventory/, order/, notification/   # each has cmd/ + pkg/
@@ -28,11 +28,11 @@ See [service-layout.md](service-layout.md) for details.
 
 ## Services
 
-### schick-auth
+### dupli1-auth
 
 - **Host port (Compose):** 18080 → container 8080
 - **Stack:** Gin, PostgreSQL, Redis, optional NATS
-- **Persistence:** `schick_db` on `postgres-auth`
+- **Persistence:** `dupli1_db` on `postgres-auth`
 - **Features:**
   - Login returns a **refresh token**; `POST /refresh` returns a short-lived **access token** (`token` field)
   - RS256 JWT + JWKS at `/api/v1/auth/.well-known/jwks.json`
@@ -41,11 +41,11 @@ See [service-layout.md](service-layout.md) for details.
   - Register requires `admin`, `user_manager`, or `customer_registrar` (not public)
   - User admin at `/api/v1/auth/users`
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD`
-  - `schick-web` service account seeded from `SCHICK_WEB_SERVICE_EMAIL` / `SCHICK_WEB_SERVICE_PASSWORD`
+  - `dupli1-web` service account seeded from `DUPLI1_WEB_SERVICE_EMAIL` / `DUPLI1_WEB_SERVICE_PASSWORD`
   - Login/refresh rate-limited per IP via Redis
 - **Tests:** `cd auth && go test ./...`
 
-### schick-product
+### dupli1-product
 
 - **Host port:** 8081
 - **Stack:** stdlib HTTP, PostgreSQL, MinIO/S3
@@ -58,7 +58,7 @@ See [service-layout.md](service-layout.md) for details.
   - Inline schema migration on startup
 - **Tests:** `cd product && go test ./...`
 
-### schick-inventory
+### dupli1-inventory
 
 - **Host port:** 8082
 - **Persistence:** In-memory
@@ -66,7 +66,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Auth:** None
 - **Tests:** `cd inventory && go test ./...`
 
-### schick-order
+### dupli1-order
 
 - **Host port:** 8083
 - **Persistence:** In-memory
@@ -77,12 +77,12 @@ See [service-layout.md](service-layout.md) for details.
 - **Auth:** Bearer JWT when `JWT_SECRET` is set (HMAC validator — **not aligned with auth RS256 yet**)
 - **Tests:** `cd order && go test ./...`
 
-### schick-notification
+### dupli1-notification
 
 - **Host port:** 8084
 - **Status:** `GET /health` only
 
-### schick-proxy
+### dupli1-proxy
 
 - **Host ports:** 8080 and 80 (HTTP), 443 exposed but TLS not configured in nginx
 - **Config:** [api/nginx.conf](../api/nginx.conf)
@@ -92,7 +92,7 @@ See [service-layout.md](service-layout.md) for details.
 
 | Store | Used by | Local |
 |-------|---------|-------|
-| PostgreSQL `schick_db` | auth | `postgres-auth:5432` |
+| PostgreSQL `dupli1_db` | auth | `postgres-auth:5432` |
 | PostgreSQL `products` | product | `postgres-product:5433` |
 | MinIO `product-images` | product | `minio:9000` |
 | In-memory | inventory, order | process-local |
@@ -115,12 +115,12 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md).
 
 | Module | Path |
 |--------|------|
-| `github.com/elug3/schick` | root stub |
-| `github.com/elug3/schick/auth` | `auth/` |
-| `github.com/elug3/schick/product` | `product/` |
-| `github.com/elug3/schick/inventory` | `inventory/` |
-| `github.com/elug3/schick/order` | `order/` |
-| `github.com/elug3/schick/notification` | `notification/` |
+| `github.com/elug3/dupli1` | root stub |
+| `github.com/elug3/dupli1/auth` | `auth/` |
+| `github.com/elug3/dupli1/product` | `product/` |
+| `github.com/elug3/dupli1/inventory` | `inventory/` |
+| `github.com/elug3/dupli1/order` | `order/` |
+| `github.com/elug3/dupli1/notification` | `notification/` |
 
 ## Known gaps
 

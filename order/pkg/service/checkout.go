@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/elug3/schick/order/pkg/domain"
-	"github.com/elug3/schick/order/pkg/ports"
+	"github.com/elug3/dupli1/order/pkg/domain"
+	"github.com/elug3/dupli1/order/pkg/ports"
 )
 
 type CreateCheckoutSessionInput struct {

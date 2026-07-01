@@ -25,7 +25,7 @@ type Config struct {
 	OwnerEmail    string
 	OwnerPassword string
 
-	// WebServiceEmail and WebServicePassword seed the schick-web service account.
+	// WebServiceEmail and WebServicePassword seed the dupli1-web service account.
 	// When WebServiceEmail is empty, seeding is skipped.
 	WebServiceEmail    string
 	WebServicePassword string

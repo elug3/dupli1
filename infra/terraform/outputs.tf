@@ -1,16 +1,16 @@
 output "rds_endpoint" {
   description = "RDS hostname."
-  value       = aws_db_instance.schick.address
+  value       = aws_db_instance.dupli1.address
 }
 
 output "rds_port" {
   description = "RDS port."
-  value       = aws_db_instance.schick.port
+  value       = aws_db_instance.dupli1.port
 }
 
 output "rds_identifier" {
   description = "RDS instance identifier."
-  value       = aws_db_instance.schick.id
+  value       = aws_db_instance.dupli1.id
 }
 
 output "rds_security_group_id" {
@@ -24,21 +24,21 @@ output "db_secret_arn" {
 }
 
 output "auth_db_url_secret_arn" {
-  description = "Secrets Manager ARN for schick-auth DB_URL."
+  description = "Secrets Manager ARN for dupli1-auth DB_URL."
   value       = aws_secretsmanager_secret.auth_db_url.arn
 }
 
 output "product_db_url_secret_arn" {
-  description = "Secrets Manager ARN for schick-product SCHICK_PRODUCT_DB."
+  description = "Secrets Manager ARN for dupli1-product DUPLI1_PRODUCT_DB."
   value       = aws_secretsmanager_secret.product_db_url.arn
 }
 
 output "auth_db_url_template" {
   description = "Auth connection string with password redacted."
-  value       = "postgres://${var.db_username}:<password>@${aws_db_instance.schick.address}:${aws_db_instance.schick.port}/${var.db_name}?sslmode=require"
+  value       = "postgres://${var.db_username}:<password>@${aws_db_instance.dupli1.address}:${aws_db_instance.dupli1.port}/${var.db_name}?sslmode=require"
 }
 
 output "product_db_url_template" {
   description = "Product connection string with password redacted."
-  value       = "postgres://${var.db_username}:<password>@${aws_db_instance.schick.address}:${aws_db_instance.schick.port}/${var.product_db_name}?sslmode=require"
+  value       = "postgres://${var.db_username}:<password>@${aws_db_instance.dupli1.address}:${aws_db_instance.dupli1.port}/${var.product_db_name}?sslmode=require"
 }

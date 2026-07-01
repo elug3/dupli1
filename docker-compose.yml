@@ -6,15 +6,15 @@ services:
   postgres-auth:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: schick_db
-      POSTGRES_USER: schick
-      POSTGRES_PASSWORD: schick_dev
+      POSTGRES_DB: dupli1_db
+      POSTGRES_USER: dupli1
+      POSTGRES_PASSWORD: dupli1_dev
     ports:
       - "5432:5432"
     volumes:
       - postgres-auth-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U schick -d schick_db"]
+      test: ["CMD-SHELL", "pg_isready -U dupli1 -d dupli1_db"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,14 +23,14 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: products
-      POSTGRES_USER: schick
-      POSTGRES_PASSWORD: schick_dev
+      POSTGRES_USER: dupli1
+      POSTGRES_PASSWORD: dupli1_dev
     ports:
       - "5433:5432"
     volumes:
       - postgres-product-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U schick -d products"]
+      test: ["CMD-SHELL", "pg_isready -U dupli1 -d products"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -64,8 +64,8 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-schick}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-schick_dev}
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-dupli1}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-dupli1_dev}
     volumes:
       - minio-data:/data
     healthcheck:
@@ -81,13 +81,13 @@ services:
         condition: service_healthy
     entrypoint: >
       sh -c "
-        mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-schick} ${MINIO_SECRET_KEY:-schick_dev} &&
+        mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-dupli1} ${MINIO_SECRET_KEY:-dupli1_dev} &&
         mc mb --ignore-existing local/product-images &&
         mc anonymous set download local/product-images
       "
     restart: "no"
 
-  schick-auth:
+  dupli1-auth:
     build:
       context: .
       dockerfile: Dockerfile
@@ -96,15 +96,15 @@ services:
     ports:
       - "18080:8080"
     environment:
-      DB_URL: postgres://schick:schick_dev@postgres-auth:5432/schick_db?sslmode=disable
+      DB_URL: postgres://dupli1:dupli1_dev@postgres-auth:5432/dupli1_db?sslmode=disable
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
-      SCHICK_AUTH_ADDR: :8080
-      OWNER_EMAIL: admin@schick.com
+      DUPLI1_AUTH_ADDR: :8080
+      OWNER_EMAIL: admin@dupli1.com
       OWNER_PASSWORD: password
-      SCHICK_WEB_SERVICE_EMAIL: schick-web@internal.schick
-      SCHICK_WEB_SERVICE_PASSWORD: schick-web-dev-secret
+      DUPLI1_WEB_SERVICE_EMAIL: dupli1-web@internal.dupli1
+      DUPLI1_WEB_SERVICE_PASSWORD: dupli1-web-dev-secret
     depends_on:
       postgres-auth:
         condition: service_healthy
@@ -120,7 +120,7 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  schick-product:
+  dupli1-product:
     build:
       context: .
       dockerfile: Dockerfile
@@ -129,20 +129,20 @@ services:
     ports:
       - "8081:8080"
     environment:
-      SCHICK_PRODUCT_DB: postgres://schick:schick_dev@postgres-product:5432/products?sslmode=disable
+      DUPLI1_PRODUCT_DB: postgres://dupli1:dupli1_dev@postgres-product:5432/products?sslmode=disable
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
-      AUTH_JWKS_URL: http://schick-auth:8080/api/v1/auth/.well-known/jwks.json
+      AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
       NATS_URL: nats://nats:4222
       S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-schick}
-      S3_SECRET_KEY: ${MINIO_SECRET_KEY:-schick_dev}
+      S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dupli1}
+      S3_SECRET_KEY: ${MINIO_SECRET_KEY:-dupli1_dev}
       S3_BUCKET: product-images
     depends_on:
       postgres-product:
         condition: service_healthy
-      schick-auth:
+      dupli1-auth:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -156,7 +156,7 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  schick-inventory:
+  dupli1-inventory:
     build:
       context: .
       dockerfile: Dockerfile
@@ -165,7 +165,7 @@ services:
     ports:
       - "8082:8080"
     environment:
-      SCHICK_INVENTORY_ADDR: :8080
+      DUPLI1_INVENTORY_ADDR: :8080
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 5s
@@ -174,7 +174,7 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  schick-order:
+  dupli1-order:
     build:
       context: .
       dockerfile: Dockerfile
@@ -183,13 +183,13 @@ services:
     ports:
       - "8083:8080"
     environment:
-      SCHICK_ORDER_ADDR: :8080
-      SCHICK_INVENTORY_URL: http://schick-inventory:8080
-      SCHICK_PRODUCT_URL: http://schick-product:8080
+      DUPLI1_ORDER_ADDR: :8080
+      DUPLI1_INVENTORY_URL: http://dupli1-inventory:8080
+      DUPLI1_PRODUCT_URL: http://dupli1-product:8080
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
       NATS_URL: nats://nats:4222
     depends_on:
-      schick-inventory:
+      dupli1-inventory:
         condition: service_healthy
       nats:
         condition: service_healthy
@@ -201,7 +201,7 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  schick-notification:
+  dupli1-notification:
     build:
       context: .
       dockerfile: Dockerfile
@@ -210,7 +210,7 @@ services:
     ports:
       - "8084:8080"
     environment:
-      SCHICK_NOTIFICATION_ADDR: :8080
+      DUPLI1_NOTIFICATION_ADDR: :8080
       NATS_URL: nats://nats:4222
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_ORDER_CHAT_ID: ${TELEGRAM_ORDER_CHAT_ID:-}
@@ -225,7 +225,7 @@ services:
       retries: 10
       start_period: 20s
 
-  schick-proxy:
+  dupli1-proxy:
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -236,13 +236,13 @@ services:
     volumes:
       - ./certs:/etc/nginx/certs:ro
     depends_on:
-      schick-auth:
+      dupli1-auth:
         condition: service_healthy
-      schick-product:
+      dupli1-product:
         condition: service_healthy
-      schick-inventory:
+      dupli1-inventory:
         condition: service_healthy
-      schick-order:
+      dupli1-order:
         condition: service_healthy
     restart: unless-stopped
 

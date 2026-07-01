@@ -12,8 +12,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/elug3/schick/auth/pkg/autherrors"
-	"github.com/elug3/schick/auth/pkg/ports"
+	"github.com/elug3/dupli1/auth/pkg/autherrors"
+	"github.com/elug3/dupli1/auth/pkg/ports"
 	"github.com/golang-jwt/jwt/v5"
 )
 
