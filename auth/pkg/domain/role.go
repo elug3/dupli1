@@ -6,5 +6,6 @@ const (
 	RoleAdmin              = "admin"
 	RoleUserManager        = "user_manager"
 	RoleCustomerRegistrar  = "customer_registrar"
+	RoleProductManager     = "product_manager"
 	RoleCustomer           = "customer"
 )

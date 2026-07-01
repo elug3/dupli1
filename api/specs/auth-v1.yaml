@@ -467,7 +467,7 @@ components:
           type: array
           items:
             type: string
-            enum: [admin, user_manager, customer_registrar, customer, owner]
+            enum: [admin, user_manager, customer_registrar, customer, owner, product_manager]
         is_active:
           type: boolean
         locked_at:

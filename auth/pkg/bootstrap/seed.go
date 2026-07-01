@@ -24,7 +24,7 @@ func seedOwner(ctx context.Context, cfg Config, repo ports.UserRepository) error
 		return nil
 	}
 
-	u, err := domain.NewUser(uuid.New().String(), cfg.OwnerEmail, cfg.OwnerPassword, domain.RoleOwner)
+	u, err := domain.NewUser(uuid.New().String(), cfg.OwnerEmail, cfg.OwnerPassword, domain.RoleOwner, domain.RoleProductManager)
 	if err != nil {
 		return fmt.Errorf("seed owner: create: %w", err)
 	}
