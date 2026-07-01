@@ -10,18 +10,18 @@ import (
 	"strings"
 	"time"
 
-	auth "github.com/elug3/schick/auth/pkg"
+	auth "github.com/elug3/dupli1/auth/pkg"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-// Options configures the schick-auth executable.
+// Options configures the dupli1-auth executable.
 type Options = auth.ServerOptions
 
 func newRootCmd() *cobra.Command {
 	root := newServeCmd()
-	root.Use = "schick-auth"
-	root.Short = "Auth server for the Schick platform"
+	root.Use = "dupli1-auth"
+	root.Short = "Auth server for the Dupli1 platform"
 	root.AddCommand(newResetCmd())
 	return root
 }
@@ -121,8 +121,8 @@ func newServeCmd() *cobra.Command {
 	f.StringVar(&logLevel, "log-level", logLevel, "Log level: debug, info, warn, error")
 	f.StringVar(&ownerEmail, "owner-email", ownerEmail, "Email for the initial owner account (seeded on first startup)")
 	f.StringVar(&ownerPassword, "owner-password", ownerPassword, "Password for the initial owner account")
-	f.StringVar(&webServiceEmail, "web-service-email", webServiceEmail, "Email for the schick-web service account (seeded on first startup)")
-	f.StringVar(&webServicePassword, "web-service-password", webServicePassword, "Password for the schick-web service account")
+	f.StringVar(&webServiceEmail, "web-service-email", webServiceEmail, "Email for the dupli1-web service account (seeded on first startup)")
+	f.StringVar(&webServicePassword, "web-service-password", webServicePassword, "Password for the dupli1-web service account")
 
 	return cmd
 }
@@ -181,7 +181,7 @@ func buildOpts(
 }
 
 func applyEnv(opts *auth.ServerOptions) {
-	if v := os.Getenv("SCHICK_AUTH_ADDR"); v != "" {
+	if v := os.Getenv("DUPLI1_AUTH_ADDR"); v != "" {
 		opts.Addr = v
 	}
 	if host := os.Getenv("SERVER_HOST"); host != "" {
@@ -191,7 +191,7 @@ func applyEnv(opts *auth.ServerOptions) {
 		}
 		opts.Addr = net.JoinHostPort(host, port)
 	}
-	if v := os.Getenv("SCHICK_AUTH_PUBLIC_ADDR"); v != "" {
+	if v := os.Getenv("DUPLI1_AUTH_PUBLIC_ADDR"); v != "" {
 		opts.PublicAddr = v
 	}
 	if v := os.Getenv("DB_URL"); v != "" {
@@ -200,7 +200,7 @@ func applyEnv(opts *auth.ServerOptions) {
 	if v := os.Getenv("REDIS_URL"); v != "" {
 		opts.RedisURL = v
 	}
-	if v := os.Getenv("SCHICK_AUTH_NATS_URL"); v != "" {
+	if v := os.Getenv("DUPLI1_AUTH_NATS_URL"); v != "" {
 		opts.NATSURL = v
 	} else if v := os.Getenv("NATS_URL"); v != "" {
 		opts.NATSURL = v
@@ -211,7 +211,7 @@ func applyEnv(opts *auth.ServerOptions) {
 	if v := os.Getenv("JWT_KEY_ID"); v != "" {
 		opts.JWTKeyID = v
 	}
-	if v := os.Getenv("SCHICK_AUTH_DEBUG"); v != "" {
+	if v := os.Getenv("DUPLI1_AUTH_DEBUG"); v != "" {
 		opts.Debug = strings.EqualFold(v, "true") || v == "1"
 	}
 	if v := os.Getenv("OWNER_EMAIL"); v != "" {
@@ -220,23 +220,23 @@ func applyEnv(opts *auth.ServerOptions) {
 	if v := os.Getenv("OWNER_PASSWORD"); v != "" {
 		opts.OwnerPassword = v
 	}
-	if v := os.Getenv("SCHICK_WEB_SERVICE_EMAIL"); v != "" {
+	if v := os.Getenv("DUPLI1_WEB_SERVICE_EMAIL"); v != "" {
 		opts.WebServiceEmail = v
 	}
-	if v := os.Getenv("SCHICK_WEB_SERVICE_PASSWORD"); v != "" {
+	if v := os.Getenv("DUPLI1_WEB_SERVICE_PASSWORD"); v != "" {
 		opts.WebServicePassword = v
 	}
 
-	setDurationEnv(&opts.ReadTimeout, "SCHICK_AUTH_READ_TIMEOUT")
-	setDurationEnv(&opts.WriteTimeout, "SCHICK_AUTH_WRITE_TIMEOUT")
-	setDurationEnv(&opts.IdleTimeout, "SCHICK_AUTH_IDLE_TIMEOUT")
-	setDurationEnv(&opts.ShutdownTimeout, "SCHICK_AUTH_SHUTDOWN_TIMEOUT")
+	setDurationEnv(&opts.ReadTimeout, "DUPLI1_AUTH_READ_TIMEOUT")
+	setDurationEnv(&opts.WriteTimeout, "DUPLI1_AUTH_WRITE_TIMEOUT")
+	setDurationEnv(&opts.IdleTimeout, "DUPLI1_AUTH_IDLE_TIMEOUT")
+	setDurationEnv(&opts.ShutdownTimeout, "DUPLI1_AUTH_SHUTDOWN_TIMEOUT")
 	setDurationEnv(&opts.TokenExpiry, "JWT_EXPIRATION")
-	setDurationEnv(&opts.RefreshTokenExpiry, "SCHICK_AUTH_REFRESH_TOKEN_EXPIRY")
-	if v := os.Getenv("SCHICK_AUTH_LOG_OUTPUT"); v != "" {
+	setDurationEnv(&opts.RefreshTokenExpiry, "DUPLI1_AUTH_REFRESH_TOKEN_EXPIRY")
+	if v := os.Getenv("DUPLI1_AUTH_LOG_OUTPUT"); v != "" {
 		opts.LogOutput = v
 	}
-	if v := os.Getenv("SCHICK_AUTH_LOG_LEVEL"); v != "" {
+	if v := os.Getenv("DUPLI1_AUTH_LOG_LEVEL"); v != "" {
 		opts.LogLevel = v
 	}
 }

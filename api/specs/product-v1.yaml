@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Schick Product API
+  title: Dupli1 Product API
   version: v1
   description: |
-    Private product catalog and coupon API for the Schick marketplace.
+    Private product catalog and coupon API for the Dupli1 marketplace.
 
     Protected routes require a Bearer access token (RS256 via auth JWKS when AUTH_JWKS_URL is set,
     or HS256 via JWT_SECRET in dev). The token must include claim "type": "access".
@@ -12,7 +12,7 @@ servers:
   - url: http://localhost:8080
     description: Local nginx gateway
   - url: http://localhost:8081
-    description: Direct schick-product service
+    description: Direct dupli1-product service
 
 tags:
   - name: Health

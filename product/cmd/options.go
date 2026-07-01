@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/elug3/schick/product/pkg"
+	"github.com/elug3/dupli1/product/pkg"
 )
 
 func ConfigureOptions(fs *flag.FlagSet, args []string) (product.ServerOptions, error) {
@@ -38,8 +38,8 @@ func applyEnv(opts *product.ServerOptions) {
 	if v := os.Getenv("DB_URL"); v != "" {
 		opts.DatabaseConnString = v
 	}
-	// SCHICK_PRODUCT_DB takes precedence over the generic DB_URL
-	if v := os.Getenv("SCHICK_PRODUCT_DB"); v != "" {
+	// DUPLI1_PRODUCT_DB takes precedence over the generic DB_URL
+	if v := os.Getenv("DUPLI1_PRODUCT_DB"); v != "" {
 		opts.DatabaseConnString = v
 	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
@@ -48,8 +48,8 @@ func applyEnv(opts *product.ServerOptions) {
 	if v := os.Getenv("AUTH_JWKS_URL"); v != "" {
 		opts.JWKSURL = v
 	}
-	setIntEnv(&opts.ReadTimeout, "SCHICK_PRODUCT_READ_TIMEOUT")
-	setIntEnv(&opts.WriteTimeout, "SCHICK_PRODUCT_WRITE_TIMEOUT")
+	setIntEnv(&opts.ReadTimeout, "DUPLI1_PRODUCT_READ_TIMEOUT")
+	setIntEnv(&opts.WriteTimeout, "DUPLI1_PRODUCT_WRITE_TIMEOUT")
 	if v := os.Getenv("S3_ENDPOINT"); v != "" {
 		opts.S3Endpoint = v
 	}
@@ -62,7 +62,7 @@ func applyEnv(opts *product.ServerOptions) {
 	if v := os.Getenv("S3_BUCKET"); v != "" {
 		opts.S3Bucket = v
 	}
-	if v := os.Getenv("SCHICK_PRODUCT_NATS_URL"); v != "" {
+	if v := os.Getenv("DUPLI1_PRODUCT_NATS_URL"); v != "" {
 		opts.NATSURL = v
 	} else if v := os.Getenv("NATS_URL"); v != "" {
 		opts.NATSURL = v

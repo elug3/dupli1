@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/elug3/schick/product/pkg/authjwt"
-	"github.com/elug3/schick/product/pkg/handler"
-	natsinfra "github.com/elug3/schick/product/pkg/infra/nats"
-	"github.com/elug3/schick/product/pkg/infra/pg"
-	s3store "github.com/elug3/schick/product/pkg/infra/s3"
-	"github.com/elug3/schick/product/pkg/middleware"
-	"github.com/elug3/schick/product/pkg/ports"
-	"github.com/elug3/schick/product/pkg/service"
+	"github.com/elug3/dupli1/product/pkg/authjwt"
+	"github.com/elug3/dupli1/product/pkg/handler"
+	natsinfra "github.com/elug3/dupli1/product/pkg/infra/nats"
+	"github.com/elug3/dupli1/product/pkg/infra/pg"
+	s3store "github.com/elug3/dupli1/product/pkg/infra/s3"
+	"github.com/elug3/dupli1/product/pkg/middleware"
+	"github.com/elug3/dupli1/product/pkg/ports"
+	"github.com/elug3/dupli1/product/pkg/service"
 )
 
 // App holds wired product service dependencies and the HTTP handler.

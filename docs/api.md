@@ -1,4 +1,4 @@
-# Schick API Reference
+# Dupli1 API Reference
 
 All traffic is routed through the nginx gateway. Locally use **HTTP** at `http://localhost:8080` or `http://localhost` (port 80). Production terminates TLS at the load balancer or gateway.
 
@@ -86,18 +86,18 @@ Create a new user account. Requires `admin`, `user_manager`, or `customer_regist
 
 ---
 
-### Service account: schick-web
+### Service account: dupli1-web
 
-The `schick-web` BFF uses a seeded machine account with the `customer_registrar` role. It can call `POST /api/v1/auth/register` to create customer accounts, but cannot manage passwords, roles, or user status.
+The `dupli1-web` BFF uses a seeded machine account with the `customer_registrar` role. It can call `POST /api/v1/auth/register` to create customer accounts, but cannot manage passwords, roles, or user status.
 
-Configure on `schick-auth` startup:
+Configure on `dupli1-auth` startup:
 
 | Variable | Purpose |
 |----------|---------|
-| `SCHICK_WEB_SERVICE_EMAIL` | Service account email (skip seeding when empty) |
-| `SCHICK_WEB_SERVICE_PASSWORD` | Service account password (required when email is set) |
+| `DUPLI1_WEB_SERVICE_EMAIL` | Service account email (skip seeding when empty) |
+| `DUPLI1_WEB_SERVICE_PASSWORD` | Service account password (required when email is set) |
 
-`schick-web` should log in with these credentials server-side, cache/refresh the access token, and call register from the backend only — never expose the service password to browsers.
+`dupli1-web` should log in with these credentials server-side, cache/refresh the access token, and call register from the backend only — never expose the service password to browsers.
 
 ---
 
@@ -212,7 +212,7 @@ List all users. Requires `admin` role.
   "users": [
     {
       "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
-      "email": "admin@schick.com",
+      "email": "admin@dupli1.com",
       "roles": ["admin"],
       "is_active": true,
       "locked_at": null,

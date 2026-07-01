@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/elug3/schick/auth/pkg/ports"
+	"github.com/elug3/dupli1/auth/pkg/ports"
 )
 
 // ErrSessionNotFound is kept for backwards compatibility; prefer ports.ErrSessionNotFound.

@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/elug3/schick/auth/pkg/autherrors"
-	"github.com/elug3/schick/auth/pkg/domain"
+	"github.com/elug3/dupli1/auth/pkg/autherrors"
+	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/lib/pq"
 )
 

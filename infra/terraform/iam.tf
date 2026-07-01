@@ -1,6 +1,6 @@
 data "aws_iam_policy_document" "ecs_task_execution_secrets" {
   statement {
-    sid    = "ReadSchickDatabaseSecrets"
+    sid    = "ReadDupli1DatabaseSecrets"
     effect = "Allow"
 
     actions = [

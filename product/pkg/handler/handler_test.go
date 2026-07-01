@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elug3/schick/product/pkg/domain"
-	"github.com/elug3/schick/product/pkg/handler"
-	"github.com/elug3/schick/product/pkg/infra/memory"
-	"github.com/elug3/schick/product/pkg/service"
+	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/handler"
+	"github.com/elug3/dupli1/product/pkg/infra/memory"
+	"github.com/elug3/dupli1/product/pkg/service"
 )
 
 // newMux registers only the public routes (no auth middleware).

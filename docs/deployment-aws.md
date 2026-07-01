@@ -1,16 +1,16 @@
 # AWS deployment
 
-Schick production runs on **ECS Fargate** in `us-east-1`. Images are built and pushed by `.github/workflows/aws.yml`.
+Dupli1 production runs on **ECS Fargate** in `us-east-1`. Images are built and pushed by `.github/workflows/aws.yml`.
 
 ## Database
 
-Production uses **Amazon RDS PostgreSQL 16**, not the legacy `schick-postgres` ECS container.
+Production uses **Amazon RDS PostgreSQL 16**, not the legacy `dupli1-postgres` ECS container.
 
 | Component | Details |
 |-----------|---------|
-| Instance | `schick-production` |
-| Databases | `schick_db` (auth), `products` (product) |
-| Credentials | AWS Secrets Manager (`schick/production/*`) |
+| Instance | `dupli1-production` |
+| Databases | `dupli1_db` (auth), `products` (product) |
+| Credentials | AWS Secrets Manager (`dupli1/production/*`) |
 | Network | Private subnets in `web-prod-vpc` |
 | SSL | `sslmode=require` |
 
@@ -29,14 +29,14 @@ See [infra/terraform/README.md](../infra/terraform/README.md) for full steps.
 
 | Service | Purpose |
 |---------|---------|
-| `schick-auth` | Authentication API |
-| `schick-product` | Product catalog API |
-| `schick-proxy` | nginx reverse proxy (ALB mode) |
-| `schick-inventory` | Inventory API (in-memory) |
-| `schick-order` | Order API (in-memory) |
-| `schick-notification` | Notification API |
+| `dupli1-auth` | Authentication API |
+| `dupli1-product` | Product catalog API |
+| `dupli1-proxy` | nginx reverse proxy (ALB mode) |
+| `dupli1-inventory` | Inventory API (in-memory) |
+| `dupli1-order` | Order API (in-memory) |
+| `dupli1-notification` | Notification API |
 
-`schick-postgres` is deprecated after RDS cutover.
+`dupli1-postgres` is deprecated after RDS cutover.
 
 ## Required GitHub configuration
 

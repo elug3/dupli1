@@ -1,11 +1,11 @@
 # Services Layout
 
-How the Schick Go backend is organized, what each service owns, and where to add new code.
+How the Dupli1 Go backend is organized, what each service owns, and where to add new code.
 
 ## Directory map
 
 ```text
-schick/
+dupli1/
 ├── auth/                     # Auth service module
 │   ├── cmd/                  # CLI entrypoint (cobra)
 │   └── pkg/                  # domain, service, ports, infra, handler, bootstrap
@@ -22,7 +22,7 @@ schick/
 │   ├── cmd/
 │   └── pkg/
 ├── api/
-│   ├── nginx.conf            # Gateway routing (schick-proxy image)
+│   ├── nginx.conf            # Gateway routing (dupli1-proxy image)
 │   └── Dockerfile
 ├── infra/
 │   ├── terraform/
@@ -54,7 +54,7 @@ Configuration lives in `bootstrap/config.go` and/or package `options.go`.
 
 ### Auth (`auth/pkg`)
 
-**Module:** `github.com/elug3/schick/auth`  
+**Module:** `github.com/elug3/dupli1/auth`  
 **Framework:** Gin  
 **Storage:** PostgreSQL (required), Redis (rate limits + session cache in Compose), NATS (optional events)
 
@@ -64,11 +64,11 @@ Owns:
 - RBAC roles: `owner`, `admin`, `user_manager`, `customer_registrar`, `customer`
 - User admin at `/api/v1/auth/users` (not `/api/v1/users`)
 - Owner seeding via `OWNER_EMAIL` / `OWNER_PASSWORD`
-- Service account seeding via `SCHICK_WEB_SERVICE_EMAIL` / `SCHICK_WEB_SERVICE_PASSWORD` (`customer_registrar`)
+- Service account seeding via `DUPLI1_WEB_SERVICE_EMAIL` / `DUPLI1_WEB_SERVICE_PASSWORD` (`customer_registrar`)
 
 ### Product (`product/pkg`)
 
-**Module:** `github.com/elug3/schick/product`  
+**Module:** `github.com/elug3/dupli1/product`  
 **Framework:** stdlib `net/http`  
 **Storage:** PostgreSQL (`products` table), MinIO/S3 (images)
 
@@ -80,36 +80,36 @@ Owns:
 
 ### Inventory (`inventory/pkg`)
 
-**Module:** `github.com/elug3/schick/inventory`  
+**Module:** `github.com/elug3/dupli1/inventory`  
 **Storage:** In-memory
 
 Owns stock and reservations at `/api/v1/inventory/*`. No authentication today.
 
 ### Order (`order/pkg`)
 
-**Module:** `github.com/elug3/schick/order`  
+**Module:** `github.com/elug3/dupli1/order`  
 **Storage:** In-memory
 
 Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/checkout/sessions`. Requires Bearer JWT when `JWT_SECRET` is set (HMAC only today — see [current-state.md](current-state.md)).
 
 ### Notification (`notification/pkg`)
 
-**Module:** `github.com/elug3/schick/notification`  
+**Module:** `github.com/elug3/dupli1/notification`  
 **Status:** Health endpoint only
 
 ## Gateway routing
 
-`schick-proxy` uses [api/nginx.conf](../api/nginx.conf). Local gateway: **HTTP** on port **8080** (also mapped to host port 80).
+`dupli1-proxy` uses [api/nginx.conf](../api/nginx.conf). Local gateway: **HTTP** on port **8080** (also mapped to host port 80).
 
 | Path prefix | Backend |
 |-------------|---------|
 | `/gateway/health` | nginx (static `ok`) |
-| `/api/v1/auth/` | schick-auth |
-| `/api/v1/products` | schick-product |
-| `/api/v1/coupons` | schick-product |
-| `/api/v1/inventory/` | schick-inventory |
-| `/api/v1/orders` | schick-order |
-| `/api/v1/checkout` | schick-order |
+| `/api/v1/auth/` | dupli1-auth |
+| `/api/v1/products` | dupli1-product |
+| `/api/v1/coupons` | dupli1-product |
+| `/api/v1/inventory/` | dupli1-inventory |
+| `/api/v1/orders` | dupli1-order |
+| `/api/v1/checkout` | dupli1-order |
 
 Checkout sessions are served by order (`/api/v1/checkout/sessions`).
 

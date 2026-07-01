@@ -70,12 +70,12 @@ update_service_db_secret() {
 
 AUTH_SECRET_ARN="${AUTH_DB_URL_SECRET_ARN:-$(aws secretsmanager list-secrets \
   --region "$AWS_REGION" \
-  --query "SecretList[?contains(Name, 'schick/production/auth-db-url')].ARN | [0]" \
+  --query "SecretList[?contains(Name, 'dupli1/production/auth-db-url')].ARN | [0]" \
   --output text)}"
 
 PRODUCT_SECRET_ARN="${PRODUCT_DB_URL_SECRET_ARN:-$(aws secretsmanager list-secrets \
   --region "$AWS_REGION" \
-  --query "SecretList[?contains(Name, 'schick/production/product-db-url')].ARN | [0]" \
+  --query "SecretList[?contains(Name, 'dupli1/production/product-db-url')].ARN | [0]" \
   --output text)}"
 
 if [[ -z "$AUTH_SECRET_ARN" || "$AUTH_SECRET_ARN" == "None" ]]; then
@@ -88,7 +88,7 @@ if [[ -z "$PRODUCT_SECRET_ARN" || "$PRODUCT_SECRET_ARN" == "None" ]]; then
   exit 1
 fi
 
-update_service_db_secret "schick-auth" "auth-container" "DB_URL" "$AUTH_SECRET_ARN"
-update_service_db_secret "schick-product" "product-container" "SCHICK_PRODUCT_DB" "$PRODUCT_SECRET_ARN"
+update_service_db_secret "dupli1-auth" "auth-container" "DB_URL" "$AUTH_SECRET_ARN"
+update_service_db_secret "dupli1-product" "product-container" "DUPLI1_PRODUCT_DB" "$PRODUCT_SECRET_ARN"
 
 echo "ECS services now read database URLs from Secrets Manager."

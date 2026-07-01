@@ -1,5 +1,5 @@
 variable "aws_region" {
-  description = "AWS region for Schick production resources."
+  description = "AWS region for Dupli1 production resources."
   type        = string
   default     = "us-east-1"
 }
@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "Resource name prefix."
   type        = string
-  default     = "schick"
+  default     = "dupli1"
 }
 
 variable "environment" {
@@ -52,17 +52,17 @@ variable "db_allocated_storage_gb" {
 variable "db_name" {
   description = "Primary database created on the RDS instance."
   type        = string
-  default     = "schick_db"
+  default     = "dupli1_db"
 }
 
 variable "db_username" {
   description = "Master database username."
   type        = string
-  default     = "schick"
+  default     = "dupli1"
 }
 
 variable "product_db_name" {
-  description = "Secondary database used by schick-product."
+  description = "Secondary database used by dupli1-product."
   type        = string
   default     = "products"
 }

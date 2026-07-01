@@ -7,10 +7,10 @@ import (
 	"log"
 	"net/http"
 
-	natsinfra "github.com/elug3/schick/notification/pkg/infra/nats"
-	telegraminfra "github.com/elug3/schick/notification/pkg/infra/telegram"
-	"github.com/elug3/schick/notification/pkg/ports"
-	"github.com/elug3/schick/notification/pkg/service"
+	natsinfra "github.com/elug3/dupli1/notification/pkg/infra/nats"
+	telegraminfra "github.com/elug3/dupli1/notification/pkg/infra/telegram"
+	"github.com/elug3/dupli1/notification/pkg/ports"
+	"github.com/elug3/dupli1/notification/pkg/service"
 )
 
 // App holds wired notification dependencies.

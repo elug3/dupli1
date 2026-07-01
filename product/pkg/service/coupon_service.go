@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/elug3/schick/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/domain"
 )
 
 type CouponService struct {

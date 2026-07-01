@@ -1,6 +1,6 @@
 package domain
 
-// Built-in role names used by Schick auth RBAC.
+// Built-in role names used by Dupli1 auth RBAC.
 const (
 	RoleOwner              = "owner"
 	RoleAdmin              = "admin"

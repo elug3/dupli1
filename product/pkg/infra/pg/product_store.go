@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/elug3/schick/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/domain"
 )
 
 type ProductSearchStore struct {

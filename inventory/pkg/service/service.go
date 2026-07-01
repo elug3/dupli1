@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elug3/schick/inventory/pkg/domain"
-	"github.com/elug3/schick/inventory/pkg/ports"
+	"github.com/elug3/dupli1/inventory/pkg/domain"
+	"github.com/elug3/dupli1/inventory/pkg/ports"
 )
 
 var (

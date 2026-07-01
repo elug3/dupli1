@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/elug3/schick/order/pkg/domain"
+	"github.com/elug3/dupli1/order/pkg/domain"
 )
 
 var ErrNotFound = errors.New("not found")

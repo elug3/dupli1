@@ -1,6 +1,6 @@
 package ports
 
-import "github.com/elug3/schick/product/pkg/domain"
+import "github.com/elug3/dupli1/product/pkg/domain"
 
 type ProductStore interface {
 	SearchBags(filter map[string]string) ([]domain.Bag, error)

@@ -3,7 +3,7 @@ set -euo pipefail
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
 CLUSTER="${ECS_CLUSTER:-production}"
-SERVICE="${ECS_POSTGRES_SERVICE:-schick-postgres}"
+SERVICE="${ECS_POSTGRES_SERVICE:-dupli1-postgres}"
 DELETE_SERVICE="${DELETE_SERVICE:-true}"
 
 aws ecs update-service \

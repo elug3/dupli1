@@ -5,12 +5,12 @@ All services listen on port `8080` inside Docker. The nginx gateway proxies by p
 | Gateway prefix | Upstream service |
 |---|---|
 | `/gateway/health` | nginx (static) |
-| `/api/v1/auth/` | `schick-auth:8080` |
-| `/api/v1/products` | `schick-product:8080` |
-| `/api/v1/coupons` | `schick-product:8080` |
-| `/api/v1/inventory/` | `schick-inventory:8080` |
-| `/api/v1/orders` | `schick-order:8080` |
-| `/api/v1/checkout` | `schick-order:8080` |
+| `/api/v1/auth/` | `dupli1-auth:8080` |
+| `/api/v1/products` | `dupli1-product:8080` |
+| `/api/v1/coupons` | `dupli1-product:8080` |
+| `/api/v1/inventory/` | `dupli1-inventory:8080` |
+| `/api/v1/orders` | `dupli1-order:8080` |
+| `/api/v1/checkout` | `dupli1-order:8080` |
 
 Local gateway: `http://localhost:8080` (also host port 80).
 
@@ -33,7 +33,7 @@ Each service also registers `/health` directly for internal/sidecar use.
 | `PATCH` | `/api/v1/auth/users/:id/password` | `admin`, `user_manager` | Set a new password for a user |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `admin`, `user_manager` | Activate or deactivate a user |
 
-**schick-web service account:** set `SCHICK_WEB_SERVICE_EMAIL` and `SCHICK_WEB_SERVICE_PASSWORD` on `schick-auth` to seed a machine user with `customer_registrar`. That role may register customers only.
+**dupli1-web service account:** set `DUPLI1_WEB_SERVICE_EMAIL` and `DUPLI1_WEB_SERVICE_PASSWORD` on `dupli1-auth` to seed a machine user with `customer_registrar`. That role may register customers only.
 
 ### GET /api/v1/auth/health
 

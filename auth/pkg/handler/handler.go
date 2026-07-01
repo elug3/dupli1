@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/elug3/schick/auth/pkg/autherrors"
-	"github.com/elug3/schick/auth/pkg/domain"
-	"github.com/elug3/schick/auth/pkg/service"
+	"github.com/elug3/dupli1/auth/pkg/autherrors"
+	"github.com/elug3/dupli1/auth/pkg/domain"
+	"github.com/elug3/dupli1/auth/pkg/service"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 )

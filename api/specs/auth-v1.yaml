@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Schick Auth API
+  title: Dupli1 Auth API
   version: v1
   description: |
-    Private authentication and user administration API for the Schick marketplace.
+    Private authentication and user administration API for the Dupli1 marketplace.
 
     **Token flow**
     1. `POST /login` → `refresh_token` (RS256 JWT, ~24h)
@@ -16,7 +16,7 @@ servers:
   - url: http://localhost:8080
     description: Local nginx gateway
   - url: http://localhost:18080
-    description: Direct schick-auth service
+    description: Direct dupli1-auth service
 
 tags:
   - name: Health

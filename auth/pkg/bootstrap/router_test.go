@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	jwtinfra "github.com/elug3/schick/auth/pkg/infra/jwt"
+	jwtinfra "github.com/elug3/dupli1/auth/pkg/infra/jwt"
 )
 
 func buildTestJWKS(t *testing.T) []byte {

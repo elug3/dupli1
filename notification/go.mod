@@ -1,4 +1,4 @@
-module github.com/elug3/schick/notification
+module github.com/elug3/dupli1/notification
 
 go 1.26.3
 

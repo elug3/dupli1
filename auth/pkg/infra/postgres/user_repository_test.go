@@ -6,10 +6,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/elug3/schick/auth/pkg/autherrors"
-	"github.com/elug3/schick/auth/pkg/bootstrap"
-	"github.com/elug3/schick/auth/pkg/domain"
-	"github.com/elug3/schick/auth/pkg/infra/postgres"
+	"github.com/elug3/dupli1/auth/pkg/autherrors"
+	"github.com/elug3/dupli1/auth/pkg/bootstrap"
+	"github.com/elug3/dupli1/auth/pkg/domain"
+	"github.com/elug3/dupli1/auth/pkg/infra/postgres"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )

@@ -3,10 +3,10 @@ package bootstrap
 import (
 	"net/http"
 
-	"github.com/elug3/schick/inventory/pkg/handler"
-	"github.com/elug3/schick/inventory/pkg/infra/memory"
-	"github.com/elug3/schick/inventory/pkg/ports"
-	"github.com/elug3/schick/inventory/pkg/service"
+	"github.com/elug3/dupli1/inventory/pkg/handler"
+	"github.com/elug3/dupli1/inventory/pkg/infra/memory"
+	"github.com/elug3/dupli1/inventory/pkg/ports"
+	"github.com/elug3/dupli1/inventory/pkg/service"
 )
 
 type App struct {

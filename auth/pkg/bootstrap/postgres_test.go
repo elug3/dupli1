@@ -12,20 +12,20 @@ func TestWithPostgresSSLMode(t *testing.T) {
 			want: "postgresql://postgres:password@172.17.0.2:5432?sslmode=require",
 		},
 		{
-			in:   "postgres://schick:schick_dev@localhost:5432/schick_db?sslmode=disable",
-			want: "postgres://schick:schick_dev@localhost:5432/schick_db?sslmode=disable",
+			in:   "postgres://dupli1:dupli1_dev@localhost:5432/dupli1_db?sslmode=disable",
+			want: "postgres://dupli1:dupli1_dev@localhost:5432/dupli1_db?sslmode=disable",
 		},
 		{
 			in:   "host=localhost user=postgres password=secret",
 			want: "host=localhost user=postgres password=secret sslmode=disable",
 		},
 		{
-			in:   "postgres://schick:secret@schick-production.abc123.us-east-1.rds.amazonaws.com:5432/schick_db",
-			want: "postgres://schick:secret@schick-production.abc123.us-east-1.rds.amazonaws.com:5432/schick_db?sslmode=require",
+			in:   "postgres://dupli1:secret@dupli1-production.abc123.us-east-1.rds.amazonaws.com:5432/dupli1_db",
+			want: "postgres://dupli1:secret@dupli1-production.abc123.us-east-1.rds.amazonaws.com:5432/dupli1_db?sslmode=require",
 		},
 		{
-			in:   "postgres://schick:secret@postgres.schick.local:5432/schick_db",
-			want: "postgres://schick:secret@postgres.schick.local:5432/schick_db?sslmode=disable",
+			in:   "postgres://dupli1:secret@postgres.dupli1.local:5432/dupli1_db",
+			want: "postgres://dupli1:secret@postgres.dupli1.local:5432/dupli1_db?sslmode=disable",
 		},
 	}
 

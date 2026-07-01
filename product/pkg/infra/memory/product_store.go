@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/elug3/schick/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/domain"
 )
 
 // ProductStore is an in-memory implementation of ports.ProductStore, for use in tests.

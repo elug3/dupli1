@@ -8,7 +8,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/elug3/schick/auth/pkg/bootstrap"
+	"github.com/elug3/dupli1/auth/pkg/bootstrap"
 	"github.com/rs/zerolog"
 )
 

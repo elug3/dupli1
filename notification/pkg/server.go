@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/elug3/schick/notification/pkg/bootstrap"
+	"github.com/elug3/dupli1/notification/pkg/bootstrap"
 )
 
 type ServerOptions struct {

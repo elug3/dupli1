@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/elug3/schick/auth/pkg/domain"
-	"github.com/elug3/schick/auth/pkg/ports"
+	"github.com/elug3/dupli1/auth/pkg/domain"
+	"github.com/elug3/dupli1/auth/pkg/ports"
 	"github.com/rs/zerolog"
 )
 
@@ -43,7 +43,7 @@ var _ ports.UserRepository = (*seedFakeRepo)(nil)
 func TestSeedWebServiceAccount_CreatesCustomerRegistrar(t *testing.T) {
 	repo := newSeedFakeRepo()
 	cfg := Config{
-		WebServiceEmail:    "schick-web@internal.schick",
+		WebServiceEmail:    "dupli1-web@internal.dupli1",
 		WebServicePassword: "service-secret",
 		Logger:             zerolog.Nop(),
 	}
@@ -52,7 +52,7 @@ func TestSeedWebServiceAccount_CreatesCustomerRegistrar(t *testing.T) {
 		t.Fatalf("seedWebServiceAccount: %v", err)
 	}
 
-	u := repo.byEmail["schick-web@internal.schick"]
+	u := repo.byEmail["dupli1-web@internal.dupli1"]
 	if u == nil {
 		t.Fatal("service account was not created")
 	}
@@ -67,7 +67,7 @@ func TestSeedWebServiceAccount_CreatesCustomerRegistrar(t *testing.T) {
 func TestSeedWebServiceAccount_Idempotent(t *testing.T) {
 	repo := newSeedFakeRepo()
 	cfg := Config{
-		WebServiceEmail:    "schick-web@internal.schick",
+		WebServiceEmail:    "dupli1-web@internal.dupli1",
 		WebServicePassword: "service-secret",
 		Logger:             zerolog.Nop(),
 	}
@@ -75,12 +75,12 @@ func TestSeedWebServiceAccount_Idempotent(t *testing.T) {
 	if err := seedWebServiceAccount(context.Background(), cfg, repo); err != nil {
 		t.Fatalf("first seed: %v", err)
 	}
-	firstID := repo.byEmail["schick-web@internal.schick"].ID
+	firstID := repo.byEmail["dupli1-web@internal.dupli1"].ID
 
 	if err := seedWebServiceAccount(context.Background(), cfg, repo); err != nil {
 		t.Fatalf("second seed: %v", err)
 	}
-	if got := repo.byEmail["schick-web@internal.schick"].ID; got != firstID {
+	if got := repo.byEmail["dupli1-web@internal.dupli1"].ID; got != firstID {
 		t.Fatalf("second seed changed user id: %s -> %s", firstID, got)
 	}
 }
@@ -103,7 +103,7 @@ func TestSeedWebServiceAccount_SkipsWhenEmailEmpty(t *testing.T) {
 func TestSeedWebServiceAccount_RequiresPassword(t *testing.T) {
 	repo := newSeedFakeRepo()
 	cfg := Config{
-		WebServiceEmail: "schick-web@internal.schick",
+		WebServiceEmail: "dupli1-web@internal.dupli1",
 		Logger:          zerolog.Nop(),
 	}
 

@@ -3,7 +3,7 @@ set -euo pipefail
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
 CLUSTER="${ECS_CLUSTER:-production}"
-LEGACY_HOST="${LEGACY_DB_HOST:-postgres.schick.local}"
+LEGACY_HOST="${LEGACY_DB_HOST:-postgres.dupli1.local}"
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -17,7 +17,7 @@ require_cmd jq
 
 SECRET_ARN="${DB_SECRET_ARN:-$(aws secretsmanager list-secrets \
   --region "$AWS_REGION" \
-  --query "SecretList[?contains(Name, 'schick/production/database')].ARN | [0]" \
+  --query "SecretList[?contains(Name, 'dupli1/production/database')].ARN | [0]" \
   --output text)}"
 
 if [[ -z "$SECRET_ARN" || "$SECRET_ARN" == "None" ]]; then
@@ -41,7 +41,7 @@ PRODUCT_DB="$(echo "$SECRET_JSON" | jq -r .dbname_product)"
 NETWORK_JSON="$(aws ecs describe-services \
   --region "$AWS_REGION" \
   --cluster "$CLUSTER" \
-  --services schick-auth \
+  --services dupli1-auth \
   --query 'services[0].networkConfiguration.awsvpcConfiguration' \
   --output json)"
 
@@ -49,9 +49,9 @@ SUBNETS="$(echo "$NETWORK_JSON" | jq -r '.subnets | join(",")')"
 SECURITY_GROUPS="$(echo "$NETWORK_JSON" | jq -r '.securityGroups | join(",")')"
 
 MIGRATE_CMD="set -euo pipefail
-export PGPASSWORD='schick_dev'
-pg_dump -h '$LEGACY_HOST' -p 5432 -U schick -d '$AUTH_DB' --no-owner --no-acl -Fc -f /tmp/auth.dump
-pg_dump -h '$LEGACY_HOST' -p 5432 -U schick -d '$PRODUCT_DB' --no-owner --no-acl -Fc -f /tmp/product.dump || true
+export PGPASSWORD='dupli1_dev'
+pg_dump -h '$LEGACY_HOST' -p 5432 -U dupli1 -d '$AUTH_DB' --no-owner --no-acl -Fc -f /tmp/auth.dump
+pg_dump -h '$LEGACY_HOST' -p 5432 -U dupli1 -d '$PRODUCT_DB' --no-owner --no-acl -Fc -f /tmp/product.dump || true
 export PGPASSWORD='$RDS_PASSWORD'
 pg_restore -h '$RDS_HOST' -p '$RDS_PORT' -U '$RDS_USER' -d '$AUTH_DB' --no-owner --no-acl --if-exists --clean /tmp/auth.dump
 if [ -f /tmp/product.dump ]; then
@@ -61,7 +61,7 @@ fi"
 TASK_DEF_JSON="$(jq -n \
   --arg cmd "$MIGRATE_CMD" \
   '{
-    family: "schick-db-migrate",
+    family: "dupli1-db-migrate",
     networkMode: "awsvpc",
     requiresCompatibilities: ["FARGATE"],
     cpu: "512",

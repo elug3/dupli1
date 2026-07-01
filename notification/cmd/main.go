@@ -7,11 +7,11 @@ import (
 	"os"
 	"os/signal"
 
-	notification "github.com/elug3/schick/notification/pkg"
+	notification "github.com/elug3/dupli1/notification/pkg"
 )
 
 var usageStr = `
-Usage: schick-notification [OPTIONS]
+Usage: dupli1-notification [OPTIONS]
 
 A notification server application that owns outbound customer and admin messaging APIs.
 
@@ -27,7 +27,7 @@ Options:
 `
 
 func main() {
-	fs := flag.NewFlagSet("schick-notification", flag.ExitOnError)
+	fs := flag.NewFlagSet("dupli1-notification", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, usageStr)
 	}

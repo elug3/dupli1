@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/elug3/schick/inventory/pkg"
+	"github.com/elug3/dupli1/inventory/pkg"
 )
 
 type Options = inventory.ServerOptions
@@ -55,7 +55,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 }
 
 func applyEnv(opts *inventory.ServerOptions) {
-	if v := os.Getenv("SCHICK_INVENTORY_ADDR"); v != "" {
+	if v := os.Getenv("DUPLI1_INVENTORY_ADDR"); v != "" {
 		opts.Addr = v
 	}
 }

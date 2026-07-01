@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elug3/schick/notification/pkg/ports"
+	"github.com/elug3/dupli1/notification/pkg/ports"
 )
 
 const (

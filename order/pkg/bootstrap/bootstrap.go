@@ -5,14 +5,14 @@ import (
 	"net/http"
 	"time"
 
-	natsinfra "github.com/elug3/schick/order/pkg/infra/nats"
-	"github.com/elug3/schick/order/pkg/authjwt"
-	"github.com/elug3/schick/order/pkg/handler"
-	"github.com/elug3/schick/order/pkg/infra/httpcoupon"
-	"github.com/elug3/schick/order/pkg/infra/httpinventory"
-	"github.com/elug3/schick/order/pkg/infra/memory"
-	"github.com/elug3/schick/order/pkg/ports"
-	"github.com/elug3/schick/order/pkg/service"
+	natsinfra "github.com/elug3/dupli1/order/pkg/infra/nats"
+	"github.com/elug3/dupli1/order/pkg/authjwt"
+	"github.com/elug3/dupli1/order/pkg/handler"
+	"github.com/elug3/dupli1/order/pkg/infra/httpcoupon"
+	"github.com/elug3/dupli1/order/pkg/infra/httpinventory"
+	"github.com/elug3/dupli1/order/pkg/infra/memory"
+	"github.com/elug3/dupli1/order/pkg/ports"
+	"github.com/elug3/dupli1/order/pkg/service"
 )
 
 type Config struct {

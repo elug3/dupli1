@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	natsgo "github.com/nats-io/nats.go"
-	"github.com/elug3/schick/notification/pkg/ports"
+	"github.com/elug3/dupli1/notification/pkg/ports"
 )
 
 // Subscriber listens to NATS subjects and dispatches messages to handlers.

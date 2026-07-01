@@ -1,6 +1,6 @@
 # Checkout Session
 
-Checkout sessions provide a multi-step purchase flow inside the **order service** (`schick-order`). A client builds a cart-like session, optionally applies a coupon, then completes checkout to create a pending order with inventory reserved.
+Checkout sessions provide a multi-step purchase flow inside the **order service** (`dupli1-order`). A client builds a cart-like session, optionally applies a coupon, then completes checkout to create a pending order with inventory reserved.
 
 Direct order creation (`POST /api/v1/orders`) remains available for callers that already have a finalized cart.
 
@@ -9,9 +9,9 @@ Direct order creation (`POST /api/v1/orders`) remains available for callers that
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Order as schick-order
-    participant Product as schick-product
-    participant Inventory as schick-inventory
+    participant Order as dupli1-order
+    participant Product as dupli1-product
+    participant Inventory as dupli1-inventory
 
     Client->>Order: POST /api/v1/checkout/sessions
     Order-->>Client: open session (expires in 30 min)
@@ -41,7 +41,7 @@ Default TTL is **30 minutes** (`domain.DefaultCheckoutTTL`).
 
 ## API
 
-Base path: `/api/v1/checkout/sessions` on `schick-order` (port **8083** locally).
+Base path: `/api/v1/checkout/sessions` on `dupli1-order` (port **8083** locally).
 
 ### `POST /api/v1/checkout/sessions`
 
@@ -127,7 +127,7 @@ Apply a coupon by redeeming it from the product service.
 
 **Response `200`** — session with `coupon_code`, `discount_cents`, and `total_cents` updated.
 
-Requires `SCHICK_PRODUCT_URL` to be configured. Returns `503` when the coupon client is unavailable.
+Requires `DUPLI1_PRODUCT_URL` to be configured. Returns `503` when the coupon client is unavailable.
 
 ---
 
@@ -168,9 +168,9 @@ After completion, use the existing order APIs to confirm, cancel, or fulfill the
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCHICK_ORDER_ADDR` | `:8083` | Listen address |
-| `SCHICK_INVENTORY_URL` | `http://localhost:8082` | Inventory reservation API |
-| `SCHICK_PRODUCT_URL` | `http://localhost:8081` | Coupon redemption API |
+| `DUPLI1_ORDER_ADDR` | `:8083` | Listen address |
+| `DUPLI1_INVENTORY_URL` | `http://localhost:8082` | Inventory reservation API |
+| `DUPLI1_PRODUCT_URL` | `http://localhost:8081` | Coupon redemption API |
 
 ## Errors
 

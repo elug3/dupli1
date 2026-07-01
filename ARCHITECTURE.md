@@ -1,12 +1,12 @@
-# Schick Architecture Guide
+# Dupli1 Architecture Guide
 
-This document defines the mandatory architecture and directory structure for all services in Schick.
+This document defines the mandatory architecture and directory structure for all services in Dupli1.
 
 Every service MUST follow this structure.
 
 ## Philosophy
 
-Schick uses:
+Dupli1 uses:
 
 - Domain Driven Design (DDD)
 - Hexagonal Architecture

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elug3/schick/order/pkg/domain"
+	"github.com/elug3/dupli1/order/pkg/domain"
 )
 
 func TestCheckoutSessionTotalsWithCoupon(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	jwtinfra "github.com/elug3/schick/auth/pkg/infra/jwt"
+	jwtinfra "github.com/elug3/dupli1/auth/pkg/infra/jwt"
 )
 
 func TestRoundtrip_UserIDAndRolesPreserved(t *testing.T) {
