@@ -1,0 +1,55 @@
+openapi: 3.0.3
+info:
+  title: Schick Notification API
+  version: v1
+  description: |
+    Private notification service API for the Schick marketplace.
+
+    Currently exposes a health endpoint only. Outbound messaging is handled
+    asynchronously via NATS event subscriptions (Telegram notifier) and is not
+    part of this REST surface.
+
+    **Gateway:** nginx does not proxy `/api/v1/notification` — call the service
+    directly on port 8084 in local development.
+
+servers:
+  - url: http://localhost:8084
+    description: Direct schick-notification service (not routed via gateway)
+
+tags:
+  - name: Health
+
+paths:
+  /api/v1/notification/health:
+    get:
+      tags: [Health]
+      summary: Service health check
+      operationId: notificationHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: method not allowed

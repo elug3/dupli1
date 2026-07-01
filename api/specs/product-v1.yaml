@@ -1,0 +1,591 @@
+openapi: 3.0.3
+info:
+  title: Schick Product API
+  version: v1
+  description: |
+    Private product catalog and coupon API for the Schick marketplace.
+
+    Protected routes require a Bearer access token (RS256 via auth JWKS when AUTH_JWKS_URL is set,
+    or HS256 via JWT_SECRET in dev). The token must include claim "type": "access".
+
+servers:
+  - url: http://localhost:8080
+    description: Local nginx gateway
+  - url: http://localhost:8081
+    description: Direct schick-product service
+
+tags:
+  - name: Health
+  - name: Products
+  - name: Coupons
+
+paths:
+  /api/v1/products/health:
+    get:
+      tags: [Health]
+      summary: Service health check
+      operationId: productHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+
+  /api/v1/products/bags:
+    get:
+      tags: [Products]
+      summary: Search active bag products
+      operationId: productSearchBags
+      description: Returns products with `category = bags` and `status = active`. Cost is omitted from results.
+      parameters:
+        - name: brand
+          in: query
+          schema:
+            type: string
+          description: Case-insensitive substring match
+        - name: color
+          in: query
+          schema:
+            type: string
+          description: Exact match
+        - name: material
+          in: query
+          schema:
+            type: string
+          description: Exact match
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductSearchResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/{id}:
+    get:
+      tags: [Products]
+      summary: Get public product detail
+      operationId: productPublicGet
+      description: Returns only `active` products. Cost is omitted.
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Product detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProduct'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Products]
+      summary: Update a product
+      operationId: productUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Products]
+      summary: Delete a product
+      operationId: productDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '204':
+          description: Product deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products:
+    get:
+      tags: [Products]
+      summary: List all products
+      operationId: productList
+      security:
+        - bearerAuth: []
+      description: Returns all statuses including drafts and archived. Includes cost.
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Products]
+      summary: Create a product
+      operationId: productCreate
+      security:
+        - bearerAuth: []
+      description: Auto-generates `id` from brand prefix if omitted. Defaults `status` to `active`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/{id}/manage:
+    get:
+      tags: [Products]
+      summary: Get product for management
+      operationId: productManageGet
+      security:
+        - bearerAuth: []
+      description: Returns any status including drafts and archived. Includes cost.
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Full product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/products/{id}/image:
+    put:
+      tags: [Products]
+      summary: Upload a product image
+      operationId: productUploadImage
+      security:
+        - bearerAuth: []
+      description: Multipart upload. Max form size 10 MB. Requires S3/MinIO configuration.
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Product with updated imageUrls
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/coupons/redeem:
+    post:
+      tags: [Coupons]
+      summary: Redeem a coupon
+      operationId: couponRedeem
+      description: Validates an active coupon. Used by checkout/order service. Case-insensitive code lookup.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  example: SUMMER30
+      responses:
+        '200':
+          description: Valid coupon
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Coupon'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Unknown or inactive coupon
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/coupons:
+    get:
+      tags: [Coupons]
+      summary: List all coupons
+      operationId: couponList
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Coupon list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CouponSearchResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Coupons]
+      summary: Create a coupon
+      operationId: couponCreate
+      security:
+        - bearerAuth: []
+      description: Code is normalized to uppercase. Coupons are stored in memory (not persisted).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CouponInput'
+      responses:
+        '201':
+          description: Coupon created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Coupon'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Duplicate coupon code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/coupons/{code}:
+    put:
+      tags: [Coupons]
+      summary: Update a coupon
+      operationId: couponUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CouponCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CouponUpdate'
+      responses:
+        '200':
+          description: Updated coupon
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Coupon'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Coupons]
+      summary: Delete a coupon
+      operationId: couponDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CouponCode'
+      responses:
+        '204':
+          description: Coupon deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from auth service refresh endpoint
+
+  parameters:
+    ProductId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: BOT-001
+    CouponCode:
+      name: code
+      in: path
+      required: true
+      schema:
+        type: string
+      example: SUMMER30
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+        code:
+          type: integer
+
+    ProductStatus:
+      type: string
+      enum: [active, draft, archived]
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          example: BOT-001
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: double
+        cost:
+          type: number
+          format: double
+        brand:
+          type: string
+        color:
+          type: string
+        material:
+          type: string
+        stock:
+          type: integer
+        category:
+          type: string
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        imageUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+        capacity:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    PublicProduct:
+      description: Product without cost field
+      allOf:
+        - $ref: '#/components/schemas/Product'
+        - type: object
+          properties:
+            cost:
+              readOnly: true
+
+    ProductInput:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: double
+        cost:
+          type: number
+          format: double
+        brand:
+          type: string
+        color:
+          type: string
+        material:
+          type: string
+        stock:
+          type: integer
+        category:
+          type: string
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        imageUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+        capacity:
+          type: string
+
+    ProductSearchResponse:
+      type: object
+      required: [total, results]
+      properties:
+        total:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicProduct'
+
+    Coupon:
+      type: object
+      required: [code, discount, description, expires, active]
+      properties:
+        code:
+          type: string
+          example: SUMMER30
+        discount:
+          type: number
+          format: double
+          description: Fraction (0.30 = 30%)
+          example: 0.30
+        description:
+          type: string
+        expires:
+          type: string
+          example: Aug 31, 2026
+        active:
+          type: boolean
+
+    CouponInput:
+      type: object
+      required: [code, discount]
+      properties:
+        code:
+          type: string
+        discount:
+          type: number
+          format: double
+        description:
+          type: string
+        expires:
+          type: string
+        active:
+          type: boolean
+          default: true
+
+    CouponUpdate:
+      type: object
+      properties:
+        discount:
+          type: number
+          format: double
+        description:
+          type: string
+        expires:
+          type: string
+        active:
+          type: boolean
+
+    CouponSearchResponse:
+      type: object
+      required: [total, results]
+      properties:
+        total:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Coupon'
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid Bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
