@@ -70,22 +70,23 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	auth := func(next http.Handler) http.Handler {
-		return middleware.RequireAuth(validator, next)
+	protect := func(next http.Handler) http.Handler {
+		return middleware.RequireAuth(validator,
+			middleware.RequireAnyRole(middleware.ProductManagerRoles...)(next))
 	}
 
-	mux.Handle("GET "+handler.RouteProducts, auth(h.ListProductsHandler()))
-	mux.Handle("POST "+handler.RouteProducts, auth(h.CreateProductHandler()))
-	mux.Handle("GET "+handler.RouteManageProduct, auth(h.GetProductHandler()))
-	mux.Handle("PUT "+handler.RouteProductByID, auth(h.SingleProductHandler()))
-	mux.Handle("DELETE "+handler.RouteProductByID, auth(h.SingleProductHandler()))
+	mux.Handle("GET "+handler.RouteProducts, protect(h.ListProductsHandler()))
+	mux.Handle("POST "+handler.RouteProducts, protect(h.CreateProductHandler()))
+	mux.Handle("GET "+handler.RouteManageProduct, protect(h.GetProductHandler()))
+	mux.Handle("PUT "+handler.RouteProductByID, protect(h.SingleProductHandler()))
+	mux.Handle("DELETE "+handler.RouteProductByID, protect(h.SingleProductHandler()))
 
-	mux.Handle("PUT "+handler.RouteProductImage, auth(h.UploadImageHandler()))
+	mux.Handle("PUT "+handler.RouteProductImage, protect(h.UploadImageHandler()))
 
-	mux.Handle("GET "+handler.RouteCoupons, auth(http.HandlerFunc(h.ListCoupons)))
-	mux.Handle("POST "+handler.RouteCoupons, auth(http.HandlerFunc(h.CreateCoupon)))
-	mux.Handle("PUT "+handler.RouteCouponByCode, auth(http.HandlerFunc(h.UpdateCoupon)))
-	mux.Handle("DELETE "+handler.RouteCouponByCode, auth(http.HandlerFunc(h.DeleteCoupon)))
+	mux.Handle("GET "+handler.RouteCoupons, protect(http.HandlerFunc(h.ListCoupons)))
+	mux.Handle("POST "+handler.RouteCoupons, protect(http.HandlerFunc(h.CreateCoupon)))
+	mux.Handle("PUT "+handler.RouteCouponByCode, protect(http.HandlerFunc(h.UpdateCoupon)))
+	mux.Handle("DELETE "+handler.RouteCouponByCode, protect(http.HandlerFunc(h.DeleteCoupon)))
 
 	return &App{
 		Handler:       mux,

@@ -1,6 +1,7 @@
 package authjwt
 
 import (
+	"context"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
@@ -13,6 +14,37 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+type contextKey struct{}
+
+// Claims holds the verified identity extracted from a JWT.
+type Claims struct {
+	UserID string
+	Roles  []string
+}
+
+// HasRole reports whether any of the given roles is present in the claims.
+func (c Claims) HasRole(roles ...string) bool {
+	for _, want := range roles {
+		for _, have := range c.Roles {
+			if have == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// WithClaims stores claims in the context.
+func WithClaims(ctx context.Context, c Claims) context.Context {
+	return context.WithValue(ctx, contextKey{}, c)
+}
+
+// FromContext retrieves claims from the context. Returns false if not present.
+func FromContext(ctx context.Context) (Claims, bool) {
+	c, ok := ctx.Value(contextKey{}).(Claims)
+	return c, ok
+}
 
 type jwk struct {
 	Kty string `json:"kty"`
@@ -47,7 +79,7 @@ func NewJWKSValidator(url string) *JWKSValidator {
 }
 
 // ValidateAccessToken verifies signature, expiry, and access token type.
-func (v *JWKSValidator) ValidateAccessToken(tokenString string) error {
+func (v *JWKSValidator) ValidateAccessToken(tokenString string) (Claims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -61,17 +93,14 @@ func (v *JWKSValidator) ValidateAccessToken(tokenString string) error {
 		return key, nil
 	})
 	if err != nil || token == nil || !token.Valid {
-		return fmt.Errorf("invalid token")
+		return Claims{}, fmt.Errorf("invalid token")
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
+	mapClaims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return fmt.Errorf("invalid token claims")
+		return Claims{}, fmt.Errorf("invalid token claims")
 	}
-	if tokenType, _ := claims["type"].(string); tokenType != "access" {
-		return fmt.Errorf("access token required")
-	}
-	return nil
+	return claimsFromMap(mapClaims)
 }
 
 func (v *JWKSValidator) publicKey(kid string) (*rsa.PublicKey, error) {
@@ -170,7 +199,7 @@ func NewHMACValidator(secret string) *HMACValidator {
 }
 
 // ValidateAccessToken verifies signature, expiry, and access token type.
-func (v *HMACValidator) ValidateAccessToken(tokenString string) error {
+func (v *HMACValidator) ValidateAccessToken(tokenString string) (Claims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -178,22 +207,62 @@ func (v *HMACValidator) ValidateAccessToken(tokenString string) error {
 		return v.secret, nil
 	})
 	if err != nil || token == nil || !token.Valid {
-		return fmt.Errorf("invalid token")
+		return Claims{}, fmt.Errorf("invalid token")
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
+	mapClaims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return fmt.Errorf("invalid token claims")
+		return Claims{}, fmt.Errorf("invalid token claims")
 	}
-	if tokenType, _ := claims["type"].(string); tokenType != "access" {
-		return fmt.Errorf("access token required")
+	return claimsFromMap(mapClaims)
+}
+
+func claimsFromMap(mapClaims jwt.MapClaims) (Claims, error) {
+	if tokenType, _ := mapClaims["type"].(string); tokenType != "access" {
+		return Claims{}, fmt.Errorf("access token required")
 	}
-	return nil
+	userID, err := extractSubject(mapClaims)
+	if err != nil {
+		return Claims{}, err
+	}
+	return Claims{UserID: userID, Roles: extractRoles(mapClaims)}, nil
+}
+
+func extractSubject(claims jwt.MapClaims) (string, error) {
+	if sub, ok := claims["sub"]; ok {
+		if s, ok := sub.(string); ok && s != "" {
+			return s, nil
+		}
+	}
+	if uid, ok := claims["user_id"]; ok {
+		if s, ok := uid.(string); ok && s != "" {
+			return s, nil
+		}
+	}
+	return "", fmt.Errorf("subject claim missing")
+}
+
+func extractRoles(claims jwt.MapClaims) []string {
+	raw, ok := claims["roles"]
+	if !ok {
+		return []string{}
+	}
+	slice, ok := raw.([]interface{})
+	if !ok {
+		return []string{}
+	}
+	roles := make([]string, 0, len(slice))
+	for _, v := range slice {
+		if s, ok := v.(string); ok {
+			roles = append(roles, s)
+		}
+	}
+	return roles
 }
 
 // NewAccessTokenValidator returns JWKS validation when url is set, otherwise HMAC.
 func NewAccessTokenValidator(jwksURL, hmacSecret string) (interface {
-	ValidateAccessToken(string) error
+	ValidateAccessToken(string) (Claims, error)
 }, error) {
 	if jwksURL != "" {
 		return NewJWKSValidator(jwksURL), nil

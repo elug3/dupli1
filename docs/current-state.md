@@ -37,7 +37,7 @@ See [service-layout.md](service-layout.md) for details.
   - Login returns a **refresh token**; `POST /refresh` returns a short-lived **access token** (`token` field)
   - RS256 JWT + JWKS at `/api/v1/auth/.well-known/jwks.json`
   - Access tokens include `type: "access"`; refresh tokens include `type: "refresh"`
-  - Roles: `owner`, `admin`, `user_manager`, `customer_registrar`, `customer`
+  - Roles: `owner`, `admin`, `user_manager`, `customer_registrar`, `product_manager`, `customer`
   - Register requires `admin`, `user_manager`, or `customer_registrar` (not public)
   - User admin at `/api/v1/auth/users`
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD`
@@ -54,7 +54,7 @@ See [service-layout.md](service-layout.md) for details.
   - Public: `GET /api/v1/products/bags`, `GET /api/v1/products/{id}`, coupon redeem
   - Admin CRUD at `/api/v1/products`, `GET /api/v1/products/{id}/manage`
   - Bag search reads `products` where `category = 'bags'` and `status = 'active'`
-  - Protected routes validate RS256 via `AUTH_JWKS_URL`
+  - Protected routes validate RS256 via `AUTH_JWKS_URL` and require `product_manager`, `admin`, or `owner` role
   - Inline schema migration on startup
 - **Tests:** `cd product && go test ./...`
 

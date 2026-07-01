@@ -181,16 +181,16 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role,
 | `GET` | `/api/v1/products/bags` | — | Search active bag products (`category=bags`) |
 | `GET` | `/api/v1/products/{id}` | — | Public product detail (active products only; cost omitted) |
 | `POST` | `/api/v1/coupons/redeem` | — | Redeem a coupon code |
-| `GET` | `/api/v1/products` | Bearer | List all products (admin) |
-| `POST` | `/api/v1/products` | Bearer | Create product |
-| `GET` | `/api/v1/products/{id}/manage` | Bearer | Get product by ID including drafts and cost |
-| `PUT` | `/api/v1/products/{id}` | Bearer | Update product |
-| `DELETE` | `/api/v1/products/{id}` | Bearer | Delete product |
-| `PUT` | `/api/v1/products/{id}/image` | Bearer | Upload product image |
-| `GET` | `/api/v1/coupons` | Bearer | List coupons |
-| `POST` | `/api/v1/coupons` | Bearer | Create coupon |
-| `PUT` | `/api/v1/coupons/{code}` | Bearer | Update coupon |
-| `DELETE` | `/api/v1/coupons/{code}` | Bearer | Delete coupon |
+| `GET` | `/api/v1/products` | `product_manager`, `admin`, `owner` | List all products (admin) |
+| `POST` | `/api/v1/products` | `product_manager`, `admin`, `owner` | Create product |
+| `GET` | `/api/v1/products/{id}/manage` | `product_manager`, `admin`, `owner` | Get product by ID including drafts and cost |
+| `PUT` | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | Update product |
+| `DELETE` | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | Delete product |
+| `PUT` | `/api/v1/products/{id}/image` | `product_manager`, `admin`, `owner` | Upload product image |
+| `GET` | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | List coupons |
+| `POST` | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | Create coupon |
+| `PUT` | `/api/v1/coupons/{code}` | `product_manager`, `admin`, `owner` | Update coupon |
+| `DELETE` | `/api/v1/coupons/{code}` | `product_manager`, `admin`, `owner` | Delete coupon |
 
 Bag search reads from the `products` table (`category = 'bags'`, `status = 'active'`). Product service validates RS256 access tokens via `AUTH_JWKS_URL` (JWKS from auth).
 

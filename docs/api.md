@@ -374,7 +374,7 @@ Public product detail page (PDP). No authentication required. Returns only `stat
 
 ### Product CRUD (authenticated)
 
-All routes below require `Authorization: Bearer <access_token>` from auth. Product validates RS256 tokens via JWKS (`AUTH_JWKS_URL`).
+All routes below require `Authorization: Bearer <access_token>` from auth with role `product_manager`, `admin`, or `owner`. Product validates RS256 tokens via JWKS (`AUTH_JWKS_URL`).
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -546,11 +546,11 @@ All error responses use a JSON envelope:
 | GET | `/api/v1/products/bags` | — | product |
 | GET | `/api/v1/products/{id}` | — | product |
 | POST | `/api/v1/coupons/redeem` | — | product |
-| GET/POST | `/api/v1/products` | Bearer | product |
-| GET | `/api/v1/products/{id}/manage` | Bearer | product |
-| PUT/DELETE | `/api/v1/products/{id}` | Bearer | product |
-| PUT | `/api/v1/products/{id}/image` | Bearer | product |
-| GET/POST/PUT/DELETE | `/api/v1/coupons` | Bearer | product |
+| GET/POST | `/api/v1/products` | `product_manager`, `admin`, `owner` | product |
+| GET | `/api/v1/products/{id}/manage` | `product_manager`, `admin`, `owner` | product |
+| PUT/DELETE | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | product |
+| PUT | `/api/v1/products/{id}/image` | `product_manager`, `admin`, `owner` | product |
+| GET/POST/PUT/DELETE | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | product |
 | GET | `/api/v1/inventory/health` | — | inventory |
 | GET/PUT | `/api/v1/inventory/{sku}` | — | inventory |
 | POST | `/api/v1/inventory/{sku}/adjust` | — | inventory |

@@ -4,12 +4,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/elug3/dupli1/product/pkg/authjwt"
 )
 
-// AccessTokenValidator validates Bearer access tokens.
+// AccessTokenValidator validates Bearer access tokens and returns claims.
 type AccessTokenValidator interface {
-	ValidateAccessToken(token string) error
+	ValidateAccessToken(token string) (authjwt.Claims, error)
 }
+
+// Product management roles allowed to create, edit, and delete products.
+var ProductManagerRoles = []string{"product_manager", "admin", "owner"}
 
 func RequireAuth(validator AccessTokenValidator, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -20,17 +25,38 @@ func RequireAuth(validator AccessTokenValidator, next http.Handler) http.Handler
 		}
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
-		if err := validator.ValidateAccessToken(tokenStr); err != nil {
+		claims, err := validator.ValidateAccessToken(tokenStr)
+		if err != nil {
 			respondUnauthorized(w)
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(authjwt.WithClaims(r.Context(), claims)))
 	})
+}
+
+// RequireAnyRole rejects callers who lack any of the given roles. Must run after RequireAuth.
+func RequireAnyRole(roles ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := authjwt.FromContext(r.Context())
+			if !ok || !claims.HasRole(roles...) {
+				respondForbidden(w)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func respondUnauthorized(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
 	json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "code": 401})
+}
+
+func respondForbidden(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusForbidden)
+	json.NewEncoder(w).Encode(map[string]interface{}{"error": "forbidden: insufficient role", "code": 403})
 }
