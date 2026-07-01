@@ -150,6 +150,10 @@ func (g *RSATokenGenerator) Validate(ctx context.Context, tokenString string) (p
 		return ports.Claims{}, autherrors.ErrInvalidToken
 	}
 
+	if err := validateTokenType(mapClaims, g.tokenType); err != nil {
+		return ports.Claims{}, autherrors.ErrInvalidToken
+	}
+
 	return ports.Claims{UserID: userID, Roles: extractRoles(mapClaims)}, nil
 }
 

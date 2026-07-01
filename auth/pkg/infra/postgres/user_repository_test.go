@@ -7,38 +7,50 @@ import (
 	"testing"
 
 	"github.com/elug3/schick/auth/pkg/autherrors"
+	"github.com/elug3/schick/auth/pkg/bootstrap"
 	"github.com/elug3/schick/auth/pkg/domain"
 	"github.com/elug3/schick/auth/pkg/infra/postgres"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
 
-var repo *postgres.UserRepository
+var (
+	testDSN string
+	repo    *postgres.UserRepository
+)
 
 func TestMain(m *testing.M) {
-	dsn := os.Getenv("POSTGRES_URL")
-	if dsn == "" {
-		// Skip all DB tests when no database is configured.
-		os.Exit(0)
+	testDSN = os.Getenv("POSTGRES_URL")
+	if testDSN == "" {
+		os.Exit(m.Run())
 	}
 
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", testDSN)
 	if err != nil {
 		panic("open postgres: " + err.Error())
 	}
 	if err := db.Ping(); err != nil {
 		panic("ping postgres: " + err.Error())
 	}
+	if err := bootstrap.MigrateSchema(context.Background(), db); err != nil {
+		panic("migrate schema: " + err.Error())
+	}
 
 	repo = postgres.NewUserRepository(db)
 
 	code := m.Run()
 
-	// Clean up the table after all tests.
 	_, _ = db.Exec("DROP TABLE IF EXISTS users")
 	db.Close()
 
 	os.Exit(code)
+}
+
+func requirePostgres(t *testing.T) {
+	t.Helper()
+	if testDSN == "" {
+		t.Skip("POSTGRES_URL not set; skipping postgres integration test")
+	}
 }
 
 func newTestUser(t *testing.T) *domain.User {
@@ -52,6 +64,7 @@ func newTestUser(t *testing.T) *domain.User {
 }
 
 func TestSave_And_FindByEmail(t *testing.T) {
+	requirePostgres(t)
 	ctx := context.Background()
 	u := newTestUser(t)
 
@@ -75,6 +88,7 @@ func TestSave_And_FindByEmail(t *testing.T) {
 }
 
 func TestFindByEmail_NotFound(t *testing.T) {
+	requirePostgres(t)
 	ctx := context.Background()
 	got, err := repo.FindByEmail(ctx, "nobody@example.com")
 	if err != nil {
@@ -86,6 +100,7 @@ func TestFindByEmail_NotFound(t *testing.T) {
 }
 
 func TestSave_And_FindByID(t *testing.T) {
+	requirePostgres(t)
 	ctx := context.Background()
 	u := newTestUser(t)
 
@@ -106,6 +121,7 @@ func TestSave_And_FindByID(t *testing.T) {
 }
 
 func TestFindByID_NotFound(t *testing.T) {
+	requirePostgres(t)
 	ctx := context.Background()
 	got, err := repo.FindByID(ctx, uuid.New().String())
 	if err != nil {
@@ -117,6 +133,7 @@ func TestFindByID_NotFound(t *testing.T) {
 }
 
 func TestSave_UpdateExisting(t *testing.T) {
+	requirePostgres(t)
 	ctx := context.Background()
 	u := newTestUser(t)
 
@@ -124,7 +141,6 @@ func TestSave_UpdateExisting(t *testing.T) {
 		t.Fatalf("initial Save: %v", err)
 	}
 
-	// Change email and re-save by same ID.
 	newEmail := "updated+" + uuid.New().String() + "@example.com"
 	u.Email = newEmail
 	if err := repo.Save(ctx, u); err != nil {
@@ -141,13 +157,14 @@ func TestSave_UpdateExisting(t *testing.T) {
 }
 
 func TestSave_DuplicateEmail(t *testing.T) {
+	requirePostgres(t)
 	ctx := context.Background()
 	u1 := newTestUser(t)
 	if err := repo.Save(ctx, u1); err != nil {
 		t.Fatalf("Save u1: %v", err)
 	}
 
-	u2, err := domain.NewUser(uuid.New().String(), u1.Email, "password", "customer") // same email, different ID
+	u2, err := domain.NewUser(uuid.New().String(), u1.Email, "password", "customer")
 	if err != nil {
 		t.Fatalf("NewUser: %v", err)
 	}
@@ -159,6 +176,7 @@ func TestSave_DuplicateEmail(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
+	requirePostgres(t)
 	ctx := context.Background()
 	u := newTestUser(t)
 
@@ -179,14 +197,15 @@ func TestDelete(t *testing.T) {
 }
 
 func TestDelete_NonExistent(t *testing.T) {
+	requirePostgres(t)
 	ctx := context.Background()
-	// Deleting a row that does not exist must not error.
 	if err := repo.Delete(ctx, uuid.New().String()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestPasswordRoundtrip(t *testing.T) {
+	requirePostgres(t)
 	ctx := context.Background()
 	u := newTestUser(t)
 

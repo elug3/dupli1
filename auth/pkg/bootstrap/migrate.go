@@ -6,6 +6,11 @@ import (
 	"fmt"
 )
 
+// MigrateSchema ensures the auth service database schema is up to date.
+func MigrateSchema(ctx context.Context, db *sql.DB) error {
+	return migrateSchema(ctx, db)
+}
+
 // migrateSchema ensures the auth service database schema is up to date.
 func migrateSchema(ctx context.Context, db *sql.DB) error {
 	stmts := []string{

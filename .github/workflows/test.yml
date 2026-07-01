@@ -1,0 +1,91 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  auth:
+    name: auth
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: schick
+          POSTGRES_PASSWORD: schick_dev
+          POSTGRES_DB: schick_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U schick -d schick_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_URL: postgres://schick:schick_dev@localhost:5432/schick_db?sslmode=disable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: auth/go.mod
+
+      - name: Test auth module
+        working-directory: auth
+        run: go test ./... -count=1
+
+  product:
+    name: product
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: product/go.mod
+
+      - name: Test product module
+        working-directory: product
+        run: go test ./... -count=1
+
+  inventory:
+    name: inventory
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: inventory/go.mod
+
+      - name: Test inventory module
+        working-directory: inventory
+        run: go test ./... -count=1
+
+  order:
+    name: order
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: order/go.mod
+
+      - name: Test order module
+        working-directory: order
+        run: go test ./... -count=1

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/elug3/schick/auth/pkg/domain"
 	"github.com/elug3/schick/auth/pkg/handler"
@@ -56,8 +57,9 @@ func TestCustomerRegistrarCanRegisterButNotManageUsers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	repo := newRBACFakeRepo()
-	tokenGen := jwtgen.NewTokenGenerator("test-secret", 900)
-	svc := service.NewService(repo, tokenGen)
+	accessGen := jwtgen.NewTokenGeneratorWithType("test-secret", 900, "access")
+	refreshGen := jwtgen.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
+	svc := service.NewService(repo, accessGen, service.WithRefreshTokenGen(refreshGen, time.Hour))
 	h := handler.NewHandler(svc, zerolog.Nop())
 
 	registrar, err := domain.NewUser(
@@ -73,7 +75,7 @@ func TestCustomerRegistrarCanRegisterButNotManageUsers(t *testing.T) {
 		t.Fatalf("Save registrar: %v", err)
 	}
 
-	accessToken, err := tokenGen.Generate(context.Background(), registrar.ID, registrar.Roles)
+	accessToken, err := accessGen.Generate(context.Background(), registrar.ID, registrar.Roles)
 	if err != nil {
 		t.Fatalf("Generate token: %v", err)
 	}

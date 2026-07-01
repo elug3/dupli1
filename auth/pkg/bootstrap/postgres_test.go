@@ -30,8 +30,10 @@ func TestWithPostgresSSLMode(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		if got := withPostgresSSLMode(tc.in); got != tc.want {
-			t.Fatalf("withPostgresSSLMode(%q) = %q, want %q", tc.in, got, tc.want)
-		}
+		t.Run(tc.in, func(t *testing.T) {
+			if got := withPostgresSSLMode(tc.in); got != tc.want {
+				t.Fatalf("withPostgresSSLMode(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
