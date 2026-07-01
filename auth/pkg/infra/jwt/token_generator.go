@@ -87,9 +87,28 @@ func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (por
 		return ports.Claims{}, autherrors.ErrInvalidToken
 	}
 
+	if err := validateTokenType(mapClaims, tg.tokenType); err != nil {
+		return ports.Claims{}, autherrors.ErrInvalidToken
+	}
+
 	roles := extractRoles(mapClaims)
 
 	return ports.Claims{UserID: userID, Roles: roles}, nil
+}
+
+func validateTokenType(claims jwt.MapClaims, expected string) error {
+	if expected == "" {
+		return nil
+	}
+	raw, ok := claims["type"]
+	if !ok {
+		return fmt.Errorf("token type claim missing")
+	}
+	typ, ok := raw.(string)
+	if !ok || typ != expected {
+		return fmt.Errorf("unexpected token type %q, want %q", typ, expected)
+	}
+	return nil
 }
 
 func extractSubject(claims jwt.MapClaims) (string, error) {

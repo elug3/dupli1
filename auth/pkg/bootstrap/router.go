@@ -10,6 +10,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// NewRouter wires the production auth HTTP routes.
+func NewRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *redis.Client, corsOrigins []string) *gin.Engine {
+	return newRouter(h, debug, jwksJSON, redisClient, corsOrigins)
+}
+
 func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *redis.Client, corsOrigins []string) *gin.Engine {
 	if debug {
 		gin.SetMode(gin.DebugMode)

@@ -90,6 +90,28 @@ func TestValidate_ExpiredTokenReturnsError(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsWrongTokenType(t *testing.T) {
+	access := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "access")
+	refresh := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
+	ctx := context.Background()
+
+	refreshToken, err := refresh.Generate(ctx, "user-1", []string{"customer"})
+	if err != nil {
+		t.Fatalf("Generate refresh: %v", err)
+	}
+	if _, err := access.Validate(ctx, refreshToken); err == nil {
+		t.Fatal("expected access validator to reject refresh token, got nil")
+	}
+
+	accessToken, err := access.Generate(ctx, "user-1", []string{"customer"})
+	if err != nil {
+		t.Fatalf("Generate access: %v", err)
+	}
+	if _, err := refresh.Validate(ctx, accessToken); err == nil {
+		t.Fatal("expected refresh validator to reject access token, got nil")
+	}
+}
+
 func TestValidate_TamperedTokenReturnsError(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
 	ctx := context.Background()

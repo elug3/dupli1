@@ -4,7 +4,6 @@ package jwt_test
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -110,6 +109,20 @@ func TestRSA_WrongKeyReturnsError(t *testing.T) {
 	token, _ := signer.Generate(ctx, "user-1", []string{})
 	if _, err := verifier.Validate(ctx, token); err == nil {
 		t.Fatal("expected error when validating with wrong key, got nil")
+	}
+}
+
+func TestRSA_Validate_RejectsWrongTokenType(t *testing.T) {
+	access := jwtinfra.NewRSATokenGeneratorWithType(testRSAKey, "kid", 3600, "access")
+	refresh := jwtinfra.NewRSATokenGeneratorWithType(testRSAKey, "kid", 3600, "refresh")
+	ctx := context.Background()
+
+	refreshToken, err := refresh.Generate(ctx, "user-1", []string{"customer"})
+	if err != nil {
+		t.Fatalf("Generate refresh: %v", err)
+	}
+	if _, err := access.Validate(ctx, refreshToken); err == nil {
+		t.Fatal("expected access validator to reject refresh token, got nil")
 	}
 }
 
@@ -275,13 +288,13 @@ func encodePKCS8(t *testing.T, key *rsa.PrivateKey) []byte {
 
 // Ensure GenerateRSAKey is actually random across calls.
 func TestRSA_GenerateRSAKey_Unique(t *testing.T) {
-	key1, err := rsa.GenerateKey(rand.Reader, 2048)
+	key1, err := jwtinfra.GenerateRSAKey(2048)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("GenerateRSAKey: %v", err)
 	}
-	key2, err := rsa.GenerateKey(rand.Reader, 2048)
+	key2, err := jwtinfra.GenerateRSAKey(2048)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("GenerateRSAKey: %v", err)
 	}
 	if key1.N.Cmp(key2.N) == 0 {
 		t.Fatal("two independently generated keys have the same modulus")

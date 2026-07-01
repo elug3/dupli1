@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
+	"time"
 
+	"github.com/elug3/schick/auth/pkg/autherrors"
 	"github.com/elug3/schick/auth/pkg/domain"
 	"github.com/elug3/schick/auth/pkg/ports"
 )
@@ -184,5 +187,131 @@ func TestRegisterAssignsCustomerRole(t *testing.T) {
 	}
 	if len(user.Roles) != 1 || user.Roles[0] != "customer" {
 		t.Fatalf("Register roles = %v, want [customer]", user.Roles)
+	}
+}
+
+type mutableUserRepository struct {
+	user *domain.User
+}
+
+func (r *mutableUserRepository) FindByEmail(_ context.Context, _ string) (*domain.User, error) {
+	return r.user, nil
+}
+
+func (r *mutableUserRepository) FindByID(_ context.Context, _ string) (*domain.User, error) {
+	return r.user, nil
+}
+
+func (r *mutableUserRepository) Save(_ context.Context, u *domain.User) error {
+	r.user = u
+	return nil
+}
+
+func (r *mutableUserRepository) Delete(_ context.Context, _ string) error { return nil }
+
+func (r *mutableUserRepository) ListAll(_ context.Context) ([]*domain.User, error) { return nil, nil }
+
+func TestLogin_LocksAccountAfterMaxFailedAttempts(t *testing.T) {
+	user, _ := domain.NewUser("u-lock", "locked@example.com", "correct-pass", "customer")
+	repo := &mutableUserRepository{user: user}
+	svc := NewService(repo, fakeTokenGenerator{})
+
+	for i := 0; i < maxFailedAttempts; i++ {
+		if _, err := svc.Login(context.Background(), "locked@example.com", "wrong"); err == nil {
+			t.Fatalf("attempt %d: expected error", i+1)
+		}
+	}
+	if !repo.user.IsLocked() {
+		t.Fatal("account should be locked after max failed attempts")
+	}
+
+	if _, err := svc.Login(context.Background(), "locked@example.com", "correct-pass"); !errors.Is(err, autherrors.ErrAccountLocked) {
+		t.Fatalf("locked login: got %v, want ErrAccountLocked", err)
+	}
+}
+
+func TestLogin_RejectsDeactivatedAccount(t *testing.T) {
+	user, _ := domain.NewUser("u-off", "off@example.com", "pass", "customer")
+	user.SetActive(false)
+	repo := &stubUserRepository{user: user}
+	svc := NewService(repo, fakeTokenGenerator{})
+
+	if _, err := svc.Login(context.Background(), "off@example.com", "pass"); !errors.Is(err, autherrors.ErrAccountDeactivated) {
+		t.Fatalf("got %v, want ErrAccountDeactivated", err)
+	}
+}
+
+func TestRefresh_RejectsDeactivatedAccount(t *testing.T) {
+	user, _ := domain.NewUser("u-off", "off@example.com", "pass", "customer")
+	user.SetActive(false)
+	repo := &stubUserRepository{user: user}
+	gen := &capturingTokenGenerator{capturedUserID: "u-off"}
+	svc := NewService(repo, fakeTokenGenerator{}, WithRefreshTokenGen(gen, time.Hour))
+
+	if _, err := svc.Refresh(context.Background(), "refresh-token"); !errors.Is(err, autherrors.ErrAccountDeactivated) {
+		t.Fatalf("got %v, want ErrAccountDeactivated", err)
+	}
+}
+
+type memorySessionStore struct {
+	entries map[string]string
+}
+
+func (s *memorySessionStore) Set(_ context.Context, key, value string, _ time.Duration) error {
+	if s.entries == nil {
+		s.entries = make(map[string]string)
+	}
+	s.entries[key] = value
+	return nil
+}
+
+func (s *memorySessionStore) Get(_ context.Context, key string) (string, error) {
+	if s.entries == nil {
+		return "", ports.ErrSessionNotFound
+	}
+	v, ok := s.entries[key]
+	if !ok {
+		return "", ports.ErrSessionNotFound
+	}
+	return v, nil
+}
+
+func (s *memorySessionStore) Delete(_ context.Context, key string) error {
+	if s.entries != nil {
+		delete(s.entries, key)
+	}
+	return nil
+}
+
+func TestLogout_RevokesRefreshSession(t *testing.T) {
+	user, _ := domain.NewUser("u-1", "user@example.com", "pass", "customer")
+	repo := &stubUserRepository{user: user}
+	refreshGen := &capturingTokenGenerator{}
+	accessGen := fakeTokenGenerator{}
+	sessions := &memorySessionStore{}
+	svc := NewService(
+		repo,
+		accessGen,
+		WithRefreshTokenGen(refreshGen, time.Hour),
+		WithSessionStore(sessions),
+	)
+
+	refreshToken, err := svc.Login(context.Background(), "user@example.com", "pass")
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if _, ok := sessions.entries[refreshToken]; !ok {
+		t.Fatal("refresh token was not stored in session store")
+	}
+
+	if err := svc.Logout(context.Background(), refreshToken); err != nil {
+		t.Fatalf("Logout: %v", err)
+	}
+	if _, ok := sessions.entries[refreshToken]; ok {
+		t.Fatal("refresh token should be removed after logout")
+	}
+
+	if _, err := svc.Refresh(context.Background(), refreshToken); !errors.Is(err, autherrors.ErrInvalidToken) {
+		t.Fatalf("Refresh after logout: got %v, want ErrInvalidToken", err)
 	}
 }
