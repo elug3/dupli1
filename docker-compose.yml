@@ -187,8 +187,11 @@ services:
       DUPLI1_INVENTORY_URL: http://dupli1-inventory:8080
       DUPLI1_PRODUCT_URL: http://dupli1-product:8080
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
+      AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
       NATS_URL: nats://nats:4222
     depends_on:
+      dupli1-auth:
+        condition: service_healthy
       dupli1-inventory:
         condition: service_healthy
       nats:

@@ -192,4 +192,4 @@ After completion, use the existing order APIs to confirm, cancel, or fulfill the
 | `order/pkg/infra/httpcoupon/` | Product service HTTP adapter |
 | `order/pkg/handler/checkout.go` | HTTP routes |
 
-Order and checkout routes require `Authorization: Bearer <token>` when `JWT_SECRET` is configured. See [current-state.md](current-state.md) for the RS256 alignment gap with auth.
+Order and checkout routes require `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SECRET` is configured (RS256 via auth JWKS when set).

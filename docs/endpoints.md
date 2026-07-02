@@ -323,7 +323,7 @@ Both return `200` with the updated reservation object. Errors: `404` not found, 
 
 ## Order Service
 
-Requires `Authorization: Bearer <token>` when `JWT_SECRET` is set on the order service (HMAC validator in Compose). Customers may only use their own `customer_id`. See [checkout-session.md](checkout-session.md).
+Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SECRET` is set on the order service (RS256 via auth JWKS in Compose). Customers may only use their own `customer_id`. See [checkout-session.md](checkout-session.md).
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -340,7 +340,7 @@ Requires `Authorization: Bearer <token>` when `JWT_SECRET` is set on the order s
 | `GET` | `/api/v1/orders/{id}` | Bearer* | Get a single order |
 | `PUT` | `/api/v1/orders/{id}/status` | Bearer* | Transition order status |
 
-\* Required when `JWT_SECRET` is configured; optional in tests with no validator.
+\* Required when `AUTH_JWKS_URL` or `JWT_SECRET` is configured; optional in tests with no validator.
 
 ### GET /api/v1/orders/health
 

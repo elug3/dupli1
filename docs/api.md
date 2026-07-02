@@ -460,7 +460,7 @@ Release a reservation (return stock).
 
 In-memory store. Calls inventory to reserve stock and product to redeem coupons.
 
-When `JWT_SECRET` is set, order and checkout routes require `Authorization: Bearer <token>` (HMAC validator — see [current-state.md](current-state.md) for RS256 alignment). Customers may only access their own `customer_id`.
+When `AUTH_JWKS_URL` or `JWT_SECRET` is set, order and checkout routes require `Authorization: Bearer <access_token>` (RS256 via auth JWKS when configured; HS256 fallback in dev). Customers may only access their own `customer_id`.
 
 See [checkout-session.md](checkout-session.md) for the full checkout flow.
 
@@ -564,4 +564,4 @@ All error responses use a JSON envelope:
 | PUT | `/api/v1/orders/{id}/status` | Bearer* | order |
 | GET | `/health` | — | notification |
 
-\* Bearer required when `JWT_SECRET` is configured on the order service.
+\* Bearer required when `AUTH_JWKS_URL` or `JWT_SECRET` is configured on the order service.

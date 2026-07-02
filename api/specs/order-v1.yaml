@@ -5,8 +5,9 @@ info:
   description: |
     Private order lifecycle and checkout session API for the Dupli1 marketplace.
 
-    **Authentication:** When `JWT_SECRET` is configured, protected routes require
-    `Authorization: Bearer <token>` validated with HS256 (not yet aligned with auth RS256/JWKS).
+    **Authentication:** When `AUTH_JWKS_URL` or `JWT_SECRET` is configured, protected routes require
+    `Authorization: Bearer <access_token>` (RS256 via auth JWKS when `AUTH_JWKS_URL` is set;
+    HS256 via `JWT_SECRET` in dev). The token must include claim `"type": "access"`.
 
     **Roles:** `customer`, `order_manager`, `admin`. Order CRUD enforces ABAC for customers;
     checkout session endpoints do not verify `customer_id` against the JWT subject.
@@ -392,7 +393,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: HS256 JWT when JWT_SECRET is configured
+      description: RS256 access token via auth JWKS when AUTH_JWKS_URL is set, or HS256 via JWT_SECRET in dev
 
   parameters:
     OrderId:
