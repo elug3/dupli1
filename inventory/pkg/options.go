@@ -5,6 +5,8 @@ import "time"
 type ServerOptions struct {
 	Addr               string
 	DatabaseConnString string
+	JWTSecret          string
+	JWKSURL            string
 	ReadTimeout        time.Duration
 	WriteTimeout       time.Duration
 	IdleTimeout        time.Duration

@@ -2,7 +2,10 @@ module github.com/elug3/dupli1/inventory
 
 go 1.26.3
 
-require github.com/jackc/pgx/v4 v4.18.3
+require (
+	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/jackc/pgx/v4 v4.18.3
+)
 
 require (
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect

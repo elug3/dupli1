@@ -112,36 +112,13 @@ func (s *Service) Reserve(ctx context.Context, orderID string, items []domain.Re
 		return nil, err
 	}
 
-	stockItems := make([]*domain.StockItem, 0, len(normalizedItems))
-	for _, reservationItem := range normalizedItems {
-		item, err := s.repo.GetItem(ctx, reservationItem.SKU)
-		if err != nil {
-			return nil, err
-		}
-		if item.Available() < reservationItem.Quantity {
+	reservation, err := s.repo.CreateReservation(ctx, orderID, normalizedItems, s.now())
+	if err != nil {
+		if errors.Is(err, ports.ErrInsufficientStock) {
 			return nil, ErrInsufficientStock
 		}
-		copied := cloneItem(item)
-		copied.Reserved += reservationItem.Quantity
-		copied.UpdatedAt = s.now()
-		stockItems = append(stockItems, copied)
-	}
-
-	reservationID, err := s.repo.NextReservationID(ctx)
-	if err != nil {
 		return nil, err
 	}
-	reservation := domain.NewReservation(reservationID, orderID, normalizedItems, s.now())
-
-	for _, item := range stockItems {
-		if err := s.repo.SaveItem(ctx, item); err != nil {
-			return nil, err
-		}
-	}
-	if err := s.repo.SaveReservation(ctx, reservation); err != nil {
-		return nil, err
-	}
-
 	return cloneReservation(reservation), nil
 }
 
@@ -159,39 +136,14 @@ func (s *Service) closeReservation(ctx context.Context, id string, status domain
 		return nil, fmt.Errorf("reservation id is required")
 	}
 
-	reservation, err := s.repo.GetReservation(ctx, id)
+	reservation, err := s.repo.FinalizeReservation(ctx, id, status, s.now())
 	if err != nil {
-		return nil, err
-	}
-	if !reservation.IsActive() {
-		return nil, ErrReservationClosed
-	}
-
-	now := s.now()
-	for _, reservationItem := range reservation.Items {
-		item, err := s.repo.GetItem(ctx, reservationItem.SKU)
-		if err != nil {
-			return nil, err
+		if errors.Is(err, ports.ErrReservationClosed) {
+			return nil, ErrReservationClosed
 		}
-		if item.Reserved < reservationItem.Quantity {
+		if errors.Is(err, ports.ErrInsufficientStock) {
 			return nil, ErrInsufficientStock
 		}
-		item.Reserved -= reservationItem.Quantity
-		if status == domain.ReservationCommitted {
-			if item.Quantity < reservationItem.Quantity {
-				return nil, ErrInsufficientStock
-			}
-			item.Quantity -= reservationItem.Quantity
-		}
-		item.UpdatedAt = now
-		if err := s.repo.SaveItem(ctx, item); err != nil {
-			return nil, err
-		}
-	}
-
-	reservation.Status = status
-	reservation.UpdatedAt = now
-	if err := s.repo.SaveReservation(ctx, reservation); err != nil {
 		return nil, err
 	}
 	return cloneReservation(reservation), nil

@@ -58,6 +58,10 @@ type ServerOptions struct {
 	// WebServiceEmail and WebServicePassword seed the dupli1-web service account.
 	WebServiceEmail    string
 	WebServicePassword string
+
+	// OrderServiceEmail and OrderServicePassword seed the dupli1-order service account.
+	OrderServiceEmail    string
+	OrderServicePassword string
 }
 
 // NewServerOptions returns ServerOptions populated with sensible defaults.

@@ -64,7 +64,12 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	}
 
 	svc := service.NewProductSearchService(store, imgStore, eventPublisher)
-	couponSvc := service.NewCouponService()
+	couponStore, err := pg.NewCouponStore(store.Pool())
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
+	couponSvc := service.NewCouponService(couponStore)
 	h := handler.NewHandler(svc, couponSvc)
 
 	mux := http.NewServeMux()

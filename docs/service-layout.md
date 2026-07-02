@@ -83,7 +83,7 @@ Owns:
 **Module:** `github.com/elug3/dupli1/inventory`  
 **Storage:** PostgreSQL (`inventory` table set), in-memory fallback when no DB URL is configured (tests)
 
-Owns stock and reservations at `/api/v1/inventory/*`. No authentication today.
+Owns stock and reservations at `/api/v1/inventory/*`. Public reads; writes require Bearer JWT with `order_manager`, `admin`, or `owner` when auth is configured.
 
 ### Order (`order/pkg`)
 

@@ -4,9 +4,13 @@ import "time"
 
 type ServerOptions struct {
 	Addr               string
-	InventoryURL       string
-	ProductURL         string
-	DatabaseConnString string
+	InventoryURL             string
+	ProductURL               string
+	AuthURL                  string
+	InventoryServiceEmail    string
+	InventoryServicePassword string
+	InventoryBearerToken     string
+	DatabaseConnString       string
 	JWTSecret          string
 	JWKSURL            string
 	NATSURL            string

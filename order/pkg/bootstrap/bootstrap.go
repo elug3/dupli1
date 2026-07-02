@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	natsinfra "github.com/elug3/dupli1/order/pkg/infra/nats"
 	"github.com/elug3/dupli1/order/pkg/authjwt"
 	"github.com/elug3/dupli1/order/pkg/handler"
+	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
 	"github.com/elug3/dupli1/order/pkg/infra/httpcoupon"
 	"github.com/elug3/dupli1/order/pkg/infra/httpinventory"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
@@ -18,13 +20,17 @@ import (
 )
 
 type Config struct {
-	InventoryURL       string
-	ProductURL         string
-	DatabaseConnString string
-	JWTSecret          string
-	JWKSURL            string
-	NATSURL            string
-	HTTPClient         *http.Client
+	InventoryURL             string
+	ProductURL               string
+	AuthURL                  string
+	InventoryServiceEmail    string
+	InventoryServicePassword string
+	InventoryBearerToken     string
+	DatabaseConnString       string
+	JWTSecret                string
+	JWKSURL                  string
+	NATSURL                  string
+	HTTPClient               *http.Client
 }
 
 type App struct {
@@ -56,7 +62,12 @@ func Bootstrap(cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	inventory := httpinventory.NewClient(cfg.InventoryURL, cfg.HTTPClient)
+	inventoryToken, err := resolveInventoryToken(context.Background(), cfg)
+	if err != nil {
+		closeFn()
+		return nil, err
+	}
+	inventory := httpinventory.NewClient(cfg.InventoryURL, cfg.HTTPClient, inventoryToken)
 
 	var couponClient ports.CouponClient
 	if cfg.ProductURL != "" {
@@ -113,6 +124,16 @@ func openRepository(connString string) (ports.Repository, func() error, error) {
 		pgRepo.Close()
 		return nil
 	}, nil
+}
+
+func resolveInventoryToken(ctx context.Context, cfg Config) (string, error) {
+	if cfg.InventoryBearerToken != "" {
+		return cfg.InventoryBearerToken, nil
+	}
+	if cfg.AuthURL == "" || cfg.InventoryServiceEmail == "" || cfg.InventoryServicePassword == "" {
+		return "", nil
+	}
+	return httpauth.FetchAccessToken(ctx, cfg.AuthURL, cfg.InventoryServiceEmail, cfg.InventoryServicePassword, cfg.HTTPClient)
 }
 
 func DefaultHTTPClient() *http.Client {

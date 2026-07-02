@@ -73,6 +73,18 @@ func applyEnv(opts *order.ServerOptions) {
 	if v := os.Getenv("DUPLI1_PRODUCT_URL"); v != "" {
 		opts.ProductURL = v
 	}
+	if v := os.Getenv("DUPLI1_AUTH_URL"); v != "" {
+		opts.AuthURL = v
+	}
+	if v := os.Getenv("DUPLI1_ORDER_SERVICE_EMAIL"); v != "" {
+		opts.InventoryServiceEmail = v
+	}
+	if v := os.Getenv("DUPLI1_ORDER_SERVICE_PASSWORD"); v != "" {
+		opts.InventoryServicePassword = v
+	}
+	if v := os.Getenv("DUPLI1_INVENTORY_BEARER_TOKEN"); v != "" {
+		opts.InventoryBearerToken = v
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.JWTSecret = v
 	}

@@ -12,17 +12,19 @@ import (
 )
 
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL     string
+	httpClient  *http.Client
+	bearerToken string
 }
 
-func NewClient(baseURL string, httpClient *http.Client) *Client {
+func NewClient(baseURL string, httpClient *http.Client, bearerToken string) *Client {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
 	return &Client{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: httpClient,
+		baseURL:     strings.TrimRight(baseURL, "/"),
+		httpClient:  httpClient,
+		bearerToken: bearerToken,
 	}
 }
 
@@ -65,6 +67,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, targ
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.bearerToken)
 	}
 
 	resp, err := c.httpClient.Do(req)

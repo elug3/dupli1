@@ -81,6 +81,10 @@ func (s *ProductSearchStore) Close() {
 	}
 }
 
+func (s *ProductSearchStore) Pool() *pgxpool.Pool {
+	return s.pool
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func brandPrefix(brand string) string {

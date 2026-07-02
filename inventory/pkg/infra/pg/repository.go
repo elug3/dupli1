@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/elug3/dupli1/inventory/pkg/domain"
 	"github.com/elug3/dupli1/inventory/pkg/ports"
@@ -71,25 +73,17 @@ func (r *Repository) migrate() error {
 	return nil
 }
 
-func (r *Repository) NextReservationID(ctx context.Context) (string, error) {
-	return r.nextID(ctx, "reservation", "res")
-}
-
-func (r *Repository) nextID(ctx context.Context, name, prefix string) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
+func (r *Repository) nextReservationID(ctx context.Context, tx pgx.Tx) (string, error) {
 	var seq int64
-	err := r.pool.QueryRow(ctx, `
-		INSERT INTO id_sequences (name, value) VALUES ($1, 1)
+	err := tx.QueryRow(ctx, `
+		INSERT INTO id_sequences (name, value) VALUES ('reservation', 1)
 		ON CONFLICT (name) DO UPDATE SET value = id_sequences.value + 1
 		RETURNING value
-	`, name).Scan(&seq)
+	`).Scan(&seq)
 	if err != nil {
 		return "", fmt.Errorf("generate id: %w", err)
 	}
-	return fmt.Sprintf("%s_%06d", prefix, seq), nil
+	return fmt.Sprintf("res_%06d", seq), nil
 }
 
 func (r *Repository) GetItem(ctx context.Context, sku string) (*domain.StockItem, error) {
@@ -199,6 +193,155 @@ func (r *Repository) SaveReservation(ctx context.Context, reservation *domain.Re
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+func (r *Repository) CreateReservation(ctx context.Context, orderID string, items []domain.ReservationItem, now time.Time) (*domain.Reservation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	sorted := append([]domain.ReservationItem(nil), items...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].SKU < sorted[j].SKU })
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, item := range sorted {
+		var quantity, reserved int
+		err := tx.QueryRow(ctx, `
+			SELECT quantity, reserved FROM stock_items WHERE sku = $1 FOR UPDATE
+		`, item.SKU).Scan(&quantity, &reserved)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ports.ErrNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		if quantity-reserved < item.Quantity {
+			return nil, ports.ErrInsufficientStock
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE stock_items SET reserved = reserved + $2, updated_at = $3 WHERE sku = $1
+		`, item.SKU, item.Quantity, now); err != nil {
+			return nil, err
+		}
+	}
+
+	reservationID, err := r.nextReservationID(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	reservation := domain.NewReservation(reservationID, orderID, items, now)
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO reservations (id, order_id, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`, reservation.ID, reservation.OrderID, reservation.Status, reservation.CreatedAt, reservation.UpdatedAt); err != nil {
+		return nil, err
+	}
+	for _, item := range reservation.Items {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO reservation_items (reservation_id, sku, quantity) VALUES ($1, $2, $3)
+		`, reservation.ID, item.SKU, item.Quantity); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return reservation, nil
+}
+
+func (r *Repository) FinalizeReservation(ctx context.Context, id string, status domain.ReservationStatus, now time.Time) (*domain.Reservation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var reservation domain.Reservation
+	err = tx.QueryRow(ctx, `
+		SELECT id, order_id, status, created_at, updated_at
+		FROM reservations WHERE id = $1 FOR UPDATE
+	`, id).Scan(&reservation.ID, &reservation.OrderID, &reservation.Status, &reservation.CreatedAt, &reservation.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ports.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !reservation.IsActive() {
+		return nil, ports.ErrReservationClosed
+	}
+
+	rows, err := tx.Query(ctx, `
+		SELECT sku, quantity FROM reservation_items WHERE reservation_id = $1 ORDER BY sku
+	`, id)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var item domain.ReservationItem
+		if err := rows.Scan(&item.SKU, &item.Quantity); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		reservation.Items = append(reservation.Items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+
+	for _, item := range reservation.Items {
+		var quantity, reserved int
+		err := tx.QueryRow(ctx, `
+			SELECT quantity, reserved FROM stock_items WHERE sku = $1 FOR UPDATE
+		`, item.SKU).Scan(&quantity, &reserved)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ports.ErrNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		if reserved < item.Quantity {
+			return nil, ports.ErrInsufficientStock
+		}
+		nextReserved := reserved - item.Quantity
+		nextQuantity := quantity
+		if status == domain.ReservationCommitted {
+			if quantity < item.Quantity {
+				return nil, ports.ErrInsufficientStock
+			}
+			nextQuantity = quantity - item.Quantity
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE stock_items SET quantity = $2, reserved = $3, updated_at = $4 WHERE sku = $1
+		`, item.SKU, nextQuantity, nextReserved, now); err != nil {
+			return nil, err
+		}
+	}
+
+	reservation.Status = status
+	reservation.UpdatedAt = now
+	if _, err := tx.Exec(ctx, `
+		UPDATE reservations SET status = $2, updated_at = $3 WHERE id = $1
+	`, id, status, now); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return &reservation, nil
 }
 
 // Ensure Repository implements ports.Repository at compile time.

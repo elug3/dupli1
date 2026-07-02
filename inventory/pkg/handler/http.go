@@ -7,35 +7,35 @@ import (
 	"strings"
 
 	"github.com/elug3/dupli1/inventory/pkg/domain"
+	"github.com/elug3/dupli1/inventory/pkg/middleware"
 	"github.com/elug3/dupli1/inventory/pkg/ports"
 	"github.com/elug3/dupli1/inventory/pkg/service"
 )
 
 type Handler struct {
-	svc *service.Service
+	svc        *service.Service
+	validator  middleware.AccessTokenValidator
 }
 
-func New(svc *service.Service) *Handler {
-	return &Handler{svc: svc}
+func New(svc *service.Service, validator middleware.AccessTokenValidator) *Handler {
+	return &Handler{svc: svc, validator: validator}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.health)
 	mux.HandleFunc("/api/v1/inventory/health", h.health)
-	mux.HandleFunc("/api/v1/inventory/reservations", h.reservations)
-	mux.HandleFunc("/api/v1/inventory/reservations/", h.reservation)
-	mux.HandleFunc("/api/v1/inventory/", h.item)
-}
 
-func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
+	protectWrite := func(next http.HandlerFunc) http.HandlerFunc {
+		chain := middleware.RequireAuth(h.validator, next)
+		return middleware.RequireAnyRole(middleware.InventoryWriterRoles...)(chain)
 	}
-	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+
+	mux.HandleFunc("/api/v1/inventory/reservations", protectWrite(h.reservations))
+	mux.HandleFunc("/api/v1/inventory/reservations/", protectWrite(h.reservation))
+	mux.HandleFunc("/api/v1/inventory/", h.inventoryItem)
 }
 
-func (h *Handler) item(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) inventoryItem(w http.ResponseWriter, r *http.Request) {
 	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/v1/inventory/"))
 	if len(parts) == 0 || parts[0] == "" {
 		respondError(w, http.StatusNotFound, "not found")
@@ -46,26 +46,12 @@ func (h *Handler) item(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 1 {
 		switch r.Method {
 		case http.MethodGet:
-			item, err := h.svc.GetItem(r.Context(), sku)
-			if err != nil {
-				respondServiceError(w, err)
-				return
-			}
-			respondJSON(w, http.StatusOK, item)
+			h.getItem(w, r, sku)
 		case http.MethodPut:
-			var req struct {
-				Quantity int `json:"quantity"`
-			}
-			if err := decodeJSON(r, &req); err != nil {
-				respondError(w, http.StatusBadRequest, err.Error())
-				return
-			}
-			item, err := h.svc.UpsertItem(r.Context(), sku, req.Quantity)
-			if err != nil {
-				respondServiceError(w, err)
-				return
-			}
-			respondJSON(w, http.StatusOK, item)
+			middleware.RequireAuth(h.validator,
+				middleware.RequireAnyRole(middleware.InventoryWriterRoles...)(func(w http.ResponseWriter, r *http.Request) {
+					h.putItem(w, r, sku)
+				}))(w, r)
 		default:
 			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -73,23 +59,63 @@ func (h *Handler) item(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 2 && parts[1] == "adjust" && r.Method == http.MethodPost {
-		var req struct {
-			Delta int `json:"delta"`
-		}
-		if err := decodeJSON(r, &req); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		item, err := h.svc.AdjustStock(r.Context(), sku, req.Delta)
-		if err != nil {
-			respondServiceError(w, err)
-			return
-		}
-		respondJSON(w, http.StatusOK, item)
+		middleware.RequireAuth(h.validator,
+			middleware.RequireAnyRole(middleware.InventoryWriterRoles...)(func(w http.ResponseWriter, r *http.Request) {
+				h.adjustItem(w, r, sku)
+			}))(w, r)
 		return
 	}
 
 	respondError(w, http.StatusNotFound, "not found")
+}
+
+func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) getItem(w http.ResponseWriter, r *http.Request, sku string) {
+	item, err := h.svc.GetItem(r.Context(), sku)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) putItem(w http.ResponseWriter, r *http.Request, sku string) {
+	var req struct {
+		Quantity int `json:"quantity"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	item, err := h.svc.UpsertItem(r.Context(), sku, req.Quantity)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) adjustItem(w http.ResponseWriter, r *http.Request, sku string) {
+	var req struct {
+		Delta int `json:"delta"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	item, err := h.svc.AdjustStock(r.Context(), sku, req.Delta)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, item)
 }
 
 func (h *Handler) reservations(w http.ResponseWriter, r *http.Request) {

@@ -19,7 +19,7 @@ import (
 // newMux registers only the public routes (no auth middleware).
 func newMux(store *memory.ProductStore) *http.ServeMux {
 	svc := service.NewProductSearchService(store, nil)
-	couponSvc := service.NewCouponService()
+	couponSvc := service.NewCouponService(memory.NewCouponStore())
 	h := handler.NewHandler(svc, couponSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -29,7 +29,7 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 // newFullMux registers all routes without auth, for handler-level tests.
 func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	svc := service.NewProductSearchService(store, nil)
-	couponSvc := service.NewCouponService()
+	couponSvc := service.NewCouponService(memory.NewCouponStore())
 	h := handler.NewHandler(svc, couponSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
