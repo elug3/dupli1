@@ -226,6 +226,12 @@ func applyEnv(opts *auth.ServerOptions) {
 	if v := os.Getenv("DUPLI1_WEB_SERVICE_PASSWORD"); v != "" {
 		opts.WebServicePassword = v
 	}
+	if v := os.Getenv("DUPLI1_ORDER_SERVICE_EMAIL"); v != "" {
+		opts.OrderServiceEmail = v
+	}
+	if v := os.Getenv("DUPLI1_ORDER_SERVICE_PASSWORD"); v != "" {
+		opts.OrderServicePassword = v
+	}
 
 	setDurationEnv(&opts.ReadTimeout, "DUPLI1_AUTH_READ_TIMEOUT")
 	setDurationEnv(&opts.WriteTimeout, "DUPLI1_AUTH_WRITE_TIMEOUT")

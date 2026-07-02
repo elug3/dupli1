@@ -29,4 +29,8 @@ type Config struct {
 	// When WebServiceEmail is empty, seeding is skipped.
 	WebServiceEmail    string
 	WebServicePassword string
+
+	// OrderServiceEmail and OrderServicePassword seed the dupli1-order service account.
+	OrderServiceEmail    string
+	OrderServicePassword string
 }

@@ -63,6 +63,12 @@ func applyEnv(opts *inventory.ServerOptions) {
 	} else if v := os.Getenv("DB_URL"); v != "" {
 		opts.DatabaseConnString = v
 	}
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		opts.JWTSecret = v
+	}
+	if v := os.Getenv("AUTH_JWKS_URL"); v != "" {
+		opts.JWKSURL = v
+	}
 }
 
 func splitAddr(addr string) (string, int, error) {

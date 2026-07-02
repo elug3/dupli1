@@ -5,15 +5,19 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/elug3/dupli1/inventory/pkg/authjwt"
 	"github.com/elug3/dupli1/inventory/pkg/handler"
 	"github.com/elug3/dupli1/inventory/pkg/infra/memory"
 	"github.com/elug3/dupli1/inventory/pkg/infra/pg"
+	"github.com/elug3/dupli1/inventory/pkg/middleware"
 	"github.com/elug3/dupli1/inventory/pkg/ports"
 	"github.com/elug3/dupli1/inventory/pkg/service"
 )
 
 type Config struct {
 	DatabaseConnString string
+	JWTSecret          string
+	JWKSURL            string
 }
 
 type App struct {
@@ -37,8 +41,18 @@ func Bootstrap(cfg Config) (*App, error) {
 		return nil, err
 	}
 
+	var validator middleware.AccessTokenValidator
+	if cfg.JWKSURL != "" || cfg.JWTSecret != "" {
+		v, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
+		if err != nil {
+			closeFn()
+			return nil, fmt.Errorf("auth validator: %w", err)
+		}
+		validator = v
+	}
+
 	svc := service.New(repo)
-	h := handler.New(svc)
+	h := handler.New(svc, validator)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

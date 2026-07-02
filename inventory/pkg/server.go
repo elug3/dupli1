@@ -24,6 +24,8 @@ func NewServer(opts ServerOptions) (*Server, error) {
 
 	app, err := bootstrap.Bootstrap(bootstrap.Config{
 		DatabaseConnString: opts.DatabaseConnString,
+		JWTSecret:          opts.JWTSecret,
+		JWKSURL:            opts.JWKSURL,
 	})
 	if err != nil {
 		return nil, err
