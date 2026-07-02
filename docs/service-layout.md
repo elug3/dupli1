@@ -81,14 +81,14 @@ Owns:
 ### Inventory (`inventory/pkg`)
 
 **Module:** `github.com/elug3/dupli1/inventory`  
-**Storage:** In-memory
+**Storage:** PostgreSQL (`inventory` table set), in-memory fallback when no DB URL is configured (tests)
 
 Owns stock and reservations at `/api/v1/inventory/*`. No authentication today.
 
 ### Order (`order/pkg`)
 
 **Module:** `github.com/elug3/dupli1/order`  
-**Storage:** In-memory
+**Storage:** PostgreSQL (`orders` table set), in-memory fallback when no DB URL is configured (tests)
 
 Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/checkout/sessions`. Requires Bearer JWT when `AUTH_JWKS_URL` or `JWT_SECRET` is set (RS256 JWKS from auth; access tokens only).
 

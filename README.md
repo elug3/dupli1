@@ -8,12 +8,14 @@ Go microservice backend for a fashion bag marketplace. Five services behind an n
 |---------|------------|-------------|
 | `dupli1-auth` | 18080 | JWT login/refresh, RS256 tokens, JWKS, RBAC user admin |
 | `dupli1-product` | 8081 | Bag catalog, coupons, product CRUD, image upload |
-| `dupli1-inventory` | 8082 | Stock and reservation APIs (in-memory) |
-| `dupli1-order` | 8083 | Checkout sessions and order lifecycle (in-memory) |
+| `dupli1-inventory` | 8082 | Stock and reservation APIs (PostgreSQL) |
+| `dupli1-order` | 8083 | Checkout sessions and order lifecycle (PostgreSQL) |
 | `dupli1-notification` | 8084 | Notification stub (health only) |
 | `dupli1-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
 | `postgres-auth` | 5432 | Auth DB |
 | `postgres-product` | 5433 | Product DB |
+| `postgres-inventory` | 5434 | Inventory DB |
+| `postgres-order` | 5435 | Order DB |
 | `redis` | 6379 | Rate limiter backing store |
 | `minio` | 9000 / 9001 | S3-compatible image storage (console on 9001) |
 
@@ -208,10 +210,17 @@ Returns the updated product with `imageUrls` populated.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `DUPLI1_ORDER_DB` | — | Postgres connection string |
 | `AUTH_JWKS_URL` | — | JWKS URL for RS256 token validation (set in Compose) |
 | `JWT_SECRET` | — | HS256 fallback when JWKS is unavailable |
 | `DUPLI1_INVENTORY_URL` | — | Inventory service base URL |
 | `DUPLI1_PRODUCT_URL` | — | Product service base URL (coupon redeem) |
+
+### Inventory service
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DUPLI1_INVENTORY_DB` | — | Postgres connection string |
 
 ### MinIO
 

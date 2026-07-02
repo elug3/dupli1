@@ -32,8 +32,8 @@ See [infra/terraform/README.md](../infra/terraform/README.md) for full steps.
 | `dupli1-auth` | Authentication API |
 | `dupli1-product` | Product catalog API |
 | `dupli1-proxy` | nginx reverse proxy (ALB mode) |
-| `dupli1-inventory` | Inventory API (in-memory) |
-| `dupli1-order` | Order API (in-memory) |
+| `dupli1-inventory` | Inventory API |
+| `dupli1-order` | Order API |
 | `dupli1-notification` | Notification API |
 
 `dupli1-postgres` is deprecated after RDS cutover.

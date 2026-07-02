@@ -10,8 +10,8 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 |------|--------|
 | Auth (login, JWT, RBAC) | Implemented |
 | Product catalog (bags, coupons, images, PDP) | Implemented |
-| Inventory (stock, reservations) | Implemented (in-memory) |
-| Orders + checkout sessions | Implemented (in-memory) |
+| Inventory (stock, reservations) | Implemented (PostgreSQL) |
+| Orders + checkout sessions | Implemented (PostgreSQL) |
 | Notifications | Stub (health only) |
 | User profiles, chat, analytics | Not started |
 
@@ -61,7 +61,7 @@ See [service-layout.md](service-layout.md) for details.
 ### dupli1-inventory
 
 - **Host port:** 8082
-- **Persistence:** In-memory
+- **Persistence:** PostgreSQL (`inventory` on `postgres-inventory`)
 - **Features:** Stock and reservations at `/api/v1/inventory/*`
 - **Auth:** None
 - **Tests:** `cd inventory && go test ./...`
@@ -69,7 +69,7 @@ See [service-layout.md](service-layout.md) for details.
 ### dupli1-order
 
 - **Host port:** 8083
-- **Persistence:** In-memory
+- **Persistence:** PostgreSQL (`orders` on `postgres-order`)
 - **Features:**
   - Checkout sessions at `/api/v1/checkout/sessions` (see [checkout-session.md](checkout-session.md))
   - Order lifecycle at `/api/v1/orders`
@@ -94,8 +94,9 @@ See [service-layout.md](service-layout.md) for details.
 |-------|---------|-------|
 | PostgreSQL `dupli1_db` | auth | `postgres-auth:5432` |
 | PostgreSQL `products` | product | `postgres-product:5433` |
+| PostgreSQL `inventory` | inventory | `postgres-inventory:5434` |
+| PostgreSQL `orders` | order | `postgres-order:5435` |
 | MinIO `product-images` | product | `minio:9000` |
-| In-memory | inventory, order | process-local |
 | Redis | auth | `redis:6379` (in Compose) |
 | NATS | auth (optional) | `nats:4222` (in Compose) |
 
@@ -125,10 +126,9 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md).
 ## Known gaps
 
 1. **Local TLS** — certs in `certs/` are not wired into nginx; gateway is HTTP only
-2. **Inventory/order persistence** — in-memory; data lost on restart
-3. **Notification** — no outbound messaging
-4. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
-5. **Planned packages not started** — user, chat, analytics, shared lib
+2. **Notification** — no outbound messaging
+3. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
+4. **Planned packages not started** — user, chat, analytics, shared lib
 
 ## Running and testing
 

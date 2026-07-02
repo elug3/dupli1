@@ -22,7 +22,12 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		return nil, fmt.Errorf("Addr is required")
 	}
 
-	app := bootstrap.Bootstrap(nil)
+	app, err := bootstrap.Bootstrap(bootstrap.Config{
+		DatabaseConnString: opts.DatabaseConnString,
+	})
+	if err != nil {
+		return nil, err
+	}
 	httpSrv := &http.Server{
 		Addr:         opts.Addr,
 		Handler:      app.Router,
@@ -54,7 +59,11 @@ func (s *Server) Stop() error {
 	defer cancel()
 
 	fmt.Println("Gracefully stopping inventory server...")
-	return s.http.Shutdown(ctx)
+	err := s.http.Shutdown(ctx)
+	if closeErr := s.app.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 func (s *Server) Wait() {
