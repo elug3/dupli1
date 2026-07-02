@@ -29,6 +29,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		InventoryURL: opts.InventoryURL,
 		ProductURL:   opts.ProductURL,
 		JWTSecret:    opts.JWTSecret,
+		JWKSURL:      opts.JWKSURL,
 		NATSURL:      opts.NATSURL,
 		HTTPClient:   bootstrap.DefaultHTTPClient(),
 	})

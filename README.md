@@ -136,7 +136,7 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 
 ### Orders (`dupli1-order` :8083)
 
-Requires `Authorization: Bearer <token>` when `JWT_SECRET` is set (HMAC validator in Compose — see [docs/current-state.md](docs/current-state.md)).
+Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SECRET` is set (RS256 via auth JWKS in Compose; `JWT_SECRET` is HS256 fallback in dev).
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -208,7 +208,8 @@ Returns the updated product with `imageUrls` populated.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `JWT_SECRET` | — | When set, enables Bearer auth on order/checkout routes |
+| `AUTH_JWKS_URL` | — | JWKS URL for RS256 token validation (set in Compose) |
+| `JWT_SECRET` | — | HS256 fallback when JWKS is unavailable |
 | `DUPLI1_INVENTORY_URL` | — | Inventory service base URL |
 | `DUPLI1_PRODUCT_URL` | — | Product service base URL (coupon redeem) |
 
