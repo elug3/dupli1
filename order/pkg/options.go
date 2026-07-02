@@ -4,9 +4,10 @@ import "time"
 
 type ServerOptions struct {
 	Addr            string
-	InventoryURL    string
-	ProductURL      string
-	JWTSecret       string
+	InventoryURL       string
+	ProductURL         string
+	DatabaseConnString string
+	JWTSecret          string
 	NATSURL         string
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration

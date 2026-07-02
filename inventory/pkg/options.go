@@ -3,11 +3,12 @@ package inventory
 import "time"
 
 type ServerOptions struct {
-	Addr            string
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
-	ShutdownTimeout time.Duration
+	Addr               string
+	DatabaseConnString string
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
+	ShutdownTimeout    time.Duration
 }
 
 func NewServerOptions() *ServerOptions {

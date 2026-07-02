@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -11,16 +12,18 @@ import (
 	"github.com/elug3/dupli1/order/pkg/infra/httpcoupon"
 	"github.com/elug3/dupli1/order/pkg/infra/httpinventory"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
+	"github.com/elug3/dupli1/order/pkg/infra/pg"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
 )
 
 type Config struct {
-	InventoryURL string
-	ProductURL   string
-	JWTSecret    string
-	NATSURL      string
-	HTTPClient   *http.Client
+	InventoryURL       string
+	ProductURL         string
+	DatabaseConnString string
+	JWTSecret          string
+	NATSURL            string
+	HTTPClient         *http.Client
 }
 
 type App struct {
@@ -30,18 +33,28 @@ type App struct {
 	Repo          ports.Repository
 	Inventory     ports.InventoryClient
 	natsPublisher *natsinfra.Publisher
+	close         func() error
 }
 
 func (a *App) Close() error {
-	if a == nil || a.natsPublisher == nil {
+	if a == nil {
 		return nil
 	}
-	a.natsPublisher.Close()
-	return nil
+	var errs []error
+	if a.natsPublisher != nil {
+		a.natsPublisher.Close()
+	}
+	if a.close != nil {
+		errs = append(errs, a.close())
+	}
+	return errors.Join(errs...)
 }
 
 func Bootstrap(cfg Config) (*App, error) {
-	repo := memory.NewRepository()
+	repo, closeFn, err := openRepository(cfg.DatabaseConnString)
+	if err != nil {
+		return nil, err
+	}
 	inventory := httpinventory.NewClient(cfg.InventoryURL, cfg.HTTPClient)
 
 	var couponClient ports.CouponClient
@@ -78,6 +91,22 @@ func Bootstrap(cfg Config) (*App, error) {
 		Repo:          repo,
 		Inventory:     inventory,
 		natsPublisher: natsPublisher,
+		close:         closeFn,
+	}, nil
+}
+
+func openRepository(connString string) (ports.Repository, func() error, error) {
+	if connString == "" {
+		return memory.NewRepository(), func() error { return nil }, nil
+	}
+
+	pgRepo, err := pg.NewRepository(connString)
+	if err != nil {
+		return nil, nil, fmt.Errorf("order repository: %w", err)
+	}
+	return pgRepo, func() error {
+		pgRepo.Close()
+		return nil
 	}, nil
 }
 

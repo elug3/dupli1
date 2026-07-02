@@ -35,6 +35,38 @@ services:
       timeout: 5s
       retries: 10
 
+  postgres-inventory:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: inventory
+      POSTGRES_USER: dupli1
+      POSTGRES_PASSWORD: dupli1_dev
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-inventory-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dupli1 -d inventory"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-order:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: dupli1
+      POSTGRES_PASSWORD: dupli1_dev
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-order-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dupli1 -d orders"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     ports:
@@ -166,6 +198,10 @@ services:
       - "8082:8080"
     environment:
       DUPLI1_INVENTORY_ADDR: :8080
+      DUPLI1_INVENTORY_DB: postgres://dupli1:dupli1_dev@postgres-inventory:5432/inventory?sslmode=disable
+    depends_on:
+      postgres-inventory:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 5s
@@ -186,9 +222,12 @@ services:
       DUPLI1_ORDER_ADDR: :8080
       DUPLI1_INVENTORY_URL: http://dupli1-inventory:8080
       DUPLI1_PRODUCT_URL: http://dupli1-product:8080
+      DUPLI1_ORDER_DB: postgres://dupli1:dupli1_dev@postgres-order:5432/orders?sslmode=disable
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
       NATS_URL: nats://nats:4222
     depends_on:
+      postgres-order:
+        condition: service_healthy
       dupli1-inventory:
         condition: service_healthy
       nats:
@@ -249,4 +288,6 @@ services:
 volumes:
   postgres-auth-data:
   postgres-product-data:
+  postgres-inventory-data:
+  postgres-order-data:
   minio-data:

@@ -44,11 +44,15 @@ Docker Compose provides two Postgres instances:
 |---------|-----------|----------|------|----------|
 | `postgres-auth` | 5432 | `dupli1_db` | `dupli1` | `dupli1_dev` |
 | `postgres-product` | 5433 | `products` | `dupli1` | `dupli1_dev` |
+| `postgres-inventory` | 5434 | `inventory` | `dupli1` | `dupli1_dev` |
+| `postgres-order` | 5435 | `orders` | `dupli1` | `dupli1_dev` |
 
 Connection strings:
 
 - Auth: `postgres://dupli1:dupli1_dev@localhost:5432/dupli1_db?sslmode=disable`
 - Product: `postgres://dupli1:dupli1_dev@localhost:5433/products?sslmode=disable`
+- Inventory: `postgres://dupli1:dupli1_dev@localhost:5434/inventory?sslmode=disable`
+- Order: `postgres://dupli1:dupli1_dev@localhost:5435/orders?sslmode=disable`
 
 Production uses **Amazon RDS** — see [docs/deployment-aws.md](docs/deployment-aws.md) and [infra/terraform/README.md](infra/terraform/README.md).
 
@@ -101,7 +105,7 @@ cd order && go test ./...
 - **Auth token flow:** login returns only a `refresh_token`; call `POST /api/v1/auth/refresh` to obtain a short-lived access token in the `token` field.
 - **Product JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint).
 - **Order JWT:** when `JWT_SECRET` is set, order/checkout require Bearer tokens validated with HMAC — not aligned with auth RS256 yet.
-- **Inventory and order** use in-memory stores (no Postgres).
+- **Inventory and order** use PostgreSQL when `DUPLI1_INVENTORY_DB` / `DUPLI1_ORDER_DB` are set (Docker Compose); in-memory fallback for tests without a DB URL.
 - **Notification** is a health-only stub; no outbound messaging yet.
 - **Redis and NATS** are optional for auth (rate limits, session cache, events); Redis is wired in Compose.
 - **SMTP, payment, and OAuth providers** are external; no local mocks are bundled.

@@ -26,11 +26,12 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	}
 
 	app, err := bootstrap.Bootstrap(bootstrap.Config{
-		InventoryURL: opts.InventoryURL,
-		ProductURL:   opts.ProductURL,
-		JWTSecret:    opts.JWTSecret,
-		NATSURL:      opts.NATSURL,
-		HTTPClient:   bootstrap.DefaultHTTPClient(),
+		InventoryURL:       opts.InventoryURL,
+		ProductURL:         opts.ProductURL,
+		DatabaseConnString: opts.DatabaseConnString,
+		JWTSecret:          opts.JWTSecret,
+		NATSURL:            opts.NATSURL,
+		HTTPClient:         bootstrap.DefaultHTTPClient(),
 	})
 	if err != nil {
 		return nil, err

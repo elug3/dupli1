@@ -76,6 +76,11 @@ func applyEnv(opts *order.ServerOptions) {
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.JWTSecret = v
 	}
+	if v := os.Getenv("DUPLI1_ORDER_DB"); v != "" {
+		opts.DatabaseConnString = v
+	} else if v := os.Getenv("DB_URL"); v != "" {
+		opts.DatabaseConnString = v
+	}
 	if v := os.Getenv("DUPLI1_ORDER_NATS_URL"); v != "" {
 		opts.NATSURL = v
 	} else if v := os.Getenv("NATS_URL"); v != "" {

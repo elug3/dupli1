@@ -58,6 +58,11 @@ func applyEnv(opts *inventory.ServerOptions) {
 	if v := os.Getenv("DUPLI1_INVENTORY_ADDR"); v != "" {
 		opts.Addr = v
 	}
+	if v := os.Getenv("DUPLI1_INVENTORY_DB"); v != "" {
+		opts.DatabaseConnString = v
+	} else if v := os.Getenv("DB_URL"); v != "" {
+		opts.DatabaseConnString = v
+	}
 }
 
 func splitAddr(addr string) (string, int, error) {
