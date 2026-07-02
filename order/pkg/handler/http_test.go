@@ -26,6 +26,7 @@ func makeToken(t *testing.T, userID string, roles []string) string {
 	t.Helper()
 	claims := jwt.MapClaims{
 		"sub":   userID,
+		"type":  "access",
 		"roles": roles,
 		"exp":   time.Now().Add(time.Hour).Unix(),
 		"iat":   time.Now().Unix(),
@@ -53,7 +54,7 @@ func newTestHandler(t *testing.T) (*handler.Handler, *service.Service) {
 	t.Helper()
 	repo := memory.NewRepository()
 	svc := service.New(repo, &fakeInventory{})
-	validator := authjwt.NewValidator(testSecret)
+	validator := authjwt.NewHMACValidator(testSecret)
 	return handler.New(svc, validator), svc
 }
 

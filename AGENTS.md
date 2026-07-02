@@ -104,7 +104,7 @@ cd order && go test ./...
 - **Module paths:** all services use `github.com/elug3/dupli1/<service>` (e.g. `github.com/elug3/dupli1/product`). There is no top-level `go.work`.
 - **Auth token flow:** login returns only a `refresh_token`; call `POST /api/v1/auth/refresh` to obtain a short-lived access token in the `token` field.
 - **Product JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint).
-- **Order JWT:** when `JWT_SECRET` is set, order/checkout require Bearer tokens validated with HMAC — not aligned with auth RS256 yet.
+- **Order JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint), with `JWT_SECRET` HS256 fallback in dev.
 - **Inventory and order** use PostgreSQL when `DUPLI1_INVENTORY_DB` / `DUPLI1_ORDER_DB` are set (Docker Compose); in-memory fallback for tests without a DB URL.
 - **Notification** is a health-only stub; no outbound messaging yet.
 - **Redis and NATS** are optional for auth (rate limits, session cache, events); Redis is wired in Compose.

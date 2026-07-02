@@ -12,12 +12,17 @@ import (
 	"github.com/elug3/dupli1/order/pkg/service"
 )
 
-type Handler struct {
-	svc          *service.Service
-	jwtValidator *authjwt.Validator
+// AccessTokenValidator validates Bearer access tokens and returns claims.
+type AccessTokenValidator interface {
+	ValidateAccessToken(token string) (authjwt.Claims, error)
 }
 
-func New(svc *service.Service, jwtValidator *authjwt.Validator) *Handler {
+type Handler struct {
+	svc          *service.Service
+	jwtValidator AccessTokenValidator
+}
+
+func New(svc *service.Service, jwtValidator AccessTokenValidator) *Handler {
 	return &Handler{svc: svc, jwtValidator: jwtValidator}
 }
 
@@ -53,7 +58,7 @@ func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		claims, err := h.jwtValidator.Validate(authHeader[7:])
+		claims, err := h.jwtValidator.ValidateAccessToken(authHeader[7:])
 		if err != nil {
 			respondError(w, http.StatusUnauthorized, "invalid token")
 			return

@@ -90,7 +90,7 @@ Owns stock and reservations at `/api/v1/inventory/*`. No authentication today.
 **Module:** `github.com/elug3/dupli1/order`  
 **Storage:** PostgreSQL (`orders` table set), in-memory fallback when no DB URL is configured (tests)
 
-Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/checkout/sessions`. Requires Bearer JWT when `JWT_SECRET` is set (HMAC only today — see [current-state.md](current-state.md)).
+Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/checkout/sessions`. Requires Bearer JWT when `AUTH_JWKS_URL` or `JWT_SECRET` is set (RS256 JWKS from auth; access tokens only).
 
 ### Notification (`notification/pkg`)
 

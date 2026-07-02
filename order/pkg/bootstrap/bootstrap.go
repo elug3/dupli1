@@ -22,6 +22,7 @@ type Config struct {
 	ProductURL         string
 	DatabaseConnString string
 	JWTSecret          string
+	JWKSURL            string
 	NATSURL            string
 	HTTPClient         *http.Client
 }
@@ -75,9 +76,13 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	svc := service.NewWithCheckout(repo, inventory, couponClient, 0, eventPublisher)
 
-	var jwtValidator *authjwt.Validator
-	if cfg.JWTSecret != "" {
-		jwtValidator = authjwt.NewValidator(cfg.JWTSecret)
+	var jwtValidator handler.AccessTokenValidator
+	if cfg.JWKSURL != "" || cfg.JWTSecret != "" {
+		validator, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
+		if err != nil {
+			return nil, fmt.Errorf("auth validator: %w", err)
+		}
+		jwtValidator = validator
 	}
 
 	h := handler.New(svc, jwtValidator)

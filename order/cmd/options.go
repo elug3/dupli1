@@ -76,6 +76,9 @@ func applyEnv(opts *order.ServerOptions) {
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.JWTSecret = v
 	}
+	if v := os.Getenv("AUTH_JWKS_URL"); v != "" {
+		opts.JWKSURL = v
+	}
 	if v := os.Getenv("DUPLI1_ORDER_DB"); v != "" {
 		opts.DatabaseConnString = v
 	} else if v := os.Getenv("DB_URL"); v != "" {

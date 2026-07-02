@@ -74,7 +74,7 @@ See [service-layout.md](service-layout.md) for details.
   - Checkout sessions at `/api/v1/checkout/sessions` (see [checkout-session.md](checkout-session.md))
   - Order lifecycle at `/api/v1/orders`
   - Calls inventory to reserve stock; calls product to redeem coupons
-- **Auth:** Bearer JWT when `JWT_SECRET` is set (HMAC validator — **not aligned with auth RS256 yet**)
+- **Auth:** Bearer JWT validated via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only), with `JWT_SECRET` HS256 fallback in dev
 - **Tests:** `cd order && go test ./...`
 
 ### dupli1-notification
@@ -125,11 +125,10 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md).
 
 ## Known gaps
 
-1. **Order JWT** — HMAC `JWT_SECRET` validator; does not consume auth JWKS/RS256 tokens
-2. **Local TLS** — certs in `certs/` are not wired into nginx; gateway is HTTP only
-3. **Notification** — no outbound messaging
-4. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
-5. **Planned packages not started** — user, chat, analytics, shared lib
+1. **Local TLS** — certs in `certs/` are not wired into nginx; gateway is HTTP only
+2. **Notification** — no outbound messaging
+3. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
+4. **Planned packages not started** — user, chat, analytics, shared lib
 
 ## Running and testing
 
