@@ -80,6 +80,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 			middleware.RequireAnyRole(middleware.ProductManagerRoles...)(next))
 	}
 
+	mux.Handle("GET "+handler.RouteProductsAll, protect(h.ListProductsAllHandler()))
 	mux.Handle("GET "+handler.RouteProducts, protect(h.ListProductsHandler()))
 	mux.Handle("POST "+handler.RouteProducts, protect(h.CreateProductHandler()))
 	mux.Handle("GET "+handler.RouteManageProduct, protect(h.GetProductHandler()))

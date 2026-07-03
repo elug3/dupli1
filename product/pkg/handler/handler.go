@@ -103,6 +103,25 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, products)
 }
 
+// ListProductsAllHandler returns an http.Handler for GET /api/v1/products/all.
+// This legacy admin path must be registered before /api/v1/products/{id} or "all"
+// is treated as a product id on the public PDP route.
+func (h *Handler) ListProductsAllHandler() http.Handler {
+	return http.HandlerFunc(h.ListProductsAll)
+}
+
+func (h *Handler) ListProductsAll(w http.ResponseWriter, r *http.Request) {
+	products, err := h.svc.ListProducts()
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if products == nil {
+		products = []domain.Product{}
+	}
+	h.respondJSON(w, http.StatusOK, SearchResponse{Total: len(products), Results: products})
+}
+
 // GetProductHandler returns an http.Handler for authenticated GET /api/v1/products/{id}/manage.
 func (h *Handler) GetProductHandler() http.Handler {
 	return http.HandlerFunc(h.GetProduct)

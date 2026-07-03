@@ -69,3 +69,13 @@ func TestHMACValidatorExtractsRoles(t *testing.T) {
 		t.Fatal("did not expect admin role")
 	}
 }
+
+func TestExtractRolesHandlesStringSliceClaim(t *testing.T) {
+	claims := jwt.MapClaims{
+		"roles": []string{"admin"},
+	}
+	roles := extractRoles(claims)
+	if len(roles) != 1 || roles[0] != "admin" {
+		t.Fatalf("roles = %v, want [admin]", roles)
+	}
+}

@@ -247,17 +247,23 @@ func extractRoles(claims jwt.MapClaims) []string {
 	if !ok {
 		return []string{}
 	}
-	slice, ok := raw.([]interface{})
-	if !ok {
-		return []string{}
-	}
-	roles := make([]string, 0, len(slice))
-	for _, v := range slice {
-		if s, ok := v.(string); ok {
-			roles = append(roles, s)
+	switch v := raw.(type) {
+	case []interface{}:
+		roles := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				roles = append(roles, s)
+			}
+		}
+		return roles
+	case []string:
+		return v
+	case string:
+		if v != "" {
+			return []string{v}
 		}
 	}
-	return roles
+	return []string{}
 }
 
 // NewAccessTokenValidator returns JWKS validation when url is set, otherwise HMAC.
