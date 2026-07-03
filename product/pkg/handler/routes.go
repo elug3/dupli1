@@ -7,7 +7,6 @@ const (
 	RoutePublicProduct  = "/api/v1/products/{id}"
 	RouteRedeemCoupon   = "/api/v1/coupons/redeem"
 	RouteProducts       = "/api/v1/products"
-	RouteProductsAll    = "/api/v1/products/all"
 	RouteManageProduct  = "/api/v1/products/{id}/manage"
 	RouteProductByID    = "/api/v1/products/{id}"
 	RouteProductImage   = "/api/v1/products/{id}/image"

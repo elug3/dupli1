@@ -53,7 +53,6 @@ func newAccessControlMux(store *memory.ProductStore) *http.ServeMux {
 			middleware.RequireAnyRole(middleware.ProductManagerRoles...)(next))
 	}
 
-	mux.Handle("GET "+handler.RouteProductsAll, protect(h.ListProductsAllHandler()))
 	mux.Handle("GET "+handler.RouteProducts, protect(h.ListProductsHandler()))
 	mux.Handle("POST "+handler.RouteProducts, protect(h.CreateProductHandler()))
 	mux.Handle("GET "+handler.RouteManageProduct, protect(h.GetProductHandler()))
@@ -205,6 +204,11 @@ func TestAdminCanManageProducts(t *testing.T) {
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+
+	w = serve(t, mux, http.MethodGet, handler.RouteProducts, token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list products: status = %d, want 200", w.Code)
 	}
 }
 

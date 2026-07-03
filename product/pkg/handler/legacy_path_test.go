@@ -10,7 +10,32 @@ import (
 	"github.com/elug3/dupli1/product/pkg/infra/memory"
 )
 
-func TestAdminCreateViaLegacyAndCurrentPaths(t *testing.T) {
+func TestAdminListsProductsAtDocumentedPath(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BAG-001", Name: "Canvas Tote", Brand: "Baggu", Status: "active", Cost: 20},
+	}
+	mux := newAccessControlMux(store)
+	token := makeAccessToken(t, "admin-1", []string{"admin"})
+
+	w := serve(t, mux, http.MethodGet, handler.RouteProducts, token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/products: status=%d, want 200; body=%s", w.Code, w.Body.String())
+	}
+
+	var products []domain.Product
+	if err := json.NewDecoder(w.Body).Decode(&products); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("len(products) = %d, want 1", len(products))
+	}
+	if products[0].Cost != 20 {
+		t.Fatalf("cost = %v, want admin list to include cost", products[0].Cost)
+	}
+}
+
+func TestAdminCreatesProductAtDocumentedPath(t *testing.T) {
 	mux := newAccessControlMux(memory.NewProductStore())
 	token := makeAccessToken(t, "admin-1", []string{"admin"})
 	body := domain.Product{Name: "Tote", Brand: "Baggu", Price: 45}
@@ -21,7 +46,7 @@ func TestAdminCreateViaLegacyAndCurrentPaths(t *testing.T) {
 	}
 }
 
-func TestAdminReadLegacyAllPathWithToken(t *testing.T) {
+func TestProductsAllIsNotAdminListEndpoint(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
 		{ID: "BAG-001", Name: "Canvas Tote", Brand: "Baggu", Status: "active"},
@@ -29,24 +54,9 @@ func TestAdminReadLegacyAllPathWithToken(t *testing.T) {
 	mux := newAccessControlMux(store)
 	token := makeAccessToken(t, "admin-1", []string{"admin"})
 
-	w := serve(t, mux, http.MethodGet, handler.RouteProductsAll, token, nil)
-	if w.Code != http.StatusOK {
-		t.Fatalf("GET /api/v1/products/all with admin token: status=%d, want 200; body=%s", w.Code, w.Body.String())
-	}
-
-	var resp handler.SearchResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if resp.Total != 1 {
-		t.Fatalf("total = %d, want 1", resp.Total)
-	}
-}
-
-func TestLegacyAllPathRejectsUnauthenticated(t *testing.T) {
-	mux := newAccessControlMux(memory.NewProductStore())
-	w := serve(t, mux, http.MethodGet, handler.RouteProductsAll, "", nil)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("GET /api/v1/products/all without auth: status=%d, want 401", w.Code)
+	// /api/v1/products/all is not documented; it falls through to the public PDP route.
+	w := serve(t, mux, http.MethodGet, "/api/v1/products/all", token, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /api/v1/products/all: status=%d, want 404", w.Code)
 	}
 }
