@@ -51,9 +51,9 @@ services:
       JWT_PRIVATE_KEY_FILE: /run/secrets/jwt_private_key.pem
       OWNER_EMAIL: ${OWNER_EMAIL:-admin@dupli1.com}
       OWNER_PASSWORD: ${OWNER_PASSWORD:?set OWNER_PASSWORD in .env.prod}
-      DUPLI1_WEB_SERVICE_EMAIL: ${DUPLI1_WEB_SERVICE_EMAIL:-dupli1-web@internal.dupli1}
+      DUPLI1_WEB_SERVICE_EMAIL: ${DUPLI1_WEB_SERVICE_EMAIL:-dupli1-web@service.dupli1.com}
       DUPLI1_WEB_SERVICE_PASSWORD: ${DUPLI1_WEB_SERVICE_PASSWORD:?set DUPLI1_WEB_SERVICE_PASSWORD}
-      DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL:-dupli1-order@internal.dupli1}
+      DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL:-dupli1-order@service.dupli1.com}
       DUPLI1_ORDER_SERVICE_PASSWORD: ${DUPLI1_ORDER_SERVICE_PASSWORD:?set DUPLI1_ORDER_SERVICE_PASSWORD}
     volumes:
       - ${DUPLI1_SECRETS_DIR:-/opt/dupli1/secrets}:/run/secrets:ro
@@ -64,6 +64,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+    healthcheck:
+      start_period: 60s
 
   dupli1-product:
     ports: []
@@ -97,7 +99,7 @@ services:
     environment:
       DUPLI1_ORDER_DB: postgres://dupli1:${POSTGRES_PASSWORD}@postgres:5432/orders?sslmode=disable
       JWT_SECRET: ${JWT_SECRET}
-      DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL:-dupli1-order@internal.dupli1}
+      DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL:-dupli1-order@service.dupli1.com}
       DUPLI1_ORDER_SERVICE_PASSWORD: ${DUPLI1_ORDER_SERVICE_PASSWORD}
     depends_on: !reset
       postgres:
@@ -108,6 +110,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+    healthcheck:
+      start_period: 60s
 
   dupli1-notification:
     ports: []

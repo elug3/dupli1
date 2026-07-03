@@ -27,6 +27,7 @@ if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
 fi
 apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
 systemctl enable --now docker
+usermod -aG docker "${SUDO_USER:-ubuntu}" 2>/dev/null || true
 
 log "Preparing ${DUPLI1_HOME}..."
 mkdir -p "$DUPLI1_HOME" "$SECRETS_DIR"
