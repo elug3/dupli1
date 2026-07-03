@@ -1,0 +1,129 @@
+# Production overlay for single-EC2 deployment.
+# Usage:
+#   cp .env.prod.example .env.prod   # fill in secrets
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+services:
+  postgres-auth:
+    profiles: ["local-db"]
+
+  postgres-product:
+    profiles: ["local-db"]
+
+  postgres-inventory:
+    profiles: ["local-db"]
+
+  postgres-order:
+    profiles: ["local-db"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dupli1_db
+      POSTGRES_USER: dupli1
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dupli1 -d dupli1_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+
+  redis:
+    ports: []
+
+  nats:
+    ports: []
+
+  minio:
+    ports: []
+
+  dupli1-auth:
+    ports: []
+    environment:
+      DB_URL: postgres://dupli1:${POSTGRES_PASSWORD}@postgres:5432/dupli1_db?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.prod}
+      JWT_PRIVATE_KEY_FILE: /run/secrets/jwt_private_key.pem
+      OWNER_EMAIL: ${OWNER_EMAIL:-admin@dupli1.com}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:?set OWNER_PASSWORD in .env.prod}
+      DUPLI1_WEB_SERVICE_EMAIL: ${DUPLI1_WEB_SERVICE_EMAIL:-dupli1-web@internal.dupli1}
+      DUPLI1_WEB_SERVICE_PASSWORD: ${DUPLI1_WEB_SERVICE_PASSWORD:?set DUPLI1_WEB_SERVICE_PASSWORD}
+      DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL:-dupli1-order@internal.dupli1}
+      DUPLI1_ORDER_SERVICE_PASSWORD: ${DUPLI1_ORDER_SERVICE_PASSWORD:?set DUPLI1_ORDER_SERVICE_PASSWORD}
+    volumes:
+      - ${DUPLI1_SECRETS_DIR:-/opt/dupli1/secrets}:/run/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+  dupli1-product:
+    ports: []
+    environment:
+      DUPLI1_PRODUCT_DB: postgres://dupli1:${POSTGRES_PASSWORD}@postgres:5432/products?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dupli1}
+      S3_SECRET_KEY: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY in .env.prod}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dupli1-auth:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+  dupli1-inventory:
+    ports: []
+    environment:
+      DUPLI1_INVENTORY_DB: postgres://dupli1:${POSTGRES_PASSWORD}@postgres:5432/inventory?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dupli1-auth:
+        condition: service_healthy
+
+  dupli1-order:
+    ports: []
+    environment:
+      DUPLI1_ORDER_DB: postgres://dupli1:${POSTGRES_PASSWORD}@postgres:5432/orders?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL:-dupli1-order@internal.dupli1}
+      DUPLI1_ORDER_SERVICE_PASSWORD: ${DUPLI1_ORDER_SERVICE_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dupli1-auth:
+        condition: service_healthy
+      dupli1-inventory:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+  dupli1-notification:
+    ports: []
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_ORDER_CHAT_ID: ${TELEGRAM_ORDER_CHAT_ID:-}
+      TELEGRAM_PRODUCT_CHAT_ID: ${TELEGRAM_PRODUCT_CHAT_ID:-}
+    restart: unless-stopped
+
+  dupli1-proxy:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.prod
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  postgres-data:

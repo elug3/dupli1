@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.prod.example
 
 # AWS credentials
 *credentials*
@@ -17,3 +18,4 @@ infra/terraform/.terraform/
 infra/terraform/terraform.tfvars
 infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
+infra/ec2/*.pem
