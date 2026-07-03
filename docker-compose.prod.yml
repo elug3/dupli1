@@ -57,7 +57,7 @@ services:
       DUPLI1_ORDER_SERVICE_PASSWORD: ${DUPLI1_ORDER_SERVICE_PASSWORD:?set DUPLI1_ORDER_SERVICE_PASSWORD}
     volumes:
       - ${DUPLI1_SECRETS_DIR:-/opt/dupli1/secrets}:/run/secrets:ro
-    depends_on:
+    depends_on: !reset
       postgres:
         condition: service_healthy
       redis:
@@ -72,7 +72,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dupli1}
       S3_SECRET_KEY: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY in .env.prod}
-    depends_on:
+    depends_on: !reset
       postgres:
         condition: service_healthy
       dupli1-auth:
@@ -86,7 +86,7 @@ services:
     ports: []
     environment:
       DUPLI1_INVENTORY_DB: postgres://dupli1:${POSTGRES_PASSWORD}@postgres:5432/inventory?sslmode=disable
-    depends_on:
+    depends_on: !reset
       postgres:
         condition: service_healthy
       dupli1-auth:
@@ -99,7 +99,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL:-dupli1-order@internal.dupli1}
       DUPLI1_ORDER_SERVICE_PASSWORD: ${DUPLI1_ORDER_SERVICE_PASSWORD}
-    depends_on:
+    depends_on: !reset
       postgres:
         condition: service_healthy
       dupli1-auth:

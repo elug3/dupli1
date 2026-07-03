@@ -59,5 +59,6 @@ if [[ ! -f "${DUPLI1_HOME}/app/.env.prod" ]]; then
 fi
 
 log "Bootstrap complete."
+chown -R "${SUDO_USER:-ubuntu}:docker" "$DUPLI1_HOME" 2>/dev/null || chown -R ubuntu:ubuntu "$DUPLI1_HOME" 2>/dev/null || true
 log "Next: edit ${DUPLI1_HOME}/app/.env.prod (owner password, service accounts, MinIO secret)"
 log "Then:  bash ${DUPLI1_HOME}/app/infra/scripts/deploy-ec2.sh"
