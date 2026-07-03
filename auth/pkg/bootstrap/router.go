@@ -27,7 +27,7 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 	r.Use(corsMiddleware(corsOrigins))
 
 	healthHandler := func(c *gin.Context) {
-		c.String(http.StatusOK, "ok")
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 	r.GET("/health", healthHandler)
 	r.GET("/api/v1/auth/health", healthHandler)

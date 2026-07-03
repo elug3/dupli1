@@ -74,7 +74,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	h.respondJSON(w, http.StatusOK, HealthResponse{Status: "healthy"})
+	h.respondJSON(w, http.StatusOK, HealthResponse{Status: "ok"})
 }
 
 func (h *Handler) SearchBags(w http.ResponseWriter, r *http.Request) {

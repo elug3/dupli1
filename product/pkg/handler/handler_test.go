@@ -56,8 +56,8 @@ func TestHealth(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Status != "healthy" {
-		t.Errorf("want healthy, got %q", resp.Status)
+	if resp.Status != "ok" {
+		t.Errorf("want ok, got %q", resp.Status)
 	}
 }
 
