@@ -83,6 +83,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+    healthcheck:
+      start_period: 60s
 
   dupli1-inventory:
     ports: []
@@ -93,6 +95,8 @@ services:
         condition: service_healthy
       dupli1-auth:
         condition: service_healthy
+    healthcheck:
+      start_period: 60s
 
   dupli1-order:
     ports: []

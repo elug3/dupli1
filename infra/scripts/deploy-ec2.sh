@@ -20,11 +20,19 @@ echo "Pulling latest code..."
 git pull origin "$(git branch --show-current)"
 
 echo "Building and starting services..."
-docker compose \
+if ! docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
   --env-file "$ENV_FILE" \
-  up -d --build --remove-orphans
+  up -d --build --remove-orphans; then
+  echo "First start had dependency races; retrying in 30s..."
+  sleep 30
+  docker compose \
+    -f docker-compose.yml \
+    -f docker-compose.prod.yml \
+    --env-file "$ENV_FILE" \
+    up -d --remove-orphans
+fi
 
 echo "Waiting for gateway health..."
 for _ in $(seq 1 30); do
