@@ -9,9 +9,9 @@ import (
 func TestEnrichFromVariantsSummaries(t *testing.T) {
 	p := domain.Product{ID: "BOT-001", Name: "Cassette"}
 	variants := []domain.Variant{
-		{SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Price: 2600, Status: "active", ImageURLs: []string{"green.jpg"}},
-		{SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Price: 2500, Status: "active", ImageURLs: []string{"black.jpg"}},
-		{SKU: "BOT-001-RED", ProductID: "BOT-001", Color: "Red", Price: 2400, Status: "draft"},
+		{SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", SellingPrice: 3200, Price: 2600, Status: "active", ImageURLs: []string{"green.jpg"}},
+		{SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", SellingPrice: 3000, Price: 2500, Status: "active", ImageURLs: []string{"black.jpg"}},
+		{SKU: "BOT-001-RED", ProductID: "BOT-001", Color: "Red", SellingPrice: 2900, Price: 2400, Status: "draft"},
 	}
 
 	p.EnrichFromVariants(variants, true)
@@ -24,6 +24,9 @@ func TestEnrichFromVariantsSummaries(t *testing.T) {
 	}
 	if p.PriceFrom != 2500 {
 		t.Fatalf("want min active price 2500, got %v", p.PriceFrom)
+	}
+	if p.SellingPriceFrom != 3000 {
+		t.Fatalf("want sellingPriceFrom of cheapest variant 3000, got %v", p.SellingPriceFrom)
 	}
 	if p.DefaultImageURL != "green.jpg" {
 		t.Fatalf("want first active image, got %q", p.DefaultImageURL)

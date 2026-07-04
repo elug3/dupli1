@@ -229,10 +229,10 @@ func TestCreateVariant(t *testing.T) {
 func TestPublicGetProduct(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active", Cost: 99},
+		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active"},
 	}
 	store.Variants = []domain.Variant{
-		{SKU: "BOT-001", ProductID: "BOT-001", Color: "Green", Price: 2500, Status: "active"},
+		{SKU: "BOT-001", ProductID: "BOT-001", Color: "Green", SellingPrice: 3000, Price: 2500, Status: "active"},
 	}
 	mux := newMux(store)
 	rec := httptest.NewRecorder()
@@ -245,8 +245,11 @@ func TestPublicGetProduct(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&p); err != nil {
 		t.Fatal(err)
 	}
-	if p.Cost != 0 {
-		t.Fatalf("want cost redacted, got %v", p.Cost)
+	if p.Price != 2500 {
+		t.Fatalf("want price=2500, got %v", p.Price)
+	}
+	if p.SellingPrice != 3000 {
+		t.Fatalf("want sellingPrice=3000, got %v", p.SellingPrice)
 	}
 	if len(p.Variants) != 1 {
 		t.Fatalf("want variants on PDP, got %d", len(p.Variants))

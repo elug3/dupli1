@@ -113,7 +113,7 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/products` | Manager search (all statuses, includes cost) |
+| GET | `/api/v1/products` | Manager search (all statuses) |
 | POST | `/api/v1/products` | Create parent style |
 | PUT | `/api/v1/products/{id}` | Update parent |
 | DELETE | `/api/v1/products/{id}` | Delete parent (cascades variants) |

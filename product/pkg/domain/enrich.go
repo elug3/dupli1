@@ -14,6 +14,7 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 	colorSeen := map[string]bool{}
 	sizeSeen := map[string]bool{}
 	var priceFrom float64
+	var sellingPriceFrom float64
 	var hasPrice bool
 	var defaultVariant *Variant
 
@@ -35,6 +36,7 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 		}
 		if !hasPrice || v.Price < priceFrom {
 			priceFrom = v.Price
+			sellingPriceFrom = v.SellingPrice
 			hasPrice = true
 		}
 	}
@@ -44,6 +46,8 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 	if hasPrice {
 		p.PriceFrom = priceFrom
 		p.Price = priceFrom
+		p.SellingPriceFrom = sellingPriceFrom
+		p.SellingPrice = sellingPriceFrom
 	}
 	if defaultVariant != nil {
 		p.Color = defaultVariant.Color

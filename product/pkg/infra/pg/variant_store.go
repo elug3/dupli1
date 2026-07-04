@@ -11,14 +11,14 @@ import (
 	"github.com/elug3/dupli1/product/pkg/domain"
 )
 
-const variantSelectCols = `sku, product_id, color, size, price, status, image_urls, created_at`
+const variantSelectCols = `sku, product_id, color, size, selling_price, price, status, image_urls, created_at`
 
 func scanVariant(scan func(...any) error) (domain.Variant, error) {
 	var v domain.Variant
 	var createdAt time.Time
 	var imageURLs pgtype.TextArray
 	err := scan(
-		&v.SKU, &v.ProductID, &v.Color, &v.Size, &v.Price, &v.Status, &imageURLs, &createdAt,
+		&v.SKU, &v.ProductID, &v.Color, &v.Size, &v.SellingPrice, &v.Price, &v.Status, &imageURLs, &createdAt,
 	)
 	if err != nil {
 		return domain.Variant{}, err
@@ -131,10 +131,10 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO product_variants (sku, product_id, color, size, price, status, image_urls)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO product_variants (sku, product_id, color, size, selling_price, price, status, image_urls)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING created_at`,
-		v.SKU, v.ProductID, v.Color, v.Size, v.Price, v.Status, toTextArray(v.ImageURLs),
+		v.SKU, v.ProductID, v.Color, v.Size, v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, err
@@ -147,10 +147,10 @@ func (s *ProductSearchStore) UpdateVariant(v domain.Variant) (*domain.Variant, e
 	var createdAt time.Time
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE product_variants
-		 SET color=$2, size=$3, price=$4, status=$5, image_urls=$6
+		 SET color=$2, size=$3, selling_price=$4, price=$5, status=$6, image_urls=$7
 		 WHERE sku=$1
 		 RETURNING product_id, created_at`,
-		v.SKU, v.Color, v.Size, v.Price, v.Status, toTextArray(v.ImageURLs),
+		v.SKU, v.Color, v.Size, v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
 	).Scan(&v.ProductID, &createdAt)
 	if err != nil {
 		return nil, err

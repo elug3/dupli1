@@ -56,7 +56,7 @@ func NewProductSearchService(store ports.ProductStore, imageStore ports.ImageSto
 }
 
 // SearchProducts returns parent styles only (no duplicate colors).
-// When public is true, only active parents are returned and cost is redacted.
+// When public is true, only active parents are returned.
 func (s *ProductSearchService) SearchProducts(filter map[string]string, public bool) ([]domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
@@ -68,16 +68,7 @@ func (s *ProductSearchService) SearchProducts(filter map[string]string, public b
 	if public {
 		f["status"] = "active"
 	}
-	results, err := s.store.SearchProducts(f)
-	if err != nil {
-		return nil, err
-	}
-	if public {
-		for i := range results {
-			results[i].Cost = 0
-		}
-	}
-	return results, nil
+	return s.store.SearchProducts(f)
 }
 
 func (s *ProductSearchService) ListProducts() ([]domain.Product, error) {

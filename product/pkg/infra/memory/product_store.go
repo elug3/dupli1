@@ -134,7 +134,6 @@ func (s *ProductStore) GetActiveProduct(id string) (*domain.Product, error) {
 			active = append(active, v)
 		}
 	}
-	p.Cost = 0
 	p.EnrichFromVariants(active, true)
 	return p, nil
 }
@@ -188,14 +187,15 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 				return nil, err
 			}
 		}
-	case p.Color != "" || p.Price > 0 || len(p.ImageURLs) > 0:
+	case p.Color != "" || p.Price > 0 || p.SellingPrice > 0 || len(p.ImageURLs) > 0:
 		if _, err := s.CreateVariant(domain.Variant{
-			SKU:       p.ID,
-			ProductID: p.ID,
-			Color:     p.Color,
-			Price:     p.Price,
-			Status:    p.Status,
-			ImageURLs: p.ImageURLs,
+			SKU:          p.ID,
+			ProductID:    p.ID,
+			Color:        p.Color,
+			SellingPrice: p.SellingPrice,
+			Price:        p.Price,
+			Status:       p.Status,
+			ImageURLs:    p.ImageURLs,
 		}); err != nil {
 			return nil, err
 		}

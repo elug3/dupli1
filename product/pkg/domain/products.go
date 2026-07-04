@@ -16,6 +16,9 @@ type Variant struct {
 	ProductID string   `json:"productId"`
 	Color     string   `json:"color"`
 	Size      string   `json:"size,omitempty"`
+	// SellingPrice is the official/display price (strikethrough / "was" price).
+	SellingPrice float64 `json:"sellingPrice,omitempty"`
+	// Price is the real sale price used for discount calculation.
 	Price     float64  `json:"price"`
 	Status    string   `json:"status"` // "active" | "draft" | "archived"
 	ImageURLs []string `json:"imageUrls,omitempty"`
@@ -31,23 +34,27 @@ type Product struct {
 	Material    string  `json:"material"`
 	Category    string  `json:"category"`
 	Status      string  `json:"status"` // "active" | "draft" | "archived"
-	Cost        float64 `json:"cost,omitempty"`
 	Capacity    string  `json:"capacity,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	CreatedAt   string  `json:"createdAt"`
 
 	// Summary fields derived from variants (not stored on parent).
+	// SellingPriceFrom is the official/display price for the cheapest active variant.
+	SellingPriceFrom  float64   `json:"sellingPriceFrom,omitempty"`
+	// PriceFrom is the real sale price (min active variant price).
 	PriceFrom         float64   `json:"priceFrom,omitempty"`
 	DefaultImageURL   string    `json:"defaultImageUrl,omitempty"`
 	AvailableColors   []string  `json:"availableColors,omitempty"`
 	AvailableSizes    []string  `json:"availableSizes,omitempty"`
 	Variants          []Variant `json:"variants,omitempty"`
 
-	// Legacy fields mirrored from the default variant for older clients.
-	Price     float64  `json:"price,omitempty"`
-	Color     string   `json:"color,omitempty"`
-	Stock     int      `json:"stock,omitempty"`
-	ImageURLs []string `json:"imageUrls,omitempty"`
+	// Legacy fields mirrored from the cheapest active variant for older clients.
+	// SellingPrice is the official/display price; Price is the real sale price.
+	SellingPrice float64  `json:"sellingPrice,omitempty"`
+	Price        float64  `json:"price,omitempty"`
+	Color        string   `json:"color,omitempty"`
+	Stock        int      `json:"stock,omitempty"`
+	ImageURLs    []string `json:"imageUrls,omitempty"`
 }
 
 // Shoes represents footwear products

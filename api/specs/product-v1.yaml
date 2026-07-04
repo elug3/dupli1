@@ -46,7 +46,7 @@ paths:
       tags: [Products]
       summary: Get public product detail
       operationId: productPublicGet
-      description: Returns an active parent style with variants, availableColors, and availableSizes. Cost is omitted.
+      description: Returns an active parent style with variants, availableColors, and availableSizes.
       parameters:
         - $ref: '#/components/parameters/ProductId'
       responses:
@@ -116,8 +116,8 @@ paths:
       operationId: productSearch
       description: |
         Returns parent styles only (no color duplicates).
-        Public callers receive active parents only with cost omitted.
-        Authenticated managers (`product_manager`, `admin`, `owner`) receive all statuses and cost.
+        Public callers receive active parents only.
+        Authenticated managers (`product_manager`, `admin`, `owner`) receive all statuses.
       parameters:
         - name: category
           in: query
@@ -510,12 +510,14 @@ components:
           type: string
         description:
           type: string
+        sellingPrice:
+          type: number
+          format: double
+          description: Official/display price (legacy mirror of cheapest active variant)
         price:
           type: number
           format: double
-        cost:
-          type: number
-          format: double
+          description: Real sale price used for discount calculation (legacy mirror of cheapest active variant)
         brand:
           type: string
         color:
@@ -542,9 +544,14 @@ components:
         createdAt:
           type: string
           format: date-time
+        sellingPriceFrom:
+          type: number
+          format: double
+          description: Official/display price of the cheapest active variant
         priceFrom:
           type: number
           format: double
+          description: Real sale price (min active variant price)
         defaultImageUrl:
           type: string
         availableColors:
@@ -574,9 +581,14 @@ components:
           type: string
         size:
           type: string
+        sellingPrice:
+          type: number
+          format: double
+          description: Official/display price (strikethrough / "was" price)
         price:
           type: number
           format: double
+          description: Real sale price used for discount calculation
         status:
           $ref: '#/components/schemas/ProductStatus'
         imageUrls:
@@ -598,9 +610,14 @@ components:
           type: string
         size:
           type: string
+        sellingPrice:
+          type: number
+          format: double
+          description: Official/display price (strikethrough / "was" price)
         price:
           type: number
           format: double
+          description: Real sale price used for discount calculation
         status:
           $ref: '#/components/schemas/ProductStatus'
         imageUrls:
@@ -610,13 +627,9 @@ components:
             format: uri
 
     PublicProduct:
-      description: Product without cost field
+      description: Public product view
       allOf:
         - $ref: '#/components/schemas/Product'
-        - type: object
-          properties:
-            cost:
-              readOnly: true
 
     ProductInput:
       type: object
@@ -627,12 +640,14 @@ components:
           type: string
         description:
           type: string
+        sellingPrice:
+          type: number
+          format: double
+          description: Official/display price (legacy create seeds default variant)
         price:
           type: number
           format: double
-        cost:
-          type: number
-          format: double
+          description: Real sale price used for discount calculation
         brand:
           type: string
         color:

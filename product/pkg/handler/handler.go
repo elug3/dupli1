@@ -107,8 +107,8 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 }
 
 // SearchProducts lists/search products via query params.
-// Public callers see active products only (cost redacted).
-// Authenticated product managers see all statuses and cost.
+// Public callers see active products only.
+// Authenticated product managers see all statuses.
 func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")

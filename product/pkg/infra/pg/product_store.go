@@ -57,7 +57,6 @@ func (s *ProductSearchStore) migrate() error {
 		{"status", "TEXT NOT NULL DEFAULT 'active'"},
 		{"created_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
 		{"image_url", "TEXT NOT NULL DEFAULT ''"},
-		{"cost", "NUMERIC(10,2) NOT NULL DEFAULT 0"},
 		{"image_urls", "TEXT[] NOT NULL DEFAULT '{}'"},
 		{"capacity", "TEXT NOT NULL DEFAULT ''"},
 		{"tags", "TEXT[] NOT NULL DEFAULT '{}'"},
@@ -73,20 +72,25 @@ func (s *ProductSearchStore) migrate() error {
 
 	_, err = s.pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS product_variants (
-			sku         TEXT PRIMARY KEY,
-			product_id  TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-			color       TEXT NOT NULL DEFAULT '',
-			size        TEXT NOT NULL DEFAULT '',
-			price       NUMERIC(10,2) NOT NULL DEFAULT 0,
-			status      TEXT NOT NULL DEFAULT 'active',
-			image_urls  TEXT[] NOT NULL DEFAULT '{}',
-			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			sku            TEXT PRIMARY KEY,
+			product_id     TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			color          TEXT NOT NULL DEFAULT '',
+			size           TEXT NOT NULL DEFAULT '',
+			selling_price  NUMERIC(10,2) NOT NULL DEFAULT 0,
+			price          NUMERIC(10,2) NOT NULL DEFAULT 0,
+			status         TEXT NOT NULL DEFAULT 'active',
+			image_urls     TEXT[] NOT NULL DEFAULT '{}',
+			created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			UNIQUE (product_id, color, size)
 		)
 	`)
 	if err != nil {
 		return fmt.Errorf("migrate product_variants: %w", err)
 	}
+
+	s.pool.Exec(ctx,
+		`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS selling_price NUMERIC(10,2) NOT NULL DEFAULT 0`,
+	)
 
 	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)`)
 
@@ -100,8 +104,8 @@ func (s *ProductSearchStore) migrate() error {
 // SKU equals the product id so existing inventory/order references keep working.
 func (s *ProductSearchStore) backfillVariants(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO product_variants (sku, product_id, color, size, price, status, image_urls, created_at)
-		SELECT p.id, p.id, p.color, '', p.price, p.status, p.image_urls, p.created_at
+		INSERT INTO product_variants (sku, product_id, color, size, selling_price, price, status, image_urls, created_at)
+		SELECT p.id, p.id, p.color, '', p.price, p.price, p.status, p.image_urls, p.created_at
 		FROM products p
 		WHERE NOT EXISTS (
 			SELECT 1 FROM product_variants v WHERE v.product_id = p.id
@@ -182,7 +186,7 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, cost, brand, material, category, status, capacity, tags, created_at`
+const parentSelectCols = `id, name, description, brand, material, category, status, capacity, tags, created_at`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -190,7 +194,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	var tags pgtype.TextArray
 	var capacity string
 	err := scan(
-		&p.ID, &p.Name, &p.Description, &p.Cost,
+		&p.ID, &p.Name, &p.Description,
 		&p.Brand, &p.Material, &p.Category, &p.Status,
 		&capacity, &tags, &createdAt,
 	)
@@ -339,7 +343,6 @@ func (s *ProductSearchStore) GetActiveProduct(id string) (*domain.Product, error
 	if err != nil {
 		return nil, err
 	}
-	p.Cost = 0
 	variants, err := s.ListVariants(id)
 	if err != nil {
 		return nil, err
@@ -385,10 +388,10 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO products (id, name, description, price, cost, brand, color, material, stock, category, status, image_urls, capacity, tags)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		`INSERT INTO products (id, name, description, price, brand, color, material, stock, category, status, image_urls, capacity, tags)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 RETURNING created_at`,
-		p.ID, p.Name, p.Description, p.Price, p.Cost,
+		p.ID, p.Name, p.Description, p.Price,
 		p.Brand, p.Color, p.Material, p.Stock, p.Category, p.Status,
 		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags),
 	).Scan(&createdAt)
@@ -408,15 +411,16 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 				return nil, err
 			}
 		}
-	case p.Color != "" || p.Price > 0 || len(p.ImageURLs) > 0:
+	case p.Color != "" || p.Price > 0 || p.SellingPrice > 0 || len(p.ImageURLs) > 0:
 		// Legacy create: seed a default variant (sku = product id).
 		if _, err := s.CreateVariant(domain.Variant{
-			SKU:       p.ID,
-			ProductID: p.ID,
-			Color:     p.Color,
-			Price:     p.Price,
-			Status:    p.Status,
-			ImageURLs: p.ImageURLs,
+			SKU:          p.ID,
+			ProductID:    p.ID,
+			Color:        p.Color,
+			SellingPrice: p.SellingPrice,
+			Price:        p.Price,
+			Status:       p.Status,
+			ImageURLs:    p.ImageURLs,
 		}); err != nil {
 			return nil, err
 		}
@@ -429,10 +433,10 @@ func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, e
 	var createdAt time.Time
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE products
-		 SET name=$2, description=$3, cost=$4, brand=$5, material=$6, category=$7, status=$8, capacity=$9, tags=$10
+		 SET name=$2, description=$3, brand=$4, material=$5, category=$6, status=$7, capacity=$8, tags=$9
 		 WHERE id=$1
 		 RETURNING created_at`,
-		p.ID, p.Name, p.Description, p.Cost,
+		p.ID, p.Name, p.Description,
 		p.Brand, p.Material, p.Category, p.Status,
 		p.Capacity, toTextArray(p.Tags),
 	).Scan(&createdAt)
