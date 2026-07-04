@@ -51,12 +51,14 @@ See [service-layout.md](service-layout.md) for details.
 - **Stack:** stdlib HTTP, PostgreSQL, MinIO/S3
 - **Persistence:** `products` on `postgres-product`
 - **Features:**
-  - Public: `GET /api/v1/products` (query filters), `GET /api/v1/products/{id}`, coupon redeem
-  - Admin CRUD at `/api/v1/products` (create/update/delete), `POST /api/v1/products/{id}/images`
-  - Public search defaults to `status = active`; filters: `category`, `brand`, `color`, `material`, `tags`
-  - Authenticated managers on `GET /api/v1/products` see all statuses and cost
+  - Parent (style) + variant (SKU) model: search returns parents only (no color duplicates)
+  - Public: `GET /api/v1/products` (query filters), `GET /api/v1/products/{id}` (parent + variants), coupon redeem
+  - Admin: parent CRUD, variant CRUD at `/api/v1/products/{id}/variants`, images on variant or default variant
+  - Filters: `category`, `brand`, `color`, `size`, `material`, `tags` (color/size match any active variant)
+  - Stock is per variant SKU in inventory (product `stock` is legacy)
   - Protected routes validate RS256 via `AUTH_JWKS_URL` and require `product_manager`, `admin`, or `owner` role
-  - Inline schema migration on startup
+  - Inline schema migration + variant backfill on startup
+  - Plan: [product-variants-plan.md](product-variants-plan.md)
 - **Tests:** `cd product && go test ./...`
 
 ### dupli1-inventory

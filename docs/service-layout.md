@@ -74,8 +74,8 @@ Owns:
 
 Owns:
 
-- Public product search (`GET /api/v1/products` with query filters), PDP, coupon redeem
-- Admin product/coupon CRUD with brand-prefixed IDs (`BOT-001`), image upload (`POST .../images`, appends to `imageUrls`)
+- Parent styles + variants (SKUs): search returns parents only; PDP embeds variants
+- Admin product/variant/coupon CRUD; brand-prefixed parent IDs (`BOT-001`); images on variants
 - JWT validation via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only)
 
 ### Inventory (`inventory/pkg`)

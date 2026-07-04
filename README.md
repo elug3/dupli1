@@ -105,19 +105,22 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/products/health` | Health check |
-| GET | `/api/v1/products` | Search products (`?category=`, `?brand=`, `?color=`, `?material=`, `?tags=`) |
-| GET | `/api/v1/products/{id}` | Public product detail (active products only) |
+| GET | `/api/v1/products` | Search **parent styles** (`?category=`, `?brand=`, `?color=`, `?size=`, `?tags=`) |
+| GET | `/api/v1/products/{id}` | PDP: parent + variants (colors/sizes/images per SKU) |
 | POST | `/api/v1/coupons/redeem` | Redeem a coupon code |
 
 **Requires `Authorization: Bearer <access_token>`** (validated via JWKS)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/products` | Manager search (all statuses, includes cost; same query filters) |
-| POST | `/api/v1/products` | Create product |
-| PUT | `/api/v1/products/{id}` | Update product |
-| DELETE | `/api/v1/products/{id}` | Delete product |
-| POST | `/api/v1/products/{id}/images` | Upload product image (multipart `image` field) |
+| GET | `/api/v1/products` | Manager search (all statuses, includes cost) |
+| POST | `/api/v1/products` | Create parent style |
+| PUT | `/api/v1/products/{id}` | Update parent |
+| DELETE | `/api/v1/products/{id}` | Delete parent (cascades variants) |
+| POST | `/api/v1/products/{id}/images` | Upload image to default variant |
+| POST | `/api/v1/products/{id}/variants` | Create variant (SKU) |
+| PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | Update / delete variant |
+| POST | `/api/v1/products/{id}/variants/{sku}/images` | Upload image for a variant |
 | GET | `/api/v1/coupons` | List coupons |
 | POST | `/api/v1/coupons` | Create coupon |
 | PUT | `/api/v1/coupons/{code}` | Update coupon |
@@ -154,24 +157,29 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 
 See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow.
 
-### Product IDs
+### Product IDs and variants
 
-IDs are generated from the brand name: first 3 characters uppercased, followed by a sequential counter.
+Parent style IDs are generated from the brand name: first 3 characters uppercased, followed by a sequential counter.
 
 ```
 Bottega Veneta → BOT-001, BOT-002, …
-Gucci          → GUC-001, GUC-002, …
 ```
+
+Variants (sellable SKUs) hang under a parent, e.g. `BOT-001-GRN` / `BOT-001-BLK`. Search returns parents only so colors do not duplicate results. Checkout and inventory use the **variant SKU**.
 
 ### Image Upload
 
 ```bash
+# Preferred: image for a specific color/size variant
+curl -X POST http://localhost:8080/api/v1/products/BOT-001/variants/BOT-001-GRN/images \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "image=@photo.jpg"
+
+# Legacy: appends to the default variant
 curl -X POST http://localhost:8080/api/v1/products/BOT-001/images \
   -H "Authorization: Bearer $TOKEN" \
   -F "image=@photo.jpg"
 ```
-
-Returns the updated product with `imageUrls` populated.
 
 ## Environment Variables
 

@@ -309,18 +309,19 @@ Product service liveness check.
 
 ### `GET /api/v1/products`
 
-Search products via query params. No authentication required for the public catalog view (active products only; cost omitted). With a manager Bearer token, returns all statuses and includes cost.
+Search **parent styles** (one row per style; colors are not duplicated). No authentication required for the public catalog view (active parents only; cost omitted). With a manager Bearer token, returns all statuses and includes cost.
 
 | Filter | Match type |
 |--------|-----------|
 | `category` | exact (e.g. `bags`) |
 | `brand` | case-insensitive substring |
-| `color` | exact |
+| `color` | parent has an active variant with this color |
+| `size` | parent has an active variant with this size |
 | `material` | exact |
-| `tags` | product must include all listed tags (comma-separated or repeated) |
+| `tags` | parent must include all listed tags (comma-separated or repeated) |
 | `status` | exact (managers only) |
 
-Example: `GET /api/v1/products?category=bags&tags=hot,new`
+Example: `GET /api/v1/products?category=bags&color=Green`
 
 **Response `200`**
 ```json
@@ -367,9 +368,9 @@ Redeem a coupon code. No authentication required.
 
 ### `GET /api/v1/products/{id}`
 
-Public product detail page (PDP). No authentication required. Returns only `status = active` products and omits `cost`.
+Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Omits `cost`. Cart lines use each variant's `sku` (inventory key).
 
-**Response `200`** — product object
+**Response `200`** — parent product object with variants
 
 **Errors**
 | Status | Meaning |
@@ -384,16 +385,20 @@ All routes below require `Authorization: Bearer <access_token>` from auth with r
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/products` | Create product |
-| PUT | `/api/v1/products/{id}` | Update product |
-| DELETE | `/api/v1/products/{id}` | Delete product |
-| POST | `/api/v1/products/{id}/images` | Upload image (multipart field `image`) |
+| POST | `/api/v1/products` | Create parent style |
+| PUT | `/api/v1/products/{id}` | Update parent |
+| DELETE | `/api/v1/products/{id}` | Delete parent (cascades variants) |
+| POST | `/api/v1/products/{id}/images` | Upload image to default variant |
+| POST | `/api/v1/products/{id}/variants` | Create variant (SKU) |
+| PUT | `/api/v1/products/{id}/variants/{sku}` | Update variant |
+| DELETE | `/api/v1/products/{id}/variants/{sku}` | Delete variant |
+| POST | `/api/v1/products/{id}/variants/{sku}/images` | Upload image for variant |
 | GET | `/api/v1/coupons` | List coupons |
 | POST | `/api/v1/coupons` | Create coupon |
 | PUT | `/api/v1/coupons/{code}` | Update coupon |
 | DELETE | `/api/v1/coupons/{code}` | Delete coupon |
 
-Product IDs are generated from the brand prefix (e.g. `BOT-001`). Image upload appends to the `imageUrls` array. Admin single-product read (`/manage`) was removed; see [TODO.md](TODO.md).
+Parent IDs use the brand prefix (e.g. `BOT-001`). Variants are sellable SKUs (e.g. `BOT-001-GRN`). See [product-variants-plan.md](product-variants-plan.md).
 
 ---
 
@@ -553,6 +558,9 @@ All error responses use a JSON envelope:
 | POST | `/api/v1/products` | `product_manager`, `admin`, `owner` | product |
 | PUT/DELETE | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | product |
 | POST | `/api/v1/products/{id}/images` | `product_manager`, `admin`, `owner` | product |
+| POST | `/api/v1/products/{id}/variants` | `product_manager`, `admin`, `owner` | product |
+| PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | `product_manager`, `admin`, `owner` | product |
+| POST | `/api/v1/products/{id}/variants/{sku}/images` | `product_manager`, `admin`, `owner` | product |
 | GET/POST/PUT/DELETE | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | product |
 | GET | `/api/v1/inventory/health` | — | inventory |
 | GET/PUT | `/api/v1/inventory/{sku}` | — | inventory |

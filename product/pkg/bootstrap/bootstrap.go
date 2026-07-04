@@ -86,6 +86,11 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	mux.Handle("DELETE "+handler.RouteProductByID, protect(h.SingleProductHandler()))
 	mux.Handle("POST "+handler.RouteProductImages, protect(h.UploadImageHandler()))
 
+	mux.Handle("POST "+handler.RouteVariants, protect(h.CreateVariantHandler()))
+	mux.Handle("PUT "+handler.RouteVariantBySKU, protect(h.VariantBySKUHandler()))
+	mux.Handle("DELETE "+handler.RouteVariantBySKU, protect(h.VariantBySKUHandler()))
+	mux.Handle("POST "+handler.RouteVariantImages, protect(h.UploadVariantImageHandler()))
+
 
 	mux.Handle("GET "+handler.RouteCoupons, protect(http.HandlerFunc(h.ListCoupons)))
 	mux.Handle("POST "+handler.RouteCoupons, protect(http.HandlerFunc(h.CreateCoupon)))

@@ -39,6 +39,26 @@ func (s fakeProductStore) DeleteProduct(id string) error {
 	return nil
 }
 
+func (s fakeProductStore) ListVariants(productID string) ([]domain.Variant, error) {
+	return nil, nil
+}
+
+func (s fakeProductStore) GetVariant(sku string) (*domain.Variant, error) {
+	return nil, nil
+}
+
+func (s fakeProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) {
+	return nil, nil
+}
+
+func (s fakeProductStore) UpdateVariant(v domain.Variant) (*domain.Variant, error) {
+	return nil, nil
+}
+
+func (s fakeProductStore) DeleteVariant(sku string) error {
+	return nil
+}
+
 type recordedProductEventPublisher struct {
 	subject string
 	event   any

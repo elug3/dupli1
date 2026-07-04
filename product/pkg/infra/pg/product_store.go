@@ -52,7 +52,6 @@ func (s *ProductSearchStore) migrate() error {
 		return fmt.Errorf("migrate products: %w", err)
 	}
 
-	// Add columns that may be missing from an older schema.
 	for _, col := range []struct{ name, def string }{
 		{"category", "TEXT NOT NULL DEFAULT ''"},
 		{"status", "TEXT NOT NULL DEFAULT 'active'"},
@@ -68,11 +67,50 @@ func (s *ProductSearchStore) migrate() error {
 		))
 	}
 
-	// Migrate existing single image_url values into image_urls array.
 	s.pool.Exec(ctx,
 		`UPDATE products SET image_urls = ARRAY[image_url] WHERE image_url != '' AND image_urls = '{}'`,
 	)
 
+	_, err = s.pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS product_variants (
+			sku         TEXT PRIMARY KEY,
+			product_id  TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			color       TEXT NOT NULL DEFAULT '',
+			size        TEXT NOT NULL DEFAULT '',
+			price       NUMERIC(10,2) NOT NULL DEFAULT 0,
+			status      TEXT NOT NULL DEFAULT 'active',
+			image_urls  TEXT[] NOT NULL DEFAULT '{}',
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE (product_id, color, size)
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("migrate product_variants: %w", err)
+	}
+
+	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)`)
+
+	if err := s.backfillVariants(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// backfillVariants creates one variant per legacy product row that has none yet.
+// SKU equals the product id so existing inventory/order references keep working.
+func (s *ProductSearchStore) backfillVariants(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO product_variants (sku, product_id, color, size, price, status, image_urls, created_at)
+		SELECT p.id, p.id, p.color, '', p.price, p.status, p.image_urls, p.created_at
+		FROM products p
+		WHERE NOT EXISTS (
+			SELECT 1 FROM product_variants v WHERE v.product_id = p.id
+		)
+		ON CONFLICT (sku) DO NOTHING
+	`)
+	if err != nil {
+		return fmt.Errorf("backfill product_variants: %w", err)
+	}
 	return nil
 }
 
@@ -85,8 +123,6 @@ func (s *ProductSearchStore) Close() {
 func (s *ProductSearchStore) Pool() *pgxpool.Pool {
 	return s.pool
 }
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 func brandPrefix(brand string) string {
 	fields := strings.Fields(strings.TrimSpace(brand))
@@ -146,55 +182,87 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-// ── queries ───────────────────────────────────────────────────────────────────
+const parentSelectCols = `id, name, description, cost, brand, material, category, status, capacity, tags, created_at`
 
-const selectCols = `id, name, description, price, cost, brand, color, material, stock, category, status, image_urls, capacity, tags, created_at`
-
-func scanProduct(scan func(...any) error) (domain.Product, error) {
+func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
 	var createdAt time.Time
-	var imageURLs, tags pgtype.TextArray
+	var tags pgtype.TextArray
 	var capacity string
 	err := scan(
-		&p.ID, &p.Name, &p.Description, &p.Price, &p.Cost,
-		&p.Brand, &p.Color, &p.Material, &p.Stock,
-		&p.Category, &p.Status, &imageURLs, &capacity, &tags, &createdAt,
+		&p.ID, &p.Name, &p.Description, &p.Cost,
+		&p.Brand, &p.Material, &p.Category, &p.Status,
+		&capacity, &tags, &createdAt,
 	)
 	if err != nil {
 		return domain.Product{}, err
 	}
-	p.ImageURLs = scanTextArray(imageURLs)
 	p.Capacity = capacity
 	p.Tags = scanTextArray(tags)
 	p.CreatedAt = createdAt.Format(time.RFC3339)
 	return p, nil
 }
 
+func (s *ProductSearchStore) enrich(products []domain.Product, includeVariants bool) error {
+	if len(products) == 0 {
+		return nil
+	}
+	ids := make([]string, len(products))
+	for i, p := range products {
+		ids[i] = p.ID
+	}
+
+	rows, err := s.pool.Query(context.Background(),
+		`SELECT sku, product_id, color, size, price, status, image_urls, created_at
+		 FROM product_variants
+		 WHERE product_id = ANY($1)
+		 ORDER BY created_at ASC, sku ASC`,
+		toTextArray(ids),
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	byProduct := make(map[string][]domain.Variant, len(products))
+	for rows.Next() {
+		v, err := scanVariant(rows.Scan)
+		if err != nil {
+			return err
+		}
+		byProduct[v.ProductID] = append(byProduct[v.ProductID], v)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for i := range products {
+		products[i].EnrichFromVariants(byProduct[products[i].ID], includeVariants)
+	}
+	return nil
+}
+
 func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.Product, error) {
-	query := "SELECT " + selectCols + " FROM products WHERE 1=1"
+	query := "SELECT " + parentSelectCols + " FROM products p WHERE 1=1"
 	args := []interface{}{}
 	idx := 1
 
 	for key, value := range filter {
 		switch key {
 		case "category":
-			query += fmt.Sprintf(" AND category = $%d", idx)
+			query += fmt.Sprintf(" AND p.category = $%d", idx)
 			args = append(args, value)
 			idx++
 		case "brand":
-			query += fmt.Sprintf(" AND brand ILIKE $%d", idx)
+			query += fmt.Sprintf(" AND p.brand ILIKE $%d", idx)
 			args = append(args, "%"+value+"%")
 			idx++
-		case "color":
-			query += fmt.Sprintf(" AND color = $%d", idx)
-			args = append(args, value)
-			idx++
 		case "material":
-			query += fmt.Sprintf(" AND material = $%d", idx)
+			query += fmt.Sprintf(" AND p.material = $%d", idx)
 			args = append(args, value)
 			idx++
 		case "status":
-			query += fmt.Sprintf(" AND status = $%d", idx)
+			query += fmt.Sprintf(" AND p.status = $%d", idx)
 			args = append(args, value)
 			idx++
 		case "tags":
@@ -202,13 +270,27 @@ func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.
 			if len(tagList) == 0 {
 				continue
 			}
-			query += fmt.Sprintf(" AND tags @> $%d::text[]", idx)
+			query += fmt.Sprintf(" AND p.tags @> $%d::text[]", idx)
 			args = append(args, tagList)
+			idx++
+		case "color":
+			query += fmt.Sprintf(` AND EXISTS (
+				SELECT 1 FROM product_variants v
+				WHERE v.product_id = p.id AND v.color = $%d AND v.status = 'active'
+			)`, idx)
+			args = append(args, value)
+			idx++
+		case "size":
+			query += fmt.Sprintf(` AND EXISTS (
+				SELECT 1 FROM product_variants v
+				WHERE v.product_id = p.id AND v.size = $%d AND v.status = 'active'
+			)`, idx)
+			args = append(args, value)
 			idx++
 		}
 	}
 
-	query += " ORDER BY created_at DESC"
+	query += " ORDER BY p.created_at DESC"
 
 	rows, err := s.pool.Query(context.Background(), query, args...)
 	if err != nil {
@@ -218,14 +300,19 @@ func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.
 
 	var results []domain.Product
 	for rows.Next() {
-		p, err := scanProduct(rows.Scan)
+		p, err := scanParent(rows.Scan)
 		if err != nil {
 			return nil, err
 		}
 		results = append(results, p)
 	}
-
-	return results, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := s.enrich(results, false); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func splitTags(value string) []string {
@@ -241,52 +328,52 @@ func splitTags(value string) []string {
 }
 
 func (s *ProductSearchStore) ListProducts() ([]domain.Product, error) {
-	rows, err := s.pool.Query(context.Background(),
-		`SELECT `+selectCols+` FROM products ORDER BY created_at DESC`,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []domain.Product
-	for rows.Next() {
-		p, err := scanProduct(rows.Scan)
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, p)
-	}
-
-	return results, rows.Err()
+	return s.SearchProducts(nil)
 }
 
 func (s *ProductSearchStore) GetActiveProduct(id string) (*domain.Product, error) {
 	row := s.pool.QueryRow(context.Background(),
-		`SELECT `+selectCols+` FROM products WHERE id = $1 AND status = 'active'`, id,
+		`SELECT `+parentSelectCols+` FROM products WHERE id = $1 AND status = 'active'`, id,
 	)
-	p, err := scanProduct(row.Scan)
+	p, err := scanParent(row.Scan)
 	if err != nil {
 		return nil, err
 	}
 	p.Cost = 0
+	variants, err := s.ListVariants(id)
+	if err != nil {
+		return nil, err
+	}
+	active := make([]domain.Variant, 0, len(variants))
+	for _, v := range variants {
+		if v.Status == "active" {
+			active = append(active, v)
+		}
+	}
+	p.EnrichFromVariants(active, true)
 	return &p, nil
 }
 
 func (s *ProductSearchStore) GetProduct(id string) (*domain.Product, error) {
 	row := s.pool.QueryRow(context.Background(),
-		`SELECT `+selectCols+` FROM products WHERE id = $1`, id,
+		`SELECT `+parentSelectCols+` FROM products WHERE id = $1`, id,
 	)
-	p, err := scanProduct(row.Scan)
+	p, err := scanParent(row.Scan)
 	if err != nil {
 		return nil, err
 	}
+	variants, err := s.ListVariants(id)
+	if err != nil {
+		return nil, err
+	}
+	p.EnrichFromVariants(variants, true)
 	return &p, nil
 }
 
 func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, error) {
+	ctx := context.Background()
 	if p.ID == "" {
-		id, err := s.nextProductID(context.Background(), p.Brand)
+		id, err := s.nextProductID(ctx, p.Brand)
 		if err != nil {
 			return nil, err
 		}
@@ -297,7 +384,7 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 	}
 
 	var createdAt time.Time
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(ctx,
 		`INSERT INTO products (id, name, description, price, cost, brand, color, material, stock, category, status, image_urls, capacity, tags)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 RETURNING created_at`,
@@ -309,25 +396,50 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 		return nil, err
 	}
 	p.CreatedAt = createdAt.Format(time.RFC3339)
-	return &p, nil
+
+	switch {
+	case len(p.Variants) > 0:
+		for _, v := range p.Variants {
+			v.ProductID = p.ID
+			if v.Status == "" {
+				v.Status = p.Status
+			}
+			if _, err := s.CreateVariant(v); err != nil {
+				return nil, err
+			}
+		}
+	case p.Color != "" || p.Price > 0 || len(p.ImageURLs) > 0:
+		// Legacy create: seed a default variant (sku = product id).
+		if _, err := s.CreateVariant(domain.Variant{
+			SKU:       p.ID,
+			ProductID: p.ID,
+			Color:     p.Color,
+			Price:     p.Price,
+			Status:    p.Status,
+			ImageURLs: p.ImageURLs,
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	return s.GetProduct(p.ID)
 }
 
 func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, error) {
 	var createdAt time.Time
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE products
-		 SET name=$2, description=$3, price=$4, cost=$5, brand=$6, color=$7, material=$8, stock=$9, category=$10, status=$11, image_urls=$12, capacity=$13, tags=$14
+		 SET name=$2, description=$3, cost=$4, brand=$5, material=$6, category=$7, status=$8, capacity=$9, tags=$10
 		 WHERE id=$1
 		 RETURNING created_at`,
-		p.ID, p.Name, p.Description, p.Price, p.Cost,
-		p.Brand, p.Color, p.Material, p.Stock, p.Category, p.Status,
-		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags),
+		p.ID, p.Name, p.Description, p.Cost,
+		p.Brand, p.Material, p.Category, p.Status,
+		p.Capacity, toTextArray(p.Tags),
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, err
 	}
-	p.CreatedAt = createdAt.Format(time.RFC3339)
-	return &p, nil
+	return s.GetProduct(p.ID)
 }
 
 func (s *ProductSearchStore) DeleteProduct(id string) error {

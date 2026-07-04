@@ -178,19 +178,23 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role,
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/products/health` | — | Health check |
-| `GET` | `/api/v1/products` | optional | Search products via query params; managers with Bearer token see drafts/cost |
-| `GET` | `/api/v1/products/{id}` | — | Public product detail (active products only; cost omitted) |
+| `GET` | `/api/v1/products` | optional | Search **parent styles** only (no color duplicates); managers see drafts/cost |
+| `GET` | `/api/v1/products/{id}` | — | Parent PDP with `variants[]`, `availableColors`, `availableSizes` |
 | `POST` | `/api/v1/coupons/redeem` | — | Redeem a coupon code |
-| `POST` | `/api/v1/products` | `product_manager`, `admin`, `owner` | Create product |
-| `PUT` | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | Update product |
-| `DELETE` | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | Delete product |
-| `POST` | `/api/v1/products/{id}/images` | `product_manager`, `admin`, `owner` | Upload product image |
+| `POST` | `/api/v1/products` | `product_manager`, `admin`, `owner` | Create parent (optional legacy color/price seeds default variant) |
+| `PUT` | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | Update parent |
+| `DELETE` | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | Delete parent (cascades variants) |
+| `POST` | `/api/v1/products/{id}/images` | `product_manager`, `admin`, `owner` | Upload image to default variant |
+| `POST` | `/api/v1/products/{id}/variants` | `product_manager`, `admin`, `owner` | Create variant (SKU) |
+| `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product_manager`, `admin`, `owner` | Update variant |
+| `DELETE` | `/api/v1/products/{id}/variants/{sku}` | `product_manager`, `admin`, `owner` | Delete variant |
+| `POST` | `/api/v1/products/{id}/variants/{sku}/images` | `product_manager`, `admin`, `owner` | Upload image for variant |
 | `GET` | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | List coupons |
 | `POST` | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | Create coupon |
 | `PUT` | `/api/v1/coupons/{code}` | `product_manager`, `admin`, `owner` | Update coupon |
 | `DELETE` | `/api/v1/coupons/{code}` | `product_manager`, `admin`, `owner` | Delete coupon |
 
-Public search defaults to `status = active`. Query filters: `category`, `brand`, `color`, `material`, `tags` (comma-separated; product must include all). Managers may also pass `status`. Product service validates RS256 access tokens via `AUTH_JWKS_URL` (JWKS from auth).
+Public search defaults to `status = active` on the **parent**. Query filters: `category`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** with inventory. See [product-variants-plan.md](product-variants-plan.md).
 
 ### GET /api/v1/products/health
 
@@ -201,9 +205,9 @@ Response `200`:
 
 ### GET /api/v1/products
 
-Query params: `category`, `brand` (partial match), `color`, `material`, `tags` (comma-separated), and `status` (managers only).
+Returns **one row per parent style** (not per color). Query params: `category`, `brand` (partial), `material`, `tags`, `color`, `size`, and `status` (managers only).
 
-Example: `GET /api/v1/products?category=bags&tags=hot,new`
+Example: `GET /api/v1/products?category=bags&color=Green`
 
 Response `200`:
 ```json
@@ -213,16 +217,13 @@ Response `200`:
     {
       "id": "BOT-001",
       "name": "Cassette Bag",
-      "price": 2500.00,
       "brand": "Bottega Veneta",
-      "color": "Green",
-      "material": "Leather",
-      "stock": 5,
       "category": "bags",
       "status": "active",
-      "imageUrls": ["https://cdn.example/bot-001.jpg"],
-      "capacity": "Medium",
-      "tags": ["hot"]
+      "priceFrom": 2500,
+      "defaultImageUrl": "https://cdn.example/green-1.jpg",
+      "availableColors": ["Green", "Black"],
+      "availableSizes": []
     }
   ]
 }
@@ -230,9 +231,7 @@ Response `200`:
 
 ### GET /api/v1/products/{id}
 
-Public storefront PDP. Returns `404` for draft/archived products. `cost` is omitted.
-
-See [TODO.md](TODO.md) for restoring an admin single-product read (formerly `/manage`).
+Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. `cost` is omitted. Cart/checkout use each variant's `sku`.
 
 ---
 

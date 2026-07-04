@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
+	"mime/multipart"
 	"net/http"
 	"strings"
 
@@ -30,7 +32,7 @@ type HealthResponse struct {
 	Status string `json:"status"`
 }
 
-var searchFilters = []string{"category", "brand", "color", "material", "status"}
+var searchFilters = []string{"category", "brand", "color", "size", "material", "status"}
 
 func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService) *Handler {
 	return &Handler{svc: svc, couponSvc: couponSvc}
@@ -48,8 +50,33 @@ func (h *Handler) SearchProductsHandler() http.Handler {
 }
 
 // UploadImageHandler returns an http.Handler for POST /api/v1/products/{id}/images.
+// Images are stored on the default variant (legacy compatibility).
 func (h *Handler) UploadImageHandler() http.Handler {
 	return http.HandlerFunc(h.UploadProductImage)
+}
+
+// CreateVariantHandler returns an http.Handler for POST /api/v1/products/{id}/variants.
+func (h *Handler) CreateVariantHandler() http.Handler {
+	return http.HandlerFunc(h.CreateVariant)
+}
+
+// VariantBySKUHandler returns an http.Handler for PUT|DELETE /api/v1/products/{id}/variants/{sku}.
+func (h *Handler) VariantBySKUHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPut:
+			h.UpdateVariant(w, r)
+		case http.MethodDelete:
+			h.DeleteVariant(w, r)
+		default:
+			h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+}
+
+// UploadVariantImageHandler returns an http.Handler for POST /api/v1/products/{id}/variants/{sku}/images.
+func (h *Handler) UploadVariantImageHandler() http.Handler {
+	return http.HandlerFunc(h.UploadVariantImage)
 }
 
 // CreateProductHandler returns an http.Handler for POST /api/v1/products.
@@ -251,13 +278,9 @@ func (h *Handler) UploadProductImage(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "missing product id")
 		return
 	}
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		h.respondError(w, http.StatusBadRequest, "invalid multipart form")
-		return
-	}
-	file, header, err := r.FormFile("image")
+	file, header, err := h.parseImageForm(r)
 	if err != nil {
-		h.respondError(w, http.StatusBadRequest, "missing image field")
+		h.respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	defer file.Close()
@@ -272,6 +295,96 @@ func (h *Handler) UploadProductImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.respondJSON(w, http.StatusCreated, product)
+}
+
+func (h *Handler) CreateVariant(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		h.respondError(w, http.StatusBadRequest, "missing product id")
+		return
+	}
+	var v domain.Variant
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	created, err := h.svc.CreateVariant(id, v)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.respondJSON(w, http.StatusCreated, created)
+}
+
+func (h *Handler) UpdateVariant(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sku := r.PathValue("sku")
+	if id == "" || sku == "" {
+		h.respondError(w, http.StatusBadRequest, "missing product id or sku")
+		return
+	}
+	var v domain.Variant
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	updated, err := h.svc.UpdateVariant(id, sku, v)
+	if err != nil {
+		h.respondError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	h.respondJSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteVariant(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sku := r.PathValue("sku")
+	if id == "" || sku == "" {
+		h.respondError(w, http.StatusBadRequest, "missing product id or sku")
+		return
+	}
+	if err := h.svc.DeleteVariant(id, sku); err != nil {
+		h.respondError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) UploadVariantImage(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sku := r.PathValue("sku")
+	if id == "" || sku == "" {
+		h.respondError(w, http.StatusBadRequest, "missing product id or sku")
+		return
+	}
+	file, header, err := h.parseImageForm(r)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	variant, err := h.svc.UploadVariantImage(r.Context(), id, sku, file, header.Size, contentType)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.respondJSON(w, http.StatusCreated, variant)
+}
+
+func (h *Handler) parseImageForm(r *http.Request) (multipart.File, *multipart.FileHeader, error) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		return nil, nil, fmt.Errorf("invalid multipart form")
+	}
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		return nil, nil, fmt.Errorf("missing image field")
+	}
+	return file, header, nil
 }
 
 func (h *Handler) RedeemCoupon(w http.ResponseWriter, r *http.Request) {

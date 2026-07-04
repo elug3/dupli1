@@ -2,4 +2,5 @@
 
 ## Product API
 
-- [ ] **Restore admin single-product read** — `GET /api/v1/products/{id}/manage` was removed for REST consistency. Public `GET /api/v1/products/{id}` only returns active products with cost redacted. Managers currently rely on authenticated `GET /api/v1/products` (optional Bearer token with `product_manager` / `admin` / `owner`) to see drafts and cost. Prefer an auth-aware `GET /api/v1/products/{id}` that returns the full product for managers instead of reintroducing `/manage`.
+- [x] **Parent + variants** — implemented; see [product-variants-plan.md](product-variants-plan.md). Remaining: inventory `inStock` enrichment on PDP, drop legacy parent `color`/`stock`/`imageUrls` columns, merge pre-existing duplicate color products.
+- [ ] **Auth-aware `GET /api/v1/products/{id}`** — managers should see drafts/cost on PDP without a separate `/manage` path (optional Bearer, same pattern as list search).

@@ -46,7 +46,7 @@ paths:
       tags: [Products]
       summary: Get public product detail
       operationId: productPublicGet
-      description: Returns only `active` products. Cost is omitted.
+      description: Returns an active parent style with variants, availableColors, and availableSizes. Cost is omitted.
       parameters:
         - $ref: '#/components/parameters/ProductId'
       responses:
@@ -115,7 +115,8 @@ paths:
       summary: Search products
       operationId: productSearch
       description: |
-        Public callers receive active products only with cost omitted.
+        Returns parent styles only (no color duplicates).
+        Public callers receive active parents only with cost omitted.
         Authenticated managers (`product_manager`, `admin`, `owner`) receive all statuses and cost.
       parameters:
         - name: category
@@ -132,7 +133,12 @@ paths:
           in: query
           schema:
             type: string
-          description: Exact match
+          description: Parent has an active variant with this color
+        - name: size
+          in: query
+          schema:
+            type: string
+          description: Parent has an active variant with this size
         - name: material
           in: query
           schema:
@@ -189,11 +195,11 @@ paths:
   /api/v1/products/{id}/images:
     post:
       tags: [Products]
-      summary: Upload a product image
+      summary: Upload image to default variant
       operationId: productUploadImage
       security:
         - bearerAuth: []
-      description: Multipart upload. Max form size 10 MB. Requires S3/MinIO configuration. Appends to imageUrls.
+      description: Multipart upload to the default variant. Prefer variant image upload for multi-color products.
       parameters:
         - $ref: '#/components/parameters/ProductId'
       requestBody:
@@ -209,7 +215,7 @@ paths:
                   format: binary
       responses:
         '201':
-          description: Product with updated imageUrls
+          description: Parent product with updated variants
           content:
             application/json:
               schema:
@@ -218,6 +224,108 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/{id}/variants:
+    post:
+      tags: [Products]
+      summary: Create a variant (SKU)
+      operationId: productCreateVariant
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VariantInput'
+      responses:
+        '201':
+          description: Created variant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Variant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/{id}/variants/{sku}:
+    put:
+      tags: [Products]
+      summary: Update a variant
+      operationId: productUpdateVariant
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/VariantSku'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VariantInput'
+      responses:
+        '200':
+          description: Updated variant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Variant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Products]
+      summary: Delete a variant
+      operationId: productDeleteVariant
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/VariantSku'
+      responses:
+        '204':
+          description: Variant deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/products/{id}/variants/{sku}/images:
+    post:
+      tags: [Products]
+      summary: Upload a variant image
+      operationId: productUploadVariantImage
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/VariantSku'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Variant with updated imageUrls
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Variant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -363,6 +471,13 @@ components:
       schema:
         type: string
       example: BOT-001
+    VariantSku:
+      name: sku
+      in: path
+      required: true
+      schema:
+        type: string
+      example: BOT-001-GRN
     CouponCode:
       name: code
       in: path
@@ -427,6 +542,72 @@ components:
         createdAt:
           type: string
           format: date-time
+        priceFrom:
+          type: number
+          format: double
+        defaultImageUrl:
+          type: string
+        availableColors:
+          type: array
+          items:
+            type: string
+        availableSizes:
+          type: array
+          items:
+            type: string
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Variant'
+
+    Variant:
+      type: object
+      required: [sku, productId, color, price, status]
+      properties:
+        sku:
+          type: string
+          example: BOT-001-GRN
+        productId:
+          type: string
+          example: BOT-001
+        color:
+          type: string
+        size:
+          type: string
+        price:
+          type: number
+          format: double
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        imageUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+        createdAt:
+          type: string
+          format: date-time
+
+    VariantInput:
+      type: object
+      properties:
+        sku:
+          type: string
+          description: Optional; auto-generated from parent id + color/size when omitted
+        color:
+          type: string
+        size:
+          type: string
+        price:
+          type: number
+          format: double
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        imageUrls:
+          type: array
+          items:
+            type: string
+            format: uri
 
     PublicProduct:
       description: Product without cost field
