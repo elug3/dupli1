@@ -178,21 +178,19 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role,
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/products/health` | — | Health check |
-| `GET` | `/api/v1/products/bags` | — | Search active bag products (`category=bags`) |
+| `GET` | `/api/v1/products` | optional | Search products via query params; managers with Bearer token see drafts/cost |
 | `GET` | `/api/v1/products/{id}` | — | Public product detail (active products only; cost omitted) |
 | `POST` | `/api/v1/coupons/redeem` | — | Redeem a coupon code |
-| `GET` | `/api/v1/products` | `product_manager`, `admin`, `owner` | List all products (admin) |
 | `POST` | `/api/v1/products` | `product_manager`, `admin`, `owner` | Create product |
-| `GET` | `/api/v1/products/{id}/manage` | `product_manager`, `admin`, `owner` | Get product by ID including drafts and cost |
 | `PUT` | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | Update product |
 | `DELETE` | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | Delete product |
-| `PUT` | `/api/v1/products/{id}/image` | `product_manager`, `admin`, `owner` | Upload product image |
+| `POST` | `/api/v1/products/{id}/images` | `product_manager`, `admin`, `owner` | Upload product image |
 | `GET` | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | List coupons |
 | `POST` | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | Create coupon |
 | `PUT` | `/api/v1/coupons/{code}` | `product_manager`, `admin`, `owner` | Update coupon |
 | `DELETE` | `/api/v1/coupons/{code}` | `product_manager`, `admin`, `owner` | Delete coupon |
 
-Bag search reads from the `products` table (`category = 'bags'`, `status = 'active'`). Product service validates RS256 access tokens via `AUTH_JWKS_URL` (JWKS from auth).
+Public search defaults to `status = active`. Query filters: `category`, `brand`, `color`, `material`, `tags` (comma-separated; product must include all). Managers may also pass `status`. Product service validates RS256 access tokens via `AUTH_JWKS_URL` (JWKS from auth).
 
 ### GET /api/v1/products/health
 
@@ -201,9 +199,11 @@ Response `200`:
 { "status": "healthy" }
 ```
 
-### GET /api/v1/products/bags
+### GET /api/v1/products
 
-Query params: `brand` (partial match), `color`, `material`.
+Query params: `category`, `brand` (partial match), `color`, `material`, `tags` (comma-separated), and `status` (managers only).
+
+Example: `GET /api/v1/products?category=bags&tags=hot,new`
 
 Response `200`:
 ```json
@@ -221,7 +221,8 @@ Response `200`:
       "category": "bags",
       "status": "active",
       "imageUrls": ["https://cdn.example/bot-001.jpg"],
-      "capacity": "Medium"
+      "capacity": "Medium",
+      "tags": ["hot"]
     }
   ]
 }
@@ -231,9 +232,7 @@ Response `200`:
 
 Public storefront PDP. Returns `404` for draft/archived products. `cost` is omitted.
 
-### GET /api/v1/products/{id}/manage
-
-Authenticated admin read. Returns any status including `cost`.
+See [TODO.md](TODO.md) for restoring an admin single-product read (formerly `/manage`).
 
 ---
 

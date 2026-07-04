@@ -307,15 +307,20 @@ Product service liveness check.
 
 ---
 
-### `GET /api/v1/products/bags`
+### `GET /api/v1/products`
 
-Search bags. No authentication required.
+Search products via query params. No authentication required for the public catalog view (active products only; cost omitted). With a manager Bearer token, returns all statuses and includes cost.
 
 | Filter | Match type |
 |--------|-----------|
+| `category` | exact (e.g. `bags`) |
 | `brand` | case-insensitive substring |
 | `color` | exact |
 | `material` | exact |
+| `tags` | product must include all listed tags (comma-separated or repeated) |
+| `status` | exact (managers only) |
+
+Example: `GET /api/v1/products?category=bags&tags=hot,new`
 
 **Response `200`**
 ```json
@@ -333,6 +338,7 @@ Search bags. No authentication required.
       "stock": 5,
       "category": "bags",
       "capacity": "Medium",
+      "tags": ["hot"],
       "imageUrls": ["https://cdn.example/bot-001.jpg"]
     }
   ]
@@ -378,18 +384,16 @@ All routes below require `Authorization: Bearer <access_token>` from auth with r
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/products` | List all products |
 | POST | `/api/v1/products` | Create product |
-| GET | `/api/v1/products/{id}/manage` | Get product by ID (includes drafts and cost) |
 | PUT | `/api/v1/products/{id}` | Update product |
 | DELETE | `/api/v1/products/{id}` | Delete product |
-| PUT | `/api/v1/products/{id}/image` | Upload image (multipart field `image`) |
+| POST | `/api/v1/products/{id}/images` | Upload image (multipart field `image`) |
 | GET | `/api/v1/coupons` | List coupons |
 | POST | `/api/v1/coupons` | Create coupon |
 | PUT | `/api/v1/coupons/{code}` | Update coupon |
 | DELETE | `/api/v1/coupons/{code}` | Delete coupon |
 
-Product IDs are generated from the brand prefix (e.g. `BOT-001`). Image upload appends to the `imageUrls` array.
+Product IDs are generated from the brand prefix (e.g. `BOT-001`). Image upload appends to the `imageUrls` array. Admin single-product read (`/manage`) was removed; see [TODO.md](TODO.md).
 
 ---
 
@@ -543,13 +547,12 @@ All error responses use a JSON envelope:
 | PATCH | `/api/v1/auth/users/{id}/password` | `admin`, `user_manager` | auth |
 | PATCH | `/api/v1/auth/users/{id}/status` | `admin`, `user_manager` | auth |
 | GET | `/api/v1/products/health` | — | product |
-| GET | `/api/v1/products/bags` | — | product |
+| GET | `/api/v1/products` | optional manager Bearer | product |
 | GET | `/api/v1/products/{id}` | — | product |
 | POST | `/api/v1/coupons/redeem` | — | product |
-| GET/POST | `/api/v1/products` | `product_manager`, `admin`, `owner` | product |
-| GET | `/api/v1/products/{id}/manage` | `product_manager`, `admin`, `owner` | product |
+| POST | `/api/v1/products` | `product_manager`, `admin`, `owner` | product |
 | PUT/DELETE | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | product |
-| PUT | `/api/v1/products/{id}/image` | `product_manager`, `admin`, `owner` | product |
+| POST | `/api/v1/products/{id}/images` | `product_manager`, `admin`, `owner` | product |
 | GET/POST/PUT/DELETE | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | product |
 | GET | `/api/v1/inventory/health` | — | inventory |
 | GET/PUT | `/api/v1/inventory/{sku}` | — | inventory |

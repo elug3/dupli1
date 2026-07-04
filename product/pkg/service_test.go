@@ -8,11 +8,11 @@ import (
 )
 
 type fakeProductStore struct {
-	bags []domain.Bag
+	products []domain.Product
 }
 
-func (s fakeProductStore) SearchBags(filter map[string]string) ([]domain.Bag, error) {
-	return s.bags, nil
+func (s fakeProductStore) SearchProducts(filter map[string]string) ([]domain.Product, error) {
+	return s.products, nil
 }
 
 func (s fakeProductStore) ListProducts() ([]domain.Product, error) {
@@ -50,19 +50,19 @@ func (p *recordedProductEventPublisher) Publish(ctx context.Context, subject str
 	return nil
 }
 
-func TestSearchBagsPublishesEvent(t *testing.T) {
+func TestSearchProductsPublishesEvent(t *testing.T) {
 	store := fakeProductStore{
-		bags: []domain.Bag{
-			{Product: domain.Product{ID: "BOT-001", Brand: "Bottega Veneta"}},
-			{Product: domain.Product{ID: "BOT-002", Brand: "Bottega Veneta"}},
+		products: []domain.Product{
+			{ID: "BOT-001", Brand: "Bottega Veneta", Category: "bags"},
+			{ID: "BOT-002", Brand: "Bottega Veneta", Category: "bags"},
 		},
 	}
 	publisher := &recordedProductEventPublisher{}
 	svc := NewProductSearchService(store, publisher)
 
-	results, err := svc.SearchBags(map[string]string{"brand": "Bottega Veneta"})
+	results, err := svc.SearchProducts(map[string]string{"category": "bags", "brand": "Bottega Veneta"})
 	if err != nil {
-		t.Fatalf("SearchBags returned error: %v", err)
+		t.Fatalf("SearchProducts returned error: %v", err)
 	}
 	if len(results) != 2 {
 		t.Fatalf("len(results) = %d, want 2", len(results))

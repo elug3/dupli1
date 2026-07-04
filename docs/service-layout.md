@@ -74,8 +74,8 @@ Owns:
 
 Owns:
 
-- Public bag search (`GET /api/v1/products/bags`), PDP, coupon redeem
-- Admin product/coupon CRUD with brand-prefixed IDs (`BOT-001`), image upload (multipart, appends to `imageUrls`)
+- Public product search (`GET /api/v1/products` with query filters), PDP, coupon redeem
+- Admin product/coupon CRUD with brand-prefixed IDs (`BOT-001`), image upload (`POST .../images`, appends to `imageUrls`)
 - JWT validation via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only)
 
 ### Inventory (`inventory/pkg`)

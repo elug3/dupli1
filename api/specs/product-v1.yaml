@@ -41,38 +41,6 @@ paths:
                     type: string
                     example: healthy
 
-  /api/v1/products/bags:
-    get:
-      tags: [Products]
-      summary: Search active bag products
-      operationId: productSearchBags
-      description: Returns products with `category = bags` and `status = active`. Cost is omitted from results.
-      parameters:
-        - name: brand
-          in: query
-          schema:
-            type: string
-          description: Case-insensitive substring match
-        - name: color
-          in: query
-          schema:
-            type: string
-          description: Exact match
-        - name: material
-          in: query
-          schema:
-            type: string
-          description: Exact match
-      responses:
-        '200':
-          description: Search results
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProductSearchResponse'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
   /api/v1/products/{id}:
     get:
       tags: [Products]
@@ -144,20 +112,49 @@ paths:
   /api/v1/products:
     get:
       tags: [Products]
-      summary: List all products
-      operationId: productList
-      security:
-        - bearerAuth: []
-      description: Returns all statuses including drafts and archived. Includes cost.
+      summary: Search products
+      operationId: productSearch
+      description: |
+        Public callers receive active products only with cost omitted.
+        Authenticated managers (`product_manager`, `admin`, `owner`) receive all statuses and cost.
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Exact match (e.g. bags)
+        - name: brand
+          in: query
+          schema:
+            type: string
+          description: Case-insensitive substring match
+        - name: color
+          in: query
+          schema:
+            type: string
+          description: Exact match
+        - name: material
+          in: query
+          schema:
+            type: string
+          description: Exact match
+        - name: tags
+          in: query
+          schema:
+            type: string
+          description: Comma-separated tags; product must include all
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Exact match (managers only)
       responses:
         '200':
-          description: Product list
+          description: Search results
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Product'
+                $ref: '#/components/schemas/ProductSearchResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -189,38 +186,14 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/products/{id}/manage:
-    get:
-      tags: [Products]
-      summary: Get product for management
-      operationId: productManageGet
-      security:
-        - bearerAuth: []
-      description: Returns any status including drafts and archived. Includes cost.
-      parameters:
-        - $ref: '#/components/parameters/ProductId'
-      responses:
-        '200':
-          description: Full product
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Product'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /api/v1/products/{id}/image:
-    put:
+  /api/v1/products/{id}/images:
+    post:
       tags: [Products]
       summary: Upload a product image
       operationId: productUploadImage
       security:
         - bearerAuth: []
-      description: Multipart upload. Max form size 10 MB. Requires S3/MinIO configuration.
+      description: Multipart upload. Max form size 10 MB. Requires S3/MinIO configuration. Appends to imageUrls.
       parameters:
         - $ref: '#/components/parameters/ProductId'
       requestBody:
@@ -235,7 +208,7 @@ paths:
                   type: string
                   format: binary
       responses:
-        '200':
+        '201':
           description: Product with updated imageUrls
           content:
             application/json:

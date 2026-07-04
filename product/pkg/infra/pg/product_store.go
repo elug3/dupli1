@@ -61,6 +61,7 @@ func (s *ProductSearchStore) migrate() error {
 		{"cost", "NUMERIC(10,2) NOT NULL DEFAULT 0"},
 		{"image_urls", "TEXT[] NOT NULL DEFAULT '{}'"},
 		{"capacity", "TEXT NOT NULL DEFAULT ''"},
+		{"tags", "TEXT[] NOT NULL DEFAULT '{}'"},
 	} {
 		s.pool.Exec(ctx, fmt.Sprintf(
 			"ALTER TABLE products ADD COLUMN IF NOT EXISTS %s %s", col.name, col.def,
@@ -147,42 +148,39 @@ func toTextArray(ss []string) pgtype.TextArray {
 
 // ── queries ───────────────────────────────────────────────────────────────────
 
-const selectCols = `id, name, description, price, cost, brand, color, material, stock, category, status, image_urls, capacity, created_at`
+const selectCols = `id, name, description, price, cost, brand, color, material, stock, category, status, image_urls, capacity, tags, created_at`
 
 func scanProduct(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
 	var createdAt time.Time
-	var imageURLs pgtype.TextArray
+	var imageURLs, tags pgtype.TextArray
 	var capacity string
 	err := scan(
 		&p.ID, &p.Name, &p.Description, &p.Price, &p.Cost,
 		&p.Brand, &p.Color, &p.Material, &p.Stock,
-		&p.Category, &p.Status, &imageURLs, &capacity, &createdAt,
+		&p.Category, &p.Status, &imageURLs, &capacity, &tags, &createdAt,
 	)
 	if err != nil {
 		return domain.Product{}, err
 	}
 	p.ImageURLs = scanTextArray(imageURLs)
 	p.Capacity = capacity
+	p.Tags = scanTextArray(tags)
 	p.CreatedAt = createdAt.Format(time.RFC3339)
 	return p, nil
 }
 
-func scanBag(scan func(...any) error) (domain.Bag, error) {
-	p, err := scanProduct(scan)
-	if err != nil {
-		return domain.Bag{}, err
-	}
-	return domain.Bag{Product: p}, nil
-}
-
-func (s *ProductSearchStore) SearchBags(filter map[string]string) ([]domain.Bag, error) {
-	query := "SELECT " + selectCols + " FROM products WHERE category = 'bags' AND status = 'active'"
+func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.Product, error) {
+	query := "SELECT " + selectCols + " FROM products WHERE 1=1"
 	args := []interface{}{}
 	idx := 1
 
 	for key, value := range filter {
 		switch key {
+		case "category":
+			query += fmt.Sprintf(" AND category = $%d", idx)
+			args = append(args, value)
+			idx++
 		case "brand":
 			query += fmt.Sprintf(" AND brand ILIKE $%d", idx)
 			args = append(args, "%"+value+"%")
@@ -195,8 +193,22 @@ func (s *ProductSearchStore) SearchBags(filter map[string]string) ([]domain.Bag,
 			query += fmt.Sprintf(" AND material = $%d", idx)
 			args = append(args, value)
 			idx++
+		case "status":
+			query += fmt.Sprintf(" AND status = $%d", idx)
+			args = append(args, value)
+			idx++
+		case "tags":
+			tagList := splitTags(value)
+			if len(tagList) == 0 {
+				continue
+			}
+			query += fmt.Sprintf(" AND tags @> $%d::text[]", idx)
+			args = append(args, tagList)
+			idx++
 		}
 	}
+
+	query += " ORDER BY created_at DESC"
 
 	rows, err := s.pool.Query(context.Background(), query, args...)
 	if err != nil {
@@ -204,17 +216,28 @@ func (s *ProductSearchStore) SearchBags(filter map[string]string) ([]domain.Bag,
 	}
 	defer rows.Close()
 
-	var results []domain.Bag
+	var results []domain.Product
 	for rows.Next() {
-		b, err := scanBag(rows.Scan)
+		p, err := scanProduct(rows.Scan)
 		if err != nil {
 			return nil, err
 		}
-		b.Product.Cost = 0
-		results = append(results, b)
+		results = append(results, p)
 	}
 
 	return results, rows.Err()
+}
+
+func splitTags(value string) []string {
+	parts := strings.Split(value, ",")
+	tags := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			tags = append(tags, part)
+		}
+	}
+	return tags
 }
 
 func (s *ProductSearchStore) ListProducts() ([]domain.Product, error) {
@@ -275,12 +298,12 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(context.Background(),
-		`INSERT INTO products (id, name, description, price, cost, brand, color, material, stock, category, status, image_urls, capacity)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		`INSERT INTO products (id, name, description, price, cost, brand, color, material, stock, category, status, image_urls, capacity, tags)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description, p.Price, p.Cost,
 		p.Brand, p.Color, p.Material, p.Stock, p.Category, p.Status,
-		toTextArray(p.ImageURLs), p.Capacity,
+		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags),
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, err
@@ -293,12 +316,12 @@ func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, e
 	var createdAt time.Time
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE products
-		 SET name=$2, description=$3, price=$4, cost=$5, brand=$6, color=$7, material=$8, stock=$9, category=$10, status=$11, image_urls=$12, capacity=$13
+		 SET name=$2, description=$3, price=$4, cost=$5, brand=$6, color=$7, material=$8, stock=$9, category=$10, status=$11, image_urls=$12, capacity=$13, tags=$14
 		 WHERE id=$1
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description, p.Price, p.Cost,
 		p.Brand, p.Color, p.Material, p.Stock, p.Category, p.Status,
-		toTextArray(p.ImageURLs), p.Capacity,
+		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags),
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, err

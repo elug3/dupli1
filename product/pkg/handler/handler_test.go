@@ -23,6 +23,7 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 	h := handler.NewHandler(svc, couponSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
+	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
 	return mux
 }
 
@@ -33,12 +34,11 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	h := handler.NewHandler(svc, couponSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
-	mux.Handle("GET "+handler.RouteProducts, h.ListProductsHandler())
+	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
 	mux.Handle("POST "+handler.RouteProducts, h.CreateProductHandler())
-	mux.Handle("GET "+handler.RouteManageProduct, h.GetProductHandler())
 	mux.Handle("PUT "+handler.RouteProductByID, h.SingleProductHandler())
 	mux.Handle("DELETE "+handler.RouteProductByID, h.SingleProductHandler())
-	mux.Handle("PUT "+handler.RouteProductImage, h.UploadImageHandler())
+	mux.Handle("POST "+handler.RouteProductImages, h.UploadImageHandler())
 	return mux, h
 }
 
@@ -71,17 +71,18 @@ func TestHealthMethodNotAllowed(t *testing.T) {
 	}
 }
 
-// --- Bags ---
+// --- Search ---
 
-func TestSearchBags(t *testing.T) {
+func TestSearchProducts(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
 		{ID: "BAG-001", Name: "Canvas Tote", Brand: "Baggu", Price: 45.0, Category: "bags", Status: "active"},
 		{ID: "HER-001", Name: "Leather Backpack", Brand: "Herschel", Price: 120.0, Category: "bags", Status: "active"},
+		{ID: "DRAFT-1", Name: "Hidden", Category: "bags", Status: "draft"},
 	}
 	mux := newMux(store)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteSearchBags, nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteProducts+"?category=bags", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
@@ -92,6 +93,28 @@ func TestSearchBags(t *testing.T) {
 	}
 	if resp.Total != 2 {
 		t.Errorf("want total=2, got %d", resp.Total)
+	}
+}
+
+func TestSearchProductsByTags(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BAG-001", Name: "Hot Tote", Category: "bags", Status: "active", Tags: []string{"hot", "new"}},
+		{ID: "BAG-002", Name: "Plain Tote", Category: "bags", Status: "active", Tags: []string{"new"}},
+	}
+	mux := newMux(store)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteProducts+"?tags=hot", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	var resp handler.SearchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Total != 1 {
+		t.Fatalf("want total=1, got %d", resp.Total)
 	}
 }
 
@@ -139,38 +162,35 @@ func TestCreateProductSequentialIDs(t *testing.T) {
 	}
 }
 
-func TestListProducts(t *testing.T) {
+func TestSearchProductsPublicRedactsCost(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta"},
+		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active", Cost: 99},
 	}
-	mux, _ := newFullMux(store)
+	mux := newMux(store)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteProducts, nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", rec.Code)
 	}
-	var products []domain.Product
-	if err := json.NewDecoder(rec.Body).Decode(&products); err != nil {
+	var resp handler.SearchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if len(products) != 1 {
-		t.Errorf("want 1 product, got %d", len(products))
+	if resp.Total != 1 {
+		t.Fatalf("want 1 product, got %d", resp.Total)
 	}
-}
-
-func TestGetProduct(t *testing.T) {
-	store := memory.NewProductStore()
-	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active"},
+	raw, err := json.Marshal(resp.Results)
+	if err != nil {
+		t.Fatal(err)
 	}
-	mux, _ := newFullMux(store)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/products/BOT-001/manage", nil))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", rec.Code)
+	var products []domain.Product
+	if err := json.Unmarshal(raw, &products); err != nil {
+		t.Fatal(err)
+	}
+	if products[0].Cost != 0 {
+		t.Fatalf("want cost redacted, got %v", products[0].Cost)
 	}
 }
 
@@ -209,16 +229,6 @@ func TestPublicGetProductDraftHidden(t *testing.T) {
 	}
 }
 
-func TestGetProductNotFound(t *testing.T) {
-	mux, _ := newFullMux(memory.NewProductStore())
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/products/NOPE-999/manage", nil))
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("want 404, got %d", rec.Code)
-	}
-}
-
 func TestDeleteProduct(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{{ID: "BOT-001", Name: "Mini Bag"}}
@@ -245,7 +255,7 @@ func TestUploadImageNoStore(t *testing.T) {
 	fw.Write([]byte("fake-image-data"))
 	w.Close()
 
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/products/BOT-001/image", &buf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/products/BOT-001/images", &buf)
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -267,7 +277,7 @@ func TestUploadImageProductNotFound(t *testing.T) {
 	fw.Write([]byte("fake-image-data"))
 	w.Close()
 
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/products/NOPE-999/image", &buf)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/products/NOPE-999/images", &buf)
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)

@@ -3,7 +3,7 @@ package ports
 import "github.com/elug3/dupli1/product/pkg/domain"
 
 type ProductStore interface {
-	SearchBags(filter map[string]string) ([]domain.Bag, error)
+	SearchProducts(filter map[string]string) ([]domain.Product, error)
 	ListProducts() ([]domain.Product, error)
 	GetProduct(id string) (*domain.Product, error)
 	GetActiveProduct(id string) (*domain.Product, error)

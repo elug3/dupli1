@@ -3,8 +3,11 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
+	"github.com/elug3/dupli1/product/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/middleware"
 	"github.com/elug3/dupli1/product/pkg/service"
 )
 
@@ -27,7 +30,7 @@ type HealthResponse struct {
 	Status string `json:"status"`
 }
 
-var bagFilters = []string{"brand", "color", "material"}
+var searchFilters = []string{"category", "brand", "color", "material", "status"}
 
 func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService) *Handler {
 	return &Handler{svc: svc, couponSvc: couponSvc}
@@ -35,12 +38,16 @@ func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponServ
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+RouteHealth, h.Health)
-	mux.HandleFunc("GET "+RouteSearchBags, h.SearchBags)
 	mux.HandleFunc("GET "+RoutePublicProduct, h.PublicGetProduct)
 	mux.HandleFunc("POST "+RouteRedeemCoupon, h.RedeemCoupon)
 }
 
-// UploadImageHandler returns an http.Handler for PUT /api/v1/products/{id}/image.
+// SearchProductsHandler returns an http.Handler for GET /api/v1/products.
+func (h *Handler) SearchProductsHandler() http.Handler {
+	return http.HandlerFunc(h.SearchProducts)
+}
+
+// UploadImageHandler returns an http.Handler for POST /api/v1/products/{id}/images.
 func (h *Handler) UploadImageHandler() http.Handler {
 	return http.HandlerFunc(h.UploadProductImage)
 }
@@ -48,11 +55,6 @@ func (h *Handler) UploadImageHandler() http.Handler {
 // CreateProductHandler returns an http.Handler for POST /api/v1/products.
 func (h *Handler) CreateProductHandler() http.Handler {
 	return http.HandlerFunc(h.CreateProduct)
-}
-
-// ListProductsHandler returns an http.Handler for GET /api/v1/products.
-func (h *Handler) ListProductsHandler() http.Handler {
-	return http.HandlerFunc(h.ListProducts)
 }
 
 // SingleProductHandler returns an http.Handler for PUT|DELETE /api/v1/products/{id}.
@@ -77,35 +79,30 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, HealthResponse{Status: "ok"})
 }
 
-func (h *Handler) SearchBags(w http.ResponseWriter, r *http.Request) {
+// SearchProducts lists/search products via query params.
+// Public callers see active products only (cost redacted).
+// Authenticated product managers see all statuses and cost.
+func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	filter := h.extractFilters(r)
-	results, err := h.svc.SearchBags(filter)
+	public := true
+	if claims, ok := authjwt.FromContext(r.Context()); ok && claims.HasRole(middleware.ProductManagerRoles...) {
+		public = false
+	} else {
+		delete(filter, "status")
+	}
+	results, err := h.svc.SearchProducts(filter, public)
 	if err != nil {
 		h.respondError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if results == nil {
+		results = []domain.Product{}
 	}
 	h.respondJSON(w, http.StatusOK, SearchResponse{Total: len(results), Results: results})
-}
-
-func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
-	products, err := h.svc.ListProducts()
-	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if products == nil {
-		products = []domain.Product{}
-	}
-	h.respondJSON(w, http.StatusOK, products)
-}
-
-// GetProductHandler returns an http.Handler for authenticated GET /api/v1/products/{id}/manage.
-func (h *Handler) GetProductHandler() http.Handler {
-	return http.HandlerFunc(h.GetProduct)
 }
 
 func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {
@@ -119,20 +116,6 @@ func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	product, err := h.svc.GetPublicProduct(id)
-	if err != nil {
-		h.respondError(w, http.StatusNotFound, "product not found")
-		return
-	}
-	h.respondJSON(w, http.StatusOK, product)
-}
-
-func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		h.respondError(w, http.StatusBadRequest, "missing product id")
-		return
-	}
-	product, err := h.svc.GetProduct(id)
 	if err != nil {
 		h.respondError(w, http.StatusNotFound, "product not found")
 		return
@@ -288,7 +271,7 @@ func (h *Handler) UploadProductImage(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.respondJSON(w, http.StatusOK, product)
+	h.respondJSON(w, http.StatusCreated, product)
 }
 
 func (h *Handler) RedeemCoupon(w http.ResponseWriter, r *http.Request) {
@@ -313,12 +296,32 @@ func (h *Handler) RedeemCoupon(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) extractFilters(r *http.Request) map[string]string {
 	filter := make(map[string]string)
-	for _, f := range bagFilters {
+	for _, f := range searchFilters {
 		if value := r.URL.Query().Get(f); value != "" {
 			filter[f] = value
 		}
 	}
+	if tags := collectTags(r); tags != "" {
+		filter["tags"] = tags
+	}
 	return filter
+}
+
+func collectTags(r *http.Request) string {
+	raw := r.URL.Query()["tags"]
+	if len(raw) == 0 {
+		return ""
+	}
+	var tags []string
+	for _, entry := range raw {
+		for _, part := range strings.Split(entry, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				tags = append(tags, part)
+			}
+		}
+	}
+	return strings.Join(tags, ",")
 }
 
 func (h *Handler) respondJSON(w http.ResponseWriter, status int, data interface{}) {

@@ -51,11 +51,29 @@ func NewProductSearchService(store ports.ProductStore, imageStore ports.ImageSto
 	return s
 }
 
-func (s *ProductSearchService) SearchBags(filter map[string]string) ([]domain.Bag, error) {
+// SearchProducts filters the catalog. When public is true, only active products
+// are returned and cost is redacted.
+func (s *ProductSearchService) SearchProducts(filter map[string]string, public bool) ([]domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	return s.store.SearchBags(filter)
+	f := make(map[string]string, len(filter)+1)
+	for k, v := range filter {
+		f[k] = v
+	}
+	if public {
+		f["status"] = "active"
+	}
+	results, err := s.store.SearchProducts(f)
+	if err != nil {
+		return nil, err
+	}
+	if public {
+		for i := range results {
+			results[i].Cost = 0
+		}
+	}
+	return results, nil
 }
 
 func (s *ProductSearchService) ListProducts() ([]domain.Product, error) {

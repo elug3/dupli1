@@ -17,10 +17,13 @@ func NewProductStore() *ProductStore {
 	return &ProductStore{}
 }
 
-func (s *ProductStore) SearchBags(filter map[string]string) ([]domain.Bag, error) {
-	var results []domain.Bag
+func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Product, error) {
+	var results []domain.Product
 	for _, p := range s.Products {
-		if p.Category != "bags" || p.Status != "active" {
+		if category := filter["category"]; category != "" && p.Category != category {
+			continue
+		}
+		if status := filter["status"]; status != "" && p.Status != status {
 			continue
 		}
 		if brand := filter["brand"]; brand != "" && !strings.Contains(strings.ToLower(p.Brand), strings.ToLower(brand)) {
@@ -32,11 +35,32 @@ func (s *ProductStore) SearchBags(filter map[string]string) ([]domain.Bag, error
 		if material := filter["material"]; material != "" && p.Material != material {
 			continue
 		}
-		public := p
-		public.Cost = 0
-		results = append(results, domain.Bag{Product: public})
+		if tags := filter["tags"]; tags != "" && !hasAllTags(p.Tags, tags) {
+			continue
+		}
+		results = append(results, p)
 	}
 	return results, nil
+}
+
+func hasAllTags(have []string, wantCSV string) bool {
+	for _, want := range strings.Split(wantCSV, ",") {
+		want = strings.TrimSpace(want)
+		if want == "" {
+			continue
+		}
+		found := false
+		for _, tag := range have {
+			if tag == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *ProductStore) ListProducts() ([]domain.Product, error) {
