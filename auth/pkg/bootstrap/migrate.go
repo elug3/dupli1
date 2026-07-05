@@ -21,13 +21,22 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			roles                 TEXT[]    NOT NULL DEFAULT '{}',
 			is_active             BOOLEAN   NOT NULL DEFAULT TRUE,
 			locked_at             TIMESTAMPTZ,
-			failed_login_attempts INT       NOT NULL DEFAULT 0
+			failed_login_attempts INT       NOT NULL DEFAULT 0,
+			account_type          TEXT      NOT NULL DEFAULT 'customer'
 		)`,
 		// Idempotent column additions for existing deployments.
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS roles TEXT[] NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS account_type TEXT NOT NULL DEFAULT 'customer'`,
+		// Backfill account_type for rows created before the column existed.
+		`UPDATE users SET account_type = 'admin'
+		 WHERE account_type = 'customer'
+		   AND (roles && ARRAY['owner','admin','user_manager'])`,
+		`UPDATE users SET account_type = 'service'
+		 WHERE account_type = 'customer'
+		   AND (roles && ARRAY['customer_registrar','order_manager'])`,
 	}
 
 	for _, stmt := range stmts {

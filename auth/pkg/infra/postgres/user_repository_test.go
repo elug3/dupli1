@@ -56,7 +56,7 @@ func requirePostgres(t *testing.T) {
 func newTestUser(t *testing.T) *domain.User {
 	t.Helper()
 	email := "test+" + uuid.New().String() + "@example.com"
-	u, err := domain.NewUser(uuid.New().String(), email, "hunter2", "customer")
+	u, err := domain.NewUser(uuid.New().String(), email, "hunter2", domain.AccountTypeCustomer, "customer")
 	if err != nil {
 		t.Fatalf("NewUser: %v", err)
 	}
@@ -84,6 +84,9 @@ func TestSave_And_FindByEmail(t *testing.T) {
 	}
 	if got.Email != u.Email {
 		t.Errorf("Email: got %q, want %q", got.Email, u.Email)
+	}
+	if got.AccountType != u.AccountType {
+		t.Errorf("AccountType: got %q, want %q", got.AccountType, u.AccountType)
 	}
 }
 
@@ -164,7 +167,7 @@ func TestSave_DuplicateEmail(t *testing.T) {
 		t.Fatalf("Save u1: %v", err)
 	}
 
-	u2, err := domain.NewUser(uuid.New().String(), u1.Email, "password", "customer")
+	u2, err := domain.NewUser(uuid.New().String(), u1.Email, "password", domain.AccountTypeCustomer, "customer")
 	if err != nil {
 		t.Fatalf("NewUser: %v", err)
 	}

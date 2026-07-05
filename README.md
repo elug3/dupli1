@@ -86,9 +86,9 @@ Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](doc
 | POST | `/api/v1/auth/refresh` | — | Exchange refresh token for access token |
 | POST | `/api/v1/auth/logout` | — | Revoke refresh token |
 | GET | `/api/v1/auth/me` | Bearer | Current user profile |
-| POST | `/api/v1/auth/register` | `admin` / `user_manager` / `customer_registrar` | Create user account |
-| GET | `/api/v1/auth/users` | `admin` | List users |
-| PATCH | `/api/v1/auth/users/{id}/roles` | `admin` | Set user roles |
+| POST | `/api/v1/auth/register` | `owner` / `admin` / `user_manager` / `customer_registrar` | Create user account (`account_type` optional) |
+| GET | `/api/v1/auth/users` | `owner` / `admin` | List users |
+| PATCH | `/api/v1/auth/users/{id}/roles` | `owner` / `admin` | Set user roles / `account_type` |
 | PATCH | `/api/v1/auth/users/{id}/password` | `admin` / `user_manager` | Set user password |
 | PATCH | `/api/v1/auth/users/{id}/status` | `admin` / `user_manager` | Activate / deactivate user |
 

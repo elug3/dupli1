@@ -116,6 +116,7 @@ func newStack(t *testing.T) *stack {
 		uuid.New().String(),
 		"registrar@internal.dupli1",
 		"registrar-secret",
+		domain.AccountTypeService,
 		domain.RoleCustomerRegistrar,
 	)
 	if err != nil {
@@ -401,14 +402,18 @@ func TestMe(t *testing.T) {
 			t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 		}
 		var resp struct {
-			ID    string `json:"user_id"`
-			Email string `json:"email"`
+			ID          string `json:"user_id"`
+			Email       string `json:"email"`
+			AccountType string `json:"account_type"`
 		}
 		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
 		if resp.Email != email {
 			t.Errorf("email: got %q, want %q", resp.Email, email)
+		}
+		if resp.AccountType != domain.AccountTypeCustomer {
+			t.Errorf("account_type: got %q, want %q", resp.AccountType, domain.AccountTypeCustomer)
 		}
 		if _, err := uuid.Parse(resp.ID); err != nil {
 			t.Errorf("user_id %q is not a valid UUID", resp.ID)

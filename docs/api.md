@@ -20,6 +20,18 @@ Authorization: Bearer <access_token>
 
 Admin routes require a token belonging to a user with the `owner` or `admin` role (or `user_manager` where noted).
 
+### Account types
+
+Every user has an `account_type` field (JSON key `account_type`) separate from RBAC `roles`:
+
+| Value | Meaning | Typical roles |
+|-------|---------|----------------|
+| `customer` | End-user storefront account | `customer` |
+| `admin` | Human operator (owner, admin staff) | `owner`, `admin`, `user_manager`, `product_manager`, … |
+| `service` | Machine / integration account | `customer_registrar`, `order_manager`, … |
+
+Seeded accounts: owner (`OWNER_EMAIL`) → `admin`; `dupli1-web` / `dupli1-order` service accounts → `service`. `POST /register` defaults to `customer` when `account_type` is omitted.
+
 ---
 
 ## Gateway
@@ -54,7 +66,7 @@ RS256 public key set for verifying access tokens issued by auth.
 
 ### `POST /api/v1/auth/register`
 
-Create a new user account. Requires `admin`, `user_manager`, or `customer_registrar` role.
+Create a new user account. Requires `owner`, `admin`, `user_manager`, or `customer_registrar` role.
 
 **Headers** — `Authorization: Bearer <access_token>`
 
@@ -62,7 +74,8 @@ Create a new user account. Requires `admin`, `user_manager`, or `customer_regist
 ```json
 {
   "email": "user@example.com",
-  "password": "minlen8"
+  "password": "minlen8",
+  "account_type": "customer"
 }
 ```
 
@@ -70,6 +83,7 @@ Create a new user account. Requires `admin`, `user_manager`, or `customer_regist
 |-------|------|-------------|
 | `email` | string | required, valid email |
 | `password` | string | required, min 8 chars |
+| `account_type` | string | optional; one of `customer`, `admin`, `service`; defaults to `customer`. `customer_registrar` may only create `customer` accounts |
 
 **Response `201`**
 ```json
@@ -81,14 +95,15 @@ Create a new user account. Requires `admin`, `user_manager`, or `customer_regist
 |--------|---------|
 | `400` | Validation failed (bad email, password too short) |
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `admin`, `user_manager`, or `customer_registrar` role |
+| `403` | Caller lacks register role, or `customer_registrar` requested a non-customer `account_type` |
 | `409` | Email already registered |
+| `422` | Invalid email, weak password, or invalid `account_type` |
 
 ---
 
 ### Service account: dupli1-web
 
-The `dupli1-web` BFF uses a seeded machine account with the `customer_registrar` role. It can call `POST /api/v1/auth/register` to create customer accounts, but cannot manage passwords, roles, or user status.
+The `dupli1-web` BFF uses a seeded machine account with the `customer_registrar` role and `account_type` `service`. It can call `POST /api/v1/auth/register` to create customer accounts, but cannot manage passwords, roles, or user status.
 
 Configure on `dupli1-auth` startup:
 
@@ -140,6 +155,7 @@ Return the currently authenticated user's profile.
 {
   "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
   "email": "user@example.com",
+  "account_type": "customer",
   "roles": ["customer"],
   "is_active": true,
   "locked_at": null,
@@ -204,7 +220,7 @@ Requires `Authorization: Bearer <access_token>`.
 
 ### `GET /api/v1/auth/users`
 
-List all users. Requires `admin` role.
+List all users. Requires `owner` or `admin` role.
 
 **Response `200`**
 ```json
@@ -213,7 +229,8 @@ List all users. Requires `admin` role.
     {
       "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
       "email": "admin@dupli1.com",
-      "roles": ["admin"],
+      "account_type": "admin",
+      "roles": ["owner", "product_manager"],
       "is_active": true,
       "locked_at": null,
       "failed_login_attempts": 0
@@ -226,28 +243,37 @@ List all users. Requires `admin` role.
 | Status | Meaning |
 |--------|---------|
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `admin` role |
+| `403` | Caller does not have `owner` or `admin` role |
 
 ---
 
 ### `PATCH /api/v1/auth/users/{id}/roles`
 
-Replace the role list for a user. Requires `admin` role.
+Replace the role list for a user. Requires `owner` or `admin` role.
 
 **Request body**
 ```json
-{ "roles": ["user_manager"] }
+{
+  "roles": ["user_manager"],
+  "account_type": "admin"
+}
 ```
 
-**Response `200`** — updated user object
+| Field | Type | Constraints |
+|-------|------|-------------|
+| `roles` | string[] | required |
+| `account_type` | string | optional; one of `customer`, `admin`, `service` |
+
+**Response `200`** — updated user object (includes `account_type`)
 
 **Errors**
 | Status | Meaning |
 |--------|---------|
 | `400` | Missing or malformed body |
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `admin` role |
+| `403` | Caller does not have `owner` or `admin` role |
 | `404` | User not found |
+| `422` | Invalid `account_type` |
 
 ---
 
@@ -542,7 +568,7 @@ All error responses use a JSON envelope:
 | GET | `/gateway/health` | — | nginx |
 | GET | `/api/v1/auth/health` | — | auth |
 | GET | `/api/v1/auth/.well-known/jwks.json` | — | auth |
-| POST | `/api/v1/auth/register` | `admin`, `user_manager`, `customer_registrar` | auth |
+| POST | `/api/v1/auth/register` | `owner`, `admin`, `user_manager`, `customer_registrar` | auth |
 | POST | `/api/v1/auth/login` | — | auth |
 | GET | `/api/v1/auth/me` | Bearer | auth |
 | POST | `/api/v1/auth/refresh` | — | auth |

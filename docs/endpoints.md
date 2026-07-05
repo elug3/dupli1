@@ -23,17 +23,19 @@ Each service also registers `/health` directly for internal/sidecar use.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/auth/health` | — | Health check |
-| `POST` | `/api/v1/auth/register` | `admin`, `user_manager`, `customer_registrar` | Create a new user account |
+| `POST` | `/api/v1/auth/register` | `owner`, `admin`, `user_manager`, `customer_registrar` | Create a new user account |
 | `POST` | `/api/v1/auth/login` | — | Login and receive a refresh token |
 | `POST` | `/api/v1/auth/logout` | — | Invalidate the current session |
 | `POST` | `/api/v1/auth/refresh` | — | Exchange a refresh token for a new access token |
 | `GET` | `/api/v1/auth/me` | Bearer | Return the authenticated user's profile |
-| `GET` | `/api/v1/auth/users` | `admin` | List all users |
-| `PATCH` | `/api/v1/auth/users/:id/roles` | `admin` | Replace a user's roles |
+| `GET` | `/api/v1/auth/users` | `owner`, `admin` | List all users |
+| `PATCH` | `/api/v1/auth/users/:id/roles` | `owner`, `admin` | Replace a user's roles (optional `account_type`) |
 | `PATCH` | `/api/v1/auth/users/:id/password` | `admin`, `user_manager` | Set a new password for a user |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `admin`, `user_manager` | Activate or deactivate a user |
 
-**dupli1-web service account:** set `DUPLI1_WEB_SERVICE_EMAIL` and `DUPLI1_WEB_SERVICE_PASSWORD` on `dupli1-auth` to seed a machine user with `customer_registrar`. That role may register customers only.
+**dupli1-web service account:** set `DUPLI1_WEB_SERVICE_EMAIL` and `DUPLI1_WEB_SERVICE_PASSWORD` on `dupli1-auth` to seed a machine user with `customer_registrar` role and `account_type` `service`. That role may register customers only (`account_type` `customer`).
+
+**Account types:** `customer`, `admin`, `service` — returned on user objects as `account_type`. Distinct from RBAC `roles`.
 
 ### GET /api/v1/auth/health
 
@@ -41,19 +43,25 @@ Response `200`: `ok` (plain text)
 
 ### POST /api/v1/auth/register
 
-Header: `Authorization: Bearer <access_token>` (must have `admin`, `user_manager`, or `customer_registrar` role)
+Header: `Authorization: Bearer <access_token>` (must have `owner`, `admin`, `user_manager`, or `customer_registrar` role)
 
 Request:
 ```json
-{ "email": "user@example.com", "password": "minlen8" }
+{
+  "email": "user@example.com",
+  "password": "minlen8",
+  "account_type": "customer"
+}
 ```
+
+`account_type` is optional (`customer`, `admin`, or `service`); defaults to `customer`. `customer_registrar` may only use `customer`.
 
 Response `201`:
 ```json
 { "user_id": "uuid" }
 ```
 
-Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `409` user already exists, `500` internal error.
+Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `409` user already exists, `422` invalid email/password/account_type, `500` internal error.
 
 ### POST /api/v1/auth/login
 
@@ -101,6 +109,7 @@ Response `200`:
 {
   "user_id": "uuid",
   "email": "user@example.com",
+  "account_type": "customer",
   "roles": ["customer"],
   "is_active": true,
   "locked_at": null,
@@ -112,7 +121,7 @@ Errors: `401` missing or invalid token, `404` user not found.
 
 ### GET /api/v1/auth/users
 
-Header: `Authorization: Bearer <access_token>` (must have the `admin` role)
+Header: `Authorization: Bearer <access_token>` (must have `owner` or `admin` role)
 
 Response `200`:
 ```json
@@ -121,6 +130,7 @@ Response `200`:
     {
       "user_id": "uuid",
       "email": "user@example.com",
+      "account_type": "customer",
       "roles": ["customer"],
       "is_active": true,
       "locked_at": null,
@@ -130,20 +140,23 @@ Response `200`:
 }
 ```
 
-Errors: `401` missing or invalid token, `403` caller lacks admin role, `500` internal error.
+Errors: `401` missing or invalid token, `403` caller lacks `owner` or `admin` role, `500` internal error.
 
 ### PATCH /api/v1/auth/users/:id/roles
 
-Header: `Authorization: Bearer <access_token>` (must have the `admin` role)
+Header: `Authorization: Bearer <access_token>` (must have `owner` or `admin` role)
 
 Request:
 ```json
-{ "roles": ["admin", "user_manager"] }
+{
+  "roles": ["admin", "user_manager"],
+  "account_type": "admin"
+}
 ```
 
 Response `200`: user object (same shape as list item).
 
-Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `404` user not found, `500` internal error.
+Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `404` user not found, `422` invalid account_type, `500` internal error.
 
 ### PATCH /api/v1/auth/users/:id/password
 

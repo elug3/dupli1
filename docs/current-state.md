@@ -38,10 +38,11 @@ See [service-layout.md](service-layout.md) for details.
   - RS256 JWT + JWKS at `/api/v1/auth/.well-known/jwks.json`
   - Access tokens include `type: "access"`; refresh tokens include `type: "refresh"`
   - Roles: `owner`, `admin`, `user_manager`, `customer_registrar`, `product_manager`, `order_manager`, `customer`
-  - Register requires `admin`, `user_manager`, or `customer_registrar` (not public)
+  - Account types: `customer`, `admin`, `service` (JSON field `account_type`; set at register/seed, returned on user objects)
+  - Register requires `owner`, `admin`, `user_manager`, or `customer_registrar` (not public)
   - User admin at `/api/v1/auth/users`
-  - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD`
-  - `dupli1-web` service account seeded from `DUPLI1_WEB_SERVICE_EMAIL` / `DUPLI1_WEB_SERVICE_PASSWORD`
+  - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`account_type` `admin`)
+  - `dupli1-web` service account seeded from `DUPLI1_WEB_SERVICE_EMAIL` / `DUPLI1_WEB_SERVICE_PASSWORD` (`account_type` `service`)
   - Login/refresh rate-limited per IP via Redis
 - **Tests:** `cd auth && go test ./...`
 
@@ -107,7 +108,7 @@ See [service-layout.md](service-layout.md) for details.
 
 | Service | Public | Authenticated |
 |---------|--------|---------------|
-| auth | login, refresh, logout | register (admin/user_manager), me, user admin |
+| auth | login, refresh, logout | register (owner/admin/user_manager; `account_type`), me, user admin |
 | product | health, bag search, PDP, coupon redeem | product/coupon CRUD, image upload |
 | inventory | all routes | — |
 | order | health only | orders, checkout (when JWT configured) |

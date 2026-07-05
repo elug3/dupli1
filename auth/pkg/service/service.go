@@ -76,24 +76,32 @@ func NewService(userRepo ports.UserRepository, tokenGen ports.TokenGenerator, op
 }
 
 type userRegisteredEvent struct {
-	EventType string    `json:"event_type"`
-	UserID    string    `json:"user_id"`
-	Email     string    `json:"email"`
-	Occurred  time.Time `json:"occurred_at"`
+	EventType   string    `json:"event_type"`
+	UserID      string    `json:"user_id"`
+	Email       string    `json:"email"`
+	AccountType string    `json:"account_type"`
+	Occurred    time.Time `json:"occurred_at"`
 }
 
 // Register creates a new user. Roles defaults to ["customer"] when empty.
-func (s *Service) Register(ctx context.Context, email, password string, roles ...string) (*domain.User, error) {
+// accountType defaults to customer when empty.
+func (s *Service) Register(ctx context.Context, email, password, accountType string, roles ...string) (*domain.User, error) {
 	if !strings.Contains(email, "@") || strings.HasPrefix(email, "@") || strings.HasSuffix(email, "@") {
 		return nil, autherrors.ErrInvalidEmail
 	}
 	if len(password) < 8 {
 		return nil, autherrors.ErrWeakPassword
 	}
+	if accountType == "" {
+		accountType = domain.DefaultAccountType
+	}
+	if !domain.ValidAccountType(accountType) {
+		return nil, autherrors.ErrInvalidAccountType
+	}
 	if len(roles) == 0 {
 		roles = []string{"customer"}
 	}
-	u, err := domain.NewUser(newID(), email, password, roles...)
+	u, err := domain.NewUser(newID(), email, password, accountType, roles...)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
@@ -215,13 +223,20 @@ func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, 
 }
 
 // SetUserRole replaces the role list for the given user.
-func (s *Service) SetUserRole(ctx context.Context, userID string, roles []string) (*domain.User, error) {
+// When accountType is non-empty it also updates User.AccountType.
+func (s *Service) SetUserRole(ctx context.Context, userID string, roles []string, accountType string) (*domain.User, error) {
 	u, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("find user: %w", err)
 	}
 	if u == nil {
 		return nil, autherrors.ErrUserNotFound
+	}
+	if accountType != "" {
+		if !domain.ValidAccountType(accountType) {
+			return nil, autherrors.ErrInvalidAccountType
+		}
+		u.AccountType = accountType
 	}
 	u.SetRoles(roles)
 	if err := s.userRepo.Save(ctx, u); err != nil {
@@ -279,9 +294,10 @@ func (s *Service) publishUserRegistered(ctx context.Context, u *domain.User) err
 	}
 
 	return s.eventPublisher.Publish(ctx, userRegisteredSubject, userRegisteredEvent{
-		EventType: userRegisteredSubject,
-		UserID:    u.ID,
-		Email:     u.Email,
-		Occurred:  time.Now().UTC(),
+		EventType:   userRegisteredSubject,
+		UserID:      u.ID,
+		Email:       u.Email,
+		AccountType: u.AccountType,
+		Occurred:    time.Now().UTC(),
 	})
 }

@@ -53,6 +53,59 @@ func (r *rbacFakeRepo) Delete(_ context.Context, id string) error {
 	return nil
 }
 
+func TestOwnerCanRegisterAndListUsers(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	repo := newRBACFakeRepo()
+	accessGen := jwtgen.NewTokenGeneratorWithType("test-secret", 900, "access")
+	refreshGen := jwtgen.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
+	svc := service.NewService(repo, accessGen, service.WithRefreshTokenGen(refreshGen, time.Hour))
+	h := handler.NewHandler(svc, zerolog.Nop())
+
+	owner, err := domain.NewUser(
+		uuid.New().String(),
+		"admin@dupli1.com",
+		"password",
+		domain.AccountTypeAdmin,
+		domain.RoleOwner,
+		domain.RoleProductManager,
+	)
+	if err != nil {
+		t.Fatalf("NewUser: %v", err)
+	}
+	if err := repo.Save(context.Background(), owner); err != nil {
+		t.Fatalf("Save owner: %v", err)
+	}
+
+	accessToken, err := accessGen.Generate(context.Background(), owner.ID, owner.Roles)
+	if err != nil {
+		t.Fatalf("Generate token: %v", err)
+	}
+
+	r := newRouter(h, false, nil, nil, nil)
+
+	body, _ := json.Marshal(map[string]string{
+		"email":    "new-user@example.com",
+		"password": "supersecret",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("register: want 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/auth/users", nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list users: want 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestCustomerRegistrarCanRegisterButNotManageUsers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -66,6 +119,7 @@ func TestCustomerRegistrarCanRegisterButNotManageUsers(t *testing.T) {
 		uuid.New().String(),
 		"dupli1-web@internal.dupli1",
 		"service-secret",
+		domain.AccountTypeService,
 		domain.RoleCustomerRegistrar,
 	)
 	if err != nil {

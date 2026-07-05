@@ -62,9 +62,10 @@ Owns:
 
 - Login, logout, refresh, RS256 JWT + JWKS
 - RBAC roles: `owner`, `admin`, `user_manager`, `customer_registrar`, `product_manager`, `customer`
+- Account types: `customer`, `admin`, `service` on `User.AccountType` / JSON `account_type`
 - User admin at `/api/v1/auth/users` (not `/api/v1/users`)
-- Owner seeding via `OWNER_EMAIL` / `OWNER_PASSWORD`
-- Service account seeding via `DUPLI1_WEB_SERVICE_EMAIL` / `DUPLI1_WEB_SERVICE_PASSWORD` (`customer_registrar`)
+- Owner seeding via `OWNER_EMAIL` / `OWNER_PASSWORD` (`account_type` `admin`)
+- Service account seeding via `DUPLI1_WEB_SERVICE_EMAIL` / `DUPLI1_WEB_SERVICE_PASSWORD` (`account_type` `service`, role `customer_registrar`)
 
 ### Product (`product/pkg`)
 
