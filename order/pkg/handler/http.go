@@ -150,6 +150,11 @@ func (h *Handler) order(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "ship" && r.Method == http.MethodPost {
+		h.shipOrder(w, r, parts[0])
+		return
+	}
+
 	if len(parts) == 2 && parts[1] == "status" && r.Method == http.MethodPut {
 		h.updateStatus(w, r, parts[0])
 		return
@@ -178,6 +183,22 @@ func (h *Handler) getOrder(w http.ResponseWriter, r *http.Request, orderID strin
 	respondJSON(w, http.StatusOK, order)
 }
 
+func (h *Handler) shipOrder(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+
+	if h.jwtValidator != nil && !claims.HasRole("order_manager", "admin", "owner") {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient role")
+		return
+	}
+
+	order, err := h.svc.ShipOrder(r.Context(), orderID, claims.UserID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, order)
+}
+
 func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request, orderID string) {
 	claims, _ := authjwt.FromContext(r.Context())
 
@@ -200,14 +221,12 @@ func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request, orderID s
 		err   error
 	)
 	switch req.Status {
-	case domain.StatusConfirmed:
-		order, err = h.svc.ConfirmOrder(r.Context(), orderID)
 	case domain.StatusCanceled:
 		order, err = h.svc.CancelOrder(r.Context(), orderID)
 	case domain.StatusFulfilled:
 		order, err = h.svc.FulfillOrder(r.Context(), orderID)
 	default:
-		respondError(w, http.StatusBadRequest, "unsupported status")
+		respondError(w, http.StatusBadRequest, "unsupported status; use POST /ship for in_transit")
 		return
 	}
 	if err != nil {
@@ -221,7 +240,7 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ports.ErrNotFound):
 		respondError(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition):
+	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, domain.ErrPaymentAmountMismatch):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:
 		respondError(w, http.StatusInternalServerError, err.Error())

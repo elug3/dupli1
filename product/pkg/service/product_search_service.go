@@ -92,6 +92,23 @@ func (s *ProductSearchService) GetPublicProduct(id string) (*domain.Product, err
 	return s.store.GetActiveProduct(id)
 }
 
+func (s *ProductSearchService) GetPublicVariant(sku string) (*domain.Variant, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("store not initialized")
+	}
+	v, err := s.store.GetVariant(sku)
+	if err != nil {
+		return nil, err
+	}
+	if v.Status != "active" {
+		return nil, fmt.Errorf("variant not found")
+	}
+	if _, err := s.store.GetActiveProduct(v.ProductID); err != nil {
+		return nil, fmt.Errorf("variant not found")
+	}
+	return v, nil
+}
+
 func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")

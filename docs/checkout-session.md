@@ -2,6 +2,10 @@
 
 Checkout sessions provide a multi-step purchase flow inside the **order service** (`dupli1-order`). A client builds a cart-like session, optionally applies a coupon, then completes checkout to create a pending order with inventory reserved.
 
+For a **persistent** shopping cart (saved across sessions), use the **cart service** first — see [cart-service.md](cart-service.md).
+
+For **payment** after checkout, see [payment-service.md](payment-service.md) (Stripe Checkout redirect; 5-minute unpaid window).
+
 Direct order creation (`POST /api/v1/orders`) remains available for callers that already have a finalized cart.
 
 ## Flow
@@ -162,7 +166,7 @@ Finalize checkout: reserve inventory, create a `pending` order, and mark the ses
 }
 ```
 
-After completion, use the existing order APIs to confirm, cancel, or fulfill the order.
+After completion, the order is **`pending`** with inventory reserved. The customer must pay within **5 minutes** via the payment service (Stripe Checkout redirect); see [payment-service.md](payment-service.md). Only `dupli1-payment` confirms the order after a successful webhook — not manual status updates.
 
 ## Configuration
 

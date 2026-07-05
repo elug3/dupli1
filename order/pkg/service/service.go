@@ -10,8 +10,10 @@ import (
 )
 
 const (
-	orderCreatedSubject = "order.created"
-	orderUpdatedSubject = "order.status_updated"
+	orderCreatedSubject      = "order.created"
+	orderUpdatedSubject        = "order.status_updated"
+	orderPaidSubject           = "order.paid"
+	paymentSucceededSubject    = "payment.succeeded"
 )
 
 type Service struct {
@@ -127,18 +129,38 @@ func (s *Service) ListCustomerOrders(ctx context.Context, customerID string) ([]
 	return cloneOrders(orders), nil
 }
 
-func (s *Service) ConfirmOrder(ctx context.Context, id string) (*domain.Order, error) {
-	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
+func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, amountCents int64) (*domain.Order, error) {
+	order, err := s.repo.Get(ctx, strings.TrimSpace(orderID))
 	if err != nil {
 		return nil, err
 	}
-	if order.Status != domain.StatusPending {
-		return nil, domain.ErrInvalidTransition
+	if order.Status == domain.StatusPaid && order.PaymentID == paymentID {
+		return cloneOrder(order), nil
+	}
+	if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {
+		return nil, err
+	}
+	if err := s.repo.Save(ctx, order); err != nil {
+		return nil, err
+	}
+	if err := s.publish(ctx, orderPaidSubject, order); err != nil {
+		return nil, err
+	}
+	if err := s.publish(ctx, orderUpdatedSubject, order); err != nil {
+		return nil, err
+	}
+	return cloneOrder(order), nil
+}
+
+func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string) (*domain.Order, error) {
+	order, err := s.repo.Get(ctx, strings.TrimSpace(orderID))
+	if err != nil {
+		return nil, err
 	}
 	if err := s.inventory.CommitReservation(ctx, order.ReservationID); err != nil {
 		return nil, err
 	}
-	if err := order.Confirm(s.now()); err != nil {
+	if err := order.Ship(shippedBy, s.now()); err != nil {
 		return nil, err
 	}
 	return s.saveStatusChange(ctx, order)
@@ -149,7 +171,7 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if err != nil {
 		return nil, err
 	}
-	if order.Status != domain.StatusPending {
+	if order.Status != domain.StatusPending && order.Status != domain.StatusPaid {
 		return nil, domain.ErrInvalidTransition
 	}
 	if err := s.inventory.ReleaseReservation(ctx, order.ReservationID); err != nil {

@@ -18,6 +18,9 @@ dupli1/
 ├── order/
 │   ├── cmd/
 │   └── pkg/
+├── cart/
+│   ├── cmd/
+│   └── pkg/
 ├── notification/
 │   ├── cmd/
 │   └── pkg/
@@ -93,6 +96,20 @@ Owns stock and reservations at `/api/v1/inventory/*`. Public reads; writes requi
 
 Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/checkout/sessions`. Requires Bearer JWT when `AUTH_JWKS_URL` or `JWT_SECRET` is set (RS256 JWKS from auth; access tokens only).
 
+### Cart (`cart/pkg`)
+
+**Module:** `github.com/elug3/dupli1/cart`  
+**Storage:** PostgreSQL (`cart` table set), in-memory fallback when no DB URL is configured (tests)
+
+Owns shopping carts at `/api/v1/cart` (current user) and `/api/v1/carts/{customer_id}` (admin read). Requires Bearer JWT when `AUTH_JWKS_URL` or `JWT_SECRET` is set. See [cart-service.md](cart-service.md).
+
+### Payment (`payment/pkg`)
+
+**Module:** `github.com/elug3/dupli1/payment`  
+**Storage:** PostgreSQL (`payments` table set), in-memory fallback when no DB URL is configured (tests)
+
+Stripe Checkout redirect; publishes `payment.succeeded` on NATS. See [payment-service.md](payment-service.md).
+
 ### Notification (`notification/pkg`)
 
 **Module:** `github.com/elug3/dupli1/notification`  
@@ -111,10 +128,13 @@ Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/checkout/sess
 | `/api/v1/inventory/` | dupli1-inventory |
 | `/api/v1/orders` | dupli1-order |
 | `/api/v1/checkout` | dupli1-order |
+| `/api/v1/cart` | dupli1-cart |
+| `/api/v1/carts/` | dupli1-cart |
+| `/api/v1/variants` | dupli1-product |
 
-Checkout sessions are served by order (`/api/v1/checkout/sessions`).
+Checkout sessions are served by order (`/api/v1/checkout/sessions`). Cart routes are served by cart.
 
-Direct host ports (bypass gateway): auth **18080**, product **8081**, inventory **8082**, order **8083**, notification **8084**.
+Direct host ports (bypass gateway): auth **18080**, product **8081**, inventory **8082**, order **8083**, cart **8086**, notification **8084**.
 
 ## Adding a new service
 
@@ -132,6 +152,7 @@ cd auth && go test ./...
 cd product && go test ./...
 cd inventory && go test ./...
 cd order && go test ./...
+cd cart && go test ./...
 ```
 
 Root `go test ./...` does not work — the root `go.mod` is a stub.

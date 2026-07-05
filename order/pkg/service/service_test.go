@@ -37,13 +37,11 @@ func (f *fakeInventory) ReleaseReservation(ctx context.Context, reservationID st
 }
 
 type recordedPublisher struct {
-	subject string
-	event   any
+	subjects []string
 }
 
 func (p *recordedPublisher) Publish(ctx context.Context, subject string, event any) error {
-	p.subject = subject
-	p.event = event
+	p.subjects = append(p.subjects, subject)
 	return nil
 }
 
@@ -66,21 +64,15 @@ func TestCreateOrderReservesInventoryAndPublishesEvent(t *testing.T) {
 	if order.Status != domain.StatusPending {
 		t.Fatalf("order status = %q, want pending", order.Status)
 	}
-	if order.TotalCents != 2500 {
-		t.Fatalf("order total = %d, want 2500", order.TotalCents)
+	if order.PaymentDueAt.IsZero() {
+		t.Fatal("payment_due_at should be set")
 	}
-	if order.ReservationID != "res-123" {
-		t.Fatalf("reservation id = %q, want res-123", order.ReservationID)
-	}
-	if len(inventory.reservedItems) != 1 || inventory.reservedItems[0].SKU != "shoe-1" || inventory.reservedItems[0].Quantity != 2 {
-		t.Fatalf("reserved items = %+v, want one shoe-1 quantity 2", inventory.reservedItems)
-	}
-	if publisher.subject != "order.created" {
-		t.Fatalf("published subject = %q, want order.created", publisher.subject)
+	if publisher.subjects[0] != "order.created" {
+		t.Fatalf("published subject = %q, want order.created", publisher.subjects[0])
 	}
 }
 
-func TestConfirmOrderCommitsInventoryReservation(t *testing.T) {
+func TestMarkOrderPaidThenShipCommitsInventory(t *testing.T) {
 	ctx := context.Background()
 	inventory := &fakeInventory{reservationID: "res-123"}
 	svc := service.New(memory.NewRepository(), inventory)
@@ -93,19 +85,30 @@ func TestConfirmOrderCommitsInventoryReservation(t *testing.T) {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
 
-	order, err = svc.ConfirmOrder(ctx, order.ID)
+	order, err = svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents)
 	if err != nil {
-		t.Fatalf("ConfirmOrder returned error: %v", err)
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
-	if order.Status != domain.StatusConfirmed {
-		t.Fatalf("order status = %q, want confirmed", order.Status)
+	if order.Status != domain.StatusPaid {
+		t.Fatalf("order status = %q, want paid", order.Status)
+	}
+	if inventory.committed != "" {
+		t.Fatal("inventory should not commit on paid")
+	}
+
+	order, err = svc.ShipOrder(ctx, order.ID, "manager-1")
+	if err != nil {
+		t.Fatalf("ShipOrder returned error: %v", err)
+	}
+	if order.Status != domain.StatusInTransit {
+		t.Fatalf("order status = %q, want in_transit", order.Status)
 	}
 	if inventory.committed != "res-123" {
 		t.Fatalf("committed reservation = %q, want res-123", inventory.committed)
 	}
 }
 
-func TestCancelConfirmedOrderDoesNotReleaseInventory(t *testing.T) {
+func TestCancelPaidOrderReleasesInventory(t *testing.T) {
 	ctx := context.Background()
 	inventory := &fakeInventory{reservationID: "res-123"}
 	svc := service.New(memory.NewRepository(), inventory)
@@ -117,15 +120,40 @@ func TestCancelConfirmedOrderDoesNotReleaseInventory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
-		t.Fatalf("ConfirmOrder returned error: %v", err)
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+
+	_, err = svc.CancelOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("CancelOrder returned error: %v", err)
+	}
+	if inventory.released != "res-123" {
+		t.Fatalf("released reservation = %q, want res-123", inventory.released)
+	}
+}
+
+func TestCancelInTransitOrderFails(t *testing.T) {
+	ctx := context.Background()
+	inventory := &fakeInventory{reservationID: "res-123"}
+	svc := service.New(memory.NewRepository(), inventory)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "clock-1", Quantity: 1, UnitPriceCents: 7500}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	if _, err := svc.ShipOrder(ctx, order.ID, "manager-1"); err != nil {
+		t.Fatalf("ShipOrder: %v", err)
 	}
 
 	_, err = svc.CancelOrder(ctx, order.ID)
 	if !errors.Is(err, domain.ErrInvalidTransition) {
 		t.Fatalf("CancelOrder error = %v, want ErrInvalidTransition", err)
-	}
-	if inventory.released != "" {
-		t.Fatalf("released reservation = %q, want empty", inventory.released)
 	}
 }

@@ -10,6 +10,7 @@ const (
 	RouteVariants       = "/api/v1/products/{id}/variants"
 	RouteVariantBySKU   = "/api/v1/products/{id}/variants/{sku}"
 	RouteVariantImages  = "/api/v1/products/{id}/variants/{sku}/images"
+	RoutePublicVariant  = "/api/v1/variants/{sku}"
 	RouteRedeemCoupon   = "/api/v1/coupons/redeem"
 	RouteCoupons        = "/api/v1/coupons"
 	RouteCouponByCode   = "/api/v1/coupons/{code}"

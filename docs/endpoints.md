@@ -11,6 +11,10 @@ All services listen on port `8080` inside Docker. The nginx gateway proxies by p
 | `/api/v1/inventory/` | `dupli1-inventory:8080` |
 | `/api/v1/orders` | `dupli1-order:8080` |
 | `/api/v1/checkout` | `dupli1-order:8080` |
+| `/api/v1/cart` | `dupli1-cart:8080` |
+| `/api/v1/carts/` | `dupli1-cart:8080` |
+| `/api/v1/payments` | `dupli1-payment:8080` |
+| `/api/v1/payments/` | `dupli1-payment:8080` |
 
 Local gateway: `http://localhost:8080` (also host port 80).
 
@@ -246,6 +250,40 @@ Response `200`:
 
 Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. `cost` is omitted. Cart/checkout use each variant's `sku`.
 
+### GET /api/v1/variants/{sku}
+
+Public variant lookup by SKU. Returns `404` when the variant or parent product is not active. Used by the cart service for price validation.
+
+---
+
+## Cart Service
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/cart/health` | — | Health check |
+| `GET` | `/api/v1/cart` | Bearer | Get current user's cart |
+| `DELETE` | `/api/v1/cart` | Bearer | Clear current user's cart |
+| `PUT` | `/api/v1/cart/items` | Bearer | Replace all cart items |
+| `POST` | `/api/v1/cart/items` | Bearer | Add or update one item |
+| `DELETE` | `/api/v1/cart/items/{sku}` | Bearer | Remove one item |
+| `GET` | `/api/v1/carts/{customer_id}` | Bearer (admin) | Get a customer's cart |
+
+See [cart-service.md](cart-service.md) for architecture, boundaries with inventory/order, and checkout handoff.
+
+---
+
+## Payment Service
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/payments/health` | — | Health check |
+| `POST` | `/api/v1/payments` | Bearer | Start Stripe Checkout for a pending order |
+| `GET` | `/api/v1/payments/{id}` | Bearer | Payment status |
+| `POST` | `/api/v1/payments/webhooks/stripe` | Stripe signature | Webhook handler |
+| `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (no Stripe key): mark payment succeeded |
+
+See [payment-service.md](payment-service.md) for Stripe redirect flow, 5-minute auto-cancel, and `payment.succeeded` → `paid`.
+
 ---
 
 ## Inventory Service
@@ -349,7 +387,8 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | `POST` | `/api/v1/orders` | Bearer* | Create a new order |
 | `GET` | `/api/v1/orders?customer_id={id}` | Bearer* | List all orders for a customer |
 | `GET` | `/api/v1/orders/{id}` | Bearer* | Get a single order |
-| `PUT` | `/api/v1/orders/{id}/status` | Bearer* | Transition order status |
+| `POST` | `/api/v1/orders/{id}/ship` | Bearer* (`order_manager`, `admin`, `owner`) | Ship order (`paid` → `in_transit`, commit stock) |
+| `PUT` | `/api/v1/orders/{id}/status` | Bearer* | Transition order status (`canceled`, `fulfilled`) |
 
 \* Required when `AUTH_JWKS_URL` or `JWT_SECRET` is configured; optional in tests with no validator.
 
@@ -387,17 +426,25 @@ Response `200`: order object.
 
 ### PUT /api/v1/orders/{id}/status
 
+`order_manager` / `admin` / `owner` may cancel or fulfill. **`pending` → `paid` is set only by the payment event consumer** (not this endpoint).
+
 Request:
 ```json
-{ "status": "confirmed" }
+{ "status": "canceled" }
 ```
 
-Valid status transitions:
-- `pending` → `confirmed`
+Valid status transitions via this endpoint:
 - `pending` → `canceled`
-- `confirmed` → `fulfilled`
+- `paid` → `canceled`
+- `in_transit` → `fulfilled`
 
 Response `200`: updated order object. Errors: `400` invalid transition, `404` not found.
+
+### POST /api/v1/orders/{id}/ship
+
+Moves a **`paid`** order to **`in_transit`** and commits inventory reservations. Requires `order_manager`, `admin`, or `owner`.
+
+Response `200`: updated order object with `shipped_by`, `shipped_at`. Errors: `400` invalid state, `404` not found.
 
 Order object shape:
 ```json
@@ -405,9 +452,12 @@ Order object shape:
   "id": "ord-abc",
   "customer_id": "cust-123",
   "reservation_id": "res-xyz",
+  "payment_id": "pay_000001",
   "items": [ { "sku": "SHOE-001", "quantity": 1, "unit_price_cents": 9900 } ],
-  "status": "pending",
+  "status": "paid",
   "total_cents": 9900,
+  "payment_due_at": "...",
+  "paid_at": "...",
   "created_at": "...",
   "updated_at": "..."
 }

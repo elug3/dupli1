@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
@@ -85,6 +86,23 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	var orders []domain.Order
 	for _, order := range r.orders {
 		if order.CustomerID == customerID {
+			orders = append(orders, *cloneOrder(order))
+		}
+	}
+	return orders, nil
+}
+
+func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Time) ([]domain.Order, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var orders []domain.Order
+	for _, order := range r.orders {
+		if order.Status == domain.StatusPending && now.After(order.PaymentDueAt) {
 			orders = append(orders, *cloneOrder(order))
 		}
 	}

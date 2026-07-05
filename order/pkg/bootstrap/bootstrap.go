@@ -40,6 +40,8 @@ type App struct {
 	Repo          ports.Repository
 	Inventory     ports.InventoryClient
 	natsPublisher *natsinfra.Publisher
+	natsSubscriber *natsinfra.Subscriber
+	expiryCancel    context.CancelFunc
 	close         func() error
 }
 
@@ -48,6 +50,12 @@ func (a *App) Close() error {
 		return nil
 	}
 	var errs []error
+	if a.expiryCancel != nil {
+		a.expiryCancel()
+	}
+	if a.natsSubscriber != nil {
+		a.natsSubscriber.Close()
+	}
 	if a.natsPublisher != nil {
 		a.natsPublisher.Close()
 	}
@@ -76,6 +84,7 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	var eventPublisher ports.EventPublisher
 	var natsPublisher *natsinfra.Publisher
+	var natsSubscriber *natsinfra.Subscriber
 	if cfg.NATSURL != "" {
 		var err error
 		natsPublisher, err = natsinfra.NewPublisher(cfg.NATSURL)
@@ -83,9 +92,26 @@ func Bootstrap(cfg Config) (*App, error) {
 			return nil, err
 		}
 		eventPublisher = natsPublisher
+
+		natsSubscriber, err = natsinfra.NewSubscriber(cfg.NATSURL)
+		if err != nil {
+			natsPublisher.Close()
+			return nil, err
+		}
 	}
 
 	svc := service.NewWithCheckout(repo, inventory, couponClient, 0, eventPublisher)
+
+	if natsSubscriber != nil {
+		if err := svc.RegisterPaymentConsumer(context.Background(), natsSubscriber); err != nil {
+			natsSubscriber.Close()
+			natsPublisher.Close()
+			closeFn()
+			return nil, fmt.Errorf("payment consumer: %w", err)
+		}
+	}
+	expiryCtx, expiryCancel := context.WithCancel(context.Background())
+	svc.StartPendingExpiryWorker(expiryCtx, 30*time.Second)
 
 	var jwtValidator handler.AccessTokenValidator
 	if cfg.JWKSURL != "" || cfg.JWTSecret != "" {
@@ -101,13 +127,15 @@ func Bootstrap(cfg Config) (*App, error) {
 	h.RegisterRoutes(mux)
 
 	return &App{
-		Router:        mux,
-		Handler:       h,
-		Service:       svc,
-		Repo:          repo,
-		Inventory:     inventory,
-		natsPublisher: natsPublisher,
-		close:         closeFn,
+		Router:         mux,
+		Handler:        h,
+		Service:        svc,
+		Repo:           repo,
+		Inventory:      inventory,
+		natsPublisher:  natsPublisher,
+		natsSubscriber: natsSubscriber,
+		expiryCancel:   expiryCancel,
+		close:          closeFn,
 	}, nil
 }
 

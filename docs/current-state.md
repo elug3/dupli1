@@ -12,6 +12,8 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Product catalog (bags, coupons, images, PDP) | Implemented |
 | Inventory (stock, reservations) | Implemented (PostgreSQL) |
 | Orders + checkout sessions | Implemented (PostgreSQL) |
+| Shopping cart | Implemented (PostgreSQL) |
+| Payments (Stripe Checkout) | Implemented — see [payment-service.md](payment-service.md) |
 | Notifications | Stub (health only) |
 | User profiles, chat, analytics | Not started |
 
@@ -20,7 +22,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 Services live in **per-service directories**, not `cmd/dupli1-*` / `pkg/*` at the repo root:
 
 ```text
-auth/, product/, inventory/, order/, notification/   # each has cmd/ + pkg/
+auth/, product/, inventory/, order/, cart/, payment/, notification/   # each has cmd/ + pkg/
 api/nginx.conf                                      # gateway
 ```
 
@@ -76,15 +78,40 @@ See [service-layout.md](service-layout.md) for details.
 - **Persistence:** PostgreSQL (`orders` on `postgres-order`)
 - **Features:**
   - Checkout sessions at `/api/v1/checkout/sessions` (see [checkout-session.md](checkout-session.md))
-  - Order lifecycle at `/api/v1/orders`
+  - Order lifecycle at `/api/v1/orders` — statuses: `pending`, `paid`, `in_transit`, `fulfilled`, `canceled`
+  - Consumes **`payment.succeeded`** (NATS) → `paid`; 5-minute unpaid `pending` expiry worker
+  - `POST /api/v1/orders/{id}/ship` → `in_transit` + commit inventory (plan B)
   - Calls inventory to reserve stock; calls product to redeem coupons
 - **Auth:** Bearer JWT validated via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only), with `JWT_SECRET` HS256 fallback in dev
 - **Tests:** `cd order && go test ./...`
 
+### dupli1-cart
+
+- **Host port:** 8086
+- **Persistence:** PostgreSQL (`cart` on `postgres-cart`)
+- **Features:**
+  - Persistent per-customer cart at `/api/v1/cart` (see [cart-service.md](cart-service.md))
+  - Admin read at `/api/v1/carts/{customer_id}`
+  - Enriches lines from product (price, images) and inventory (availability)
+- **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only), with `JWT_SECRET` HS256 fallback in dev
+- **Tests:** `cd cart && go test ./...`
+
+### dupli1-payment
+
+- **Host port:** 8087
+- **Persistence:** PostgreSQL (`payments` on `postgres-payment`)
+- **Features:**
+  - Stripe Checkout redirect at `POST /api/v1/payments` (see [payment-service.md](payment-service.md))
+  - Dev mode without `STRIPE_SECRET_KEY`: simulate URL `GET /api/v1/payments/{id}/simulate-success`
+  - Publishes **`payment.succeeded`** on NATS when payment completes
+- **Auth:** Bearer JWT via `AUTH_JWKS_URL` on customer routes; Stripe signature on webhook
+- **Tests:** `cd payment && go test ./...`
+
 ### dupli1-notification
 
 - **Host port:** 8084
-- **Status:** `GET /health` only
+- **Features:** NATS subscriber; Telegram alerts on `order.paid` (when `TELEGRAM_*` configured)
+- **Status:** Health + event dispatch (no outbound email/SMS yet)
 
 ### dupli1-proxy
 
@@ -100,9 +127,11 @@ See [service-layout.md](service-layout.md) for details.
 | PostgreSQL `products` | product | `postgres-product:5433` |
 | PostgreSQL `inventory` | inventory | `postgres-inventory:5434` |
 | PostgreSQL `orders` | order | `postgres-order:5435` |
+| PostgreSQL `cart` | cart | `postgres-cart:5436` |
+| PostgreSQL `payments` | payment | `postgres-payment:5437` |
 | MinIO `product-images` | product | `minio:9000` |
 | Redis | auth | `redis:6379` (in Compose) |
-| NATS | auth (optional) | `nats:4222` (in Compose) |
+| NATS | auth, order, payment, notification | `nats:4222` (in Compose) |
 
 ## API surface (summary)
 
@@ -111,7 +140,9 @@ See [service-layout.md](service-layout.md) for details.
 | auth | login, refresh, logout | register (owner/admin/user_manager; `account_type`), me, user admin |
 | product | health, bag search, PDP, coupon redeem | product/coupon CRUD, image upload |
 | inventory | all routes | — |
-| order | health only | orders, checkout (when JWT configured) |
+| order | health only | orders, checkout, ship (when JWT configured) |
+| cart | health only | cart (when JWT configured) |
+| payment | health, dev simulate | payments (when JWT configured) |
 | notification | health | — |
 
 Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md).
@@ -125,6 +156,8 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md).
 | `github.com/elug3/dupli1/product` | `product/` |
 | `github.com/elug3/dupli1/inventory` | `inventory/` |
 | `github.com/elug3/dupli1/order` | `order/` |
+| `github.com/elug3/dupli1/cart` | `cart/` |
+| `github.com/elug3/dupli1/payment` | `payment/` |
 | `github.com/elug3/dupli1/notification` | `notification/` |
 
 ## Known gaps

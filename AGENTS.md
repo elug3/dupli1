@@ -6,7 +6,7 @@ Guidance for AI agents working in the Dupli1 repository.
 
 Dupli1 is a Go microservice backend for a fashion bag marketplace. The repo contains:
 
-- Five HTTP services in `auth/`, `product/`, `inventory/`, `order/`, `notification/` (each with `cmd/` + `pkg/`)
+- Seven HTTP services in `auth/`, `product/`, `inventory/`, `order/`, `cart/`, `payment/`, `notification/` (each with `cmd/` + `pkg/`)
 - nginx gateway in `api/` (`dupli1-proxy` in Docker Compose)
 - Docker Compose for local development
 - Terraform and GitHub Actions for AWS ECS deployment
@@ -46,6 +46,8 @@ Docker Compose provides two Postgres instances:
 | `postgres-product` | 5433 | `products` | `dupli1` | `dupli1_dev` |
 | `postgres-inventory` | 5434 | `inventory` | `dupli1` | `dupli1_dev` |
 | `postgres-order` | 5435 | `orders` | `dupli1` | `dupli1_dev` |
+| `postgres-cart` | 5436 | `cart` | `dupli1` | `dupli1_dev` |
+| `postgres-payment` | 5437 | `payments` | `dupli1` | `dupli1_dev` |
 
 Connection strings:
 
@@ -53,6 +55,8 @@ Connection strings:
 - Product: `postgres://dupli1:dupli1_dev@localhost:5433/products?sslmode=disable`
 - Inventory: `postgres://dupli1:dupli1_dev@localhost:5434/inventory?sslmode=disable`
 - Order: `postgres://dupli1:dupli1_dev@localhost:5435/orders?sslmode=disable`
+- Cart: `postgres://dupli1:dupli1_dev@localhost:5436/cart?sslmode=disable`
+- Payment: `postgres://dupli1:dupli1_dev@localhost:5437/payments?sslmode=disable`
 
 Production uses **Amazon RDS** — see [docs/deployment-aws.md](docs/deployment-aws.md) and [infra/terraform/README.md](infra/terraform/README.md).
 
@@ -73,6 +77,8 @@ Direct service ports (bypass gateway):
 | `dupli1-product` | 8081 |
 | `dupli1-inventory` | 8082 |
 | `dupli1-order` | 8083 |
+| `dupli1-cart` | 8086 |
+| `dupli1-payment` | 8087 |
 | `dupli1-notification` | 8084 |
 
 ### Running a single service (without Docker)
@@ -97,6 +103,8 @@ cd auth && go test ./...
 cd product && go test ./...
 cd inventory && go test ./...
 cd order && go test ./...
+cd cart && go test ./...
+cd payment && go test ./...
 ```
 
 ### Gotchas
@@ -105,7 +113,8 @@ cd order && go test ./...
 - **Auth token flow:** login returns only a `refresh_token`; call `POST /api/v1/auth/refresh` to obtain a short-lived access token in the `token` field.
 - **Product JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint).
 - **Order JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint), with `JWT_SECRET` HS256 fallback in dev.
-- **Inventory and order** use PostgreSQL when `DUPLI1_INVENTORY_DB` / `DUPLI1_ORDER_DB` are set (Docker Compose); in-memory fallback for tests without a DB URL.
-- **Notification** is a health-only stub; no outbound messaging yet.
-- **Redis and NATS** are optional for auth (rate limits, session cache, events); Redis is wired in Compose.
-- **SMTP, payment, and OAuth providers** are external; no local mocks are bundled.
+- **Inventory, order, cart, and payment** use PostgreSQL when `DUPLI1_INVENTORY_DB` / `DUPLI1_ORDER_DB` / `DUPLI1_CART_DB` / `DUPLI1_PAYMENT_DB` are set (Docker Compose); in-memory fallback for tests without a DB URL.
+- **Payment flow:** `POST /api/v1/payments` → Stripe Checkout (or dev simulate URL). On success, payment publishes **`payment.succeeded`**; order service marks order **`paid`**. Ship via `POST /api/v1/orders/{id}/ship` → **`in_transit`** (commits stock). See [docs/payment-service.md](docs/payment-service.md).
+- **Notification** subscribes to NATS (e.g. `order.paid` → Telegram when configured).
+- **Redis and NATS** are optional for auth (rate limits, session cache, events); Redis and NATS are wired in Compose. Order and payment use NATS for payment events.
+- **SMTP and OAuth providers** are external. **Stripe** is optional locally — without `STRIPE_SECRET_KEY`, payment uses a dev simulate endpoint.

@@ -217,7 +217,7 @@ func (s *ProductSearchStore) enrich(products []domain.Product, includeVariants b
 	}
 
 	rows, err := s.pool.Query(context.Background(),
-		`SELECT sku, product_id, color, size, price, status, image_urls, created_at
+		`SELECT `+variantSelectCols+`
 		 FROM product_variants
 		 WHERE product_id = ANY($1)
 		 ORDER BY created_at ASC, sku ASC`,

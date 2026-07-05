@@ -14,6 +14,7 @@ import (
 const (
 	SubjectOrderCreated      = "order.created"
 	SubjectOrderStatusUpdate = "order.status_updated"
+	SubjectOrderPaid         = "order.paid"
 	SubjectProductCreated    = "product.created"
 	SubjectProductUpdated    = "product.updated"
 	SubjectProductDeleted    = "product.deleted"
@@ -38,6 +39,7 @@ func (d *Dispatcher) Register(subscriber ports.EventSubscriber, ctx context.Cont
 	subjects := []string{
 		SubjectOrderCreated,
 		SubjectOrderStatusUpdate,
+		SubjectOrderPaid,
 		SubjectProductCreated,
 		SubjectProductUpdated,
 		SubjectProductDeleted,
@@ -58,7 +60,7 @@ func (d *Dispatcher) HandleForTest(ctx context.Context, subject string, payload 
 
 func (d *Dispatcher) handle(ctx context.Context, subject string, payload []byte) error {
 	switch subject {
-	case SubjectOrderCreated, SubjectOrderStatusUpdate:
+	case SubjectOrderCreated, SubjectOrderStatusUpdate, SubjectOrderPaid:
 		return d.handleOrder(ctx, subject, payload)
 	case SubjectProductCreated, SubjectProductUpdated, SubjectProductDeleted, SubjectProductImage:
 		return d.handleProduct(ctx, subject, payload)
@@ -147,6 +149,14 @@ func formatOrderMessage(subject string, event orderEvent) string {
 
 	total := formatMoney(event.TotalCents)
 	switch subject {
+	case SubjectOrderPaid:
+		return fmt.Sprintf(
+			"💳 <b>Order paid — action required</b> %s\nStatus: <b>paid</b>\nCustomer: %s\nItems: %s\nTotal: <b>%s</b>\nShip when ready.",
+			escapeHTML(event.OrderID),
+			escapeHTML(event.CustomerID),
+			itemsLine,
+			total,
+		)
 	case SubjectOrderCreated:
 		return fmt.Sprintf(
 			"🛒 <b>New order</b> %s\nStatus: <b>%s</b>\nCustomer: %s\nItems: %s\nTotal: <b>%s</b>",

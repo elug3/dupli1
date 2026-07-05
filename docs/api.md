@@ -491,6 +491,69 @@ Release a reservation (return stock).
 
 ---
 
+## Cart Service — `/api/v1/cart`
+
+PostgreSQL-backed persistent cart. Enriches lines from product (price, images) and inventory (availability). Does **not** reserve stock or create orders.
+
+When `AUTH_JWKS_URL` or `JWT_SECRET` is set, cart routes require `Authorization: Bearer <access_token>`. The cart owner is the JWT `sub` claim — do not send `customer_id` on `/api/v1/cart` mutations.
+
+See [cart-service.md](cart-service.md) for architecture, service boundaries, and checkout handoff.
+
+### `GET /api/v1/cart/health`
+
+**Response `200`**
+```json
+{ "status": "ok" }
+```
+
+### Cart (current user)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/cart` | Get my cart |
+| DELETE | `/api/v1/cart` | Clear my cart |
+| PUT | `/api/v1/cart/items` | Replace all items |
+| POST | `/api/v1/cart/items` | Add or update one item |
+| DELETE | `/api/v1/cart/items/{sku}` | Remove line |
+
+**Add item request**
+```json
+{ "sku": "BOT-001-BLK", "quantity": 1 }
+```
+
+**Cart response** (enriched)
+```json
+{
+  "customer_id": "uuid",
+  "items": [
+    {
+      "sku": "BOT-001-BLK",
+      "product_id": "BOT-001",
+      "quantity": 1,
+      "unit_price_cents": 125000,
+      "color": "Black",
+      "available_qty": 3
+    }
+  ],
+  "subtotal_cents": 125000,
+  "updated_at": "2026-07-05T12:00:00Z"
+}
+```
+
+### Admin
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/carts/{customer_id}` | Get a customer's cart (`order_manager`, `admin`, or `owner`) |
+
+### Product variant lookup (used by cart)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/variants/{sku}` | Public active variant by SKU |
+
+---
+
 ## Order Service — `/api/v1`
 
 In-memory store. Calls inventory to reserve stock and product to redeem coupons.
@@ -536,6 +599,22 @@ See [checkout-session.md](checkout-session.md) for the full checkout flow.
 ```
 
 Supported status transitions: `pending` → `confirmed` | `canceled`; `confirmed` → `fulfilled`.
+
+**Planned:** `pending` → `confirmed` will be **payment-service only** after Stripe Checkout succeeds. See [payment-service.md](payment-service.md).
+
+---
+
+## Payment Service — `/api/v1/payments` (planned)
+
+Stripe Checkout **redirect** — Dupli1 never handles card numbers, CVC, or card passwords.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/payments` | Start Checkout for a pending order → `checkout_url` |
+| GET | `/api/v1/payments/{id}` | Payment status |
+| POST | `/api/v1/payments/webhooks/stripe` | Stripe webhooks |
+
+Unpaid `pending` orders auto-cancel after **5 minutes**. Full design: [payment-service.md](payment-service.md).
 
 ---
 

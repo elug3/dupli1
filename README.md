@@ -10,12 +10,15 @@ Go microservice backend for a fashion bag marketplace. Five services behind an n
 | `dupli1-product` | 8081 | Bag catalog, coupons, product CRUD, image upload |
 | `dupli1-inventory` | 8082 | Stock and reservation APIs (PostgreSQL) |
 | `dupli1-order` | 8083 | Checkout sessions and order lifecycle (PostgreSQL) |
+| `dupli1-cart` | 8086 | Shopping cart (PostgreSQL) |
+| `dupli1-payment` | 8087 (planned) | Stripe Checkout payments |
 | `dupli1-notification` | 8084 | Notification stub (health only) |
 | `dupli1-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
 | `postgres-auth` | 5432 | Auth DB |
 | `postgres-product` | 5433 | Product DB |
 | `postgres-inventory` | 5434 | Inventory DB |
 | `postgres-order` | 5435 | Order DB |
+| `postgres-cart` | 5436 | Cart DB |
 | `redis` | 6379 | Rate limiter backing store |
 | `minio` | 9000 / 9001 | S3-compatible image storage (console on 9001) |
 
@@ -58,6 +61,7 @@ dupli1/
 ├── product/              # Product catalog
 ├── inventory/            # Inventory service
 ├── order/                # Order + checkout
+├── cart/                 # Shopping cart
 ├── notification/         # Notification stub
 ├── api/
 │   ├── nginx.conf        # Gateway routing
@@ -155,7 +159,27 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | GET | `/api/v1/orders/{id}` | Get order |
 | PUT | `/api/v1/orders/{id}/status` | Confirm, cancel, or fulfill order |
 
-See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow.
+See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow. See [docs/cart-service.md](docs/cart-service.md) for the persistent cart. See [docs/payment-service.md](docs/payment-service.md) for Stripe Checkout payment (planned).
+
+### Cart (`dupli1-cart` :8086)
+
+Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SECRET` is set.
+
+Full design (boundaries vs inventory/order, data model, checkout handoff): [docs/cart-service.md](docs/cart-service.md).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/cart/health` | Health check |
+| GET | `/api/v1/cart` | Get my cart |
+| DELETE | `/api/v1/cart` | Clear my cart |
+| PUT | `/api/v1/cart/items` | Replace all items |
+| POST | `/api/v1/cart/items` | Add or update one item |
+| DELETE | `/api/v1/cart/items/{sku}` | Remove line |
+| GET | `/api/v1/carts/{customer_id}` | Admin: get user cart |
+
+### Payment (`dupli1-payment` :8087) — planned
+
+Stripe Checkout **redirect** — card numbers, CVC, and card passwords are entered only on Stripe's hosted page, never on Dupli1. Unpaid `pending` orders auto-cancel after **5 minutes**. [docs/payment-service.md](docs/payment-service.md).
 
 ### Product IDs and variants
 
@@ -243,6 +267,7 @@ cd auth && go test ./...
 cd product && go test ./...
 cd inventory && go test ./...
 cd order && go test ./...
+cd cart && go test ./...
 ```
 
 ## Dependencies

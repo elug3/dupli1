@@ -41,6 +41,7 @@ func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponServ
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+RouteHealth, h.Health)
 	mux.HandleFunc("GET "+RoutePublicProduct, h.PublicGetProduct)
+	mux.HandleFunc("GET "+RoutePublicVariant, h.PublicGetVariant)
 	mux.HandleFunc("POST "+RouteRedeemCoupon, h.RedeemCoupon)
 }
 
@@ -148,6 +149,24 @@ func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.respondJSON(w, http.StatusOK, product)
+}
+
+func (h *Handler) PublicGetVariant(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	sku := r.PathValue("sku")
+	if sku == "" {
+		h.respondError(w, http.StatusBadRequest, "missing sku")
+		return
+	}
+	variant, err := h.svc.GetPublicVariant(sku)
+	if err != nil {
+		h.respondError(w, http.StatusNotFound, "variant not found")
+		return
+	}
+	h.respondJSON(w, http.StatusOK, variant)
 }
 
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
