@@ -31,6 +31,7 @@ func seedWebServiceAccount(ctx context.Context, cfg Config, repo ports.UserRepos
 		uuid.New().String(),
 		cfg.WebServiceEmail,
 		cfg.WebServicePassword,
+		domain.AccountTypeService,
 		domain.RoleCustomerRegistrar,
 	)
 	if err != nil {

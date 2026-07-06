@@ -293,14 +293,53 @@ func TestUpdateStatus_CustomerForbidden(t *testing.T) {
 	orderID := seedOrder(t, svc, "u-1")
 	token := makeToken(t, "u-1", []string{"customer"})
 
-	body := map[string]string{"status": "confirmed"}
+	body := map[string]string{"status": "fulfilled"}
 	w := do(t, mux, http.MethodPut, "/api/v1/orders/"+orderID+"/status", token, body)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", w.Code)
 	}
 }
 
-func TestUpdateStatus_OrderManagerCanConfirmOrder(t *testing.T) {
+func seedPaidOrder(t *testing.T, svc *service.Service, customerID string) string {
+	t.Helper()
+	orderID := seedOrder(t, svc, customerID)
+	order, err := svc.GetOrder(context.Background(), orderID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(context.Background(), orderID, "pay-test", order.TotalCents); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	return orderID
+}
+
+func TestShipOrder_OrderManagerSuccess(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	orderID := seedPaidOrder(t, svc, "u-1")
+	token := makeToken(t, "mgr-1", []string{"order_manager"})
+
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestShipOrder_CustomerForbidden(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	orderID := seedPaidOrder(t, svc, "u-1")
+	token := makeToken(t, "u-1", []string{"customer"})
+
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestUpdateStatus_ConfirmedRejected(t *testing.T) {
 	h, svc := newTestHandler(t)
 	mux := newMux(h)
 
@@ -309,21 +348,7 @@ func TestUpdateStatus_OrderManagerCanConfirmOrder(t *testing.T) {
 
 	body := map[string]string{"status": "confirmed"}
 	w := do(t, mux, http.MethodPut, "/api/v1/orders/"+orderID+"/status", token, body)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestUpdateStatus_AdminCanConfirmOrder(t *testing.T) {
-	h, svc := newTestHandler(t)
-	mux := newMux(h)
-
-	orderID := seedOrder(t, svc, "u-1")
-	token := makeToken(t, "admin-1", []string{"admin"})
-
-	body := map[string]string{"status": "confirmed"}
-	w := do(t, mux, http.MethodPut, "/api/v1/orders/"+orderID+"/status", token, body)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
 	}
 }

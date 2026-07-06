@@ -80,13 +80,17 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 			middleware.RequireAnyRole(middleware.ProductManagerRoles...)(next))
 	}
 
-	mux.Handle("GET "+handler.RouteProducts, protect(h.ListProductsHandler()))
+	mux.Handle("GET "+handler.RouteProducts, middleware.OptionalAuth(validator, h.SearchProductsHandler()))
 	mux.Handle("POST "+handler.RouteProducts, protect(h.CreateProductHandler()))
-	mux.Handle("GET "+handler.RouteManageProduct, protect(h.GetProductHandler()))
 	mux.Handle("PUT "+handler.RouteProductByID, protect(h.SingleProductHandler()))
 	mux.Handle("DELETE "+handler.RouteProductByID, protect(h.SingleProductHandler()))
+	mux.Handle("POST "+handler.RouteProductImages, protect(h.UploadImageHandler()))
 
-	mux.Handle("PUT "+handler.RouteProductImage, protect(h.UploadImageHandler()))
+	mux.Handle("POST "+handler.RouteVariants, protect(h.CreateVariantHandler()))
+	mux.Handle("PUT "+handler.RouteVariantBySKU, protect(h.VariantBySKUHandler()))
+	mux.Handle("DELETE "+handler.RouteVariantBySKU, protect(h.VariantBySKUHandler()))
+	mux.Handle("POST "+handler.RouteVariantImages, protect(h.UploadVariantImageHandler()))
+
 
 	mux.Handle("GET "+handler.RouteCoupons, protect(http.HandlerFunc(h.ListCoupons)))
 	mux.Handle("POST "+handler.RouteCoupons, protect(http.HandlerFunc(h.CreateCoupon)))

@@ -11,6 +11,9 @@ type User struct {
 	ID                   string
 	Email                string
 	Password             string // hashed
+	// AccountType classifies the account (customer, admin, service).
+	// It is independent of RBAC roles but is typically aligned at creation time.
+	AccountType          string
 	Roles                []string
 	IsActive             bool
 	LockedAt             *time.Time
@@ -18,17 +21,18 @@ type User struct {
 }
 
 // NewUser creates a new user, hashing the plaintext password with bcrypt.
-func NewUser(id, email, password string, roles ...string) (*User, error) {
+func NewUser(id, email, password, accountType string, roles ...string) (*User, error) {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
 	return &User{
-		ID:       id,
-		Email:    email,
-		Password: string(hashed),
-		Roles:    roles,
-		IsActive: true,
+		ID:          id,
+		Email:       email,
+		Password:    string(hashed),
+		AccountType: accountType,
+		Roles:       roles,
+		IsActive:    true,
 	}, nil
 }
 

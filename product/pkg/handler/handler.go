@@ -2,9 +2,14 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
+	"mime/multipart"
 	"net/http"
+	"strings"
 
+	"github.com/elug3/dupli1/product/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/middleware"
 	"github.com/elug3/dupli1/product/pkg/service"
 )
 
@@ -27,7 +32,7 @@ type HealthResponse struct {
 	Status string `json:"status"`
 }
 
-var bagFilters = []string{"brand", "color", "material"}
+var searchFilters = []string{"category", "brand", "color", "size", "material", "status"}
 
 func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService) *Handler {
 	return &Handler{svc: svc, couponSvc: couponSvc}
@@ -35,24 +40,49 @@ func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponServ
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+RouteHealth, h.Health)
-	mux.HandleFunc("GET "+RouteSearchBags, h.SearchBags)
 	mux.HandleFunc("GET "+RoutePublicProduct, h.PublicGetProduct)
+	mux.HandleFunc("GET "+RoutePublicVariant, h.PublicGetVariant)
 	mux.HandleFunc("POST "+RouteRedeemCoupon, h.RedeemCoupon)
 }
 
-// UploadImageHandler returns an http.Handler for PUT /api/v1/products/{id}/image.
+// SearchProductsHandler returns an http.Handler for GET /api/v1/products.
+func (h *Handler) SearchProductsHandler() http.Handler {
+	return http.HandlerFunc(h.SearchProducts)
+}
+
+// UploadImageHandler returns an http.Handler for POST /api/v1/products/{id}/images.
+// Images are stored on the default variant (legacy compatibility).
 func (h *Handler) UploadImageHandler() http.Handler {
 	return http.HandlerFunc(h.UploadProductImage)
+}
+
+// CreateVariantHandler returns an http.Handler for POST /api/v1/products/{id}/variants.
+func (h *Handler) CreateVariantHandler() http.Handler {
+	return http.HandlerFunc(h.CreateVariant)
+}
+
+// VariantBySKUHandler returns an http.Handler for PUT|DELETE /api/v1/products/{id}/variants/{sku}.
+func (h *Handler) VariantBySKUHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPut:
+			h.UpdateVariant(w, r)
+		case http.MethodDelete:
+			h.DeleteVariant(w, r)
+		default:
+			h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+}
+
+// UploadVariantImageHandler returns an http.Handler for POST /api/v1/products/{id}/variants/{sku}/images.
+func (h *Handler) UploadVariantImageHandler() http.Handler {
+	return http.HandlerFunc(h.UploadVariantImage)
 }
 
 // CreateProductHandler returns an http.Handler for POST /api/v1/products.
 func (h *Handler) CreateProductHandler() http.Handler {
 	return http.HandlerFunc(h.CreateProduct)
-}
-
-// ListProductsHandler returns an http.Handler for GET /api/v1/products.
-func (h *Handler) ListProductsHandler() http.Handler {
-	return http.HandlerFunc(h.ListProducts)
 }
 
 // SingleProductHandler returns an http.Handler for PUT|DELETE /api/v1/products/{id}.
@@ -74,38 +104,33 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	h.respondJSON(w, http.StatusOK, HealthResponse{Status: "healthy"})
+	h.respondJSON(w, http.StatusOK, HealthResponse{Status: "ok"})
 }
 
-func (h *Handler) SearchBags(w http.ResponseWriter, r *http.Request) {
+// SearchProducts lists/search products via query params.
+// Public callers see active products only.
+// Authenticated product managers see all statuses.
+func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	filter := h.extractFilters(r)
-	results, err := h.svc.SearchBags(filter)
+	public := true
+	if claims, ok := authjwt.FromContext(r.Context()); ok && claims.HasRole(middleware.ProductManagerRoles...) {
+		public = false
+	} else {
+		delete(filter, "status")
+	}
+	results, err := h.svc.SearchProducts(filter, public)
 	if err != nil {
 		h.respondError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if results == nil {
+		results = []domain.Product{}
 	}
 	h.respondJSON(w, http.StatusOK, SearchResponse{Total: len(results), Results: results})
-}
-
-func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
-	products, err := h.svc.ListProducts()
-	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if products == nil {
-		products = []domain.Product{}
-	}
-	h.respondJSON(w, http.StatusOK, products)
-}
-
-// GetProductHandler returns an http.Handler for authenticated GET /api/v1/products/{id}/manage.
-func (h *Handler) GetProductHandler() http.Handler {
-	return http.HandlerFunc(h.GetProduct)
 }
 
 func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {
@@ -126,18 +151,22 @@ func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, product)
 }
 
-func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		h.respondError(w, http.StatusBadRequest, "missing product id")
+func (h *Handler) PublicGetVariant(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	product, err := h.svc.GetProduct(id)
+	sku := r.PathValue("sku")
+	if sku == "" {
+		h.respondError(w, http.StatusBadRequest, "missing sku")
+		return
+	}
+	variant, err := h.svc.GetPublicVariant(sku)
 	if err != nil {
-		h.respondError(w, http.StatusNotFound, "product not found")
+		h.respondError(w, http.StatusNotFound, "variant not found")
 		return
 	}
-	h.respondJSON(w, http.StatusOK, product)
+	h.respondJSON(w, http.StatusOK, variant)
 }
 
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
@@ -268,13 +297,9 @@ func (h *Handler) UploadProductImage(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "missing product id")
 		return
 	}
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		h.respondError(w, http.StatusBadRequest, "invalid multipart form")
-		return
-	}
-	file, header, err := r.FormFile("image")
+	file, header, err := h.parseImageForm(r)
 	if err != nil {
-		h.respondError(w, http.StatusBadRequest, "missing image field")
+		h.respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	defer file.Close()
@@ -288,7 +313,97 @@ func (h *Handler) UploadProductImage(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.respondJSON(w, http.StatusOK, product)
+	h.respondJSON(w, http.StatusCreated, product)
+}
+
+func (h *Handler) CreateVariant(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		h.respondError(w, http.StatusBadRequest, "missing product id")
+		return
+	}
+	var v domain.Variant
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	created, err := h.svc.CreateVariant(id, v)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.respondJSON(w, http.StatusCreated, created)
+}
+
+func (h *Handler) UpdateVariant(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sku := r.PathValue("sku")
+	if id == "" || sku == "" {
+		h.respondError(w, http.StatusBadRequest, "missing product id or sku")
+		return
+	}
+	var v domain.Variant
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	updated, err := h.svc.UpdateVariant(id, sku, v)
+	if err != nil {
+		h.respondError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	h.respondJSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteVariant(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sku := r.PathValue("sku")
+	if id == "" || sku == "" {
+		h.respondError(w, http.StatusBadRequest, "missing product id or sku")
+		return
+	}
+	if err := h.svc.DeleteVariant(id, sku); err != nil {
+		h.respondError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) UploadVariantImage(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sku := r.PathValue("sku")
+	if id == "" || sku == "" {
+		h.respondError(w, http.StatusBadRequest, "missing product id or sku")
+		return
+	}
+	file, header, err := h.parseImageForm(r)
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	variant, err := h.svc.UploadVariantImage(r.Context(), id, sku, file, header.Size, contentType)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.respondJSON(w, http.StatusCreated, variant)
+}
+
+func (h *Handler) parseImageForm(r *http.Request) (multipart.File, *multipart.FileHeader, error) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		return nil, nil, fmt.Errorf("invalid multipart form")
+	}
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		return nil, nil, fmt.Errorf("missing image field")
+	}
+	return file, header, nil
 }
 
 func (h *Handler) RedeemCoupon(w http.ResponseWriter, r *http.Request) {
@@ -313,12 +428,32 @@ func (h *Handler) RedeemCoupon(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) extractFilters(r *http.Request) map[string]string {
 	filter := make(map[string]string)
-	for _, f := range bagFilters {
+	for _, f := range searchFilters {
 		if value := r.URL.Query().Get(f); value != "" {
 			filter[f] = value
 		}
 	}
+	if tags := collectTags(r); tags != "" {
+		filter["tags"] = tags
+	}
 	return filter
+}
+
+func collectTags(r *http.Request) string {
+	raw := r.URL.Query()["tags"]
+	if len(raw) == 0 {
+		return ""
+	}
+	var tags []string
+	for _, entry := range raw {
+		for _, part := range strings.Split(entry, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				tags = append(tags, part)
+			}
+		}
+	}
+	return strings.Join(tags, ",")
 }
 
 func (h *Handler) respondJSON(w http.ResponseWriter, status int, data interface{}) {

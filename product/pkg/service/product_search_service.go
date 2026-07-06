@@ -16,11 +16,15 @@ const (
 	productUpdatedSubject       = "product.updated"
 	productDeletedSubject       = "product.deleted"
 	productImageUploadedSubject = "product.image_uploaded"
+	variantCreatedSubject       = "product.variant_created"
+	variantUpdatedSubject       = "product.variant_updated"
+	variantDeletedSubject       = "product.variant_deleted"
 )
 
 type productEvent struct {
 	EventType string    `json:"event_type"`
 	ProductID string    `json:"product_id"`
+	SKU       string    `json:"sku,omitempty"`
 	Name      string    `json:"name"`
 	Brand     string    `json:"brand"`
 	Category  string    `json:"category"`
@@ -51,11 +55,20 @@ func NewProductSearchService(store ports.ProductStore, imageStore ports.ImageSto
 	return s
 }
 
-func (s *ProductSearchService) SearchBags(filter map[string]string) ([]domain.Bag, error) {
+// SearchProducts returns parent styles only (no duplicate colors).
+// When public is true, only active parents are returned.
+func (s *ProductSearchService) SearchProducts(filter map[string]string, public bool) ([]domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	return s.store.SearchBags(filter)
+	f := make(map[string]string, len(filter)+1)
+	for k, v := range filter {
+		f[k] = v
+	}
+	if public {
+		f["status"] = "active"
+	}
+	return s.store.SearchProducts(f)
 }
 
 func (s *ProductSearchService) ListProducts() ([]domain.Product, error) {
@@ -79,6 +92,23 @@ func (s *ProductSearchService) GetPublicProduct(id string) (*domain.Product, err
 	return s.store.GetActiveProduct(id)
 }
 
+func (s *ProductSearchService) GetPublicVariant(sku string) (*domain.Variant, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("store not initialized")
+	}
+	v, err := s.store.GetVariant(sku)
+	if err != nil {
+		return nil, err
+	}
+	if v.Status != "active" {
+		return nil, fmt.Errorf("variant not found")
+	}
+	if _, err := s.store.GetActiveProduct(v.ProductID); err != nil {
+		return nil, fmt.Errorf("variant not found")
+	}
+	return v, nil
+}
+
 func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
@@ -87,7 +117,7 @@ func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product,
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publish(context.Background(), productCreatedSubject, created, ""); err != nil {
+	if err := s.publish(context.Background(), productCreatedSubject, created, "", ""); err != nil {
 		return nil, err
 	}
 	return created, nil
@@ -101,7 +131,7 @@ func (s *ProductSearchService) UpdateProduct(p domain.Product) (*domain.Product,
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publish(context.Background(), productUpdatedSubject, updated, ""); err != nil {
+	if err := s.publish(context.Background(), productUpdatedSubject, updated, "", ""); err != nil {
 		return nil, err
 	}
 	return updated, nil
@@ -118,46 +148,136 @@ func (s *ProductSearchService) DeleteProduct(id string) error {
 	if err := s.store.DeleteProduct(id); err != nil {
 		return err
 	}
-	return s.publish(context.Background(), productDeletedSubject, existing, "")
+	return s.publish(context.Background(), productDeletedSubject, existing, "", "")
 }
 
-// UploadImage uploads a file to the image store and appends its URL to the product's ImageURLs.
-func (s *ProductSearchService) UploadImage(ctx context.Context, productID string, r io.Reader, size int64, contentType string) (*domain.Product, error) {
-	if s.imageStore == nil {
-		return nil, fmt.Errorf("image store not configured")
+func (s *ProductSearchService) CreateVariant(productID string, v domain.Variant) (*domain.Variant, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("store not initialized")
 	}
+	if _, err := s.store.GetProduct(productID); err != nil {
+		return nil, fmt.Errorf("product not found: %w", err)
+	}
+	v.ProductID = productID
+	created, err := s.store.CreateVariant(v)
+	if err != nil {
+		return nil, err
+	}
+	parent, _ := s.store.GetProduct(productID)
+	_ = s.publish(context.Background(), variantCreatedSubject, parent, created.SKU, "")
+	return created, nil
+}
+
+func (s *ProductSearchService) UpdateVariant(productID, sku string, v domain.Variant) (*domain.Variant, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("store not initialized")
+	}
+	existing, err := s.store.GetVariant(sku)
+	if err != nil {
+		return nil, err
+	}
+	if existing.ProductID != productID {
+		return nil, fmt.Errorf("variant not found")
+	}
+	v.SKU = sku
+	v.ProductID = productID
+	updated, err := s.store.UpdateVariant(v)
+	if err != nil {
+		return nil, err
+	}
+	parent, _ := s.store.GetProduct(productID)
+	_ = s.publish(context.Background(), variantUpdatedSubject, parent, updated.SKU, "")
+	return updated, nil
+}
+
+func (s *ProductSearchService) DeleteVariant(productID, sku string) error {
+	if s.store == nil {
+		return fmt.Errorf("store not initialized")
+	}
+	existing, err := s.store.GetVariant(sku)
+	if err != nil {
+		return err
+	}
+	if existing.ProductID != productID {
+		return fmt.Errorf("variant not found")
+	}
+	parent, _ := s.store.GetProduct(productID)
+	if err := s.store.DeleteVariant(sku); err != nil {
+		return err
+	}
+	return s.publish(context.Background(), variantDeletedSubject, parent, sku, "")
+}
+
+// UploadImage appends an image to the default variant (sku == productID, else first variant).
+func (s *ProductSearchService) UploadImage(ctx context.Context, productID string, r io.Reader, size int64, contentType string) (*domain.Product, error) {
 	p, err := s.store.GetProduct(productID)
 	if err != nil {
 		return nil, fmt.Errorf("product not found: %w", err)
 	}
-	objectKey := productID + "/" + uuid.New().String()
+	sku, err := defaultVariantSKU(p)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.UploadVariantImage(ctx, productID, sku, r, size, contentType); err != nil {
+		return nil, err
+	}
+	return s.store.GetProduct(productID)
+}
+
+// UploadVariantImage uploads a file and appends its URL to the variant's ImageURLs.
+func (s *ProductSearchService) UploadVariantImage(ctx context.Context, productID, sku string, r io.Reader, size int64, contentType string) (*domain.Variant, error) {
+	if s.imageStore == nil {
+		return nil, fmt.Errorf("image store not configured")
+	}
+	v, err := s.store.GetVariant(sku)
+	if err != nil {
+		return nil, fmt.Errorf("variant not found: %w", err)
+	}
+	if v.ProductID != productID {
+		return nil, fmt.Errorf("variant not found")
+	}
+	objectKey := productID + "/" + sku + "/" + uuid.New().String()
 	url, err := s.imageStore.Upload(ctx, objectKey, r, size, contentType)
 	if err != nil {
 		return nil, err
 	}
-	p.ImageURLs = append(p.ImageURLs, url)
-	updated, err := s.store.UpdateProduct(*p)
+	v.ImageURLs = append(v.ImageURLs, url)
+	updated, err := s.store.UpdateVariant(*v)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publish(ctx, productImageUploadedSubject, updated, url); err != nil {
+	parent, _ := s.store.GetProduct(productID)
+	if err := s.publish(ctx, productImageUploadedSubject, parent, sku, url); err != nil {
 		return nil, err
 	}
 	return updated, nil
 }
 
-func (s *ProductSearchService) publish(ctx context.Context, subject string, product *domain.Product, imageURL string) error {
+func defaultVariantSKU(p *domain.Product) (string, error) {
+	if p == nil || len(p.Variants) == 0 {
+		return "", fmt.Errorf("product has no variants")
+	}
+	for _, v := range p.Variants {
+		if v.SKU == p.ID {
+			return v.SKU, nil
+		}
+	}
+	return p.Variants[0].SKU, nil
+}
+
+func (s *ProductSearchService) publish(ctx context.Context, subject string, product *domain.Product, sku, imageURL string) error {
 	if s.eventPublisher == nil || product == nil {
 		return nil
 	}
 	return s.eventPublisher.Publish(ctx, subject, productEvent{
 		EventType: subject,
 		ProductID: product.ID,
+		SKU:       sku,
 		Name:      product.Name,
 		Brand:     product.Brand,
 		Category:  product.Category,
 		Status:    product.Status,
-		Price:     product.Price,
+		Price:     product.PriceFrom,
 		ImageURL:  imageURL,
 		Occurred:  s.now(),
 	})

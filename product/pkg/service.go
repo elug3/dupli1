@@ -34,15 +34,19 @@ func NewProductSearchService(store ports.ProductStore, eventPublisher ...ports.E
 	return s
 }
 
-func (s *ProductSearchService) SearchBags(filter map[string]string) ([]domain.Bag, error) {
+func (s *ProductSearchService) SearchProducts(filter map[string]string) ([]domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	results, err := s.store.SearchBags(filter)
+	results, err := s.store.SearchProducts(filter)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publishSearchEvent("bags", filter, len(results)); err != nil {
+	category := filter["category"]
+	if category == "" {
+		category = "all"
+	}
+	if err := s.publishSearchEvent(category, filter, len(results)); err != nil {
 		return nil, err
 	}
 	return results, nil

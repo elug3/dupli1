@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
@@ -89,6 +90,17 @@ func (r *Repository) migrate() error {
 			return fmt.Errorf("migrate order schema: %w", err)
 		}
 	}
+	alterStmts := []string{
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_due_at TIMESTAMPTZ`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_by TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMPTZ`,
+	}
+	for _, stmt := range alterStmts {
+		_, _ = r.pool.Exec(ctx, stmt)
+	}
+	_, _ = r.pool.Exec(ctx, `UPDATE orders SET payment_due_at = created_at + INTERVAL '5 minutes' WHERE payment_due_at IS NULL`)
 	return nil
 }
 
@@ -131,8 +143,10 @@ func (r *Repository) Save(ctx context.Context, order *domain.Order) error {
 	_, err = tx.Exec(ctx, `
 		INSERT INTO orders (
 			id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, total_cents, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			subtotal_cents, discount_cents, total_cents,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			reservation_id = EXCLUDED.reservation_id,
@@ -141,9 +155,16 @@ func (r *Repository) Save(ctx context.Context, order *domain.Order) error {
 			subtotal_cents = EXCLUDED.subtotal_cents,
 			discount_cents = EXCLUDED.discount_cents,
 			total_cents = EXCLUDED.total_cents,
+			payment_id = EXCLUDED.payment_id,
+			paid_at = EXCLUDED.paid_at,
+			payment_due_at = EXCLUDED.payment_due_at,
+			shipped_by = EXCLUDED.shipped_by,
+			shipped_at = EXCLUDED.shipped_at,
 			updated_at = EXCLUDED.updated_at
 	`, order.ID, order.CustomerID, order.ReservationID, order.Status, order.CouponCode,
-		order.SubtotalCents, order.DiscountCents, order.TotalCents, order.CreatedAt, order.UpdatedAt)
+		order.SubtotalCents, order.DiscountCents, order.TotalCents,
+		order.PaymentID, order.PaidAt, order.PaymentDueAt, order.ShippedBy, order.ShippedAt,
+		order.CreatedAt, order.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -168,13 +189,18 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	}
 
 	var order domain.Order
+	var paidAt, shippedAt *time.Time
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, total_cents, created_at, updated_at
+			subtotal_cents, discount_cents, total_cents,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id).Scan(
 		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-		&order.SubtotalCents, &order.DiscountCents, &order.TotalCents, &order.CreatedAt, &order.UpdatedAt,
+		&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ports.ErrNotFound
@@ -182,6 +208,8 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	if err != nil {
 		return nil, err
 	}
+	order.PaidAt = paidAt
+	order.ShippedAt = shippedAt
 
 	items, err := r.loadOrderItems(ctx, id)
 	if err != nil {
@@ -218,7 +246,9 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, total_cents, created_at, updated_at
+			subtotal_cents, discount_cents, total_cents,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			created_at, updated_at
 		FROM orders WHERE customer_id = $1 ORDER BY created_at DESC
 	`, customerID)
 	if err != nil {
@@ -229,12 +259,59 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	var orders []domain.Order
 	for rows.Next() {
 		var order domain.Order
+		var paidAt, shippedAt *time.Time
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents, &order.CreatedAt, &order.UpdatedAt,
+			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
+		order.PaidAt = paidAt
+		order.ShippedAt = shippedAt
+		items, err := r.loadOrderItems(ctx, order.ID)
+		if err != nil {
+			return nil, err
+		}
+		order.Items = items
+		orders = append(orders, order)
+	}
+	return orders, rows.Err()
+}
+
+func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Time) ([]domain.Order, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, customer_id, reservation_id, status, coupon_code,
+			subtotal_cents, discount_cents, total_cents,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			created_at, updated_at
+		FROM orders
+		WHERE status = $1 AND payment_due_at < $2
+	`, domain.StatusPending, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []domain.Order
+	for rows.Next() {
+		var order domain.Order
+		var paidAt, shippedAt *time.Time
+		if err := rows.Scan(
+			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
+			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+			&order.CreatedAt, &order.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		order.PaidAt = paidAt
+		order.ShippedAt = shippedAt
 		items, err := r.loadOrderItems(ctx, order.ID)
 		if err != nil {
 			return nil, err

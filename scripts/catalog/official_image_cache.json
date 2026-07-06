@@ -1,0 +1,348 @@
+{
+  "gucci": {
+    "default": [
+      "https://media.gucci.com/style/DarkGray_Center_0_0_490x490/1707239718/443497_AABZC_1712_001_063_0008_Light-GG-Marmont-small-shoulder-bag.jpg",
+      "https://media.gucci.com/style/DarkGray_Center_0_0_490x490/1707239719/443497_AABZC_1712_002_063_0008_Light-GG-Marmont-small-shoulder-bag.jpg",
+      "https://media.gucci.com/style/DarkGray_Center_0_0_490x490/1707930005/443497_AABZC_1712_003_100_0000_Light-GG-Marmont-small-shoulder-bag.jpg",
+      "https://media.gucci.com/style/DarkGray_Center_0_0_490x490/1707930007/443497_AABZC_1712_004_100_0000_Light-GG-Marmont-small-shoulder-bag.jpg",
+      "https://media.gucci.com/style/DarkGray_Center_0_0_490x490/1721838603/443497_AABZC_1712_006_100_0000_Light-GG-Marmont-small-shoulder-bag.jpg",
+      "https://media.gucci.com/style/DarkGray_Center_0_0_490x490/1707239719/443497_AABZC_1712_009_063_0008_Light-GG-Marmont-small-shoulder-bag.jpg",
+      "https://media.gucci.com/style/DarkGray_Center_0_0_490x490/1707239720/443497_AABZC_1712_010_063_0008_Light-GG-Marmont-small-shoulder-bag.jpg",
+      "https://media.gucci.com/style/DarkGray_Center_0_0_490x490/1707239721/443497_AABZC_1712_012_063_0008_Light-GG-Marmont-small-shoulder-bag.jpg",
+      "https://media.gucci.com/style/DarkGray_Center_0_0_490x490/1721838605/443497_AABZC_1712_013_100_0000_Light-GG-Marmont-small-shoulder-bag.jpg"
+    ]
+  },
+  "dior": {
+    "Book Tote": [
+      "https://www.dior.com/couture/ecommerce/media/catalog/product/6/M/1701265517_M1296ZRHZ_M06E_E03_GHC.jpg?imwidth=3000",
+      "https://www.dior.com/couture/ecommerce/media/catalog/product/6/M/1701265517_M1296ZRHZ_M06E_E05_GHC.jpg?imwidth=3000",
+      "https://www.dior.com/couture/ecommerce/media/catalog/product/6/M/1701265517_M1296ZRHZ_M06E_E06_GHC.jpg?imwidth=3000",
+      "https://www.dior.com/couture/ecommerce/media/catalog/product/6/M/1701265517_M1296ZRHZ_M06E_E08_GHC.jpg?imwidth=3000",
+      "https://www.dior.com/couture/ecommerce/media/catalog/product/6/M/1701265517_M1296ZRHZ_M06E_E09_GHC.jpg?imwidth=3000",
+      "https://assets.christiandior.com/is/image/diorprod/M1324CZBBM928_E01?$default_GHC$&wid=1850&hei=2000&scale=0.875&bfc=on&qlt=85",
+      "https://assets.christiandior.com/is/image/diorprod/M1324CZBBM928_E03?$default_GHC$&wid=1850&hei=2000&scale=0.875&bfc=on&qlt=85",
+      "https://assets.christiandior.com/is/image/diorprod/M1324CZBBM928_E08?$default_GHC$&wid=1850&hei=2000&scale=0.875&bfc=on&qlt=85",
+      "https://assets.christiandior.com/is/image/diorprod/M1324CZBBM928_E09?$default_GHC$&wid=1850&hei=2000&scale=0.875&bfc=on&qlt=85"
+    ],
+    "default": [
+      "https://assets.christiandior.com/is/image/diorprod/M1324CZBBM928_E01?$default_GHC$&wid=1850&hei=2000&scale=0.875&bfc=on&qlt=85",
+      "https://assets.christiandior.com/is/image/diorprod/M1324CZBBM928_E03?$default_GHC$&wid=1850&hei=2000&scale=0.875&bfc=on&qlt=85",
+      "https://assets.christiandior.com/is/image/diorprod/M1324CZBBM928_E06?$default_GHC$&wid=1850&hei=2000&scale=0.875&bfc=on&qlt=85",
+      "https://assets.christiandior.com/is/image/diorprod/M1324CZBBM928_E08?$default_GHC$&wid=1850&hei=2000&scale=0.875&bfc=on&qlt=85",
+      "https://assets.christiandior.com/is/image/diorprod/M1324CZBBM928_E09?$default_GHC$&wid=1850&hei=2000&scale=0.875&bfc=on&qlt=85",
+      "https://www.dior.com/couture/ecommerce/media/catalog/product/6/M/1701265517_M1296ZRHZ_M06E_E03_GHC.jpg?imwidth=3000",
+      "https://www.dior.com/couture/ecommerce/media/catalog/product/6/M/1701265517_M1296ZRHZ_M06E_E06_GHC.jpg?imwidth=3000",
+      "https://www.dior.com/couture/ecommerce/media/catalog/product/6/M/1701265517_M1296ZRHZ_M06E_E08_GHC.jpg?imwidth=3000",
+      "https://www.dior.com/couture/ecommerce/media/catalog/product/6/M/1701265517_M1296ZRHZ_M06E_E09_GHC.jpg?imwidth=3000"
+    ]
+  },
+  "bottega-veneta": {
+    "Cassette": [
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_A.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_B.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_C.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_D.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_E.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_F.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_G.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_H.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_I.jpg?v=5"
+    ],
+    "Jodie": [
+      "https://bottega-veneta.dam.kering.com/m/38247778d3b360f7/Medium-651876VCPP58803_A.jpg?v=4",
+      "https://bottega-veneta.dam.kering.com/m/38247778d3b360f7/Medium-651876VCPP58803_B.jpg?v=4",
+      "https://bottega-veneta.dam.kering.com/m/38247778d3b360f7/Medium-651876VCPP58803_C.jpg?v=4",
+      "https://bottega-veneta.dam.kering.com/m/38247778d3b360f7/Medium-651876VCPP58803_D.jpg?v=4",
+      "https://bottega-veneta.dam.kering.com/m/38247778d3b360f7/Medium-651876VCPP58803_E.jpg?v=4",
+      "https://bottega-veneta.dam.kering.com/m/38247778d3b360f7/Medium-651876VCPP58803_F.jpg?v=4",
+      "https://bottega-veneta.dam.kering.com/m/38247778d3b360f7/Medium-651876VCPP58803_G.jpg?v=4",
+      "https://bottega-veneta.dam.kering.com/m/38247778d3b360f7/Medium-651876VCPP58803_H.jpg?v=4",
+      "https://bottega-veneta.dam.kering.com/m/38247778d3b360f7/Medium-651876VCPP58803_I.jpg?v=4"
+    ],
+    "Andiamo": [
+      "https://bottega-veneta.dam.kering.com/asset/dcaccbdf-19e8-486b-a727-35c4709ec93a/Medium/874957VCPP12272_A.jpg?v=1",
+      "https://bottega-veneta.dam.kering.com/asset/ad1d1968-edac-49f6-bfd3-a50e3e0e2581/Medium/874957VCPP12272_B.jpg?v=1",
+      "https://bottega-veneta.dam.kering.com/asset/4ae086f9-a3f5-4cc2-8dda-7a2441634d49/Medium/874957VCPP12272_C.jpg?v=1",
+      "https://bottega-veneta.dam.kering.com/asset/0906766a-3355-4096-b3d3-5fff6b9fc833/Medium/874957VCPP12272_D.jpg?v=1",
+      "https://bottega-veneta.dam.kering.com/asset/b2b4781d-2347-4f98-b1f7-cfcd30811d54/Medium/874957VCPP12272_E.jpg?v=1",
+      "https://bottega-veneta.dam.kering.com/asset/4051df8e-bed9-4e36-be93-8091a55d4396/Medium/874957VCPP12272_F.jpg?v=1",
+      "https://bottega-veneta.dam.kering.com/asset/8de6a67e-c00c-4269-b818-406b9af7cc90/Medium/874957VCPP12272_G.jpg?v=1",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_A.jpg?v=5"
+    ],
+    "Loop": [
+      "https://bottega-veneta.dam.kering.com/asset/9254f571-92f4-41b4-be25-1cafecf74e13/Medium/723547V1G118425_A.jpg?v=3",
+      "https://bottega-veneta.dam.kering.com/asset/103e5ec7-b169-4e8b-93b1-bc94678a8684/Medium/723547V1G118425_C.jpg?v=2",
+      "https://bottega-veneta.dam.kering.com/asset/dd1e69a1-6725-4877-8ae3-d94e88d0cb04/Medium/723547V1G118425_D.jpg?v=2",
+      "https://bottega-veneta.dam.kering.com/asset/09ad0812-9126-4f15-8db8-345505ffe4dc/Medium/723547V1G118425_F.jpg?v=1",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_A.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_B.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_C.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_D.jpg?v=5"
+    ],
+    "Hop": [
+      "https://bottega-veneta.dam.kering.com/asset/f5fd6b8f-b0a6-4c07-a5be-95007fa6ab3f/Medium/876648V6JG02009_A.jpg",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_A.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_B.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_C.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_D.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_E.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_F.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_G.jpg?v=5"
+    ],
+    "Pouch": [
+      "https://bottega-veneta.dam.kering.com/asset/2a8901c0-f2a9-4d12-a515-bdcf15e13628/Medium/855179VCPP13197_A.jpg?v=3",
+      "https://bottega-veneta.dam.kering.com/asset/cd9630cb-916e-4fa0-bdcd-b20ab21a99f9/Medium/855179VCPP13197_B.jpg?v=1",
+      "https://bottega-veneta.dam.kering.com/asset/ba56c3bf-0821-438f-8296-50c0df5ef44c/Medium/855179VCPP13197_C.jpg?v=1",
+      "https://bottega-veneta.dam.kering.com/asset/c324a177-ef6c-4053-8338-e871df3b7cc8/Medium/855179VCPP13197_D.jpg?v=3",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_A.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_B.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_C.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_D.jpg?v=5"
+    ],
+    "Padded": [
+      "https://bottega-veneta.dam.kering.com/asset/f5fd6b8f-b0a6-4c07-a5be-95007fa6ab3f/Medium/876648V6JG02009_A.jpg",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_A.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_B.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_C.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_D.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_E.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_F.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_G.jpg?v=5"
+    ],
+    "default": [
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_A.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_B.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_C.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_D.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_E.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_F.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_G.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_H.jpg?v=5",
+      "https://bottega-veneta.dam.kering.com/m/5fac54574ab958ee/Medium-578004VMAY19007_I.jpg?v=5"
+    ]
+  },
+  "loewe": {
+    "Puzzle": [
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1F.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwdbe68dbd/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1O.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw92313bef/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1P.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw7c05aa6d/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1Q.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwd14bb60d/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1R.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw0943009a/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1S.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwd44af60c/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1T.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw0c449c20/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1U.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwdbdf5673/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1V.jpg?sw=2000&q=90"
+    ],
+    "Flamenco": [
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw2c6dee81/images_rd/A411FC2XA6/A411FC2XA6-2150/A411FC2XA6_2150_1F.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwbf587b16/images_rd/A411FC2XA6/A411FC2XA6-2150/A411FC2XA6_2150_1O.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwa8eda735/images_rd/A411FC2XA6/A411FC2XA6-2150/A411FC2XA6_2150_1Q.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwbd27cb59/images_rd/A411FC2XA6/A411FC2XA6-2150/A411FC2XA6_2150_1R.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw9f9d612e/images_rd/A411FC2XA6/A411FC2XA6-2150/A411FC2XA6_2150_1S.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw25d15202/images_rd/A411FC2XA6/A411FC2XA6-2150/A411FC2XA6_2150_1T.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw65902c83/images_rd/A411FC2XA6/A411FC2XA6-2150/A411FC2XA6_2150_1U.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw1657387f/images_rd/A411FC2XA6/A411FC2XA6-2150/A411FC2XA6_2150_1W.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw14497f77/images_rd/A411FC2XA6/A411FC2XA6-2150/A411FC2XA6_2150_2O.jpg?sw=2000&q=90"
+    ],
+    "Hammock": [
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1F.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwdbe68dbd/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1O.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw92313bef/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1P.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw7c05aa6d/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1Q.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwd14bb60d/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1R.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw0943009a/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1S.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwd44af60c/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1T.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw0c449c20/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1U.jpg?sw=2000&q=90"
+    ],
+    "Amazona": [
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw35934894/images_rd/A039AS0X01/A039AS0X01-9579/A039AS0X01_9579_1A.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwf58bd39f/images_rd/A039AS0X01/A039AS0X01-9579/A039AS0X01_9579_1B.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw6a78d7fd/images_rd/A039AS0X01/A039AS0X01-9579/A039AS0X01_9579_1C.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw2e9ca40e/images_rd/A039AS0X01/A039AS0X01-9579/A039AS0X01_9579_1F.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwb8d6f3dd/images_rd/A039AS0X01/A039AS0X01-9579/A039AS0X01_9579_1P.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw4788b156/images_rd/A039AS0X01/A039AS0X01-9579/A039AS0X01_9579_1Q.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw9a72d960/images_rd/A039AS0X01/A039AS0X01-9579/A039AS0X01_9579_1R.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwf52fb184/images_rd/A039AS0X01/A039AS0X01-9579/A039AS0X01_9579_1S.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwefe59074/images_rd/A039AS0X01/A039AS0X01-9579/A039AS0X01_9579_1T.jpg?sw=2000&q=90"
+    ],
+    "Gate": [
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A650N46X13/A650N46X13-2530/A650N46X13_2530_1F.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A650N46X13/A650N46X13-2530/A650N46X13_2530_1O.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A650N46X13/A650N46X13-2530/A650N46X13_2530_1Q.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A650N46X13/A650N46X13-2530/A650N46X13_2530_1S.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A650N46X13/A650N46X13-2530/A650N46X13_2530_1T.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A650N46X13/A650N46X13-2530/A650N46X13_2530_1U.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A650N46X13/A650N46X13-2530/A650N46X13_2530_1W.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A650N46X13/A650N46X13-2530/A650N46X13_2530_2O.jpg?sw=2000&q=90"
+    ],
+    "Balloon": [
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/B411FLKX01/B411FLKX01-1100/B411FLKX01_1100_1F.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/B411FLKX01/B411FLKX01-1100/B411FLKX01_1100_1O.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/B411FLKX01/B411FLKX01-1100/B411FLKX01_1100_1Q.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/B411FLKX01/B411FLKX01-1100/B411FLKX01_1100_1S.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/B411FLKX01/B411FLKX01-1100/B411FLKX01_1100_1U.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/B411FLKX01/B411FLKX01-1100/B411FLKX01_1100_1W.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/B411FLKX01/B411FLKX01-1100/B411FLKX01_1100_2O.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1F.jpg?sw=2000&q=90"
+    ],
+    "default": [
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwe6879fa4/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1F.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwdbe68dbd/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1O.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw92313bef/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1P.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw7c05aa6d/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1Q.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwd14bb60d/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1R.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw0943009a/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1S.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwd44af60c/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1T.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dw0c449c20/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1U.jpg?sw=2000&q=90",
+      "https://www.loewe.com/dw/image/v2/BBPC_PRD/on/demandware.static/-/Sites-Loewe_master/default/dwdbdf5673/images_rd/A510PLSX01/A510PLSX01-9190/A510PLSX01_9190_1V.jpg?sw=2000&q=90"
+    ]
+  },
+  "celine": {
+    "Triomphe": [
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_1_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_2_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_3_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_4_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_5_LIB_W_V2.jpg"
+    ],
+    "Classic Box": [
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_1_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_2_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_3_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_4_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_5_LIB_W_V2.jpg"
+    ],
+    "Luggage": [
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_1_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_2_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_3_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_4_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_5_LIB_W_V2.jpg"
+    ],
+    "Belt": [
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_1_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_2_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_3_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_4_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_5_LIB_W_V2.jpg"
+    ],
+    "16": [
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_1_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_2_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_3_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_4_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_5_LIB_W_V2.jpg"
+    ],
+    "Ava": [
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_1_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_2_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_3_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_4_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_5_LIB_W_V2.jpg"
+    ],
+    "Cabas": [
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_1_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_2_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_3_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_4_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_5_LIB_W_V2.jpg"
+    ],
+    "default": [
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_1_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_2_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_3_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_4_LIB_W_V2.jpg",
+      "https://www.celine.com/on/demandware.static/-/Sites-masterCatalog/default/images/large/191242BZ4.04LU_5_LIB_W_V2.jpg"
+    ]
+  },
+  "saint-laurent": {
+    "Lou": [
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_A.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_B.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_C.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_D.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_E.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_F.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_G.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_H.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_I.jpgD"
+    ],
+    "Kate": [
+      "https://saint-laurent.dam.kering.com/m/39792932c7424fed/Medium2-364021BOW0J1000_A.jpgE",
+      "https://saint-laurent.dam.kering.com/m/39792932c7424fed/Medium2-364021BOW0J1000_B.jpgE",
+      "https://saint-laurent.dam.kering.com/m/39792932c7424fed/Medium2-364021BOW0J1000_C.jpgE",
+      "https://saint-laurent.dam.kering.com/m/39792932c7424fed/Medium2-364021BOW0J1000_D.jpgE",
+      "https://saint-laurent.dam.kering.com/m/39792932c7424fed/Medium2-364021BOW0J1000_E.jpgE",
+      "https://saint-laurent.dam.kering.com/m/39792932c7424fed/Medium2-364021BOW0J1000_F.jpgE",
+      "https://saint-laurent.dam.kering.com/m/39792932c7424fed/Medium2-364021BOW0J1000_G.jpgE",
+      "https://saint-laurent.dam.kering.com/m/39792932c7424fed/Medium2-364021BOW0J1000_H.jpgE",
+      "https://saint-laurent.dam.kering.com/m/39792932c7424fed/Medium2-364021BOW0J1000_I.jpgE"
+    ],
+    "Loulou": [
+      "https://saint-laurent.dam.kering.com/m/740892966c355939/Medium2-801437AAEAX1000_A.jpgG",
+      "https://saint-laurent.dam.kering.com/m/740892966c355939/Medium2-801437AAEAX1000_B.jpgG",
+      "https://saint-laurent.dam.kering.com/m/740892966c355939/Medium2-801437AAEAX1000_C.jpgG",
+      "https://saint-laurent.dam.kering.com/m/740892966c355939/Medium2-801437AAEAX1000_D.jpgG",
+      "https://saint-laurent.dam.kering.com/m/740892966c355939/Medium2-801437AAEAX1000_E.jpgG",
+      "https://saint-laurent.dam.kering.com/m/740892966c355939/Medium2-801437AAEAX1000_F.jpgG",
+      "https://saint-laurent.dam.kering.com/m/740892966c355939/Medium2-801437AAEAX1000_G.jpgG",
+      "https://saint-laurent.dam.kering.com/m/740892966c355939/Medium2-801437AAEAX1000_H.jpgG",
+      "https://saint-laurent.dam.kering.com/m/740892966c355939/Medium2-801437AAEAX1000_I.jpgG"
+    ],
+    "Sac de Jour": [
+      "https://saint-laurent.dam.kering.com/m/570be4da8dd7755e/Medium2-392035B681N1000_A.jpgE",
+      "https://saint-laurent.dam.kering.com/m/570be4da8dd7755e/Medium2-392035B681N1000_B.jpgE",
+      "https://saint-laurent.dam.kering.com/m/570be4da8dd7755e/Medium2-392035B681N1000_C.jpgE",
+      "https://saint-laurent.dam.kering.com/m/570be4da8dd7755e/Medium2-392035B681N1000_D.jpgE",
+      "https://saint-laurent.dam.kering.com/m/570be4da8dd7755e/Medium2-392035B681N1000_E.jpgE",
+      "https://saint-laurent.dam.kering.com/m/570be4da8dd7755e/Medium2-392035B681N1000_F.jpgE",
+      "https://saint-laurent.dam.kering.com/m/570be4da8dd7755e/Medium2-392035B681N1000_G.jpgE",
+      "https://saint-laurent.dam.kering.com/m/570be4da8dd7755e/Medium2-392035B681N1000_H.jpgE",
+      "https://saint-laurent.dam.kering.com/m/570be4da8dd7755e/Medium2-392035B681N1000_I.jpgE"
+    ],
+    "Niki": [
+      "https://saint-laurent.dam.kering.com/m/5a0d50981d4b9481/Medium2-633178AACYT3212_A.jpgE",
+      "https://saint-laurent.dam.kering.com/m/5a0d50981d4b9481/Medium2-633178AACYT3212_B.jpgE",
+      "https://saint-laurent.dam.kering.com/m/5a0d50981d4b9481/Medium2-633178AACYT3212_C.jpgE",
+      "https://saint-laurent.dam.kering.com/m/5a0d50981d4b9481/Medium2-633178AACYT3212_D.jpgE",
+      "https://saint-laurent.dam.kering.com/m/5a0d50981d4b9481/Medium2-633178AACYT3212_E.jpgE",
+      "https://saint-laurent.dam.kering.com/m/5a0d50981d4b9481/Medium2-633178AACYT3212_F.jpgE",
+      "https://saint-laurent.dam.kering.com/m/5a0d50981d4b9481/Medium2-633178AACYT3212_G.jpgE",
+      "https://saint-laurent.dam.kering.com/m/5a0d50981d4b9481/Medium2-633178AACYT3212_H.jpgE",
+      "https://saint-laurent.dam.kering.com/m/5a0d50981d4b9481/Medium2-633178AACYT3212_I.jpgE"
+    ],
+    "Solferino": [
+      "https://saint-laurent.dam.kering.com/m/1deaae244925c2b8/Medium2-8323300SX0W1000_A.jpgF",
+      "https://saint-laurent.dam.kering.com/m/1deaae244925c2b8/Medium2-8323300SX0W1000_B.jpgF",
+      "https://saint-laurent.dam.kering.com/m/1deaae244925c2b8/Medium2-8323300SX0W1000_C.jpgF",
+      "https://saint-laurent.dam.kering.com/m/1deaae244925c2b8/Medium2-8323300SX0W1000_D.jpgF",
+      "https://saint-laurent.dam.kering.com/m/1deaae244925c2b8/Medium2-8323300SX0W1000_E.jpgF",
+      "https://saint-laurent.dam.kering.com/m/1deaae244925c2b8/Medium2-8323300SX0W1000_F.jpgF",
+      "https://saint-laurent.dam.kering.com/m/1deaae244925c2b8/Medium2-8323300SX0W1000_G.jpgF",
+      "https://saint-laurent.dam.kering.com/m/1deaae244925c2b8/Medium2-8323300SX0W1000_H.jpgF",
+      "https://saint-laurent.dam.kering.com/m/1deaae244925c2b8/Medium2-8323300SX0W1000_I.jpgF"
+    ],
+    "Cassandre": [
+      "https://saint-laurent.dam.kering.com/m/4d751262cf7d33da/Medium2-600195BOW911000_A.jpgE",
+      "https://saint-laurent.dam.kering.com/m/4d751262cf7d33da/Medium2-600195BOW911000_B.jpgE",
+      "https://saint-laurent.dam.kering.com/m/4d751262cf7d33da/Medium2-600195BOW911000_C.jpgE",
+      "https://saint-laurent.dam.kering.com/m/4d751262cf7d33da/Medium2-600195BOW911000_D.jpgE",
+      "https://saint-laurent.dam.kering.com/m/4d751262cf7d33da/Medium2-600195BOW911000_E.jpgE",
+      "https://saint-laurent.dam.kering.com/m/4d751262cf7d33da/Medium2-600195BOW911000_F.jpgE",
+      "https://saint-laurent.dam.kering.com/m/4d751262cf7d33da/Medium2-600195BOW911000_G.jpgE",
+      "https://saint-laurent.dam.kering.com/m/4d751262cf7d33da/Medium2-600195BOW911000_H.jpgE",
+      "https://saint-laurent.dam.kering.com/m/4d751262cf7d33da/Medium2-600195BOW911000_I.jpgE"
+    ],
+    "default": [
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_A.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_B.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_C.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_D.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_E.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_F.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_G.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_H.jpgD",
+      "https://saint-laurent.dam.kering.com/m/66be92b29fe6c7c0/Medium2-761554DV7041000_I.jpgD"
+    ]
+  }
+}

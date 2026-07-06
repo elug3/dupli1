@@ -16,6 +16,7 @@ import (
 type userResponse struct {
 	ID                  string     `json:"user_id"`
 	Email               string     `json:"email"`
+	AccountType         string     `json:"account_type"`
 	Roles               []string   `json:"roles"`
 	IsActive            bool       `json:"is_active"`
 	LockedAt            *time.Time `json:"locked_at,omitempty"`
@@ -26,6 +27,7 @@ func toUserResponse(u *domain.User) userResponse {
 	return userResponse{
 		ID:                  u.ID,
 		Email:               u.Email,
+		AccountType:         u.AccountType,
 		Roles:               u.Roles,
 		IsActive:            u.IsActive,
 		LockedAt:            u.LockedAt,
@@ -113,8 +115,9 @@ func (h *Handler) Login(c *gin.Context) {
 }
 
 type registerRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
+	Email       string `json:"email" binding:"required,email"`
+	Password    string `json:"password" binding:"required,min=8"`
+	AccountType string `json:"account_type"`
 }
 
 // Register creates a new user account.
@@ -133,7 +136,21 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	u, err := h.svc.Register(c.Request.Context(), req.Email, req.Password)
+	accountType := req.AccountType
+	if accountType == "" {
+		accountType = domain.DefaultAccountType
+	}
+	caller := callerFromContext(c)
+	if caller != nil && caller.HasRole(domain.RoleCustomerRegistrar) &&
+		!caller.HasRole(domain.RoleOwner) &&
+		!caller.HasRole(domain.RoleAdmin) &&
+		!caller.HasRole(domain.RoleUserManager) &&
+		accountType != domain.AccountTypeCustomer {
+		c.JSON(http.StatusForbidden, gin.H{"error": "customer_registrar may only create customer accounts"})
+		return
+	}
+
+	u, err := h.svc.Register(c.Request.Context(), req.Email, req.Password, accountType)
 	if err != nil {
 		if errors.Is(err, autherrors.ErrUserAlreadyExists) {
 			h.logger.Warn().
@@ -142,7 +159,7 @@ func (h *Handler) Register(c *gin.Context) {
 				Str("ip", ip).
 				Msg("register failed: user already exists")
 			c.JSON(http.StatusConflict, gin.H{"error": fmt.Errorf("register: %w", err).Error()})
-		} else if errors.Is(err, autherrors.ErrInvalidEmail) || errors.Is(err, autherrors.ErrWeakPassword) {
+		} else if errors.Is(err, autherrors.ErrInvalidEmail) || errors.Is(err, autherrors.ErrWeakPassword) || errors.Is(err, autherrors.ErrInvalidAccountType) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("register: %w", err).Error()})
 		} else {
 			h.logger.Error().
@@ -219,16 +236,19 @@ func (h *Handler) ListUsers(c *gin.Context) {
 func (h *Handler) SetUserRole(c *gin.Context) {
 	userID := c.Param("id")
 	var body struct {
-		Roles []string `json:"roles" binding:"required"`
+		Roles       []string `json:"roles" binding:"required"`
+		AccountType string   `json:"account_type"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("set role: parse request: %w", err).Error()})
 		return
 	}
-	u, err := h.svc.SetUserRole(c.Request.Context(), userID, body.Roles)
+	u, err := h.svc.SetUserRole(c.Request.Context(), userID, body.Roles, body.AccountType)
 	if err != nil {
 		if errors.Is(err, autherrors.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		} else if errors.Is(err, autherrors.ErrInvalidAccountType) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("set role: %w", err).Error()})
 		} else {
 			h.logger.Error().Str("event", "set_role_error").Str("user_id", userID).Err(err).Msg("set role failed")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set role: %w", err).Error()})

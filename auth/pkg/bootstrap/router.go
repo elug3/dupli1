@@ -27,7 +27,7 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 	r.Use(corsMiddleware(corsOrigins))
 
 	healthHandler := func(c *gin.Context) {
-		c.String(http.StatusOK, "ok")
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 	r.GET("/health", healthHandler)
 	r.GET("/api/v1/auth/health", healthHandler)
@@ -47,6 +47,7 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 	{
 		// Public — no authentication required.
 		v1.POST("/register", h.RequireAuth(), handler.RequireAnyRole(
+			domain.RoleOwner,
 			domain.RoleAdmin,
 			domain.RoleUserManager,
 			domain.RoleCustomerRegistrar,
@@ -61,15 +62,15 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 			authed.GET("/me", h.Me)
 		}
 
-		// Admin-only — require a valid Bearer access token with the "admin" role.
-		admin := v1.Group("", h.RequireAuth(), handler.RequireRole(domain.RoleAdmin))
+		// Admin-only — require a valid Bearer access token with the "owner" or "admin" role.
+		admin := v1.Group("", h.RequireAuth(), handler.RequireAnyRole(domain.RoleOwner, domain.RoleAdmin))
 		{
 			admin.GET("/users", h.ListUsers)
 			admin.PATCH("/users/:id/roles", h.SetUserRole)
 		}
 
-		// User management — require "admin" or "user_manager" role.
-		userMgmt := v1.Group("", h.RequireAuth(), handler.RequireAnyRole(domain.RoleAdmin, domain.RoleUserManager))
+		// User management — require "owner", "admin", or "user_manager" role.
+		userMgmt := v1.Group("", h.RequireAuth(), handler.RequireAnyRole(domain.RoleOwner, domain.RoleAdmin, domain.RoleUserManager))
 		{
 			userMgmt.PATCH("/users/:id/password", h.UpdateUserPassword)
 			userMgmt.PATCH("/users/:id/status", h.SetUserStatus)

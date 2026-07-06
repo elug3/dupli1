@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	natsgo "github.com/nats-io/nats.go"
 )
+
+const defaultFlushTimeout = 5 * time.Second
 
 // Publisher publishes JSON-encoded events to NATS subjects.
 type Publisher struct {
@@ -43,11 +46,21 @@ func (p *Publisher) Publish(ctx context.Context, subject string, event any) erro
 	if err := p.conn.Publish(subject, payload); err != nil {
 		return fmt.Errorf("publish nats event: %w", err)
 	}
-	if err := p.conn.FlushWithContext(ctx); err != nil {
+	flushCtx, cancel := flushContext(ctx)
+	defer cancel()
+	if err := p.conn.FlushWithContext(flushCtx); err != nil {
 		return fmt.Errorf("flush nats event: %w", err)
 	}
 
 	return nil
+}
+
+// flushContext returns a context suitable for FlushWithContext, which requires a deadline.
+func flushContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, defaultFlushTimeout)
 }
 
 // Close closes the NATS connection.

@@ -39,13 +39,14 @@ func ResetAdminAccount(ctx context.Context, dbURL, adminID, email string) (strin
 	}
 
 	if user == nil {
-		user, err = domain.NewUser(adminID, email, plainPassword, domain.RoleAdmin)
+		user, err = domain.NewUser(adminID, email, plainPassword, domain.AccountTypeAdmin, domain.RoleAdmin)
 		if err != nil {
 			return "", fmt.Errorf("create admin: %w", err)
 		}
 	} else {
 		user.Email = email
 		user.SetRoles([]string{domain.RoleAdmin})
+		user.AccountType = domain.AccountTypeAdmin
 		if err := user.UpdatePassword(plainPassword); err != nil {
 			return "", fmt.Errorf("update password: %w", err)
 		}

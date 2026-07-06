@@ -156,7 +156,7 @@ paths:
       operationId: authRegister
       security:
         - bearerAuth: []
-      description: Requires `admin`, `user_manager`, or `customer_registrar` role. New users receive the `customer` role by default.
+      description: Requires `owner`, `admin`, `user_manager`, or `customer_registrar` role. New users receive the `customer` role by default and `account_type` `customer` unless overridden.
       requestBody:
         required: true
         content:
@@ -221,7 +221,7 @@ paths:
       operationId: authListUsers
       security:
         - bearerAuth: []
-      description: Requires `admin` role.
+      description: Requires `owner` or `admin` role.
       responses:
         '200':
           description: User list
@@ -238,7 +238,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Admin role required
+          description: Owner or admin role required
           content:
             application/json:
               schema:
@@ -253,7 +253,7 @@ paths:
       operationId: authSetUserRoles
       security:
         - bearerAuth: []
-      description: Requires `admin` role.
+      description: Requires `owner` or `admin` role.
       parameters:
         - $ref: '#/components/parameters/UserId'
       requestBody:
@@ -269,6 +269,10 @@ paths:
                   items:
                     type: string
                   example: [customer, user_manager]
+                account_type:
+                  type: string
+                  enum: [customer, admin, service]
+                  description: Optional. When set, updates the user's account_type.
       responses:
         '200':
           description: Updated user
@@ -281,7 +285,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Admin role required
+          description: Owner or admin role required
           content:
             application/json:
               schema:
@@ -423,6 +427,11 @@ components:
         password:
           type: string
           minLength: 8
+        account_type:
+          type: string
+          enum: [customer, admin, service]
+          default: customer
+          description: Account classification. `customer_registrar` callers may only use `customer`.
 
     RegisterResponse:
       type: object
@@ -455,7 +464,7 @@ components:
 
     User:
       type: object
-      required: [user_id, email, roles, is_active, failed_login_attempts]
+      required: [user_id, email, account_type, roles, is_active, failed_login_attempts]
       properties:
         user_id:
           type: string
@@ -463,6 +472,9 @@ components:
         email:
           type: string
           format: email
+        account_type:
+          type: string
+          enum: [customer, admin, service]
         roles:
           type: array
           items:

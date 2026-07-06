@@ -20,6 +20,18 @@ Authorization: Bearer <access_token>
 
 Admin routes require a token belonging to a user with the `owner` or `admin` role (or `user_manager` where noted).
 
+### Account types
+
+Every user has an `account_type` field (JSON key `account_type`) separate from RBAC `roles`:
+
+| Value | Meaning | Typical roles |
+|-------|---------|----------------|
+| `customer` | End-user storefront account | `customer` |
+| `admin` | Human operator (owner, admin staff) | `owner`, `admin`, `user_manager`, `product_manager`, … |
+| `service` | Machine / integration account | `customer_registrar`, `order_manager`, … |
+
+Seeded accounts: owner (`OWNER_EMAIL`) → `admin`; `dupli1-web` / `dupli1-order` service accounts → `service`. `POST /register` defaults to `customer` when `account_type` is omitted.
+
 ---
 
 ## Gateway
@@ -54,7 +66,7 @@ RS256 public key set for verifying access tokens issued by auth.
 
 ### `POST /api/v1/auth/register`
 
-Create a new user account. Requires `admin`, `user_manager`, or `customer_registrar` role.
+Create a new user account. Requires `owner`, `admin`, `user_manager`, or `customer_registrar` role.
 
 **Headers** — `Authorization: Bearer <access_token>`
 
@@ -62,7 +74,8 @@ Create a new user account. Requires `admin`, `user_manager`, or `customer_regist
 ```json
 {
   "email": "user@example.com",
-  "password": "minlen8"
+  "password": "minlen8",
+  "account_type": "customer"
 }
 ```
 
@@ -70,6 +83,7 @@ Create a new user account. Requires `admin`, `user_manager`, or `customer_regist
 |-------|------|-------------|
 | `email` | string | required, valid email |
 | `password` | string | required, min 8 chars |
+| `account_type` | string | optional; one of `customer`, `admin`, `service`; defaults to `customer`. `customer_registrar` may only create `customer` accounts |
 
 **Response `201`**
 ```json
@@ -81,14 +95,15 @@ Create a new user account. Requires `admin`, `user_manager`, or `customer_regist
 |--------|---------|
 | `400` | Validation failed (bad email, password too short) |
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `admin`, `user_manager`, or `customer_registrar` role |
+| `403` | Caller lacks register role, or `customer_registrar` requested a non-customer `account_type` |
 | `409` | Email already registered |
+| `422` | Invalid email, weak password, or invalid `account_type` |
 
 ---
 
 ### Service account: dupli1-web
 
-The `dupli1-web` BFF uses a seeded machine account with the `customer_registrar` role. It can call `POST /api/v1/auth/register` to create customer accounts, but cannot manage passwords, roles, or user status.
+The `dupli1-web` BFF uses a seeded machine account with the `customer_registrar` role and `account_type` `service`. It can call `POST /api/v1/auth/register` to create customer accounts, but cannot manage passwords, roles, or user status.
 
 Configure on `dupli1-auth` startup:
 
@@ -140,6 +155,7 @@ Return the currently authenticated user's profile.
 {
   "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
   "email": "user@example.com",
+  "account_type": "customer",
   "roles": ["customer"],
   "is_active": true,
   "locked_at": null,
@@ -204,7 +220,7 @@ Requires `Authorization: Bearer <access_token>`.
 
 ### `GET /api/v1/auth/users`
 
-List all users. Requires `admin` role.
+List all users. Requires `owner` or `admin` role.
 
 **Response `200`**
 ```json
@@ -213,7 +229,8 @@ List all users. Requires `admin` role.
     {
       "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
       "email": "admin@dupli1.com",
-      "roles": ["admin"],
+      "account_type": "admin",
+      "roles": ["owner", "product_manager"],
       "is_active": true,
       "locked_at": null,
       "failed_login_attempts": 0
@@ -226,28 +243,37 @@ List all users. Requires `admin` role.
 | Status | Meaning |
 |--------|---------|
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `admin` role |
+| `403` | Caller does not have `owner` or `admin` role |
 
 ---
 
 ### `PATCH /api/v1/auth/users/{id}/roles`
 
-Replace the role list for a user. Requires `admin` role.
+Replace the role list for a user. Requires `owner` or `admin` role.
 
 **Request body**
 ```json
-{ "roles": ["user_manager"] }
+{
+  "roles": ["user_manager"],
+  "account_type": "admin"
+}
 ```
 
-**Response `200`** — updated user object
+| Field | Type | Constraints |
+|-------|------|-------------|
+| `roles` | string[] | required |
+| `account_type` | string | optional; one of `customer`, `admin`, `service` |
+
+**Response `200`** — updated user object (includes `account_type`)
 
 **Errors**
 | Status | Meaning |
 |--------|---------|
 | `400` | Missing or malformed body |
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `admin` role |
+| `403` | Caller does not have `owner` or `admin` role |
 | `404` | User not found |
+| `422` | Invalid `account_type` |
 
 ---
 
@@ -307,15 +333,21 @@ Product service liveness check.
 
 ---
 
-### `GET /api/v1/products/bags`
+### `GET /api/v1/products`
 
-Search bags. No authentication required.
+Search **parent styles** (one row per style; colors are not duplicated). No authentication required for the public catalog view (active parents only; cost omitted). With a manager Bearer token, returns all statuses and includes cost.
 
 | Filter | Match type |
 |--------|-----------|
+| `category` | exact (e.g. `bags`) |
 | `brand` | case-insensitive substring |
-| `color` | exact |
+| `color` | parent has an active variant with this color |
+| `size` | parent has an active variant with this size |
 | `material` | exact |
+| `tags` | parent must include all listed tags (comma-separated or repeated) |
+| `status` | exact (managers only) |
+
+Example: `GET /api/v1/products?category=bags&color=Green`
 
 **Response `200`**
 ```json
@@ -333,6 +365,7 @@ Search bags. No authentication required.
       "stock": 5,
       "category": "bags",
       "capacity": "Medium",
+      "tags": ["hot"],
       "imageUrls": ["https://cdn.example/bot-001.jpg"]
     }
   ]
@@ -361,9 +394,9 @@ Redeem a coupon code. No authentication required.
 
 ### `GET /api/v1/products/{id}`
 
-Public product detail page (PDP). No authentication required. Returns only `status = active` products and omits `cost`.
+Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Omits `cost`. Cart lines use each variant's `sku` (inventory key).
 
-**Response `200`** — product object
+**Response `200`** — parent product object with variants
 
 **Errors**
 | Status | Meaning |
@@ -378,18 +411,20 @@ All routes below require `Authorization: Bearer <access_token>` from auth with r
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/products` | List all products |
-| POST | `/api/v1/products` | Create product |
-| GET | `/api/v1/products/{id}/manage` | Get product by ID (includes drafts and cost) |
-| PUT | `/api/v1/products/{id}` | Update product |
-| DELETE | `/api/v1/products/{id}` | Delete product |
-| PUT | `/api/v1/products/{id}/image` | Upload image (multipart field `image`) |
+| POST | `/api/v1/products` | Create parent style |
+| PUT | `/api/v1/products/{id}` | Update parent |
+| DELETE | `/api/v1/products/{id}` | Delete parent (cascades variants) |
+| POST | `/api/v1/products/{id}/images` | Upload image to default variant |
+| POST | `/api/v1/products/{id}/variants` | Create variant (SKU) |
+| PUT | `/api/v1/products/{id}/variants/{sku}` | Update variant |
+| DELETE | `/api/v1/products/{id}/variants/{sku}` | Delete variant |
+| POST | `/api/v1/products/{id}/variants/{sku}/images` | Upload image for variant |
 | GET | `/api/v1/coupons` | List coupons |
 | POST | `/api/v1/coupons` | Create coupon |
 | PUT | `/api/v1/coupons/{code}` | Update coupon |
 | DELETE | `/api/v1/coupons/{code}` | Delete coupon |
 
-Product IDs are generated from the brand prefix (e.g. `BOT-001`). Image upload appends to the `imageUrls` array.
+Parent IDs use the brand prefix (e.g. `BOT-001`). Variants are sellable SKUs (e.g. `BOT-001-GRN`). See [product-variants-plan.md](product-variants-plan.md).
 
 ---
 
@@ -456,6 +491,69 @@ Release a reservation (return stock).
 
 ---
 
+## Cart Service — `/api/v1/cart`
+
+PostgreSQL-backed persistent cart. Enriches lines from product (price, images) and inventory (availability). Does **not** reserve stock or create orders.
+
+When `AUTH_JWKS_URL` or `JWT_SECRET` is set, cart routes require `Authorization: Bearer <access_token>`. The cart owner is the JWT `sub` claim — do not send `customer_id` on `/api/v1/cart` mutations.
+
+See [cart-service.md](cart-service.md) for architecture, service boundaries, and checkout handoff.
+
+### `GET /api/v1/cart/health`
+
+**Response `200`**
+```json
+{ "status": "ok" }
+```
+
+### Cart (current user)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/cart` | Get my cart |
+| DELETE | `/api/v1/cart` | Clear my cart |
+| PUT | `/api/v1/cart/items` | Replace all items |
+| POST | `/api/v1/cart/items` | Add or update one item |
+| DELETE | `/api/v1/cart/items/{sku}` | Remove line |
+
+**Add item request**
+```json
+{ "sku": "BOT-001-BLK", "quantity": 1 }
+```
+
+**Cart response** (enriched)
+```json
+{
+  "customer_id": "uuid",
+  "items": [
+    {
+      "sku": "BOT-001-BLK",
+      "product_id": "BOT-001",
+      "quantity": 1,
+      "unit_price_cents": 125000,
+      "color": "Black",
+      "available_qty": 3
+    }
+  ],
+  "subtotal_cents": 125000,
+  "updated_at": "2026-07-05T12:00:00Z"
+}
+```
+
+### Admin
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/carts/{customer_id}` | Get a customer's cart (`order_manager`, `admin`, or `owner`) |
+
+### Product variant lookup (used by cart)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/variants/{sku}` | Public active variant by SKU |
+
+---
+
 ## Order Service — `/api/v1`
 
 In-memory store. Calls inventory to reserve stock and product to redeem coupons.
@@ -502,6 +600,22 @@ See [checkout-session.md](checkout-session.md) for the full checkout flow.
 
 Supported status transitions: `pending` → `confirmed` | `canceled`; `confirmed` → `fulfilled`.
 
+**Planned:** `pending` → `confirmed` will be **payment-service only** after Stripe Checkout succeeds. See [payment-service.md](payment-service.md).
+
+---
+
+## Payment Service — `/api/v1/payments` (planned)
+
+Stripe Checkout **redirect** — Dupli1 never handles card numbers, CVC, or card passwords.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/payments` | Start Checkout for a pending order → `checkout_url` |
+| GET | `/api/v1/payments/{id}` | Payment status |
+| POST | `/api/v1/payments/webhooks/stripe` | Stripe webhooks |
+
+Unpaid `pending` orders auto-cancel after **5 minutes**. Full design: [payment-service.md](payment-service.md).
+
 ---
 
 ## Notification Service
@@ -533,7 +647,7 @@ All error responses use a JSON envelope:
 | GET | `/gateway/health` | — | nginx |
 | GET | `/api/v1/auth/health` | — | auth |
 | GET | `/api/v1/auth/.well-known/jwks.json` | — | auth |
-| POST | `/api/v1/auth/register` | `admin`, `user_manager`, `customer_registrar` | auth |
+| POST | `/api/v1/auth/register` | `owner`, `admin`, `user_manager`, `customer_registrar` | auth |
 | POST | `/api/v1/auth/login` | — | auth |
 | GET | `/api/v1/auth/me` | Bearer | auth |
 | POST | `/api/v1/auth/refresh` | — | auth |
@@ -543,13 +657,15 @@ All error responses use a JSON envelope:
 | PATCH | `/api/v1/auth/users/{id}/password` | `admin`, `user_manager` | auth |
 | PATCH | `/api/v1/auth/users/{id}/status` | `admin`, `user_manager` | auth |
 | GET | `/api/v1/products/health` | — | product |
-| GET | `/api/v1/products/bags` | — | product |
+| GET | `/api/v1/products` | optional manager Bearer | product |
 | GET | `/api/v1/products/{id}` | — | product |
 | POST | `/api/v1/coupons/redeem` | — | product |
-| GET/POST | `/api/v1/products` | `product_manager`, `admin`, `owner` | product |
-| GET | `/api/v1/products/{id}/manage` | `product_manager`, `admin`, `owner` | product |
+| POST | `/api/v1/products` | `product_manager`, `admin`, `owner` | product |
 | PUT/DELETE | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | product |
-| PUT | `/api/v1/products/{id}/image` | `product_manager`, `admin`, `owner` | product |
+| POST | `/api/v1/products/{id}/images` | `product_manager`, `admin`, `owner` | product |
+| POST | `/api/v1/products/{id}/variants` | `product_manager`, `admin`, `owner` | product |
+| PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | `product_manager`, `admin`, `owner` | product |
+| POST | `/api/v1/products/{id}/variants/{sku}/images` | `product_manager`, `admin`, `owner` | product |
 | GET/POST/PUT/DELETE | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | product |
 | GET | `/api/v1/inventory/health` | — | inventory |
 | GET/PUT | `/api/v1/inventory/{sku}` | — | inventory |

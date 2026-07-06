@@ -30,6 +30,7 @@ func seedOrderServiceAccount(ctx context.Context, cfg Config, repo ports.UserRep
 		uuid.New().String(),
 		cfg.OrderServiceEmail,
 		cfg.OrderServicePassword,
+		domain.AccountTypeService,
 		domain.RoleOrderManager,
 	)
 	if err != nil {

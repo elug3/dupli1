@@ -10,12 +10,15 @@ Go microservice backend for a fashion bag marketplace. Five services behind an n
 | `dupli1-product` | 8081 | Bag catalog, coupons, product CRUD, image upload |
 | `dupli1-inventory` | 8082 | Stock and reservation APIs (PostgreSQL) |
 | `dupli1-order` | 8083 | Checkout sessions and order lifecycle (PostgreSQL) |
+| `dupli1-cart` | 8086 | Shopping cart (PostgreSQL) |
+| `dupli1-payment` | 8087 (planned) | Stripe Checkout payments |
 | `dupli1-notification` | 8084 | Notification stub (health only) |
 | `dupli1-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
 | `postgres-auth` | 5432 | Auth DB |
 | `postgres-product` | 5433 | Product DB |
 | `postgres-inventory` | 5434 | Inventory DB |
 | `postgres-order` | 5435 | Order DB |
+| `postgres-cart` | 5436 | Cart DB |
 | `redis` | 6379 | Rate limiter backing store |
 | `minio` | 9000 / 9001 | S3-compatible image storage (console on 9001) |
 
@@ -58,6 +61,7 @@ dupli1/
 ├── product/              # Product catalog
 ├── inventory/            # Inventory service
 ├── order/                # Order + checkout
+├── cart/                 # Shopping cart
 ├── notification/         # Notification stub
 ├── api/
 │   ├── nginx.conf        # Gateway routing
@@ -86,9 +90,9 @@ Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](doc
 | POST | `/api/v1/auth/refresh` | — | Exchange refresh token for access token |
 | POST | `/api/v1/auth/logout` | — | Revoke refresh token |
 | GET | `/api/v1/auth/me` | Bearer | Current user profile |
-| POST | `/api/v1/auth/register` | `admin` / `user_manager` / `customer_registrar` | Create user account |
-| GET | `/api/v1/auth/users` | `admin` | List users |
-| PATCH | `/api/v1/auth/users/{id}/roles` | `admin` | Set user roles |
+| POST | `/api/v1/auth/register` | `owner` / `admin` / `user_manager` / `customer_registrar` | Create user account (`account_type` optional) |
+| GET | `/api/v1/auth/users` | `owner` / `admin` | List users |
+| PATCH | `/api/v1/auth/users/{id}/roles` | `owner` / `admin` | Set user roles / `account_type` |
 | PATCH | `/api/v1/auth/users/{id}/password` | `admin` / `user_manager` | Set user password |
 | PATCH | `/api/v1/auth/users/{id}/status` | `admin` / `user_manager` | Activate / deactivate user |
 
@@ -105,20 +109,22 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/products/health` | Health check |
-| GET | `/api/v1/products/bags` | Search bags (`?brand=`, `?color=`, `?material=`) |
-| GET | `/api/v1/products/{id}` | Public product detail (active products only) |
+| GET | `/api/v1/products` | Search **parent styles** (`?category=`, `?brand=`, `?color=`, `?size=`, `?tags=`) |
+| GET | `/api/v1/products/{id}` | PDP: parent + variants (colors/sizes/images per SKU) |
 | POST | `/api/v1/coupons/redeem` | Redeem a coupon code |
 
 **Requires `Authorization: Bearer <access_token>`** (validated via JWKS)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/products` | List all products |
-| POST | `/api/v1/products` | Create product |
-| GET | `/api/v1/products/{id}/manage` | Get product (admin, includes drafts/cost) |
-| PUT | `/api/v1/products/{id}` | Update product |
-| DELETE | `/api/v1/products/{id}` | Delete product |
-| PUT | `/api/v1/products/{id}/image` | Upload product image (multipart `image` field) |
+| GET | `/api/v1/products` | Manager search (all statuses) |
+| POST | `/api/v1/products` | Create parent style |
+| PUT | `/api/v1/products/{id}` | Update parent |
+| DELETE | `/api/v1/products/{id}` | Delete parent (cascades variants) |
+| POST | `/api/v1/products/{id}/images` | Upload image to default variant |
+| POST | `/api/v1/products/{id}/variants` | Create variant (SKU) |
+| PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | Update / delete variant |
+| POST | `/api/v1/products/{id}/variants/{sku}/images` | Upload image for a variant |
 | GET | `/api/v1/coupons` | List coupons |
 | POST | `/api/v1/coupons` | Create coupon |
 | PUT | `/api/v1/coupons/{code}` | Update coupon |
@@ -153,26 +159,51 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | GET | `/api/v1/orders/{id}` | Get order |
 | PUT | `/api/v1/orders/{id}/status` | Confirm, cancel, or fulfill order |
 
-See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow.
+See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow. See [docs/cart-service.md](docs/cart-service.md) for the persistent cart. See [docs/payment-service.md](docs/payment-service.md) for Stripe Checkout payment (planned).
 
-### Product IDs
+### Cart (`dupli1-cart` :8086)
 
-IDs are generated from the brand name: first 3 characters uppercased, followed by a sequential counter.
+Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SECRET` is set.
+
+Full design (boundaries vs inventory/order, data model, checkout handoff): [docs/cart-service.md](docs/cart-service.md).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/cart/health` | Health check |
+| GET | `/api/v1/cart` | Get my cart |
+| DELETE | `/api/v1/cart` | Clear my cart |
+| PUT | `/api/v1/cart/items` | Replace all items |
+| POST | `/api/v1/cart/items` | Add or update one item |
+| DELETE | `/api/v1/cart/items/{sku}` | Remove line |
+| GET | `/api/v1/carts/{customer_id}` | Admin: get user cart |
+
+### Payment (`dupli1-payment` :8087) — planned
+
+Stripe Checkout **redirect** — card numbers, CVC, and card passwords are entered only on Stripe's hosted page, never on Dupli1. Unpaid `pending` orders auto-cancel after **5 minutes**. [docs/payment-service.md](docs/payment-service.md).
+
+### Product IDs and variants
+
+Parent style IDs are generated from the brand name: first 3 characters uppercased, followed by a sequential counter.
 
 ```
 Bottega Veneta → BOT-001, BOT-002, …
-Gucci          → GUC-001, GUC-002, …
 ```
+
+Variants (sellable SKUs) hang under a parent, e.g. `BOT-001-GRN` / `BOT-001-BLK`. Search returns parents only so colors do not duplicate results. Checkout and inventory use the **variant SKU**.
 
 ### Image Upload
 
 ```bash
-curl -X PUT http://localhost:8080/api/v1/products/BOT-001/image \
+# Preferred: image for a specific color/size variant
+curl -X POST http://localhost:8080/api/v1/products/BOT-001/variants/BOT-001-GRN/images \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "image=@photo.jpg"
+
+# Legacy: appends to the default variant
+curl -X POST http://localhost:8080/api/v1/products/BOT-001/images \
   -H "Authorization: Bearer $TOKEN" \
   -F "image=@photo.jpg"
 ```
-
-Returns the updated product with `imageUrls` populated.
 
 ## Environment Variables
 
@@ -236,6 +267,7 @@ cd auth && go test ./...
 cd product && go test ./...
 cd inventory && go test ./...
 cd order && go test ./...
+cd cart && go test ./...
 ```
 
 ## Dependencies

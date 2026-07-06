@@ -89,3 +89,35 @@ jobs:
       - name: Test order module
         working-directory: order
         run: go test ./... -count=1
+
+  cart:
+    name: cart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cart/go.mod
+
+      - name: Test cart module
+        working-directory: cart
+        run: go test ./... -count=1
+
+  payment:
+    name: payment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: payment/go.mod
+
+      - name: Test payment module
+        working-directory: payment
+        run: go test ./... -count=1
