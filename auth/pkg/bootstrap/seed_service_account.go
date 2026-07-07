@@ -6,6 +6,7 @@ import (
 
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/google/uuid"
 )
 
@@ -32,7 +33,7 @@ func seedWebServiceAccount(ctx context.Context, cfg Config, repo ports.UserRepos
 		cfg.WebServiceEmail,
 		cfg.WebServicePassword,
 		domain.AccountTypeService,
-		domain.RoleCustomerRegistrar,
+		permissions.UserCreate,
 	)
 	if err != nil {
 		return fmt.Errorf("seed web service account: create: %w", err)

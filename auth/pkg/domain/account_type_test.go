@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/elug3/dupli1/auth/pkg/domain"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 func TestNewUserSetsAccountType(t *testing.T) {
-	u, err := domain.NewUser("id-1", "user@example.com", "supersecret", domain.AccountTypeAdmin, domain.RoleAdmin)
+	u, err := domain.NewUser("id-1", "user@example.com", "supersecret", domain.AccountTypeAdmin, permissions.UserRead)
 	if err != nil {
 		t.Fatalf("NewUser: %v", err)
 	}

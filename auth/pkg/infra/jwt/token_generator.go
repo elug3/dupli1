@@ -32,20 +32,10 @@ func NewTokenGeneratorWithType(secret string, expirySeconds int64, tokenType str
 	}
 }
 
-// Generate generates a JWT token for a user with their roles.
-func (tg *TokenGenerator) Generate(ctx context.Context, userID string, roles []string) (string, error) {
-	if roles == nil {
-		roles = []string{}
-	}
-	claims := jwt.MapClaims{
-		"sub":   userID,
-		"roles": roles,
-		"exp":   time.Now().Add(tg.expiryDuration).Unix(),
-		"iat":   time.Now().Unix(),
-	}
-	if tg.tokenType != "" {
-		claims["type"] = tg.tokenType
-	}
+// Generate generates a JWT token. Access tokens include permissions and legacy roles;
+// refresh tokens include only sub, type, exp, and iat.
+func (tg *TokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string) (string, error) {
+	claims := buildMapClaims(userID, tg.tokenType, time.Now().Add(tg.expiryDuration), userPermissions)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString([]byte(tg.secret))
@@ -91,9 +81,9 @@ func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (por
 		return ports.Claims{}, autherrors.ErrInvalidToken
 	}
 
-	roles := extractRoles(mapClaims)
+	perms, roles := claimsFromMap(mapClaims)
 
-	return ports.Claims{UserID: userID, Roles: roles}, nil
+	return ports.Claims{UserID: userID, Permissions: perms, Roles: roles}, nil
 }
 
 func validateTokenType(claims jwt.MapClaims, expected string) error {
@@ -112,7 +102,6 @@ func validateTokenType(claims jwt.MapClaims, expected string) error {
 }
 
 func extractSubject(claims jwt.MapClaims) (string, error) {
-	// prefer standard "sub" claim, fall back to legacy "user_id"
 	if sub, ok := claims["sub"]; ok {
 		if s, ok := sub.(string); ok && s != "" {
 			return s, nil
@@ -124,22 +113,4 @@ func extractSubject(claims jwt.MapClaims) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("subject claim missing")
-}
-
-func extractRoles(claims jwt.MapClaims) []string {
-	raw, ok := claims["roles"]
-	if !ok {
-		return []string{}
-	}
-	slice, ok := raw.([]interface{})
-	if !ok {
-		return []string{}
-	}
-	roles := make([]string, 0, len(slice))
-	for _, v := range slice {
-		if s, ok := v.(string); ok {
-			roles = append(roles, s)
-		}
-	}
-	return roles
 }

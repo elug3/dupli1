@@ -6,6 +6,7 @@ import (
 
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/google/uuid"
 )
 
@@ -24,7 +25,7 @@ func seedOwner(ctx context.Context, cfg Config, repo ports.UserRepository) error
 		return nil
 	}
 
-	u, err := domain.NewUser(uuid.New().String(), cfg.OwnerEmail, cfg.OwnerPassword, domain.AccountTypeAdmin, domain.RoleOwner, domain.RoleProductManager)
+	u, err := domain.NewUser(uuid.New().String(), cfg.OwnerEmail, cfg.OwnerPassword, domain.AccountTypeAdmin, permissions.All)
 	if err != nil {
 		return fmt.Errorf("seed owner: create: %w", err)
 	}

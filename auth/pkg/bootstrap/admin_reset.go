@@ -8,6 +8,7 @@ import (
 
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/infra/postgres"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/rs/zerolog"
 )
 
@@ -38,14 +39,16 @@ func ResetAdminAccount(ctx context.Context, dbURL, adminID, email string) (strin
 		return "", fmt.Errorf("find admin: %w", err)
 	}
 
+	adminPerms := permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})
+
 	if user == nil {
-		user, err = domain.NewUser(adminID, email, plainPassword, domain.AccountTypeAdmin, domain.RoleAdmin)
+		user, err = domain.NewUser(adminID, email, plainPassword, domain.AccountTypeAdmin, adminPerms...)
 		if err != nil {
 			return "", fmt.Errorf("create admin: %w", err)
 		}
 	} else {
 		user.Email = email
-		user.SetRoles([]string{domain.RoleAdmin})
+		user.SetPermissions(adminPerms)
 		user.AccountType = domain.AccountTypeAdmin
 		if err := user.UpdatePassword(plainPassword); err != nil {
 			return "", fmt.Errorf("update password: %w", err)

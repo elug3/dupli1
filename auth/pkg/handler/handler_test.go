@@ -13,6 +13,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/autherrors"
 	"github.com/elug3/dupli1/auth/pkg/bootstrap"
 	"github.com/elug3/dupli1/auth/pkg/domain"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/auth/pkg/handler"
 	jwtgen "github.com/elug3/dupli1/auth/pkg/infra/jwt"
 	"github.com/elug3/dupli1/auth/pkg/infra/memory"
@@ -117,7 +118,7 @@ func newStack(t *testing.T) *stack {
 		"registrar@internal.dupli1",
 		"registrar-secret",
 		domain.AccountTypeService,
-		domain.RoleCustomerRegistrar,
+		permissions.UserCreate,
 	)
 	if err != nil {
 		t.Fatalf("NewUser registrar: %v", err)
@@ -125,7 +126,7 @@ func newStack(t *testing.T) *stack {
 	if err := repo.Save(context.Background(), registrar); err != nil {
 		t.Fatalf("Save registrar: %v", err)
 	}
-	registrarToken, err := accessGen.Generate(context.Background(), registrar.ID, registrar.Roles)
+	registrarToken, err := accessGen.Generate(context.Background(), registrar.ID, registrar.Permissions)
 	if err != nil {
 		t.Fatalf("Generate registrar token: %v", err)
 	}

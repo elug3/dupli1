@@ -1,0 +1,353 @@
+# Fine-grained permissions (Phase 0)
+
+Authoritative specification for migrating Dupli1 from coarse service-manager **roles** to fine-grained **permissions**.
+
+**Status:** Phase 2 complete — auth service stores permissions, issues JWT `permissions` claim (+ legacy `roles` for dual-read). Phase 3 (downstream services) is next.
+
+**Related docs:** [endpoints.md](endpoints.md) (current role gates), [api.md](api.md), [current-state.md](current-state.md).
+
+---
+
+## Goals
+
+| Today | Target |
+|-------|--------|
+| `product_manager` grants all product + coupon actions | `product.create`, `product.update`, … assigned independently |
+| `order_manager` grants ship, status, inventory writes, admin cart | `order.ship`, `inventory.stock.write`, … per action |
+| `user_manager` / `customer_registrar` gate user admin | `user.create`, `user.password.update`, … per action |
+| `admin` / `owner` implicit super-access everywhere | `admin.*` and `*` wildcards with explicit evaluation rules |
+
+Storefront **customers** are not permissions. Customer self-service stays **authenticated + ABAC** (caller `sub` must match the resource owner).
+
+---
+
+## Frozen design decisions (Phase 0)
+
+### 1. Permission string format
+
+- Pattern: `{resource}.{action}` (lowercase, dot-separated).
+- Valid characters: `[a-z0-9._*]`.
+- Actions are verbs (`create`, `update`, `delete`, `read`, `ship`, …).
+- Resources match service domains (`product`, `coupon`, `order`, `user`, `inventory`, `cart`, `payment`).
+
+### 2. JWT access-token claim
+
+| Claim | Type | Notes |
+|-------|------|-------|
+| `sub` | string | User ID (unchanged) |
+| `type` | string | `"access"` (unchanged) |
+| `permissions` | string[] | **New.** Replaces `roles` for authorization |
+| `exp`, `iat` | number | Unchanged |
+
+Refresh tokens keep `sub` + `type: "refresh"` only. Permissions are loaded from the database on every refresh so revocations apply on the next access token.
+
+**During dual-read (Phases 2–4):** validators accept `permissions` first; if absent, expand legacy `roles` via the mapping in [Legacy role migration](#legacy-role-migration).
+
+### 3. Database column
+
+Rename `users.roles TEXT[]` → `users.permissions TEXT[]`.
+
+Rationale: `roles` today stores values like `product_manager`. Reusing the column name after migration would be confusing for operators and SQL.
+
+### 4. User admin API
+
+| Endpoint | Status |
+|----------|--------|
+| `PATCH /api/v1/auth/users/:id/permissions` | **New canonical** — body `{ "permissions": ["..."], "account_type": "..." }` |
+| `PATCH /api/v1/auth/users/:id/roles` | **Deprecated alias** — accepted during dual-read; forwards to permissions handler; removed in Phase 5 |
+
+User objects expose `permissions` (not `roles`) in JSON responses after Phase 2.
+
+Optional later: `POST /api/v1/auth/users/:id/permissions/bundles` with `{ "bundle": "catalog_editor" }` — **not in Phase 0 scope**; bundles are code-defined presets for now.
+
+### 5. Wildcards
+
+| Token | Grants |
+|-------|--------|
+| `*` | Every permission (owner only) |
+| `admin.*` | All permissions listed under **Auth** and **User admin** in the catalog below, plus `user.*` |
+| `{resource}.*` | All permissions whose resource prefix matches (e.g. `product.*` → `product.create`, `product.update`, …) |
+
+Evaluation order: exact match → resource wildcard → `admin.*` → `*`.
+
+No other prefix wildcards (e.g. `product.variant.*` is not supported; list `product.variant.create` explicitly or use `product.*`).
+
+### 6. `customer` is not a permission
+
+`customer` remains implicit for accounts with **no admin permissions** (empty `permissions` array, storefront `account_type: customer`). ABAC rules key off authentication + absence of elevated permissions, not a `customer` string in the token.
+
+### 7. Backward-compatibility window
+
+| Phase | Behaviour |
+|-------|-----------|
+| 2 | Auth writes `permissions` claim; DB column renamed; legacy `roles` JWT claim still issued **in addition** for one release |
+| 3 | All services dual-read `permissions` then legacy `roles` |
+| 4 | Docs and OpenAPI updated; `roles` alias endpoint deprecated |
+| 5 | Remove `roles` claim, alias endpoint, and dual-read |
+
+**Dual-read minimum:** one full release cycle after all services deploy Phase 3.
+
+### 8. Shared library location
+
+Phase 1 introduces `shared/pkg/permissions` (Go module `github.com/elug3/dupli1/shared`) consumed by auth and downstream services. The library is intentionally thin: permission constants, wildcard evaluation, legacy role expansion, and bundles only — no JWT or HTTP code. See [shared/README.md](../shared/README.md).
+
+---
+
+## Permission catalog
+
+### Auth / user admin
+
+| Permission | Description |
+|------------|-------------|
+| `user.create` | Register a new user (`POST /api/v1/auth/register`) |
+| `user.read` | List users (`GET /api/v1/auth/users`) |
+| `user.permissions.update` | Replace a user's permission list (`PATCH …/permissions`) |
+| `user.password.update` | Set another user's password |
+| `user.status.update` | Activate or deactivate a user |
+
+**ABAC (auth service only):** user management follows a role hierarchy independent of downstream services:
+
+| Caller tier | May manage |
+|-------------|------------|
+| `user_manager` | `customer` accounts |
+| `admin` | `manager` and `customer` accounts |
+| `owner` (unique `*` account) | `admin`, `manager`, and `customer` accounts |
+
+Tiers are derived from permissions inside auth only. Other services continue to use fine-grained permissions without this hierarchy.
+
+**ABAC (register):** callers with only `user.create` (and without `user.password.update`, `admin.*`, or `*`) may register **`account_type: customer`** only. Higher-privilege callers may set any valid `account_type` subject to the hierarchy above.
+
+### Product
+
+| Permission | Description |
+|------------|-------------|
+| `product.create` | Create parent product |
+| `product.update` | Update parent product |
+| `product.delete` | Delete parent product (cascades variants) |
+| `product.read` | List/search with drafts, `status` filter, and `cost` field |
+| `product.variant.create` | Create variant (SKU) |
+| `product.variant.update` | Update variant |
+| `product.variant.delete` | Delete variant |
+| `product.image.upload` | Upload image on parent default variant or specific variant |
+
+Public `GET /api/v1/products` and `GET /api/v1/products/{id}` stay **unauthenticated**. `product.read` only widens manager view when a valid token is present (same as today's `product_manager` optional-auth behaviour).
+
+### Coupon (product service)
+
+| Permission | Description |
+|------------|-------------|
+| `coupon.read` | List coupons |
+| `coupon.create` | Create coupon |
+| `coupon.update` | Update coupon |
+| `coupon.delete` | Delete coupon |
+
+`coupon.redeem` is **public** (checkout flow) — no permission.
+
+### Inventory
+
+| Permission | Description |
+|------------|-------------|
+| `inventory.stock.read` | Reserved for future private stock APIs (reads stay public today) |
+| `inventory.stock.write` | `PUT /{sku}`, `POST /{sku}/adjust` |
+| `inventory.reservation.manage` | Create, commit, and release reservations |
+
+### Order
+
+| Permission | Description |
+|------------|-------------|
+| `order.create` | Create order for any `customer_id` (without ABAC self-check) |
+| `order.read.all` | List/get any customer's orders (bypass ABAC) |
+| `order.ship` | `POST /orders/{id}/ship` |
+| `order.status.update` | `PUT /orders/{id}/status` (cancel, fulfill) |
+
+Checkout session routes (`/api/v1/checkout/sessions/*`) follow the same rules as orders: authenticated customers use ABAC on `customer_id`; `order.create` / `order.read.all` bypass ABAC.
+
+**Default storefront:** authenticated user with empty `permissions` may create/read/list **only their own** orders (ABAC on `sub` == `customer_id`).
+
+### Cart
+
+| Permission | Description |
+|------------|-------------|
+| `cart.read` | `GET /api/v1/carts/{customer_id}` (any customer) |
+
+Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
+
+### Payment
+
+| Permission | Description |
+|------------|-------------|
+| `payment.create` | Start checkout for any user's order (service accounts) |
+| `payment.read.all` | Read any payment by ID (bypass ownership check in service layer) |
+
+**Default storefront:** authenticated user with empty `permissions` may create/read **only their own** payments (ownership enforced in service).
+
+Stripe webhook and dev simulate endpoints are **unauthenticated** (signature / dev-only).
+
+---
+
+## Endpoint → permission matrix
+
+### Auth service
+
+| Method | Path | Permission |
+|--------|------|------------|
+| `POST` | `/api/v1/auth/register` | `user.create` |
+| `GET` | `/api/v1/auth/me` | (authenticated) |
+| `GET` | `/api/v1/auth/users` | `user.read` |
+| `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` |
+| `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` |
+| `PATCH` | `/api/v1/auth/users/:id/status` | `user.status.update` |
+
+Login, refresh, logout, health, JWKS — public.
+
+### Product service
+
+| Method | Path | Permission |
+|--------|------|------------|
+| `GET` | `/api/v1/products` | optional: `product.read` widens response |
+| `GET` | `/api/v1/products/{id}` | — (public) |
+| `GET` | `/api/v1/variants/{sku}` | — (public) |
+| `POST` | `/api/v1/products` | `product.create` |
+| `PUT` | `/api/v1/products/{id}` | `product.update` |
+| `DELETE` | `/api/v1/products/{id}` | `product.delete` |
+| `POST` | `/api/v1/products/{id}/images` | `product.image.upload` |
+| `POST` | `/api/v1/products/{id}/variants` | `product.variant.create` |
+| `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` |
+| `DELETE` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` |
+| `POST` | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` |
+| `GET` | `/api/v1/coupons` | `coupon.read` |
+| `POST` | `/api/v1/coupons` | `coupon.create` |
+| `PUT` | `/api/v1/coupons/{code}` | `coupon.update` |
+| `DELETE` | `/api/v1/coupons/{code}` | `coupon.delete` |
+| `POST` | `/api/v1/coupons/{code}/redeem` | — (public) |
+
+### Inventory service
+
+| Method | Path | Permission |
+|--------|------|------------|
+| `GET` | `/api/v1/inventory/{sku}` | — (public) |
+| `PUT` | `/api/v1/inventory/{sku}` | `inventory.stock.write` |
+| `POST` | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` |
+| `POST` | `/api/v1/inventory/reservations` | `inventory.reservation.manage` |
+| `POST` | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` |
+| `POST` | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` |
+
+### Order service
+
+| Method | Path | Permission / rule |
+|--------|------|-------------------|
+| `POST` | `/api/v1/orders` | ABAC or `order.create` |
+| `GET` | `/api/v1/orders?customer_id=` | ABAC or `order.read.all` |
+| `GET` | `/api/v1/orders/{id}` | ABAC or `order.read.all` |
+| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` |
+| `PUT` | `/api/v1/orders/{id}/status` | `order.status.update` |
+| `*` | `/api/v1/checkout/sessions/*` | same as orders (ABAC on session owner) |
+
+**ABAC:** caller lacks `order.create` / `order.read.all` / `admin.*` / `*` → `customer_id` (or session owner) must equal `sub`.
+
+### Cart service
+
+| Method | Path | Permission / rule |
+|--------|------|-------------------|
+| `*` | `/api/v1/cart/*` | authenticated; scoped to `sub` |
+| `GET` | `/api/v1/carts/{customer_id}` | `cart.read` |
+
+### Payment service
+
+| Method | Path | Permission / rule |
+|--------|------|-------------------|
+| `POST` | `/api/v1/payments` | ABAC or `payment.create` |
+| `GET` | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
+| `POST` | `/api/v1/payments/webhooks/stripe` | — (Stripe signature) |
+| `GET` | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
+
+---
+
+## Named bundles (presets)
+
+Code-defined sets for common job functions. Assigning a bundle expands to explicit permissions before save (bundles are not stored on the user row).
+
+| Bundle | Permissions |
+|--------|-------------|
+| `catalog_editor` | `product.create`, `product.update`, `product.read`, `product.variant.create`, `product.variant.update`, `product.image.upload` |
+| `catalog_admin` | `product.*`, `coupon.*` |
+| `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read` |
+| `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update` |
+| `customer_registrar` | `user.create` |
+
+API exposure of bundles is deferred; Phase 2 seeds and migrations use these expansions directly.
+
+---
+
+## Legacy role migration
+
+One-time mapping applied to `users.permissions` and used by dual-read JWT validators when `permissions` claim is absent.
+
+| Legacy role | Expanded permissions |
+|-------------|---------------------|
+| `owner` | `*` |
+| `admin` | `admin.*`, `user.*`, `product.*`, `coupon.*`, `inventory.stock.write`, `inventory.reservation.manage`, `order.ship`, `order.status.update`, `order.read.all`, `cart.read` |
+| `user_manager` | `user.password.update`, `user.status.update` |
+| `customer_registrar` | `user.create` |
+| `product_manager` | `product.*`, `coupon.*` |
+| `order_manager` | `order.ship`, `order.status.update`, `order.read.all`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read` |
+| `customer` | _(empty — storefront ABAC only)_ |
+
+Users with multiple legacy roles receive the **union** of expanded permissions (deduplicated).
+
+### Seeded accounts (target permissions)
+
+| Account | Env vars | Today | After migration |
+|---------|----------|-------|-----------------|
+| Owner | `OWNER_EMAIL` | `owner`, `product_manager` | `*` |
+| dupli1-web | `DUPLI1_WEB_SERVICE_*` | `customer_registrar` | `user.create` |
+| dupli1-order | `DUPLI1_ORDER_SERVICE_*` | `order_manager` | `order.ship`, `order.status.update`, `inventory.reservation.manage` |
+
+Note: `dupli1-order` does not need `cart.read` or `inventory.stock.write` for its runtime paths (reservations only). The legacy `order_manager` role was broader than the order service account requires.
+
+---
+
+## SQL migration sketch (Phase 2)
+
+```sql
+-- Rename column
+ALTER TABLE users RENAME COLUMN roles TO permissions;
+
+-- Expand legacy values (run per-role; order matters for owner/admin)
+UPDATE users SET permissions = ARRAY['*']
+  WHERE 'owner' = ANY(permissions);
+
+UPDATE users SET permissions = ARRAY[
+  'admin.*','user.create','user.read','user.permissions.update',
+  'user.password.update','user.status.update',
+  'product.*','coupon.*',
+  'inventory.stock.write','inventory.reservation.manage',
+  'order.ship','order.status.update','order.read.all',
+  'cart.read'
+] WHERE 'admin' = ANY(permissions) AND NOT ('*' = ANY(permissions));
+
+-- ... product_manager, order_manager, user_manager, customer_registrar, customer
+```
+
+Exact SQL will live in `auth/pkg/bootstrap/migrate.go` with tests in Phase 2.
+
+---
+
+## Implementation roadmap
+
+| Phase | Deliverable |
+|-------|-------------|
+| **0** | This document (frozen catalog + decisions) |
+| **1** | `shared/pkg/permissions` — catalog constants, `Has`, `ExpandLegacyRoles`, bundles (**done**) |
+| **2** | Auth: DB rename, JWT issuer, middleware, seeds, `PATCH …/permissions` (**done**) |
+| **3** | Product, inventory, order, cart, payment: per-route permission checks + dual-read |
+| **4** | `docs/api.md`, `docs/endpoints.md`, OpenAPI specs |
+| **5** | Remove `roles` claim, deprecated endpoint, legacy constants |
+
+---
+
+## Open items (not blocking Phase 1)
+
+- Whether `admin` should shrink to `admin.*` only (user-domain) vs the full cross-service list above — current decision: **admin gets explicit cross-service set** equivalent to today's behaviour.
+- Persisted bundle entities in the database — deferred.
+- Permission audit log on `user.permissions.update` — deferred.

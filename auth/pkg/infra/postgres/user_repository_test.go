@@ -56,7 +56,7 @@ func requirePostgres(t *testing.T) {
 func newTestUser(t *testing.T) *domain.User {
 	t.Helper()
 	email := "test+" + uuid.New().String() + "@example.com"
-	u, err := domain.NewUser(uuid.New().String(), email, "hunter2", domain.AccountTypeCustomer, "customer")
+	u, err := domain.NewUser(uuid.New().String(), email, "hunter2", domain.AccountTypeCustomer)
 	if err != nil {
 		t.Fatalf("NewUser: %v", err)
 	}

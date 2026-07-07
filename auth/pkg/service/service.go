@@ -11,6 +11,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/autherrors"
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 func newID() string {
@@ -29,9 +30,9 @@ const (
 // Service holds all auth business logic.
 type Service struct {
 	userRepo           ports.UserRepository
-	tokenGen           ports.TokenGenerator // issues short-lived access tokens
-	refreshTokenGen    ports.TokenGenerator // issues long-lived refresh tokens
-	sessionStore       ports.SessionStore   // persists active refresh tokens; nil = revocation disabled
+	tokenGen           ports.TokenGenerator
+	refreshTokenGen    ports.TokenGenerator
+	sessionStore       ports.SessionStore
 	refreshTokenExpiry time.Duration
 	eventPublisher     ports.EventPublisher
 }
@@ -62,8 +63,6 @@ func WithEventPublisher(pub ports.EventPublisher) ServiceOption {
 }
 
 // NewService creates a new auth Service.
-// tokenGen issues short-lived access tokens; use WithRefreshTokenGen to set a
-// separate long-lived generator. If omitted, the same generator is used for both.
 func NewService(userRepo ports.UserRepository, tokenGen ports.TokenGenerator, opts ...ServiceOption) *Service {
 	s := &Service{userRepo: userRepo, tokenGen: tokenGen}
 	for _, o := range opts {
@@ -83,9 +82,8 @@ type userRegisteredEvent struct {
 	Occurred    time.Time `json:"occurred_at"`
 }
 
-// Register creates a new user. Roles defaults to ["customer"] when empty.
-// accountType defaults to customer when empty.
-func (s *Service) Register(ctx context.Context, email, password, accountType string, roles ...string) (*domain.User, error) {
+// Register creates a new user. Permissions default to empty for storefront customers.
+func (s *Service) Register(ctx context.Context, email, password, accountType string, userPermissions ...string) (*domain.User, error) {
 	if !strings.Contains(email, "@") || strings.HasPrefix(email, "@") || strings.HasSuffix(email, "@") {
 		return nil, autherrors.ErrInvalidEmail
 	}
@@ -98,10 +96,8 @@ func (s *Service) Register(ctx context.Context, email, password, accountType str
 	if !domain.ValidAccountType(accountType) {
 		return nil, autherrors.ErrInvalidAccountType
 	}
-	if len(roles) == 0 {
-		roles = []string{"customer"}
-	}
-	u, err := domain.NewUser(newID(), email, password, accountType, roles...)
+	perms := permissions.Dedupe(userPermissions)
+	u, err := domain.NewUser(newID(), email, password, accountType, perms...)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
@@ -147,7 +143,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, er
 		_ = s.userRepo.Save(ctx, u)
 	}
 
-	token, err := s.refreshTokenGen.Generate(ctx, u.ID, u.Roles)
+	token, err := s.refreshTokenGen.Generate(ctx, u.ID, nil)
 	if err != nil {
 		return "", fmt.Errorf("generate token: %w", err)
 	}
@@ -196,7 +192,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (string, err
 		return "", autherrors.ErrAccountDeactivated
 	}
 
-	newToken, err := s.tokenGen.Generate(ctx, u.ID, u.Roles)
+	newToken, err := s.tokenGen.Generate(ctx, u.ID, u.Permissions)
 	if err != nil {
 		return "", fmt.Errorf("generate token: %w", err)
 	}
@@ -208,7 +204,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (string, err
 func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, error) {
 	claims, err := s.tokenGen.Validate(ctx, accessToken)
 	if err != nil {
-		return nil, err // ErrTokenExpired or ErrInvalidToken from tokenGen
+		return nil, err
 	}
 
 	u, err := s.userRepo.FindByID(ctx, claims.UserID)
@@ -222,9 +218,37 @@ func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, 
 	return u, nil
 }
 
-// SetUserRole replaces the role list for the given user.
-// When accountType is non-empty it also updates User.AccountType.
-func (s *Service) SetUserRole(ctx context.Context, userID string, roles []string, accountType string) (*domain.User, error) {
+// FindUserByID returns a user by ID.
+func (s *Service) FindUserByID(ctx context.Context, userID string) (*domain.User, error) {
+	u, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("find user: %w", err)
+	}
+	if u == nil {
+		return nil, autherrors.ErrUserNotFound
+	}
+	return u, nil
+}
+
+// HasOwner reports whether an owner account (* permission) already exists.
+func (s *Service) HasOwner(ctx context.Context) (bool, error) {
+	users, err := s.userRepo.ListAll(ctx)
+	if err != nil {
+		return false, fmt.Errorf("list users: %w", err)
+	}
+	for _, u := range users {
+		if permissions.Has(u.Permissions, permissions.All) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// SetUserPermissions replaces the permission list for the given user.
+func (s *Service) SetUserPermissions(ctx context.Context, userID string, perms []string, accountType string) (*domain.User, error) {
+	if err := permissions.Validate(perms); err != nil {
+		return nil, autherrors.ErrInvalidPermission
+	}
 	u, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("find user: %w", err)
@@ -238,7 +262,7 @@ func (s *Service) SetUserRole(ctx context.Context, userID string, roles []string
 		}
 		u.AccountType = accountType
 	}
-	u.SetRoles(roles)
+	u.SetPermissions(perms)
 	if err := s.userRepo.Save(ctx, u); err != nil {
 		return nil, fmt.Errorf("save user: %w", err)
 	}

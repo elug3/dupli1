@@ -6,6 +6,7 @@ import (
 
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/google/uuid"
 )
 
@@ -31,7 +32,9 @@ func seedOrderServiceAccount(ctx context.Context, cfg Config, repo ports.UserRep
 		cfg.OrderServiceEmail,
 		cfg.OrderServicePassword,
 		domain.AccountTypeService,
-		domain.RoleOrderManager,
+		permissions.OrderShip,
+		permissions.OrderStatusUpdate,
+		permissions.InventoryReservationManage,
 	)
 	if err != nil {
 		return fmt.Errorf("seed order service account: create: %w", err)
