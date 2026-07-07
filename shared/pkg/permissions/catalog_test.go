@@ -59,7 +59,8 @@ func TestUnion(t *testing.T) {
 }
 
 func TestUnion_empty(t *testing.T) {
-	if Union() != nil {
-		t.Fatal("Union() with no args should return nil")
+	got := Union()
+	if len(got) != 0 {
+		t.Fatalf("Union() with no args = %v, want empty slice", got)
 	}
 }
