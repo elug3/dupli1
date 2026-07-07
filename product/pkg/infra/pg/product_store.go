@@ -60,6 +60,7 @@ func (s *ProductSearchStore) migrate() error {
 		{"image_urls", "TEXT[] NOT NULL DEFAULT '{}'"},
 		{"capacity", "TEXT NOT NULL DEFAULT ''"},
 		{"tags", "TEXT[] NOT NULL DEFAULT '{}'"},
+		{"created_by", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		s.pool.Exec(ctx, fmt.Sprintf(
 			"ALTER TABLE products ADD COLUMN IF NOT EXISTS %s %s", col.name, col.def,
@@ -186,7 +187,7 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, brand, material, category, status, capacity, tags, created_at`
+const parentSelectCols = `id, name, description, brand, material, category, status, capacity, tags, created_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -196,7 +197,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
 		&p.Brand, &p.Material, &p.Category, &p.Status,
-		&capacity, &tags, &createdAt,
+		&capacity, &tags, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err
@@ -388,12 +389,12 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO products (id, name, description, price, brand, color, material, stock, category, status, image_urls, capacity, tags)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		`INSERT INTO products (id, name, description, price, brand, color, material, stock, category, status, image_urls, capacity, tags, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description, p.Price,
 		p.Brand, p.Color, p.Material, p.Stock, p.Category, p.Status,
-		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags),
+		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), p.CreatedBy,
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, err

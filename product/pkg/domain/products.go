@@ -37,6 +37,7 @@ type Product struct {
 	Capacity    string  `json:"capacity,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	CreatedAt   string  `json:"createdAt"`
+	CreatedBy   string  `json:"createdBy,omitempty"`
 
 	// Summary fields derived from variants (not stored on parent).
 	// SellingPriceFrom is the official/display price for the cheapest active variant.
