@@ -105,7 +105,17 @@ Phase 1 introduces `shared/pkg/permissions` (Go module `github.com/elug3/dupli1/
 | `user.password.update` | Set another user's password |
 | `user.status.update` | Activate or deactivate a user |
 
-**ABAC (unchanged semantics):** callers with only `user.create` (and without `user.permissions.update`, `admin.*`, or `*`) may register **`account_type: customer`** only. Higher-privilege callers may set any valid `account_type`.
+**ABAC (auth service only):** user management follows a role hierarchy independent of downstream services:
+
+| Caller tier | May manage |
+|-------------|------------|
+| `user_manager` | `customer` accounts |
+| `admin` | `manager` and `customer` accounts |
+| `owner` (unique `*` account) | `admin`, `manager`, and `customer` accounts |
+
+Tiers are derived from permissions inside auth only. Other services continue to use fine-grained permissions without this hierarchy.
+
+**ABAC (register):** callers with only `user.create` (and without `user.password.update`, `admin.*`, or `*`) may register **`account_type: customer`** only. Higher-privilege callers may set any valid `account_type` subject to the hierarchy above.
 
 ### Product
 

@@ -146,10 +146,20 @@ func (h *Handler) Register(c *gin.Context) {
 		accountType = domain.DefaultAccountType
 	}
 	caller := callerFromContext(c)
-	if caller != nil && !permissions.CanRegisterAnyAccountType(caller.Permissions) &&
-		accountType != domain.AccountTypeCustomer {
-		c.JSON(http.StatusForbidden, gin.H{"error": "user.create may only register customer accounts"})
+	if caller == nil || !domain.CanRegister(caller, accountType, nil) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "management forbidden: cannot register this account type"})
 		return
+	}
+	if domain.ClassFromNewUser(accountType, nil) == domain.ClassOwner {
+		hasOwner, err := h.svc.HasOwner(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "register: internal error"})
+			return
+		}
+		if hasOwner {
+			c.JSON(http.StatusForbidden, gin.H{"error": "owner account already exists"})
+			return
+		}
 	}
 
 	u, err := h.svc.Register(c.Request.Context(), req.Email, req.Password, accountType)
@@ -226,8 +236,16 @@ func (h *Handler) ListUsers(c *gin.Context) {
 		return
 	}
 
-	out := make([]userResponse, len(users))
-	for i, u := range users {
+	caller := callerFromContext(c)
+	filtered := make([]*domain.User, 0, len(users))
+	for _, u := range users {
+		if domain.CanManageUser(caller, u) {
+			filtered = append(filtered, u)
+		}
+	}
+
+	out := make([]userResponse, len(filtered))
+	for i, u := range filtered {
 		out[i] = toUserResponse(u)
 	}
 
@@ -254,6 +272,33 @@ func (h *Handler) SetUserPermissions(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "permissions is required"})
 		return
 	}
+
+	caller := callerFromContext(c)
+	target, err := h.svc.FindUserByID(c.Request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, autherrors.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set permissions: %w", err).Error()})
+		}
+		return
+	}
+	if !domain.CanAssignPermissions(caller, target, perms, body.AccountType) {
+		c.JSON(http.StatusForbidden, gin.H{"error": autherrors.ErrManagementForbidden.Error()})
+		return
+	}
+	if permissions.Has(perms, permissions.All) {
+		hasOwner, err := h.svc.HasOwner(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "set permissions: internal error"})
+			return
+		}
+		if hasOwner && !permissions.Has(target.Permissions, permissions.All) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "owner account already exists"})
+			return
+		}
+	}
+
 	u, err := h.svc.SetUserPermissions(c.Request.Context(), userID, perms, body.AccountType)
 	if err != nil {
 		if errors.Is(err, autherrors.ErrUserNotFound) {
@@ -281,6 +326,20 @@ func (h *Handler) UpdateUserPassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("update password: parse request: %w", err).Error()})
 		return
 	}
+	caller := callerFromContext(c)
+	target, err := h.svc.FindUserByID(c.Request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, autherrors.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("update password: %w", err).Error()})
+		}
+		return
+	}
+	if !domain.CanManageUser(caller, target) {
+		c.JSON(http.StatusForbidden, gin.H{"error": autherrors.ErrManagementForbidden.Error()})
+		return
+	}
 	if err := h.svc.UpdateUserPassword(c.Request.Context(), userID, body.Password); err != nil {
 		if errors.Is(err, autherrors.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
@@ -303,6 +362,20 @@ func (h *Handler) SetUserStatus(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("set status: parse request: %w", err).Error()})
+		return
+	}
+	caller := callerFromContext(c)
+	target, err := h.svc.FindUserByID(c.Request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, autherrors.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set status: %w", err).Error()})
+		}
+		return
+	}
+	if !domain.CanManageUser(caller, target) {
+		c.JSON(http.StatusForbidden, gin.H{"error": autherrors.ErrManagementForbidden.Error()})
 		return
 	}
 	u, err := h.svc.SetUserStatus(c.Request.Context(), userID, body.IsActive)

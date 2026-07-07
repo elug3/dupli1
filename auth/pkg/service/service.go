@@ -218,6 +218,32 @@ func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, 
 	return u, nil
 }
 
+// FindUserByID returns a user by ID.
+func (s *Service) FindUserByID(ctx context.Context, userID string) (*domain.User, error) {
+	u, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("find user: %w", err)
+	}
+	if u == nil {
+		return nil, autherrors.ErrUserNotFound
+	}
+	return u, nil
+}
+
+// HasOwner reports whether an owner account (* permission) already exists.
+func (s *Service) HasOwner(ctx context.Context) (bool, error) {
+	users, err := s.userRepo.ListAll(ctx)
+	if err != nil {
+		return false, fmt.Errorf("list users: %w", err)
+	}
+	for _, u := range users {
+		if permissions.Has(u.Permissions, permissions.All) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // SetUserPermissions replaces the permission list for the given user.
 func (s *Service) SetUserPermissions(ctx context.Context, userID string, perms []string, accountType string) (*domain.User, error) {
 	if err := permissions.Validate(perms); err != nil {
