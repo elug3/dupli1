@@ -4,8 +4,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/elug3/dupli1/order/pkg/authjwt"
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 func (h *Handler) checkoutSessions(w http.ResponseWriter, r *http.Request) {
@@ -14,12 +16,21 @@ func (h *Handler) checkoutSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims, _ := authjwt.FromContext(r.Context())
+
 	var req struct {
 		CustomerID string `json:"customer_id"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	if h.jwtValidator != nil && !permissions.BypassesOrderCreateABAC(claims.Permissions) {
+		if req.CustomerID != claims.UserID {
+			respondError(w, http.StatusForbidden, "forbidden: customer_id must match your user id")
+			return
+		}
 	}
 
 	session, err := h.svc.CreateCheckoutSession(r.Context(), service.CreateCheckoutSessionInput{
@@ -33,6 +44,8 @@ func (h *Handler) checkoutSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
+	claims, _ := authjwt.FromContext(r.Context())
+
 	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/v1/checkout/sessions/"))
 	if len(parts) == 0 || parts[0] == "" {
 		respondError(w, http.StatusNotFound, "not found")
@@ -47,11 +60,18 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 			respondServiceError(w, err)
 			return
 		}
+		if !h.mayAccessCheckoutSession(claims, session.CustomerID, false) {
+			respondError(w, http.StatusForbidden, "forbidden: you do not own this checkout session")
+			return
+		}
 		respondJSON(w, http.StatusOK, session)
 		return
 	}
 
 	if len(parts) == 2 && parts[1] == "complete" && r.Method == http.MethodPost {
+		if err := h.withCheckoutSessionAccess(w, r, claims, sessionID, true); err != nil {
+			return
+		}
 		result, err := h.svc.CompleteCheckout(r.Context(), sessionID)
 		if err != nil {
 			respondServiceError(w, err)
@@ -62,6 +82,9 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 2 && parts[1] == "coupon" && r.Method == http.MethodPost {
+		if err := h.withCheckoutSessionAccess(w, r, claims, sessionID, true); err != nil {
+			return
+		}
 		var req struct {
 			Code string `json:"code"`
 		}
@@ -79,6 +102,9 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 2 && parts[1] == "items" {
+		if err := h.withCheckoutSessionAccess(w, r, claims, sessionID, true); err != nil {
+			return
+		}
 		switch r.Method {
 		case http.MethodPut:
 			var req struct {
@@ -113,6 +139,9 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 3 && parts[1] == "items" && r.Method == http.MethodDelete {
+		if err := h.withCheckoutSessionAccess(w, r, claims, sessionID, true); err != nil {
+			return
+		}
 		session, err := h.svc.RemoveCheckoutItem(r.Context(), sessionID, parts[2])
 		if err != nil {
 			respondServiceError(w, err)
@@ -124,3 +153,35 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 
 	respondError(w, http.StatusNotFound, "not found")
 }
+
+func (h *Handler) mayAccessCheckoutSession(claims authjwt.Claims, sessionCustomerID string, requireCreateBypass bool) bool {
+	if h.jwtValidator == nil {
+		return true
+	}
+	if requireCreateBypass && permissions.BypassesOrderCreateABAC(claims.Permissions) {
+		return true
+	}
+	if !requireCreateBypass && permissions.BypassesOrderReadABAC(claims.Permissions) {
+		return true
+	}
+	return sessionCustomerID == claims.UserID
+}
+
+func (h *Handler) withCheckoutSessionAccess(w http.ResponseWriter, r *http.Request, claims authjwt.Claims, sessionID string, requireCreateBypass bool) error {
+	session, err := h.svc.GetCheckoutSession(r.Context(), sessionID)
+	if err != nil {
+		respondServiceError(w, err)
+		return err
+	}
+	if !h.mayAccessCheckoutSession(claims, session.CustomerID, requireCreateBypass) {
+		respondError(w, http.StatusForbidden, "forbidden: you do not own this checkout session")
+		return errForbidden
+	}
+	return nil
+}
+
+var errForbidden = &forbiddenError{}
+
+type forbiddenError struct{}
+
+func (e *forbiddenError) Error() string { return "forbidden" }

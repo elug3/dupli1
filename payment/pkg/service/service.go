@@ -35,6 +35,7 @@ type CreatePaymentInput struct {
 	CustomerID     string
 	BearerToken    string
 	IdempotencyKey string
+	BypassABAC     bool
 }
 
 func (s *Service) CreatePayment(ctx context.Context, input CreatePaymentInput) (*domain.Payment, error) {
@@ -50,7 +51,7 @@ func (s *Service) CreatePayment(ctx context.Context, input CreatePaymentInput) (
 	if err != nil {
 		return nil, err
 	}
-	if order.CustomerID != input.CustomerID {
+	if !input.BypassABAC && order.CustomerID != input.CustomerID {
 		return nil, ports.ErrOrderForbidden
 	}
 	if order.Status != "pending" {

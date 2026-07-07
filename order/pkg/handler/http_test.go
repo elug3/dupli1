@@ -180,13 +180,28 @@ func TestCreateOrder_CustomerForbiddenOnOthersCustomerID(t *testing.T) {
 	}
 }
 
-func TestCreateOrder_OrderManagerCanCreateForAnyCustomer(t *testing.T) {
+func TestCreateOrder_OrderManagerCannotCreateForOtherCustomer(t *testing.T) {
 	h, _ := newTestHandler(t)
 	mux := newMux(h)
 	token := makeToken(t, "mgr-1", []string{"order_manager"})
 
 	body := map[string]any{
-		"customer_id": "u-99", // different from token subject
+		"customer_id": "u-99",
+		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_cents": 999}},
+	}
+	w := do(t, mux, http.MethodPost, "/api/v1/orders", token, body)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestCreateOrder_AdminCanCreateForAnyCustomer(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+	token := makeToken(t, "admin-1", []string{"admin"})
+
+	body := map[string]any{
+		"customer_id": "u-99",
 		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_cents": 999}},
 	}
 	w := do(t, mux, http.MethodPost, "/api/v1/orders", token, body)

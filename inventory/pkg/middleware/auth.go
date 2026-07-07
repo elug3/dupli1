@@ -13,9 +13,6 @@ type AccessTokenValidator interface {
 	ValidateAccessToken(token string) (authjwt.Claims, error)
 }
 
-// InventoryWriterRoles may adjust stock and manage reservations.
-var InventoryWriterRoles = []string{"order_manager", "admin", "owner"}
-
 func RequireAuth(validator AccessTokenValidator, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if validator == nil {
@@ -40,11 +37,11 @@ func RequireAuth(validator AccessTokenValidator, next http.HandlerFunc) http.Han
 	}
 }
 
-func RequireAnyRole(roles ...string) func(http.HandlerFunc) http.HandlerFunc {
+func RequireAnyPermission(perms ...string) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := authjwt.FromContext(r.Context())
-			if !ok || !claims.HasRole(roles...) {
+			if !ok || !claims.HasPermission(perms...) {
 				respondForbidden(w)
 				return
 			}
@@ -62,5 +59,5 @@ func respondUnauthorized(w http.ResponseWriter) {
 func respondForbidden(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusForbidden)
-	_ = json.NewEncoder(w).Encode(map[string]any{"error": "forbidden: insufficient role", "code": 403})
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": "forbidden: insufficient permission", "code": 403})
 }

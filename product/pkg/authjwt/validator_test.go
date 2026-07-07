@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -45,7 +46,7 @@ func TestHMACValidatorRejectsRefreshType(t *testing.T) {
 	}
 }
 
-func TestHMACValidatorExtractsRoles(t *testing.T) {
+func TestHMACValidatorExpandsLegacyRoles(t *testing.T) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":   "user-2",
 		"type":  "access",
@@ -62,20 +63,46 @@ func TestHMACValidatorExtractsRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateAccessToken: %v", err)
 	}
-	if !claims.HasRole("product_manager") {
-		t.Fatal("expected product_manager role")
+	if !claims.HasPermission(permissions.ProductCreate) {
+		t.Fatal("expected product.create from product_manager role")
 	}
-	if claims.HasRole("admin") {
-		t.Fatal("did not expect admin role")
+	if claims.HasPermission(permissions.OrderShip) {
+		t.Fatal("did not expect order.ship")
 	}
 }
 
-func TestExtractRolesHandlesStringSliceClaim(t *testing.T) {
-	claims := jwt.MapClaims{
-		"roles": []string{"admin"},
+func TestHMACValidatorPrefersPermissionsClaim(t *testing.T) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":         "user-3",
+		"type":        "access",
+		"permissions": []string{permissions.CouponRead},
+		"roles":       []string{"product_manager"},
+		"exp":         time.Now().Add(time.Hour).Unix(),
+	})
+	signed, err := token.SignedString([]byte("test-secret"))
+	if err != nil {
+		t.Fatalf("SignedString: %v", err)
 	}
-	roles := extractRoles(claims)
-	if len(roles) != 1 || roles[0] != "admin" {
-		t.Fatalf("roles = %v, want [admin]", roles)
+
+	v := NewHMACValidator("test-secret")
+	claims, err := v.ValidateAccessToken(signed)
+	if err != nil {
+		t.Fatalf("ValidateAccessToken: %v", err)
+	}
+	if !claims.HasPermission(permissions.CouponRead) {
+		t.Fatal("expected coupon.read from permissions claim")
+	}
+	if claims.HasPermission(permissions.ProductCreate) {
+		t.Fatal("permissions claim should take precedence over legacy roles")
+	}
+}
+
+func TestExtractStringSliceHandlesStringSliceClaim(t *testing.T) {
+	claims := jwt.MapClaims{
+		"permissions": []string{"coupon.read"},
+	}
+	perms := extractStringSlice(claims, "permissions")
+	if len(perms) != 1 || perms[0] != "coupon.read" {
+		t.Fatalf("permissions = %v, want [coupon.read]", perms)
 	}
 }

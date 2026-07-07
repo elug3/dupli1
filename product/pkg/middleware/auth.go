@@ -13,9 +13,6 @@ type AccessTokenValidator interface {
 	ValidateAccessToken(token string) (authjwt.Claims, error)
 }
 
-// Product management roles allowed to create, edit, and delete products.
-var ProductManagerRoles = []string{"product_manager", "admin", "owner"}
-
 func RequireAuth(validator AccessTokenValidator, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -58,12 +55,12 @@ func OptionalAuth(validator AccessTokenValidator, next http.Handler) http.Handle
 	})
 }
 
-// RequireAnyRole rejects callers who lack any of the given roles. Must run after RequireAuth.
-func RequireAnyRole(roles ...string) func(http.Handler) http.Handler {
+// RequireAnyPermission rejects callers who lack any of the given permissions. Must run after RequireAuth.
+func RequireAnyPermission(perms ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := authjwt.FromContext(r.Context())
-			if !ok || !claims.HasRole(roles...) {
+			if !ok || !claims.HasPermission(perms...) {
 				respondForbidden(w)
 				return
 			}
@@ -81,5 +78,5 @@ func respondUnauthorized(w http.ResponseWriter) {
 func respondForbidden(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusForbidden)
-	json.NewEncoder(w).Encode(map[string]interface{}{"error": "forbidden: insufficient role", "code": 403})
+	json.NewEncoder(w).Encode(map[string]interface{}{"error": "forbidden: insufficient permission", "code": 403})
 }
