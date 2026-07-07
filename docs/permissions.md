@@ -2,7 +2,7 @@
 
 Authoritative specification for migrating Dupli1 from coarse service-manager **roles** to fine-grained **permissions**.
 
-**Status:** Phase 0 — design frozen. Implementation starts in Phase 1 (`shared/pkg/permissions`).
+**Status:** Phase 1 complete — `shared/pkg/permissions` library implemented. Phase 2 (auth integration) is next.
 
 **Related docs:** [endpoints.md](endpoints.md) (current role gates), [api.md](api.md), [current-state.md](current-state.md).
 
@@ -89,7 +89,7 @@ No other prefix wildcards (e.g. `product.variant.*` is not supported; list `prod
 
 ### 8. Shared library location
 
-Phase 1 introduces `shared/pkg/permissions` (new Go module `github.com/elug3/dupli1/shared`) consumed by auth and downstream services. Consolidates duplicated `authjwt` claim parsing over Phases 1–3.
+Phase 1 introduces `shared/pkg/permissions` (Go module `github.com/elug3/dupli1/shared`) consumed by auth and downstream services. The library is intentionally thin: permission constants, wildcard evaluation, legacy role expansion, and bundles only — no JWT or HTTP code. See [shared/README.md](../shared/README.md).
 
 ---
 
@@ -328,7 +328,7 @@ Exact SQL will live in `auth/pkg/bootstrap/migrate.go` with tests in Phase 2.
 | Phase | Deliverable |
 |-------|-------------|
 | **0** | This document (frozen catalog + decisions) |
-| **1** | `shared/pkg/permissions` — catalog constants, `HasPermission`, `ExpandLegacyRoles`, bundles |
+| **1** | `shared/pkg/permissions` — catalog constants, `Has`, `ExpandLegacyRoles`, bundles (**done**) |
 | **2** | Auth: DB rename, JWT issuer, middleware, seeds, `PATCH …/permissions` |
 | **3** | Product, inventory, order, cart, payment: per-route permission checks + dual-read |
 | **4** | `docs/api.md`, `docs/endpoints.md`, OpenAPI specs |

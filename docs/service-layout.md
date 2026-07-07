@@ -24,6 +24,9 @@ dupli1/
 ├── notification/
 │   ├── cmd/
 │   └── pkg/
+├── shared/                   # Reusable Go modules (permissions, …)
+│   ├── go.mod
+│   └── pkg/
 ├── api/
 │   ├── nginx.conf            # Gateway routing (dupli1-proxy image)
 │   └── Dockerfile
@@ -37,7 +40,21 @@ dupli1/
 └── docs/
 ```
 
-Each service is an independent Go module (`auth/go.mod`, `product/go.mod`, …). There is no top-level `go.work` file; run and test from each service directory.
+Each service is an independent Go module (`auth/go.mod`, `product/go.mod`, …). The `shared/` directory is also its own module (`shared/go.mod`). There is no top-level `go.work` file; run and test from each module directory.
+
+### Shared (`shared/pkg`)
+
+**Module:** `github.com/elug3/dupli1/shared`
+
+Cross-service libraries with no service-specific dependencies. Services import via `go get` (local dev: `go mod edit -replace github.com/elug3/dupli1/shared=../shared`).
+
+| Package | Purpose |
+|---------|---------|
+| `permissions` | Fine-grained permission constants, `Has` / `HasAny`, legacy role expansion, bundles — see [permissions.md](permissions.md) |
+
+```bash
+cd shared && go test ./...
+```
 
 ## Layer responsibilities
 
