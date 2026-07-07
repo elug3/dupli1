@@ -3,6 +3,7 @@ module github.com/elug3/dupli1/order
 go 1.26.3
 
 require (
+	github.com/elug3/dupli1/shared v0.0.0-00010101000000-000000000000
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v4 v4.18.3
 	github.com/nats-io/nats.go v1.52.0
@@ -24,3 +25,5 @@ require (
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 )
+
+replace github.com/elug3/dupli1/shared => ../shared

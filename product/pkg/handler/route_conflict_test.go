@@ -12,12 +12,7 @@ import (
 func TestDocumentedProductRoutesRequireAuth(t *testing.T) {
 	mux := newAccessControlMux(memory.NewProductStore())
 
-	w := serve(t, mux, http.MethodGet, handler.RouteProducts, "", nil)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("GET /api/v1/products without auth: status=%d, want 401", w.Code)
-	}
-
-	w = serve(t, mux, http.MethodPost, handler.RouteProducts, "", nil)
+	w := serve(t, mux, http.MethodPost, handler.RouteProducts, "", nil)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("POST /api/v1/products without auth: status=%d, want 401", w.Code)
 	}
@@ -35,9 +30,9 @@ func TestPublicRoutesStayOpen(t *testing.T) {
 		t.Fatalf("GET health: status=%d, want 200", w.Code)
 	}
 
-	w = serve(t, mux, http.MethodGet, handler.RouteSearchBags, "", nil)
+	w = serve(t, mux, http.MethodGet, handler.RouteProducts, "", nil)
 	if w.Code != http.StatusOK {
-		t.Fatalf("GET bags: status=%d, want 200", w.Code)
+		t.Fatalf("GET products search: status=%d, want 200", w.Code)
 	}
 
 	w = serve(t, mux, http.MethodGet, "/api/v1/products/BAG-001", "", nil)

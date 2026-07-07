@@ -49,9 +49,10 @@ func Union(slices ...[]string) []string {
 }
 
 // Dedupe returns a copy of perms with duplicates removed, preserving first-seen order.
+// An empty result is returned as a non-nil slice for JSON/DB compatibility.
 func Dedupe(perms []string) []string {
 	if len(perms) == 0 {
-		return nil
+		return []string{}
 	}
 	seen := make(map[string]struct{}, len(perms))
 	out := make([]string, 0, len(perms))
@@ -64,6 +65,9 @@ func Dedupe(perms []string) []string {
 		}
 		seen[p] = struct{}{}
 		out = append(out, p)
+	}
+	if len(out) == 0 {
+		return []string{}
 	}
 	return out
 }

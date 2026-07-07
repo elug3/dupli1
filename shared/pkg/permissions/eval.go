@@ -82,12 +82,32 @@ func CanRegisterAnyAccountType(held []string) bool {
 	return HasAny(held, All, AdminAll, UserPermissionsUpdate)
 }
 
-// BypassesOrderABAC reports whether held may access orders for any customer_id.
-func BypassesOrderABAC(held []string) bool {
-	return HasAny(held, All, AdminAll, OrderCreate, OrderReadAll)
+// BypassesOrderCreateABAC reports whether held may create orders for any customer_id.
+func BypassesOrderCreateABAC(held []string) bool {
+	return HasAny(held, All, AdminAll, OrderCreate)
 }
 
-// BypassesPaymentABAC reports whether held may access payments for any user.
+// BypassesOrderReadABAC reports whether held may read/list orders for any customer_id.
+func BypassesOrderReadABAC(held []string) bool {
+	return HasAny(held, All, AdminAll, OrderReadAll)
+}
+
+// BypassesOrderABAC is an alias for BypassesOrderReadABAC.
+func BypassesOrderABAC(held []string) bool {
+	return BypassesOrderReadABAC(held)
+}
+
+// BypassesPaymentCreateABAC reports whether held may start checkout for any user's order.
+func BypassesPaymentCreateABAC(held []string) bool {
+	return HasAny(held, All, AdminAll, PaymentCreate)
+}
+
+// BypassesPaymentReadABAC reports whether held may read any payment by ID.
+func BypassesPaymentReadABAC(held []string) bool {
+	return HasAny(held, All, AdminAll, PaymentReadAll)
+}
+
+// BypassesPaymentABAC is an alias for BypassesPaymentReadABAC.
 func BypassesPaymentABAC(held []string) bool {
-	return HasAny(held, All, AdminAll, PaymentCreate, PaymentReadAll)
+	return BypassesPaymentReadABAC(held)
 }

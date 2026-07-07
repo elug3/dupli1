@@ -8,6 +8,7 @@ import (
 
 	"github.com/elug3/dupli1/product/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/middleware"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -47,13 +48,13 @@ func TestRequireAuthRejectsMissingToken(t *testing.T) {
 	}
 }
 
-func TestRequireAnyRoleAllowsProductManager(t *testing.T) {
+func TestRequireAnyPermissionAllowsProductManager(t *testing.T) {
 	validator := authjwt.NewHMACValidator(testSecret)
 	token := makeAccessToken(t, "mgr-1", []string{"product_manager"})
 	called := false
 
 	handler := middleware.RequireAuth(validator,
-		middleware.RequireAnyRole(middleware.ProductManagerRoles...)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		middleware.RequireAnyPermission(permissions.ProductCreate)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			called = true
 		})))
 
@@ -70,13 +71,13 @@ func TestRequireAnyRoleAllowsProductManager(t *testing.T) {
 	}
 }
 
-func TestRequireAnyRoleAllowsOwner(t *testing.T) {
+func TestRequireAnyPermissionAllowsOwner(t *testing.T) {
 	validator := authjwt.NewHMACValidator(testSecret)
-	token := makeAccessToken(t, "owner-1", []string{"owner", "product_manager"})
+	token := makeAccessToken(t, "owner-1", []string{"owner"})
 	called := false
 
 	handler := middleware.RequireAuth(validator,
-		middleware.RequireAnyRole(middleware.ProductManagerRoles...)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		middleware.RequireAnyPermission(permissions.ProductCreate)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			called = true
 		})))
 
@@ -93,13 +94,13 @@ func TestRequireAnyRoleAllowsOwner(t *testing.T) {
 	}
 }
 
-func TestRequireAnyRoleRejectsCustomer(t *testing.T) {
+func TestRequireAnyPermissionRejectsCustomer(t *testing.T) {
 	validator := authjwt.NewHMACValidator(testSecret)
 	token := makeAccessToken(t, "cust-1", []string{"customer"})
 	called := false
 
 	handler := middleware.RequireAuth(validator,
-		middleware.RequireAnyRole(middleware.ProductManagerRoles...)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		middleware.RequireAnyPermission(permissions.ProductCreate)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			called = true
 		})))
 

@@ -10,6 +10,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 // AccessTokenValidator validates Bearer access tokens and returns claims.
@@ -91,8 +92,8 @@ func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ABAC: customers may only create orders for themselves.
-	if h.jwtValidator != nil && claims.HasRole("customer") && !claims.HasRole("order_manager", "admin") {
+	// ABAC: storefront callers may only create orders for themselves.
+	if h.jwtValidator != nil && !permissions.BypassesOrderCreateABAC(claims.Permissions) {
 		if req.CustomerID != claims.UserID {
 			respondError(w, http.StatusForbidden, "forbidden: customer_id must match your user id")
 			return
@@ -119,8 +120,8 @@ func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ABAC: customers may only list their own orders.
-	if h.jwtValidator != nil && claims.HasRole("customer") && !claims.HasRole("order_manager", "admin") {
+	// ABAC: storefront callers may only list their own orders.
+	if h.jwtValidator != nil && !permissions.BypassesOrderReadABAC(claims.Permissions) {
 		if customerID != claims.UserID {
 			respondError(w, http.StatusForbidden, "forbidden: can only list your own orders")
 			return
@@ -172,8 +173,8 @@ func (h *Handler) getOrder(w http.ResponseWriter, r *http.Request, orderID strin
 		return
 	}
 
-	// ABAC: customers may only read their own orders.
-	if h.jwtValidator != nil && claims.HasRole("customer") && !claims.HasRole("order_manager", "admin") {
+	// ABAC: storefront callers may only read their own orders.
+	if h.jwtValidator != nil && !permissions.BypassesOrderReadABAC(claims.Permissions) {
 		if order.CustomerID != claims.UserID {
 			respondError(w, http.StatusForbidden, "forbidden: you do not own this order")
 			return
@@ -186,8 +187,8 @@ func (h *Handler) getOrder(w http.ResponseWriter, r *http.Request, orderID strin
 func (h *Handler) shipOrder(w http.ResponseWriter, r *http.Request, orderID string) {
 	claims, _ := authjwt.FromContext(r.Context())
 
-	if h.jwtValidator != nil && !claims.HasRole("order_manager", "admin", "owner") {
-		respondError(w, http.StatusForbidden, "forbidden: insufficient role")
+	if h.jwtValidator != nil && !claims.HasPermission(permissions.OrderShip) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
 		return
 	}
 
@@ -202,9 +203,8 @@ func (h *Handler) shipOrder(w http.ResponseWriter, r *http.Request, orderID stri
 func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request, orderID string) {
 	claims, _ := authjwt.FromContext(r.Context())
 
-	// RBAC: only order_manager or admin may change order status.
-	if h.jwtValidator != nil && !claims.HasRole("order_manager", "admin") {
-		respondError(w, http.StatusForbidden, "forbidden: insufficient role")
+	if h.jwtValidator != nil && !claims.HasPermission(permissions.OrderStatusUpdate) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
 		return
 	}
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -48,7 +49,7 @@ func publicJWKS(key *rsa.PrivateKey, kid string) []byte {
 	return b
 }
 
-func TestJWKSValidatorAcceptsAdminRole(t *testing.T) {
+func TestJWKSValidatorExpandsAdminRole(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
@@ -68,10 +69,10 @@ func TestJWKSValidatorAcceptsAdminRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateAccessToken: %v", err)
 	}
-	if !claims.HasRole("admin") {
-		t.Fatalf("roles = %v, want admin", claims.Roles)
+	if !claims.HasPermission(permissions.ProductCreate) {
+		t.Fatalf("admin should grant product.create, got %v", claims.Permissions)
 	}
-	if !claims.HasRole("product_manager", "admin", "owner") {
-		t.Fatalf("admin should satisfy product manager roles, got %v", claims.Roles)
+	if !claims.HasPermission(permissions.CouponRead) {
+		t.Fatalf("admin should grant coupon.read, got %v", claims.Permissions)
 	}
 }

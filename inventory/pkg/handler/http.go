@@ -10,11 +10,12 @@ import (
 	"github.com/elug3/dupli1/inventory/pkg/middleware"
 	"github.com/elug3/dupli1/inventory/pkg/ports"
 	"github.com/elug3/dupli1/inventory/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 type Handler struct {
-	svc        *service.Service
-	validator  middleware.AccessTokenValidator
+	svc       *service.Service
+	validator middleware.AccessTokenValidator
 }
 
 func New(svc *service.Service, validator middleware.AccessTokenValidator) *Handler {
@@ -25,13 +26,13 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.health)
 	mux.HandleFunc("/api/v1/inventory/health", h.health)
 
-	protectWrite := func(next http.HandlerFunc) http.HandlerFunc {
+	protectReservation := func(next http.HandlerFunc) http.HandlerFunc {
 		chain := middleware.RequireAuth(h.validator, next)
-		return middleware.RequireAnyRole(middleware.InventoryWriterRoles...)(chain)
+		return middleware.RequireAnyPermission(permissions.InventoryReservationManage)(chain)
 	}
 
-	mux.HandleFunc("/api/v1/inventory/reservations", protectWrite(h.reservations))
-	mux.HandleFunc("/api/v1/inventory/reservations/", protectWrite(h.reservation))
+	mux.HandleFunc("/api/v1/inventory/reservations", protectReservation(h.reservations))
+	mux.HandleFunc("/api/v1/inventory/reservations/", protectReservation(h.reservation))
 	mux.HandleFunc("/api/v1/inventory/", h.inventoryItem)
 }
 
@@ -49,7 +50,7 @@ func (h *Handler) inventoryItem(w http.ResponseWriter, r *http.Request) {
 			h.getItem(w, r, sku)
 		case http.MethodPut:
 			middleware.RequireAuth(h.validator,
-				middleware.RequireAnyRole(middleware.InventoryWriterRoles...)(func(w http.ResponseWriter, r *http.Request) {
+				middleware.RequireAnyPermission(permissions.InventoryStockWrite)(func(w http.ResponseWriter, r *http.Request) {
 					h.putItem(w, r, sku)
 				}))(w, r)
 		default:
@@ -60,7 +61,7 @@ func (h *Handler) inventoryItem(w http.ResponseWriter, r *http.Request) {
 
 	if len(parts) == 2 && parts[1] == "adjust" && r.Method == http.MethodPost {
 		middleware.RequireAuth(h.validator,
-			middleware.RequireAnyRole(middleware.InventoryWriterRoles...)(func(w http.ResponseWriter, r *http.Request) {
+			middleware.RequireAnyPermission(permissions.InventoryStockWrite)(func(w http.ResponseWriter, r *http.Request) {
 				h.adjustItem(w, r, sku)
 			}))(w, r)
 		return
