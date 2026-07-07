@@ -1,0 +1,255 @@
+openapi: 3.1.0
+info:
+  title: Dupli1 API
+  version: 1.0.0
+  description: |
+    HTTP API for the Dupli1 fashion bag marketplace.
+
+    **Authorization:** protected routes require `Authorization: Bearer <access_token>`.
+    Access tokens include a `permissions` string array (primary) and a deprecated `roles`
+    array (dual-read until Phase 5). See [permissions.md](permissions.md) for the catalog.
+
+    Gateway base URL (local): `http://localhost:8080`
+
+servers:
+  - url: http://localhost:8080
+    description: Local nginx gateway
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        RS256 access token from `POST /api/v1/auth/refresh`.
+        Claims: `sub`, `type: access`, `permissions` (string[]), `roles` (deprecated string[]).
+
+  schemas:
+    User:
+      type: object
+      required: [user_id, email, account_type, permissions, is_active, failed_login_attempts]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        account_type:
+          type: string
+          enum: [customer, admin, service]
+        permissions:
+          type: array
+          items:
+            type: string
+          description: Fine-grained permission strings (e.g. product.create, order.ship, *)
+        is_active:
+          type: boolean
+        locked_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_login_attempts:
+          type: integer
+
+    SetPermissionsRequest:
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: array
+          items:
+            type: string
+        account_type:
+          type: string
+          enum: [customer, admin, service]
+
+    SetRolesRequestDeprecated:
+      type: object
+      description: Deprecated alias — expands legacy roles to permissions
+      properties:
+        roles:
+          type: array
+          items:
+            type: string
+        account_type:
+          type: string
+          enum: [customer, admin, service]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: integer
+
+paths:
+  /api/v1/auth/register:
+    post:
+      summary: Register a user
+      security:
+        - bearerAuth: []
+      tags: [Auth]
+      x-required-permissions: [user.create]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+                account_type:
+                  type: string
+                  enum: [customer, admin, service]
+      responses:
+        '201':
+          description: User created
+        '403':
+          description: Insufficient permission
+
+  /api/v1/auth/users:
+    get:
+      summary: List users
+      security:
+        - bearerAuth: []
+      tags: [Auth Admin]
+      x-required-permissions: [user.read]
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+
+  /api/v1/auth/users/{id}/permissions:
+    patch:
+      summary: Replace user permissions
+      security:
+        - bearerAuth: []
+      tags: [Auth Admin]
+      x-required-permissions: [user.permissions.update]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPermissionsRequest'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /api/v1/auth/users/{id}/roles:
+    patch:
+      summary: Replace user roles (deprecated)
+      deprecated: true
+      description: Deprecated alias for PATCH …/permissions. Expands legacy role names.
+      security:
+        - bearerAuth: []
+      tags: [Auth Admin]
+      x-required-permissions: [user.permissions.update]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetRolesRequestDeprecated'
+      responses:
+        '200':
+          description: Updated user
+
+  /api/v1/products:
+    get:
+      summary: Search products (public; optional product.read widens response)
+      tags: [Product]
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Requires product.read when authenticated
+      responses:
+        '200':
+          description: Search results
+    post:
+      summary: Create product
+      security:
+        - bearerAuth: []
+      tags: [Product]
+      x-required-permissions: [product.create]
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/orders/{id}/ship:
+    post:
+      summary: Ship order
+      security:
+        - bearerAuth: []
+      tags: [Order]
+      x-required-permissions: [order.ship]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Order shipped
+
+  /api/v1/carts/{customer_id}:
+    get:
+      summary: Admin cart lookup
+      security:
+        - bearerAuth: []
+      tags: [Cart]
+      x-required-permissions: [cart.read]
+      parameters:
+        - name: customer_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Customer cart
+
+tags:
+  - name: Auth
+  - name: Auth Admin
+  - name: Product
+  - name: Order
+  - name: Cart

@@ -8,7 +8,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 
 | Area | Status |
 |------|--------|
-| Auth (login, JWT, RBAC) | Implemented |
+| Auth (login, JWT, fine-grained permissions) | Implemented |
 | Product catalog (bags, coupons, images, PDP) | Implemented |
 | Inventory (stock, reservations) | Implemented (PostgreSQL) |
 | Orders + checkout sessions | Implemented (PostgreSQL) |
@@ -39,12 +39,15 @@ See [service-layout.md](service-layout.md) for details.
   - Login returns a **refresh token**; `POST /refresh` returns a short-lived **access token** (`token` field)
   - RS256 JWT + JWKS at `/api/v1/auth/.well-known/jwks.json`
   - Access tokens include `type: "access"`; refresh tokens include `type: "refresh"`
-  - Roles: `owner`, `admin`, `user_manager`, `customer_registrar`, `product_manager`, `order_manager`, `customer`
-  - Account types: `customer`, `admin`, `service` (JSON field `account_type`; set at register/seed, returned on user objects)
-  - Register requires `owner`, `admin`, `user_manager`, or `customer_registrar` (not public)
-  - User admin at `/api/v1/auth/users`
-  - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`account_type` `admin`)
-  - `dupli1-web` service account seeded from `DUPLI1_WEB_SERVICE_EMAIL` / `DUPLI1_WEB_SERVICE_PASSWORD` (`account_type` `service`)
+  - Fine-grained **permissions** stored on users (`users.permissions TEXT[]`); JWT access tokens include `permissions` claim (+ legacy `roles` for dual-read until Phase 5)
+  - Permission constants and evaluation in `shared/pkg/permissions` (`github.com/elug3/dupli1/shared`)
+  - Wildcards: `*`, `admin.*`, `{resource}.*` (e.g. `product.*`)
+  - Account types: `customer`, `admin`, `service` (JSON field `account_type`; distinct from permissions)
+  - Register requires `user.create` (not public); auth ABAC hierarchy governs who may manage whom
+  - User admin at `/api/v1/auth/users`; canonical update via `PATCH …/permissions` (`…/roles` deprecated alias)
+  - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `admin`)
+  - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`)
+  - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage` (`DUPLI1_ORDER_SERVICE_*`)
   - Login/refresh rate-limited per IP via Redis
 - **Tests:** `cd auth && go test ./...`
 
@@ -55,11 +58,9 @@ See [service-layout.md](service-layout.md) for details.
 - **Persistence:** `products` on `postgres-product`
 - **Features:**
   - Parent (style) + variant (SKU) model: search returns parents only (no color duplicates)
-  - Public: `GET /api/v1/products` (query filters), `GET /api/v1/products/{id}` (parent + variants), coupon redeem
-  - Admin: parent CRUD, variant CRUD at `/api/v1/products/{id}/variants`, images on variant or default variant
-  - Filters: `category`, `brand`, `color`, `size`, `material`, `tags` (color/size match any active variant)
-  - Stock is per variant SKU in inventory (product `stock` is legacy)
-  - Protected routes validate RS256 via `AUTH_JWKS_URL` and require `product_manager`, `admin`, or `owner` role
+  - Public: `GET /api/v1/products` (optional `product.read` widens view), `GET /api/v1/products/{id}`, coupon redeem
+  - Admin: per-route permissions (`product.create`, `coupon.read`, …) — see [permissions.md](permissions.md)
+  - Protected routes validate RS256 via `AUTH_JWKS_URL`; dual-read `permissions` then legacy `roles`
   - Inline schema migration + variant backfill on startup
   - Plan: [product-variants-plan.md](product-variants-plan.md)
 - **Tests:** `cd product && go test ./...`
@@ -69,7 +70,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Host port:** 8082
 - **Persistence:** PostgreSQL (`inventory` on `postgres-inventory`)
 - **Features:** Stock and reservations at `/api/v1/inventory/*`
-- **Auth:** None on reads; writes require Bearer JWT (`order_manager`, `admin`, or `owner`) when `AUTH_JWKS_URL` is set
+- **Auth:** Public reads; writes require Bearer JWT with `inventory.stock.write` or `inventory.reservation.manage` when `AUTH_JWKS_URL` is set
 - **Tests:** `cd inventory && go test ./...`
 
 ### dupli1-order
@@ -82,7 +83,7 @@ See [service-layout.md](service-layout.md) for details.
   - Consumes **`payment.succeeded`** (NATS) → `paid`; 5-minute unpaid `pending` expiry worker
   - `POST /api/v1/orders/{id}/ship` → `in_transit` + commit inventory (plan B)
   - Calls inventory to reserve stock; calls product to redeem coupons
-- **Auth:** Bearer JWT validated via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only), with `JWT_SECRET` HS256 fallback in dev
+- **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS; HS256 fallback in dev). Storefront ABAC on `customer_id`; `order.create` / `order.read.all` bypass ABAC. Ship requires `order.ship`; status changes require `order.status.update`
 - **Tests:** `cd order && go test ./...`
 
 ### dupli1-cart
@@ -91,7 +92,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Persistence:** PostgreSQL (`cart` on `postgres-cart`)
 - **Features:**
   - Persistent per-customer cart at `/api/v1/cart` (see [cart-service.md](cart-service.md))
-  - Admin read at `/api/v1/carts/{customer_id}`
+  - Admin read at `/api/v1/carts/{customer_id}` requires `cart.read`
   - Enriches lines from product (price, images) and inventory (availability)
 - **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only), with `JWT_SECRET` HS256 fallback in dev
 - **Tests:** `cd cart && go test ./...`
@@ -104,7 +105,7 @@ See [service-layout.md](service-layout.md) for details.
   - Stripe Checkout redirect at `POST /api/v1/payments` (see [payment-service.md](payment-service.md))
   - Dev mode without `STRIPE_SECRET_KEY`: simulate URL `GET /api/v1/payments/{id}/simulate-success`
   - Publishes **`payment.succeeded`** on NATS when payment completes
-- **Auth:** Bearer JWT via `AUTH_JWKS_URL` on customer routes; Stripe signature on webhook
+- **Auth:** Bearer JWT on customer routes; ownership ABAC unless `payment.create` / `payment.read.all`. Stripe signature on webhook
 - **Tests:** `cd payment && go test ./...`
 
 ### dupli1-notification
@@ -137,15 +138,15 @@ See [service-layout.md](service-layout.md) for details.
 
 | Service | Public | Authenticated |
 |---------|--------|---------------|
-| auth | login, refresh, logout | register (owner/admin/user_manager; `account_type`), me, user admin |
-| product | health, bag search, PDP, coupon redeem | product/coupon CRUD, image upload |
-| inventory | all routes | — |
-| order | health only | orders, checkout, ship (when JWT configured) |
-| cart | health only | cart (when JWT configured) |
-| payment | health, dev simulate | payments (when JWT configured) |
+| auth | login, refresh, logout, JWKS | register (`user.create`), me, user admin (permissions) |
+| product | health, product search/PDP, coupon redeem | product/coupon CRUD (per permission), image upload |
+| inventory | stock reads | stock writes (`inventory.stock.write`), reservations (`inventory.reservation.manage`) |
+| order | health only | orders, checkout (ABAC + permissions), ship (`order.ship`) |
+| cart | health only | own cart; admin read (`cart.read`) |
+| payment | health, dev simulate | payments (ABAC + permissions) |
 | notification | health | — |
 
-Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md).
+Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Permission spec: [permissions.md](permissions.md).
 
 ## Go modules
 
@@ -159,13 +160,14 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md).
 | `github.com/elug3/dupli1/cart` | `cart/` |
 | `github.com/elug3/dupli1/payment` | `payment/` |
 | `github.com/elug3/dupli1/notification` | `notification/` |
+| `github.com/elug3/dupli1/shared` | `shared/` (permissions library) |
 
 ## Known gaps
 
 1. **Local TLS** — certs in `certs/` are not wired into nginx; gateway is HTTP only
 2. **Notification** — no outbound messaging
 3. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
-4. **Planned packages not started** — user, chat, analytics, shared lib
+4. **Planned packages not started** — user, chat, analytics (beyond `shared/pkg/permissions`)
 
 ## Running and testing
 

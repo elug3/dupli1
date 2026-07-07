@@ -81,11 +81,11 @@ Configuration lives in `bootstrap/config.go` and/or package `options.go`.
 Owns:
 
 - Login, logout, refresh, RS256 JWT + JWKS
-- RBAC roles: `owner`, `admin`, `user_manager`, `customer_registrar`, `product_manager`, `customer`
+- Fine-grained **permissions** on users and in JWT `permissions` claim (legacy `roles` dual-read until Phase 5)
 - Account types: `customer`, `admin`, `service` on `User.AccountType` / JSON `account_type`
-- User admin at `/api/v1/auth/users` (not `/api/v1/users`)
-- Owner seeding via `OWNER_EMAIL` / `OWNER_PASSWORD` (`account_type` `admin`)
-- Service account seeding via `DUPLI1_WEB_SERVICE_EMAIL` / `DUPLI1_WEB_SERVICE_PASSWORD` (`account_type` `service`, role `customer_registrar`)
+- User admin at `/api/v1/auth/users` (not `/api/v1/users`); `PATCH …/permissions` canonical
+- Owner seeding via `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`)
+- Service account seeding via `DUPLI1_WEB_SERVICE_*` (`permissions: ["user.create"]`)
 
 ### Product (`product/pkg`)
 
@@ -97,14 +97,14 @@ Owns:
 
 - Parent styles + variants (SKUs): search returns parents only; PDP embeds variants
 - Admin product/variant/coupon CRUD; brand-prefixed parent IDs (`BOT-001`); images on variants
-- JWT validation via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only)
+- JWT validation via `AUTH_JWKS_URL` (RS256 JWKS); per-route permission checks (`product.create`, `coupon.read`, …)
 
 ### Inventory (`inventory/pkg`)
 
 **Module:** `github.com/elug3/dupli1/inventory`  
 **Storage:** PostgreSQL (`inventory` table set), in-memory fallback when no DB URL is configured (tests)
 
-Owns stock and reservations at `/api/v1/inventory/*`. Public reads; writes require Bearer JWT with `order_manager`, `admin`, or `owner` when auth is configured.
+Owns stock and reservations at `/api/v1/inventory/*`. Public reads; writes require Bearer JWT with `inventory.stock.write` or `inventory.reservation.manage` when auth is configured.
 
 ### Order (`order/pkg`)
 

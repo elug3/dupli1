@@ -2,9 +2,9 @@
 
 Authoritative specification for migrating Dupli1 from coarse service-manager **roles** to fine-grained **permissions**.
 
-**Status:** Phase 2 complete — auth service stores permissions, issues JWT `permissions` claim (+ legacy `roles` for dual-read). Phase 3 (downstream services) is next.
+**Status:** Phase 4 complete — `docs/api.md`, `docs/endpoints.md`, `docs/current-state.md`, and `docs/openapi.yaml` aligned with fine-grained permissions. Phase 5 (remove legacy `roles` claim and alias endpoint) is next.
 
-**Related docs:** [endpoints.md](endpoints.md) (current role gates), [api.md](api.md), [current-state.md](current-state.md).
+**Related docs:** [endpoints.md](endpoints.md) (route index), [api.md](api.md), [current-state.md](current-state.md), [openapi.yaml](openapi.yaml).
 
 ---
 
@@ -340,8 +340,8 @@ Exact SQL will live in `auth/pkg/bootstrap/migrate.go` with tests in Phase 2.
 | **0** | This document (frozen catalog + decisions) |
 | **1** | `shared/pkg/permissions` — catalog constants, `Has`, `ExpandLegacyRoles`, bundles (**done**) |
 | **2** | Auth: DB rename, JWT issuer, middleware, seeds, `PATCH …/permissions` (**done**) |
-| **3** | Product, inventory, order, cart, payment: per-route permission checks + dual-read |
-| **4** | `docs/api.md`, `docs/endpoints.md`, OpenAPI specs |
+| **3** | Product, inventory, order, cart, payment: per-route permission checks + dual-read (**done**) |
+| **4** | `docs/api.md`, `docs/endpoints.md`, OpenAPI specs (**done**) |
 | **5** | Remove `roles` claim, deprecated endpoint, legacy constants |
 
 ---

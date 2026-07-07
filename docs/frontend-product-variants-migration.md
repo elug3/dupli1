@@ -55,7 +55,7 @@ Protected product routes need:
 2. `POST /api/v1/auth/refresh` → access token in `token`
 3. `Authorization: Bearer <access_token>`
 
-Roles for catalog admin: `product_manager`, `admin`, or `owner`.
+Catalog admin permissions: `product.create`, `product.update`, `product.read`, `product.variant.*`, `product.image.upload`, or wildcards such as `product.*` / `*`. See [permissions.md](permissions.md).
 
 Public catalog reads need **no** auth.
 
