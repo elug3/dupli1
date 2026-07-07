@@ -179,6 +179,9 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if claims, ok := authjwt.FromContext(r.Context()); ok {
+		p.CreatedBy = claims.UserID
+	}
 	created, err := h.svc.CreateProduct(p)
 	if err != nil {
 		h.respondError(w, http.StatusInternalServerError, err.Error())

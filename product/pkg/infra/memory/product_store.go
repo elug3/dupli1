@@ -208,6 +208,7 @@ func (s *ProductStore) UpdateProduct(p domain.Product) (*domain.Product, error) 
 	for i, existing := range s.Products {
 		if existing.ID == p.ID {
 			p.CreatedAt = existing.CreatedAt
+			p.CreatedBy = existing.CreatedBy
 			s.Products[i] = p
 			return s.GetProduct(p.ID)
 		}

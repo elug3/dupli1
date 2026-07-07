@@ -184,6 +184,13 @@ func TestProductManagerCanManageProducts(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create product: status = %d, want 201; body: %s", w.Code, w.Body.String())
 	}
+	var created domain.Product
+	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
+		t.Fatalf("decode created product: %v", err)
+	}
+	if created.CreatedBy != "mgr-1" {
+		t.Fatalf("createdBy = %q, want mgr-1", created.CreatedBy)
+	}
 
 	w = serve(t, mux, http.MethodGet, handler.RouteProducts, token, nil)
 	if w.Code != http.StatusOK {
