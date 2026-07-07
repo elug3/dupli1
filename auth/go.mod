@@ -3,6 +3,7 @@ module github.com/elug3/dupli1/auth
 go 1.26.3
 
 require (
+	github.com/elug3/dupli1/shared v0.0.0-00010101000000-000000000000
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
@@ -52,3 +53,5 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 )
+
+replace github.com/elug3/dupli1/shared => ../shared

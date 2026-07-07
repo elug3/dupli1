@@ -100,3 +100,42 @@ func TestLegacyOrderManagerGrantsOrderShip(t *testing.T) {
 		t.Fatal("order_manager expansion must grant order.ship")
 	}
 }
+
+func TestInferLegacyRoles_owner(t *testing.T) {
+	got := InferLegacyRoles([]string{All})
+	if !slices.Contains(got, RoleOwner) {
+		t.Fatalf("InferLegacyRoles(*) = %v, want owner", got)
+	}
+}
+
+func TestInferLegacyRoles_customerRegistrar(t *testing.T) {
+	got := InferLegacyRoles([]string{UserCreate})
+	if !slices.Equal(got, []string{RoleCustomerRegistrar}) {
+		t.Fatalf("InferLegacyRoles(user.create) = %v", got)
+	}
+}
+
+func TestInferLegacyRoles_emptyCustomer(t *testing.T) {
+	got := InferLegacyRoles(nil)
+	if !slices.Equal(got, []string{RoleCustomer}) {
+		t.Fatalf("InferLegacyRoles(empty) = %v", got)
+	}
+}
+
+func TestNeedsExpansion(t *testing.T) {
+	if !NeedsExpansion([]string{RoleAdmin}) {
+		t.Fatal("admin role should need expansion")
+	}
+	if NeedsExpansion([]string{ProductCreate}) {
+		t.Fatal("concrete permission should not need expansion")
+	}
+}
+
+// Round-trip: expand then infer includes original manager role when applicable.
+func TestExpandInferRoundTrip_productManager(t *testing.T) {
+	perms := ExpandLegacyRoles([]string{RoleProductManager})
+	roles := InferLegacyRoles(perms)
+	if !slices.Contains(roles, RoleProductManager) {
+		t.Fatalf("infer after expand = %v, want product_manager", roles)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	jwtinfra "github.com/elug3/dupli1/auth/pkg/infra/jwt"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 // testRSAKey is generated once per test binary run (2048-bit is fast enough).
@@ -29,7 +30,7 @@ func TestRSA_RoundtripPreservesClaims(t *testing.T) {
 	gen := jwtinfra.NewRSATokenGenerator(testRSAKey, "test-kid", 3600)
 	ctx := context.Background()
 
-	token, err := gen.Generate(ctx, "user-1", []string{"customer"})
+	token, err := gen.Generate(ctx, "user-1", []string{permissions.UserCreate})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -41,16 +42,17 @@ func TestRSA_RoundtripPreservesClaims(t *testing.T) {
 	if claims.UserID != "user-1" {
 		t.Fatalf("UserID = %q, want user-1", claims.UserID)
 	}
-	if len(claims.Roles) != 1 || claims.Roles[0] != "customer" {
-		t.Fatalf("Roles = %v, want [customer]", claims.Roles)
+	if len(claims.Permissions) != 1 || claims.Permissions[0] != permissions.UserCreate {
+		t.Fatalf("Permissions = %v, want [%s]", claims.Permissions, permissions.UserCreate)
 	}
 }
 
-func TestRSA_MultipleRolesPreserved(t *testing.T) {
+func TestRSA_AdminPermissionsIncludeLegacyRoles(t *testing.T) {
 	gen := jwtinfra.NewRSATokenGenerator(testRSAKey, "kid", 3600)
 	ctx := context.Background()
 
-	token, err := gen.Generate(ctx, "user-2", []string{"admin", "order_manager"})
+	perms := permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})
+	token, err := gen.Generate(ctx, "user-2", perms)
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -59,12 +61,15 @@ func TestRSA_MultipleRolesPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
-	if len(claims.Roles) != 2 {
-		t.Fatalf("len(Roles) = %d, want 2", len(claims.Roles))
+	if !permissions.Has(claims.Permissions, permissions.AdminAll) {
+		t.Fatalf("Permissions = %v", claims.Permissions)
+	}
+	if len(claims.Roles) == 0 {
+		t.Fatal("expected legacy roles in access token")
 	}
 }
 
-func TestRSA_EmptyRolesPreserved(t *testing.T) {
+func TestRSA_EmptyPermissionsInfersCustomerRole(t *testing.T) {
 	gen := jwtinfra.NewRSATokenGenerator(testRSAKey, "kid", 3600)
 	ctx := context.Background()
 
@@ -77,8 +82,8 @@ func TestRSA_EmptyRolesPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
-	if len(claims.Roles) != 0 {
-		t.Fatalf("Roles = %v, want empty", claims.Roles)
+	if len(claims.Roles) != 1 || claims.Roles[0] != permissions.RoleCustomer {
+		t.Fatalf("Roles = %v, want [customer]", claims.Roles)
 	}
 }
 
@@ -117,7 +122,7 @@ func TestRSA_Validate_RejectsWrongTokenType(t *testing.T) {
 	refresh := jwtinfra.NewRSATokenGeneratorWithType(testRSAKey, "kid", 3600, "refresh")
 	ctx := context.Background()
 
-	refreshToken, err := refresh.Generate(ctx, "user-1", []string{"customer"})
+	refreshToken, err := refresh.Generate(ctx, "user-1", nil)
 	if err != nil {
 		t.Fatalf("Generate refresh: %v", err)
 	}
@@ -204,7 +209,7 @@ func TestRSA_NewFromPEM_PKCS1(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	token, err := gen.Generate(ctx, "user-1", []string{"admin"})
+	token, err := gen.Generate(ctx, "user-1", []string{permissions.All})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}

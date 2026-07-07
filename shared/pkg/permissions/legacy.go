@@ -80,3 +80,65 @@ func Resolve(permissions, legacyRoles []string) []string {
 	}
 	return ExpandLegacyRoles(legacyRoles)
 }
+
+// InferLegacyRoles maps a permission set to legacy role names for JWT dual-read.
+// Downstream services that still read the roles claim use this during migration.
+func InferLegacyRoles(perms []string) []string {
+	if len(perms) == 0 {
+		return []string{RoleCustomer}
+	}
+
+	var roles []string
+	if Has(perms, All) {
+		roles = append(roles, RoleOwner)
+	}
+	if infersAdmin(perms) {
+		roles = append(roles, RoleAdmin)
+	}
+	if Has(perms, ProductAll) || Has(perms, CouponAll) {
+		roles = append(roles, RoleProductManager)
+	}
+	if infersOrderManager(perms) {
+		roles = append(roles, RoleOrderManager)
+	}
+	if infersUserManager(perms) {
+		roles = append(roles, RoleUserManager)
+	}
+	if infersCustomerRegistrar(perms) {
+		roles = append(roles, RoleCustomerRegistrar)
+	}
+	return Dedupe(roles)
+}
+
+func infersAdmin(perms []string) bool {
+	return Has(perms, AdminAll) ||
+		(Has(perms, UserRead) && Has(perms, UserPermissionsUpdate) && Has(perms, ProductAll))
+}
+
+func infersOrderManager(perms []string) bool {
+	return HasAny(perms, OrderShip, OrderStatusUpdate) &&
+		Has(perms, InventoryReservationManage)
+}
+
+func infersUserManager(perms []string) bool {
+	return Has(perms, UserPasswordUpdate) && Has(perms, UserStatusUpdate) && !Has(perms, UserRead)
+}
+
+func infersCustomerRegistrar(perms []string) bool {
+	return Has(perms, UserCreate) &&
+		!Has(perms, UserRead) &&
+		!Has(perms, UserPermissionsUpdate) &&
+		!Has(perms, AdminAll) &&
+		!Has(perms, All)
+}
+
+// NeedsExpansion reports whether stored values are legacy role names
+// that should be expanded to fine-grained permissions.
+func NeedsExpansion(stored []string) bool {
+	for _, entry := range stored {
+		if IsLegacyRole(entry) {
+			return true
+		}
+	}
+	return false
+}

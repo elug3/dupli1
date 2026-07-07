@@ -10,6 +10,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/autherrors"
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 type fakeUserRepository struct {
@@ -40,27 +41,27 @@ func (r *fakeUserRepository) ListAll(ctx context.Context) ([]*domain.User, error
 
 type fakeTokenGenerator struct{}
 
-func (g fakeTokenGenerator) Generate(ctx context.Context, userID string, roles []string) (string, error) {
+func (g fakeTokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string) (string, error) {
 	return "token", nil
 }
 
 func (g fakeTokenGenerator) Validate(ctx context.Context, token string) (ports.Claims, error) {
-	return ports.Claims{UserID: "user-123", Roles: []string{"customer"}}, nil
+	return ports.Claims{UserID: "user-123"}, nil
 }
 
 type capturingTokenGenerator struct {
-	capturedUserID string
-	capturedRoles  []string
+	capturedUserID        string
+	capturedPermissions   []string
 }
 
-func (g *capturingTokenGenerator) Generate(ctx context.Context, userID string, roles []string) (string, error) {
+func (g *capturingTokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string) (string, error) {
 	g.capturedUserID = userID
-	g.capturedRoles = append([]string(nil), roles...)
+	g.capturedPermissions = append([]string(nil), userPermissions...)
 	return "token", nil
 }
 
 func (g *capturingTokenGenerator) Validate(ctx context.Context, token string) (ports.Claims, error) {
-	return ports.Claims{UserID: g.capturedUserID, Roles: g.capturedRoles}, nil
+	return ports.Claims{UserID: g.capturedUserID}, nil
 }
 
 type stubUserRepository struct {
@@ -146,8 +147,9 @@ func TestRegisterPublishesUserRegisteredEvent(t *testing.T) {
 	}
 }
 
-func TestLogin_ForwardsUserRolesToTokenGenerator(t *testing.T) {
-	user, _ := domain.NewUser("u-1", "user@example.com", "pass", domain.AccountTypeService, "order_manager")
+func TestLogin_RefreshTokenOmitsPermissions(t *testing.T) {
+	user, _ := domain.NewUser("u-1", "user@example.com", "pass", domain.AccountTypeService,
+		permissions.OrderShip, permissions.OrderStatusUpdate)
 	repo := &stubUserRepository{user: user}
 	gen := &capturingTokenGenerator{}
 	svc := NewService(repo, gen)
@@ -158,25 +160,25 @@ func TestLogin_ForwardsUserRolesToTokenGenerator(t *testing.T) {
 	if gen.capturedUserID != "u-1" {
 		t.Fatalf("Generate userID = %q, want u-1", gen.capturedUserID)
 	}
-	if len(gen.capturedRoles) != 1 || gen.capturedRoles[0] != "order_manager" {
-		t.Fatalf("Generate roles = %v, want [order_manager]", gen.capturedRoles)
+	if len(gen.capturedPermissions) != 0 {
+		t.Fatalf("refresh Generate permissions = %v, want nil/empty", gen.capturedPermissions)
 	}
 }
 
-func TestRefresh_FetchesFreshRolesFromDB(t *testing.T) {
-	user, _ := domain.NewUser("u-2", "user@example.com", "pass", domain.AccountTypeAdmin, "admin")
+func TestRefresh_FetchesFreshPermissionsFromDB(t *testing.T) {
+	user, _ := domain.NewUser("u-2", "user@example.com", "pass", domain.AccountTypeAdmin,
+		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
 	repo := &stubUserRepository{user: user}
 	gen := &capturingTokenGenerator{}
 	svc := NewService(repo, gen)
 
-	// Validate on the fake returns the captured ID; pre-seed it.
 	gen.capturedUserID = "u-2"
 
 	if _, err := svc.Refresh(context.Background(), "any-token"); err != nil {
 		t.Fatalf("Refresh returned error: %v", err)
 	}
-	if len(gen.capturedRoles) != 1 || gen.capturedRoles[0] != "admin" {
-		t.Fatalf("Generate roles = %v, want [admin]", gen.capturedRoles)
+	if !permissions.Has(gen.capturedPermissions, permissions.AdminAll) {
+		t.Fatalf("Generate permissions = %v, want admin wildcard", gen.capturedPermissions)
 	}
 }
 
@@ -188,7 +190,7 @@ func TestRegisterRejectsInvalidAccountType(t *testing.T) {
 	}
 }
 
-func TestRegisterAssignsCustomerRole(t *testing.T) {
+func TestRegisterAssignsEmptyPermissionsForCustomer(t *testing.T) {
 	repo := &fakeUserRepository{}
 	svc := NewService(repo, fakeTokenGenerator{})
 
@@ -196,8 +198,8 @@ func TestRegisterAssignsCustomerRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Register returned error: %v", err)
 	}
-	if len(user.Roles) != 1 || user.Roles[0] != "customer" {
-		t.Fatalf("Register roles = %v, want [customer]", user.Roles)
+	if len(user.Permissions) != 0 {
+		t.Fatalf("Register permissions = %v, want empty", user.Permissions)
 	}
 	if user.AccountType != domain.AccountTypeCustomer {
 		t.Fatalf("Register account_type = %q, want %q", user.AccountType, domain.AccountTypeCustomer)
@@ -226,7 +228,7 @@ func (r *mutableUserRepository) Delete(_ context.Context, _ string) error { retu
 func (r *mutableUserRepository) ListAll(_ context.Context) ([]*domain.User, error) { return nil, nil }
 
 func TestLogin_LocksAccountAfterMaxFailedAttempts(t *testing.T) {
-	user, _ := domain.NewUser("u-lock", "locked@example.com", "correct-pass", domain.AccountTypeCustomer, "customer")
+	user, _ := domain.NewUser("u-lock", "locked@example.com", "correct-pass", domain.AccountTypeCustomer)
 	repo := &mutableUserRepository{user: user}
 	svc := NewService(repo, fakeTokenGenerator{})
 
@@ -245,7 +247,7 @@ func TestLogin_LocksAccountAfterMaxFailedAttempts(t *testing.T) {
 }
 
 func TestLogin_RejectsDeactivatedAccount(t *testing.T) {
-	user, _ := domain.NewUser("u-off", "off@example.com", "pass", domain.AccountTypeCustomer, "customer")
+	user, _ := domain.NewUser("u-off", "off@example.com", "pass", domain.AccountTypeCustomer)
 	user.SetActive(false)
 	repo := &stubUserRepository{user: user}
 	svc := NewService(repo, fakeTokenGenerator{})
@@ -256,7 +258,7 @@ func TestLogin_RejectsDeactivatedAccount(t *testing.T) {
 }
 
 func TestRefresh_RejectsDeactivatedAccount(t *testing.T) {
-	user, _ := domain.NewUser("u-off", "off@example.com", "pass", domain.AccountTypeCustomer, "customer")
+	user, _ := domain.NewUser("u-off", "off@example.com", "pass", domain.AccountTypeCustomer)
 	user.SetActive(false)
 	repo := &stubUserRepository{user: user}
 	gen := &capturingTokenGenerator{capturedUserID: "u-off"}
@@ -298,7 +300,7 @@ func (s *memorySessionStore) Delete(_ context.Context, key string) error {
 }
 
 func TestLogout_RevokesRefreshSession(t *testing.T) {
-	user, _ := domain.NewUser("u-1", "user@example.com", "pass", domain.AccountTypeCustomer, "customer")
+	user, _ := domain.NewUser("u-1", "user@example.com", "pass", domain.AccountTypeCustomer)
 	repo := &stubUserRepository{user: user}
 	refreshGen := &capturingTokenGenerator{}
 	accessGen := fakeTokenGenerator{}
@@ -327,5 +329,16 @@ func TestLogout_RevokesRefreshSession(t *testing.T) {
 
 	if _, err := svc.Refresh(context.Background(), refreshToken); !errors.Is(err, autherrors.ErrInvalidToken) {
 		t.Fatalf("Refresh after logout: got %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestSetUserPermissionsRejectsInvalidPermission(t *testing.T) {
+	user, _ := domain.NewUser("u-1", "user@example.com", "pass", domain.AccountTypeCustomer)
+	repo := &stubUserRepository{user: user}
+	svc := NewService(repo, fakeTokenGenerator{})
+
+	_, err := svc.SetUserPermissions(context.Background(), "u-1", []string{"not.valid.permission"}, "")
+	if !errors.Is(err, autherrors.ErrInvalidPermission) {
+		t.Fatalf("got %v, want ErrInvalidPermission", err)
 	}
 }

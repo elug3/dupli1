@@ -6,6 +6,7 @@ import (
 
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/rs/zerolog"
 )
 
@@ -56,8 +57,8 @@ func TestSeedWebServiceAccount_CreatesCustomerRegistrar(t *testing.T) {
 	if u == nil {
 		t.Fatal("service account was not created")
 	}
-	if !u.HasRole(domain.RoleCustomerRegistrar) {
-		t.Fatalf("roles = %v, want [%s]", u.Roles, domain.RoleCustomerRegistrar)
+	if !u.HasPermission(permissions.UserCreate) {
+		t.Fatalf("permissions = %v, want [%s]", u.Permissions, permissions.UserCreate)
 	}
 	if !u.ValidatePassword("service-secret") {
 		t.Fatal("stored password does not match configured password")

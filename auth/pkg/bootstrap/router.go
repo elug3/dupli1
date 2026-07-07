@@ -3,9 +3,9 @@ package bootstrap
 import (
 	"net/http"
 
-	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/handler"
 	redisinfra "github.com/elug3/dupli1/auth/pkg/infra/redis"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
@@ -45,35 +45,35 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 
 	v1 := r.Group("/api/v1/auth")
 	{
-		// Public — no authentication required.
-		v1.POST("/register", h.RequireAuth(), handler.RequireAnyRole(
-			domain.RoleOwner,
-			domain.RoleAdmin,
-			domain.RoleUserManager,
-			domain.RoleCustomerRegistrar,
-		), h.Register)
+		v1.POST("/register", h.RequireAuth(), handler.RequirePermission(permissions.UserCreate), h.Register)
 		v1.POST("/login", loginLimiter.Middleware(), h.Login)
 		v1.POST("/refresh", refreshLimiter.Middleware(), h.Refresh)
-		v1.POST("/logout", h.Logout) // authenticates via refresh_token in request body
+		v1.POST("/logout", h.Logout)
 
-		// Authenticated — require a valid Bearer access token.
 		authed := v1.Group("", h.RequireAuth())
 		{
 			authed.GET("/me", h.Me)
 		}
 
-		// Admin-only — require a valid Bearer access token with the "owner" or "admin" role.
-		admin := v1.Group("", h.RequireAuth(), handler.RequireAnyRole(domain.RoleOwner, domain.RoleAdmin))
+		userRead := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserRead))
 		{
-			admin.GET("/users", h.ListUsers)
-			admin.PATCH("/users/:id/roles", h.SetUserRole)
+			userRead.GET("/users", h.ListUsers)
 		}
 
-		// User management — require "owner", "admin", or "user_manager" role.
-		userMgmt := v1.Group("", h.RequireAuth(), handler.RequireAnyRole(domain.RoleOwner, domain.RoleAdmin, domain.RoleUserManager))
+		userPermissions := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserPermissionsUpdate))
 		{
-			userMgmt.PATCH("/users/:id/password", h.UpdateUserPassword)
-			userMgmt.PATCH("/users/:id/status", h.SetUserStatus)
+			userPermissions.PATCH("/users/:id/permissions", h.SetUserPermissions)
+			userPermissions.PATCH("/users/:id/roles", h.SetUserPermissions) // deprecated alias
+		}
+
+		userMgmtPassword := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserPasswordUpdate))
+		{
+			userMgmtPassword.PATCH("/users/:id/password", h.UpdateUserPassword)
+		}
+
+		userMgmtStatus := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserStatusUpdate))
+		{
+			userMgmtStatus.PATCH("/users/:id/status", h.SetUserStatus)
 		}
 	}
 
@@ -81,7 +81,6 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 }
 
 // corsMiddleware enforces CORS headers for the given list of allowed origins.
-// If origins is empty, no CORS headers are added.
 func corsMiddleware(origins []string) gin.HandlerFunc {
 	if len(origins) == 0 {
 		return func(c *gin.Context) { c.Next() }

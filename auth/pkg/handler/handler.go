@@ -9,6 +9,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/autherrors"
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 )
@@ -17,18 +18,22 @@ type userResponse struct {
 	ID                  string     `json:"user_id"`
 	Email               string     `json:"email"`
 	AccountType         string     `json:"account_type"`
-	Roles               []string   `json:"roles"`
+	Permissions         []string   `json:"permissions"`
 	IsActive            bool       `json:"is_active"`
 	LockedAt            *time.Time `json:"locked_at,omitempty"`
 	FailedLoginAttempts int        `json:"failed_login_attempts"`
 }
 
 func toUserResponse(u *domain.User) userResponse {
+	perms := u.Permissions
+	if perms == nil {
+		perms = []string{}
+	}
 	return userResponse{
 		ID:                  u.ID,
 		Email:               u.Email,
 		AccountType:         u.AccountType,
-		Roles:               u.Roles,
+		Permissions:         perms,
 		IsActive:            u.IsActive,
 		LockedAt:            u.LockedAt,
 		FailedLoginAttempts: u.FailedLoginAttempts,
@@ -36,7 +41,7 @@ func toUserResponse(u *domain.User) userResponse {
 }
 
 // Handler holds service dependencies for HTTP handlers.
-// Access control is enforced via RequireAuth / RequireRole middleware in the router.
+// Access control is enforced via RequireAuth / RequirePermission middleware in the router.
 type Handler struct {
 	svc    *service.Service
 	logger zerolog.Logger
@@ -141,12 +146,9 @@ func (h *Handler) Register(c *gin.Context) {
 		accountType = domain.DefaultAccountType
 	}
 	caller := callerFromContext(c)
-	if caller != nil && caller.HasRole(domain.RoleCustomerRegistrar) &&
-		!caller.HasRole(domain.RoleOwner) &&
-		!caller.HasRole(domain.RoleAdmin) &&
-		!caller.HasRole(domain.RoleUserManager) &&
+	if caller != nil && !permissions.CanRegisterAnyAccountType(caller.Permissions) &&
 		accountType != domain.AccountTypeCustomer {
-		c.JSON(http.StatusForbidden, gin.H{"error": "customer_registrar may only create customer accounts"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "user.create may only register customer accounts"})
 		return
 	}
 
@@ -213,7 +215,7 @@ func (h *Handler) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, toUserResponse(callerFromContext(c)))
 }
 
-// ListUsers returns all users. Requires RequireAuth + RequireRole("admin") middleware.
+// ListUsers returns all users. Requires user.read permission.
 func (h *Handler) ListUsers(c *gin.Context) {
 	ip := c.ClientIP()
 
@@ -232,33 +234,44 @@ func (h *Handler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"users": out})
 }
 
-// SetUserRole replaces the role list for a user. Requires "admin" role.
-func (h *Handler) SetUserRole(c *gin.Context) {
+// SetUserPermissions replaces the permission list for a user.
+func (h *Handler) SetUserPermissions(c *gin.Context) {
 	userID := c.Param("id")
 	var body struct {
-		Roles       []string `json:"roles" binding:"required"`
+		Permissions []string `json:"permissions"`
+		Roles       []string `json:"roles"` // deprecated alias
 		AccountType string   `json:"account_type"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("set role: parse request: %w", err).Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Errorf("set permissions: parse request: %w", err).Error()})
 		return
 	}
-	u, err := h.svc.SetUserRole(c.Request.Context(), userID, body.Roles, body.AccountType)
+	perms := body.Permissions
+	if len(perms) == 0 && len(body.Roles) > 0 {
+		perms = permissions.ExpandLegacyRoles(body.Roles)
+	}
+	if len(perms) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "permissions is required"})
+		return
+	}
+	u, err := h.svc.SetUserPermissions(c.Request.Context(), userID, perms, body.AccountType)
 	if err != nil {
 		if errors.Is(err, autherrors.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		} else if errors.Is(err, autherrors.ErrInvalidAccountType) {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("set role: %w", err).Error()})
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("set permissions: %w", err).Error()})
+		} else if errors.Is(err, autherrors.ErrInvalidPermission) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("set permissions: %w", err).Error()})
 		} else {
-			h.logger.Error().Str("event", "set_role_error").Str("user_id", userID).Err(err).Msg("set role failed")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set role: %w", err).Error()})
+			h.logger.Error().Str("event", "set_permissions_error").Str("user_id", userID).Err(err).Msg("set permissions failed")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set permissions: %w", err).Error()})
 		}
 		return
 	}
 	c.JSON(http.StatusOK, toUserResponse(u))
 }
 
-// UpdateUserPassword sets a new password for a user. Requires "admin" or "user_manager" role.
+// UpdateUserPassword sets a new password for a user. Requires user.password.update.
 func (h *Handler) UpdateUserPassword(c *gin.Context) {
 	userID := c.Param("id")
 	var body struct {
@@ -282,7 +295,7 @@ func (h *Handler) UpdateUserPassword(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// SetUserStatus activates or deactivates a user. Requires "admin" or "user_manager" role.
+// SetUserStatus activates or deactivates a user. Requires user.status.update.
 func (h *Handler) SetUserStatus(c *gin.Context) {
 	userID := c.Param("id")
 	var body struct {

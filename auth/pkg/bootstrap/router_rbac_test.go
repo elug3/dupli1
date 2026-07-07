@@ -13,6 +13,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/handler"
 	jwtgen "github.com/elug3/dupli1/auth/pkg/infra/jwt"
 	"github.com/elug3/dupli1/auth/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -67,8 +68,7 @@ func TestOwnerCanRegisterAndListUsers(t *testing.T) {
 		"admin@dupli1.com",
 		"password",
 		domain.AccountTypeAdmin,
-		domain.RoleOwner,
-		domain.RoleProductManager,
+		permissions.All,
 	)
 	if err != nil {
 		t.Fatalf("NewUser: %v", err)
@@ -77,7 +77,7 @@ func TestOwnerCanRegisterAndListUsers(t *testing.T) {
 		t.Fatalf("Save owner: %v", err)
 	}
 
-	accessToken, err := accessGen.Generate(context.Background(), owner.ID, owner.Roles)
+	accessToken, err := accessGen.Generate(context.Background(), owner.ID, owner.Permissions)
 	if err != nil {
 		t.Fatalf("Generate token: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestCustomerRegistrarCanRegisterButNotManageUsers(t *testing.T) {
 		"dupli1-web@internal.dupli1",
 		"service-secret",
 		domain.AccountTypeService,
-		domain.RoleCustomerRegistrar,
+		permissions.UserCreate,
 	)
 	if err != nil {
 		t.Fatalf("NewUser: %v", err)
@@ -129,7 +129,7 @@ func TestCustomerRegistrarCanRegisterButNotManageUsers(t *testing.T) {
 		t.Fatalf("Save registrar: %v", err)
 	}
 
-	accessToken, err := accessGen.Generate(context.Background(), registrar.ID, registrar.Roles)
+	accessToken, err := accessGen.Generate(context.Background(), registrar.ID, registrar.Permissions)
 	if err != nil {
 		t.Fatalf("Generate token: %v", err)
 	}

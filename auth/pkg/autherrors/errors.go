@@ -14,4 +14,5 @@ var (
 	ErrAccountLocked       = errors.New("account is locked")
 	ErrAccountDeactivated  = errors.New("account is deactivated")
 	ErrInvalidAccountType  = errors.New("invalid account type")
+	ErrInvalidPermission   = errors.New("invalid permission")
 )
