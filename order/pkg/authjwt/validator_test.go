@@ -8,12 +8,12 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func TestHMACValidatorExpandsLegacyRoles(t *testing.T) {
+func TestHMACValidatorReadsPermissionsClaim(t *testing.T) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":   "user-2",
-		"type":  "access",
-		"roles": []string{"order_manager"},
-		"exp":   time.Now().Add(time.Hour).Unix(),
+		"sub":         "user-1",
+		"type":        "access",
+		"permissions": permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}),
+		"exp":         time.Now().Add(time.Hour).Unix(),
 	})
 	signed, err := token.SignedString([]byte("test-secret"))
 	if err != nil {
@@ -26,9 +26,6 @@ func TestHMACValidatorExpandsLegacyRoles(t *testing.T) {
 		t.Fatalf("ValidateAccessToken: %v", err)
 	}
 	if !claims.HasPermission(permissions.OrderShip) {
-		t.Fatal("expected order.ship from order_manager role")
-	}
-	if claims.HasPermission(permissions.ProductCreate) {
-		t.Fatal("did not expect product.create")
+		t.Fatal("expected order.ship")
 	}
 }

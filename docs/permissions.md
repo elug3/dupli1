@@ -2,9 +2,9 @@
 
 Authoritative specification for migrating Dupli1 from coarse service-manager **roles** to fine-grained **permissions**.
 
-**Status:** Phase 3 complete — product, inventory, order, cart, and payment services use per-route permission checks with dual-read (`permissions` claim + legacy `roles` expansion). Phase 4 (docs/OpenAPI) is next.
+**Status:** Phase 5 complete — legacy JWT `roles` claim, dual-read validators, and `PATCH …/roles` alias removed. Authorization uses the `permissions` claim only.
 
-**Related docs:** [endpoints.md](endpoints.md) (current role gates), [api.md](api.md), [current-state.md](current-state.md).
+**Related docs:** [endpoints.md](endpoints.md) (route index), [api.md](api.md), [current-state.md](current-state.md), [openapi.yaml](openapi.yaml).
 
 ---
 
@@ -36,12 +36,10 @@ Storefront **customers** are not permissions. Customer self-service stays **auth
 |-------|------|-------|
 | `sub` | string | User ID (unchanged) |
 | `type` | string | `"access"` (unchanged) |
-| `permissions` | string[] | **New.** Replaces `roles` for authorization |
+| `permissions` | string[] | Fine-grained authorization strings |
 | `exp`, `iat` | number | Unchanged |
 
 Refresh tokens keep `sub` + `type: "refresh"` only. Permissions are loaded from the database on every refresh so revocations apply on the next access token.
-
-**During dual-read (Phases 2–4):** validators accept `permissions` first; if absent, expand legacy `roles` via the mapping in [Legacy role migration](#legacy-role-migration).
 
 ### 3. Database column
 
@@ -53,10 +51,9 @@ Rationale: `roles` today stores values like `product_manager`. Reusing the colum
 
 | Endpoint | Status |
 |----------|--------|
-| `PATCH /api/v1/auth/users/:id/permissions` | **New canonical** — body `{ "permissions": ["..."], "account_type": "..." }` |
-| `PATCH /api/v1/auth/users/:id/roles` | **Deprecated alias** — accepted during dual-read; forwards to permissions handler; removed in Phase 5 |
+| `PATCH /api/v1/auth/users/:id/permissions` | Replace a user's permission list — body `{ "permissions": ["..."], "account_type": "..." }` |
 
-User objects expose `permissions` (not `roles`) in JSON responses after Phase 2.
+User objects expose `permissions` in JSON responses.
 
 Optional later: `POST /api/v1/auth/users/:id/permissions/bundles` with `{ "bundle": "catalog_editor" }` — **not in Phase 0 scope**; bundles are code-defined presets for now.
 
@@ -76,16 +73,14 @@ No other prefix wildcards (e.g. `product.variant.*` is not supported; list `prod
 
 `customer` remains implicit for accounts with **no admin permissions** (empty `permissions` array, storefront `account_type: customer`). ABAC rules key off authentication + absence of elevated permissions, not a `customer` string in the token.
 
-### 7. Backward-compatibility window
+### 7. Migration phases (complete)
 
 | Phase | Behaviour |
 |-------|-----------|
-| 2 | Auth writes `permissions` claim; DB column renamed; legacy `roles` JWT claim still issued **in addition** for one release |
-| 3 | All services dual-read `permissions` then legacy `roles` |
-| 4 | Docs and OpenAPI updated; `roles` alias endpoint deprecated |
-| 5 | Remove `roles` claim, alias endpoint, and dual-read |
-
-**Dual-read minimum:** one full release cycle after all services deploy Phase 3.
+| 2 | Auth writes `permissions` claim; DB column renamed |
+| 3 | All services enforce per-route permission checks |
+| 4 | Docs and OpenAPI aligned with permissions model |
+| 5 | Legacy JWT `roles` claim, dual-read, and alias endpoint removed |
 
 ### 8. Shared library location
 
@@ -281,7 +276,7 @@ API exposure of bundles is deferred; Phase 2 seeds and migrations use these expa
 
 ## Legacy role migration
 
-One-time mapping applied to `users.permissions` and used by dual-read JWT validators when `permissions` claim is absent.
+One-time mapping applied to `users.permissions` during database migration (`auth/pkg/bootstrap/migrate.go`).
 
 | Legacy role | Expanded permissions |
 |-------------|---------------------|
@@ -341,8 +336,8 @@ Exact SQL will live in `auth/pkg/bootstrap/migrate.go` with tests in Phase 2.
 | **1** | `shared/pkg/permissions` — catalog constants, `Has`, `ExpandLegacyRoles`, bundles (**done**) |
 | **2** | Auth: DB rename, JWT issuer, middleware, seeds, `PATCH …/permissions` (**done**) |
 | **3** | Product, inventory, order, cart, payment: per-route permission checks + dual-read (**done**) |
-| **4** | `docs/api.md`, `docs/endpoints.md`, OpenAPI specs |
-| **5** | Remove `roles` claim, deprecated endpoint, legacy constants |
+| **4** | `docs/api.md`, `docs/endpoints.md`, OpenAPI specs (**done**) |
+| **5** | Remove `roles` claim, deprecated endpoint, dual-read (**done**) |
 
 ---
 

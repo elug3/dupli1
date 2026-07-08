@@ -24,22 +24,24 @@ Each service also registers `/health` directly for internal/sidecar use.
 
 ## Auth Service
 
-| Method | Path | Auth | Description |
+| Method | Path | Permission | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/auth/health` | — | Health check |
-| `POST` | `/api/v1/auth/register` | `owner`, `admin`, `user_manager`, `customer_registrar` | Create a new user account |
+| `POST` | `/api/v1/auth/register` | `user.create` | Create a new user account |
 | `POST` | `/api/v1/auth/login` | — | Login and receive a refresh token |
 | `POST` | `/api/v1/auth/logout` | — | Invalidate the current session |
 | `POST` | `/api/v1/auth/refresh` | — | Exchange a refresh token for a new access token |
 | `GET` | `/api/v1/auth/me` | Bearer | Return the authenticated user's profile |
-| `GET` | `/api/v1/auth/users` | `owner`, `admin` | List all users |
-| `PATCH` | `/api/v1/auth/users/:id/roles` | `owner`, `admin` | Replace a user's roles (optional `account_type`) |
-| `PATCH` | `/api/v1/auth/users/:id/password` | `admin`, `user_manager` | Set a new password for a user |
-| `PATCH` | `/api/v1/auth/users/:id/status` | `admin`, `user_manager` | Activate or deactivate a user |
+| `GET` | `/api/v1/auth/users` | `user.read` | List users (filtered by auth ABAC hierarchy) |
+| `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` | Replace a user's permissions (optional `account_type`) |
+| `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` | Set a new password for a user |
+| `PATCH` | `/api/v1/auth/users/:id/status` | `user.status.update` | Activate or deactivate a user |
 
-**dupli1-web service account:** set `DUPLI1_WEB_SERVICE_EMAIL` and `DUPLI1_WEB_SERVICE_PASSWORD` on `dupli1-auth` to seed a machine user with `customer_registrar` role and `account_type` `service`. That role may register customers only (`account_type` `customer`).
+**dupli1-web service account:** set `DUPLI1_WEB_SERVICE_EMAIL` and `DUPLI1_WEB_SERVICE_PASSWORD` on `dupli1-auth` to seed a machine user with `permissions: ["user.create"]` and `account_type` `service`. That account may register customers only (`account_type` `customer`).
 
-**Account types:** `customer`, `admin`, `service` — returned on user objects as `account_type`. Distinct from RBAC `roles`.
+**Account types:** `customer`, `admin`, `service` — returned on user objects as `account_type`. Distinct from **permissions** (fine-grained authorization strings).
+
+See [permissions.md](permissions.md) for the full catalog, JWT claim shape, and auth ABAC hierarchy.
 
 ### GET /api/v1/auth/health
 
@@ -47,7 +49,7 @@ Response `200`: `ok` (plain text)
 
 ### POST /api/v1/auth/register
 
-Header: `Authorization: Bearer <access_token>` (must have `owner`, `admin`, `user_manager`, or `customer_registrar` role)
+Header: `Authorization: Bearer <access_token>` (requires `user.create`)
 
 Request:
 ```json
@@ -58,14 +60,14 @@ Request:
 }
 ```
 
-`account_type` is optional (`customer`, `admin`, or `service`); defaults to `customer`. `customer_registrar` may only use `customer`.
+`account_type` is optional (`customer`, `admin`, or `service`); defaults to `customer`. Callers with only `user.create` may register `customer` accounts only.
 
 Response `201`:
 ```json
 { "user_id": "uuid" }
 ```
 
-Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `409` user already exists, `422` invalid email/password/account_type, `500` internal error.
+Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permission, `409` user already exists, `422` invalid email/password/account_type, `500` internal error.
 
 ### POST /api/v1/auth/login
 
@@ -114,7 +116,7 @@ Response `200`:
   "user_id": "uuid",
   "email": "user@example.com",
   "account_type": "customer",
-  "roles": ["customer"],
+  "permissions": [],
   "is_active": true,
   "locked_at": null,
   "failed_login_attempts": 0
@@ -125,7 +127,7 @@ Errors: `401` missing or invalid token, `404` user not found.
 
 ### GET /api/v1/auth/users
 
-Header: `Authorization: Bearer <access_token>` (must have `owner` or `admin` role)
+Header: `Authorization: Bearer <access_token>` (requires `user.read`)
 
 Response `200`:
 ```json
@@ -135,7 +137,7 @@ Response `200`:
       "user_id": "uuid",
       "email": "user@example.com",
       "account_type": "customer",
-      "roles": ["customer"],
+      "permissions": [],
       "is_active": true,
       "locked_at": null,
       "failed_login_attempts": 0
@@ -144,27 +146,27 @@ Response `200`:
 }
 ```
 
-Errors: `401` missing or invalid token, `403` caller lacks `owner` or `admin` role, `500` internal error.
+Errors: `401` missing or invalid token, `403` caller lacks `user.read`, `500` internal error.
 
-### PATCH /api/v1/auth/users/:id/roles
+### PATCH /api/v1/auth/users/:id/permissions
 
-Header: `Authorization: Bearer <access_token>` (must have `owner` or `admin` role)
+Header: `Authorization: Bearer <access_token>` (requires `user.permissions.update`)
 
 Request:
 ```json
 {
-  "roles": ["admin", "user_manager"],
+  "permissions": ["user.password.update", "user.status.update"],
   "account_type": "admin"
 }
 ```
 
 Response `200`: user object (same shape as list item).
 
-Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `404` user not found, `422` invalid account_type, `500` internal error.
+Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permission, `404` user not found, `422` invalid account_type/permission, `500` internal error.
 
 ### PATCH /api/v1/auth/users/:id/password
 
-Header: `Authorization: Bearer <access_token>` (must have `admin` or `user_manager` role)
+Header: `Authorization: Bearer <access_token>` (requires `user.password.update`)
 
 Request:
 ```json
@@ -173,11 +175,11 @@ Request:
 
 Response `204` (no body).
 
-Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `404` user not found, `422` password too short, `500` internal error.
+Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permission, `404` user not found, `422` password too short, `500` internal error.
 
 ### PATCH /api/v1/auth/users/:id/status
 
-Header: `Authorization: Bearer <access_token>` (must have `admin` or `user_manager` role)
+Header: `Authorization: Bearer <access_token>` (requires `user.status.update`)
 
 Request:
 ```json
@@ -186,30 +188,30 @@ Request:
 
 Response `200`: user object (same shape as list item).
 
-Errors: `400` bad request, `401` missing/invalid token, `403` insufficient role, `404` user not found, `500` internal error.
+Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permission, `404` user not found, `500` internal error.
 
 ---
 
 ## Product Service
 
-| Method | Path | Auth | Description |
+| Method | Path | Permission | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/products/health` | — | Health check |
-| `GET` | `/api/v1/products` | optional | Search **parent styles** only (no color duplicates); managers see drafts/cost |
+| `GET` | `/api/v1/products` | optional `product.read` | Search **parent styles**; public active-only; `product.read` adds drafts/cost |
 | `GET` | `/api/v1/products/{id}` | — | Parent PDP with `variants[]`, `availableColors`, `availableSizes` |
 | `POST` | `/api/v1/coupons/redeem` | — | Redeem a coupon code |
-| `POST` | `/api/v1/products` | `product_manager`, `admin`, `owner` | Create parent (optional legacy color/price seeds default variant) |
-| `PUT` | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | Update parent |
-| `DELETE` | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | Delete parent (cascades variants) |
-| `POST` | `/api/v1/products/{id}/images` | `product_manager`, `admin`, `owner` | Upload image to default variant |
-| `POST` | `/api/v1/products/{id}/variants` | `product_manager`, `admin`, `owner` | Create variant (SKU) |
-| `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product_manager`, `admin`, `owner` | Update variant |
-| `DELETE` | `/api/v1/products/{id}/variants/{sku}` | `product_manager`, `admin`, `owner` | Delete variant |
-| `POST` | `/api/v1/products/{id}/variants/{sku}/images` | `product_manager`, `admin`, `owner` | Upload image for variant |
-| `GET` | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | List coupons |
-| `POST` | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | Create coupon |
-| `PUT` | `/api/v1/coupons/{code}` | `product_manager`, `admin`, `owner` | Update coupon |
-| `DELETE` | `/api/v1/coupons/{code}` | `product_manager`, `admin`, `owner` | Delete coupon |
+| `POST` | `/api/v1/products` | `product.create` | Create parent |
+| `PUT` | `/api/v1/products/{id}` | `product.update` | Update parent |
+| `DELETE` | `/api/v1/products/{id}` | `product.delete` | Delete parent (cascades variants) |
+| `POST` | `/api/v1/products/{id}/images` | `product.image.upload` | Upload image to default variant |
+| `POST` | `/api/v1/products/{id}/variants` | `product.variant.create` | Create variant (SKU) |
+| `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` | Update variant |
+| `DELETE` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` | Delete variant |
+| `POST` | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | Upload image for variant |
+| `GET` | `/api/v1/coupons` | `coupon.read` | List coupons |
+| `POST` | `/api/v1/coupons` | `coupon.create` | Create coupon |
+| `PUT` | `/api/v1/coupons/{code}` | `coupon.update` | Update coupon |
+| `DELETE` | `/api/v1/coupons/{code}` | `coupon.delete` | Delete coupon |
 
 Public search defaults to `status = active` on the **parent**. Query filters: `category`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** with inventory. See [product-variants-plan.md](product-variants-plan.md).
 
@@ -266,7 +268,7 @@ Public variant lookup by SKU. Returns `404` when the variant or parent product i
 | `PUT` | `/api/v1/cart/items` | Bearer | Replace all cart items |
 | `POST` | `/api/v1/cart/items` | Bearer | Add or update one item |
 | `DELETE` | `/api/v1/cart/items/{sku}` | Bearer | Remove one item |
-| `GET` | `/api/v1/carts/{customer_id}` | Bearer (admin) | Get a customer's cart |
+| `GET` | `/api/v1/carts/{customer_id}` | `cart.read` | Get a customer's cart |
 
 See [cart-service.md](cart-service.md) for architecture, boundaries with inventory/order, and checkout handoff.
 
@@ -274,11 +276,11 @@ See [cart-service.md](cart-service.md) for architecture, boundaries with invento
 
 ## Payment Service
 
-| Method | Path | Auth | Description |
+| Method | Path | Permission / rule | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/payments/health` | — | Health check |
-| `POST` | `/api/v1/payments` | Bearer | Start Stripe Checkout for a pending order |
-| `GET` | `/api/v1/payments/{id}` | Bearer | Payment status |
+| `POST` | `/api/v1/payments` | ABAC / `payment.create` | Start Stripe Checkout for a pending order |
+| `GET` | `/api/v1/payments/{id}` | ABAC / `payment.read.all` | Payment status |
 | `POST` | `/api/v1/payments/webhooks/stripe` | Stripe signature | Webhook handler |
 | `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (no Stripe key): mark payment succeeded |
 
@@ -288,15 +290,15 @@ See [payment-service.md](payment-service.md) for Stripe redirect flow, 5-minute 
 
 ## Inventory Service
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/v1/inventory/health` | Health check |
-| `GET` | `/api/v1/inventory/{sku}` | Get a stock item by SKU |
-| `PUT` | `/api/v1/inventory/{sku}` | Create or overwrite stock quantity for a SKU |
-| `POST` | `/api/v1/inventory/{sku}/adjust` | Add or subtract stock quantity (delta) |
-| `POST` | `/api/v1/inventory/reservations` | Create a reservation |
-| `POST` | `/api/v1/inventory/reservations/{id}/commit` | Commit a reservation (deducts stock) |
-| `POST` | `/api/v1/inventory/reservations/{id}/release` | Release a reservation (restores stock) |
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/inventory/health` | — | Health check |
+| `GET` | `/api/v1/inventory/{sku}` | — | Get a stock item by SKU |
+| `PUT` | `/api/v1/inventory/{sku}` | `inventory.stock.write` | Create or overwrite stock quantity |
+| `POST` | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` | Add or subtract stock (delta) |
+| `POST` | `/api/v1/inventory/reservations` | `inventory.reservation.manage` | Create a reservation |
+| `POST` | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` | Commit a reservation |
+| `POST` | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` | Release a reservation |
 
 ### GET /api/v1/inventory/health
 
@@ -372,25 +374,23 @@ Both return `200` with the updated reservation object. Errors: `404` not found, 
 
 ## Order Service
 
-Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SECRET` is set on the order service (RS256 via auth JWKS in Compose). Customers may only use their own `customer_id`. See [checkout-session.md](checkout-session.md).
+Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SECRET` is set (RS256 via auth JWKS in Compose). Storefront callers use ABAC on `customer_id` / session owner; `order.create` and `order.read.all` bypass ABAC. See [checkout-session.md](checkout-session.md) and [permissions.md](permissions.md).
 
-| Method | Path | Auth | Description |
+| Method | Path | Permission / rule | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/orders/health` | — | Health check |
-| `POST` | `/api/v1/checkout/sessions` | Bearer* | Create checkout session |
-| `GET` | `/api/v1/checkout/sessions/{id}` | Bearer* | Get session |
-| `PUT` | `/api/v1/checkout/sessions/{id}/items` | Bearer* | Replace all items |
-| `POST` | `/api/v1/checkout/sessions/{id}/items` | Bearer* | Add or update one item |
-| `DELETE` | `/api/v1/checkout/sessions/{id}/items/{sku}` | Bearer* | Remove item |
-| `POST` | `/api/v1/checkout/sessions/{id}/coupon` | Bearer* | Apply coupon |
-| `POST` | `/api/v1/checkout/sessions/{id}/complete` | Bearer* | Complete checkout |
-| `POST` | `/api/v1/orders` | Bearer* | Create a new order |
-| `GET` | `/api/v1/orders?customer_id={id}` | Bearer* | List all orders for a customer |
-| `GET` | `/api/v1/orders/{id}` | Bearer* | Get a single order |
-| `POST` | `/api/v1/orders/{id}/ship` | Bearer* (`order_manager`, `admin`, `owner`) | Ship order (`paid` → `in_transit`, commit stock) |
-| `PUT` | `/api/v1/orders/{id}/status` | Bearer* | Transition order status (`canceled`, `fulfilled`) |
-
-\* Required when `AUTH_JWKS_URL` or `JWT_SECRET` is configured; optional in tests with no validator.
+| `POST` | `/api/v1/checkout/sessions` | ABAC / `order.create` | Create checkout session |
+| `GET` | `/api/v1/checkout/sessions/{id}` | ABAC / `order.read.all` | Get session |
+| `PUT` | `/api/v1/checkout/sessions/{id}/items` | ABAC / `order.create` | Replace all items |
+| `POST` | `/api/v1/checkout/sessions/{id}/items` | ABAC / `order.create` | Add or update one item |
+| `DELETE` | `/api/v1/checkout/sessions/{id}/items/{sku}` | ABAC / `order.create` | Remove item |
+| `POST` | `/api/v1/checkout/sessions/{id}/coupon` | ABAC / `order.create` | Apply coupon |
+| `POST` | `/api/v1/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout |
+| `POST` | `/api/v1/orders` | ABAC / `order.create` | Create a new order |
+| `GET` | `/api/v1/orders?customer_id={id}` | ABAC / `order.read.all` | List orders for a customer |
+| `GET` | `/api/v1/orders/{id}` | ABAC / `order.read.all` | Get a single order |
+| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | Ship order (`paid` → `in_transit`, commit stock) |
+| `PUT` | `/api/v1/orders/{id}/status` | `order.status.update` | Cancel or fulfill |
 
 ### GET /api/v1/orders/health
 
@@ -426,7 +426,7 @@ Response `200`: order object.
 
 ### PUT /api/v1/orders/{id}/status
 
-`order_manager` / `admin` / `owner` may cancel or fulfill. **`pending` → `paid` is set only by the payment event consumer** (not this endpoint).
+Requires `order.status.update`. **`pending` → `paid` is set only by the payment event consumer** (not this endpoint).
 
 Request:
 ```json
@@ -442,7 +442,7 @@ Response `200`: updated order object. Errors: `400` invalid transition, `404` no
 
 ### POST /api/v1/orders/{id}/ship
 
-Moves a **`paid`** order to **`in_transit`** and commits inventory reservations. Requires `order_manager`, `admin`, or `owner`.
+Moves a **`paid`** order to **`in_transit`** and commits inventory reservations. Requires `order.ship`.
 
 Response `200`: updated order object with `shipped_by`, `shipped_at`. Errors: `400` invalid state, `404` not found.
 

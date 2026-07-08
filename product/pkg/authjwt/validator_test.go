@@ -46,12 +46,12 @@ func TestHMACValidatorRejectsRefreshType(t *testing.T) {
 	}
 }
 
-func TestHMACValidatorExpandsLegacyRoles(t *testing.T) {
+func TestHMACValidatorReadsPermissionsClaim(t *testing.T) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":   "user-2",
-		"type":  "access",
-		"roles": []string{"product_manager", "customer"},
-		"exp":   time.Now().Add(time.Hour).Unix(),
+		"sub":         "user-2",
+		"type":        "access",
+		"permissions": []string{permissions.ProductAll, permissions.CouponAll},
+		"exp":         time.Now().Add(time.Hour).Unix(),
 	})
 	signed, err := token.SignedString([]byte("test-secret"))
 	if err != nil {
@@ -64,14 +64,14 @@ func TestHMACValidatorExpandsLegacyRoles(t *testing.T) {
 		t.Fatalf("ValidateAccessToken: %v", err)
 	}
 	if !claims.HasPermission(permissions.ProductCreate) {
-		t.Fatal("expected product.create from product_manager role")
+		t.Fatal("expected product.create from product.* wildcard")
 	}
 	if claims.HasPermission(permissions.OrderShip) {
 		t.Fatal("did not expect order.ship")
 	}
 }
 
-func TestHMACValidatorPrefersPermissionsClaim(t *testing.T) {
+func TestHMACValidatorIgnoresLegacyRolesClaim(t *testing.T) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":         "user-3",
 		"type":        "access",
@@ -93,7 +93,7 @@ func TestHMACValidatorPrefersPermissionsClaim(t *testing.T) {
 		t.Fatal("expected coupon.read from permissions claim")
 	}
 	if claims.HasPermission(permissions.ProductCreate) {
-		t.Fatal("permissions claim should take precedence over legacy roles")
+		t.Fatal("legacy roles claim must not grant permissions")
 	}
 }
 

@@ -109,7 +109,7 @@ The cart owner is always **`sub` from the JWT** — clients do not send `custome
 | Route | Identity |
 |-------|----------|
 | `/api/v1/cart` | `claims.UserID` from token |
-| `/api/v1/carts/{customer_id}` | Path id; requires `order_manager`, `admin`, or `owner` |
+| `/api/v1/carts/{customer_id}` | Path id; requires `cart.read` |
 
 Guest / anonymous carts are **not implemented** yet (planned phase 2).
 

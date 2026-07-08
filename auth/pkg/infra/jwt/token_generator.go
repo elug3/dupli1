@@ -32,7 +32,7 @@ func NewTokenGeneratorWithType(secret string, expirySeconds int64, tokenType str
 	}
 }
 
-// Generate generates a JWT token. Access tokens include permissions and legacy roles;
+// Generate generates a JWT token. Access tokens include permissions;
 // refresh tokens include only sub, type, exp, and iat.
 func (tg *TokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string) (string, error) {
 	claims := buildMapClaims(userID, tg.tokenType, time.Now().Add(tg.expiryDuration), userPermissions)
@@ -81,9 +81,9 @@ func (tg *TokenGenerator) Validate(ctx context.Context, tokenString string) (por
 		return ports.Claims{}, autherrors.ErrInvalidToken
 	}
 
-	perms, roles := claimsFromMap(mapClaims)
+	perms := claimsFromMap(mapClaims)
 
-	return ports.Claims{UserID: userID, Permissions: perms, Roles: roles}, nil
+	return ports.Claims{UserID: userID, Permissions: perms}, nil
 }
 
 func validateTokenType(claims jwt.MapClaims, expected string) error {

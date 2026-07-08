@@ -8,6 +8,7 @@ import (
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/handler"
 	"github.com/elug3/dupli1/product/pkg/infra/memory"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 func TestAdminListsProductsAtDocumentedPath(t *testing.T) {
@@ -17,7 +18,7 @@ func TestAdminListsProductsAtDocumentedPath(t *testing.T) {
 		{ID: "BAG-002", Name: "Draft Tote", Brand: "Baggu", Status: "draft"},
 	}
 	mux := newAccessControlMux(store)
-	token := makeAccessToken(t, "admin-1", []string{"admin"})
+	token := makeAccessToken(t, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
 
 	w := serve(t, mux, http.MethodGet, handler.RouteProducts, token, nil)
 	if w.Code != http.StatusOK {
@@ -38,7 +39,7 @@ func TestAdminListsProductsAtDocumentedPath(t *testing.T) {
 
 func TestAdminCreatesProductAtDocumentedPath(t *testing.T) {
 	mux := newAccessControlMux(memory.NewProductStore())
-	token := makeAccessToken(t, "admin-1", []string{"admin"})
+	token := makeAccessToken(t, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
 	body := domain.Product{Name: "Tote", Brand: "Baggu", Price: 45}
 
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
@@ -53,7 +54,7 @@ func TestProductsAllIsNotAdminListEndpoint(t *testing.T) {
 		{ID: "BAG-001", Name: "Canvas Tote", Brand: "Baggu", Status: "active"},
 	}
 	mux := newAccessControlMux(store)
-	token := makeAccessToken(t, "admin-1", []string{"admin"})
+	token := makeAccessToken(t, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
 
 	w := serve(t, mux, http.MethodGet, "/api/v1/products/all", token, nil)
 	if w.Code != http.StatusNotFound {

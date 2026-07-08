@@ -47,7 +47,7 @@ func TestRSA_RoundtripPreservesClaims(t *testing.T) {
 	}
 }
 
-func TestRSA_AdminPermissionsIncludeLegacyRoles(t *testing.T) {
+func TestRSA_AdminPermissionsPreserved(t *testing.T) {
 	gen := jwtinfra.NewRSATokenGenerator(testRSAKey, "kid", 3600)
 	ctx := context.Background()
 
@@ -64,12 +64,9 @@ func TestRSA_AdminPermissionsIncludeLegacyRoles(t *testing.T) {
 	if !permissions.Has(claims.Permissions, permissions.AdminAll) {
 		t.Fatalf("Permissions = %v", claims.Permissions)
 	}
-	if len(claims.Roles) == 0 {
-		t.Fatal("expected legacy roles in access token")
-	}
 }
 
-func TestRSA_EmptyPermissionsInfersCustomerRole(t *testing.T) {
+func TestRSA_EmptyPermissionsForCustomer(t *testing.T) {
 	gen := jwtinfra.NewRSATokenGenerator(testRSAKey, "kid", 3600)
 	ctx := context.Background()
 
@@ -82,8 +79,8 @@ func TestRSA_EmptyPermissionsInfersCustomerRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
-	if len(claims.Roles) != 1 || claims.Roles[0] != permissions.RoleCustomer {
-		t.Fatalf("Roles = %v, want [customer]", claims.Roles)
+	if len(claims.Permissions) != 0 {
+		t.Fatalf("Permissions = %v, want empty", claims.Permissions)
 	}
 }
 

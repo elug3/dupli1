@@ -96,7 +96,7 @@ func GenerateRSAKey(bits int) (*rsa.PrivateKey, error) {
 	return rsa.GenerateKey(rand.Reader, bits)
 }
 
-// Generate issues a signed RS256 JWT. Access tokens include permissions and legacy roles;
+// Generate issues a signed RS256 JWT. Access tokens include permissions;
 // refresh tokens include only sub, type, exp, and iat.
 func (g *RSATokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string) (string, error) {
 	claims := buildMapClaims(userID, g.tokenType, time.Now().Add(g.expiryDuration), userPermissions)
@@ -144,9 +144,9 @@ func (g *RSATokenGenerator) Validate(ctx context.Context, tokenString string) (p
 		return ports.Claims{}, autherrors.ErrInvalidToken
 	}
 
-	perms, roles := claimsFromMap(mapClaims)
+	perms := claimsFromMap(mapClaims)
 
-	return ports.Claims{UserID: userID, Permissions: perms, Roles: roles}, nil
+	return ports.Claims{UserID: userID, Permissions: perms}, nil
 }
 
 // PublicJWKS returns the JWKS document for the public key.
