@@ -11,17 +11,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func signRS256AccessToken(t *testing.T, key *rsa.PrivateKey, kid, userID string, roles []string) string {
+func signRS256AccessToken(t *testing.T, key *rsa.PrivateKey, kid, userID string, perms []string) string {
 	t.Helper()
 	claims := jwt.MapClaims{
-		"sub":   userID,
-		"roles": roles,
-		"type":  "access",
-		"exp":   time.Now().Add(time.Hour).Unix(),
-		"iat":   time.Now().Unix(),
+		"sub":         userID,
+		"permissions": perms,
+		"type":        "access",
+		"exp":         time.Now().Add(time.Hour).Unix(),
+		"iat":         time.Now().Unix(),
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	tok.Header["kid"] = kid
@@ -48,7 +49,7 @@ func publicJWKS(key *rsa.PrivateKey, kid string) []byte {
 	return b
 }
 
-func TestJWKSValidatorAcceptsAdminRole(t *testing.T) {
+func TestJWKSValidatorReadsAdminPermissions(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
@@ -62,16 +63,16 @@ func TestJWKSValidatorAcceptsAdminRole(t *testing.T) {
 	defer srv.Close()
 
 	validator := NewJWKSValidator(srv.URL)
-	token := signRS256AccessToken(t, key, kid, "admin-1", []string{"admin"})
+	token := signRS256AccessToken(t, key, kid, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
 
 	claims, err := validator.ValidateAccessToken(token)
 	if err != nil {
 		t.Fatalf("ValidateAccessToken: %v", err)
 	}
-	if !claims.HasRole("admin") {
-		t.Fatalf("roles = %v, want admin", claims.Roles)
+	if !claims.HasPermission(permissions.ProductCreate) {
+		t.Fatalf("admin should grant product.create, got %v", claims.Permissions)
 	}
-	if !claims.HasRole("product_manager", "admin", "owner") {
-		t.Fatalf("admin should satisfy product manager roles, got %v", claims.Roles)
+	if !claims.HasPermission(permissions.CouponRead) {
+		t.Fatalf("admin should grant coupon.read, got %v", claims.Permissions)
 	}
 }

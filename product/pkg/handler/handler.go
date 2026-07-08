@@ -9,8 +9,8 @@ import (
 
 	"github.com/elug3/dupli1/product/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/domain"
-	"github.com/elug3/dupli1/product/pkg/middleware"
 	"github.com/elug3/dupli1/product/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 type Handler struct {
@@ -117,7 +117,7 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := h.extractFilters(r)
 	public := true
-	if claims, ok := authjwt.FromContext(r.Context()); ok && claims.HasRole(middleware.ProductManagerRoles...) {
+	if claims, ok := authjwt.FromContext(r.Context()); ok && claims.HasPermission(permissions.ProductRead) {
 		public = false
 	} else {
 		delete(filter, "status")

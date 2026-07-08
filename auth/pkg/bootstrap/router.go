@@ -63,7 +63,6 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 		userPermissions := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserPermissionsUpdate))
 		{
 			userPermissions.PATCH("/users/:id/permissions", h.SetUserPermissions)
-			userPermissions.PATCH("/users/:id/roles", h.SetUserPermissions) // deprecated alias
 		}
 
 		userMgmtPassword := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserPasswordUpdate))

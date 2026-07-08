@@ -24,13 +24,12 @@ Authorization: Bearer <access_token>
 |-------|------|-------|
 | `sub` | string | User ID |
 | `type` | string | `"access"` |
-| `permissions` | string[] | **Primary authorization.** Fine-grained strings such as `product.create`, `order.ship`, `*` |
-| `roles` | string[] | **Deprecated (dual-read).** Legacy role names inferred from permissions; removed in Phase 5 |
+| `permissions` | string[] | Fine-grained authorization strings such as `product.create`, `order.ship`, `*` |
 | `exp`, `iat` | number | Standard JWT timestamps |
 
 Refresh tokens contain `sub` and `type: "refresh"` only. Permissions are loaded from the database on every refresh.
 
-Protected routes check the `permissions` claim (with legacy `roles` expansion as fallback during dual-read). See [permissions.md](permissions.md) for the full catalog and endpoint matrix.
+Protected routes check the `permissions` claim. See [permissions.md](permissions.md) for the full catalog and endpoint matrix.
 
 Wildcards: `*` (everything), `admin.*` (user-admin domain), `{resource}.*` (e.g. `product.*`).
 
@@ -288,22 +287,6 @@ Replace the permission list for a user. Requires `user.permissions.update`. Subj
 | `403` | Caller lacks `user.permissions.update` or may not manage this user |
 | `404` | User not found |
 | `422` | Invalid `account_type` or permission string |
-
----
-
-### `PATCH /api/v1/auth/users/{id}/roles` (deprecated)
-
-**Deprecated alias** for `PATCH …/permissions`. Accepts `{ "roles": ["…"] }` and expands legacy role names to permissions. Removed in Phase 5.
-
-**Request body**
-```json
-{
-  "roles": ["admin"],
-  "account_type": "admin"
-}
-```
-
-Same response and errors as `…/permissions`.
 
 ---
 
@@ -701,7 +684,6 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | POST | `/api/v1/auth/logout` | — | auth |
 | GET | `/api/v1/auth/users` | `user.read` | auth |
 | PATCH | `/api/v1/auth/users/{id}/permissions` | `user.permissions.update` | auth |
-| PATCH | `/api/v1/auth/users/{id}/roles` | `user.permissions.update` (deprecated alias) | auth |
 | PATCH | `/api/v1/auth/users/{id}/password` | `user.password.update` | auth |
 | PATCH | `/api/v1/auth/users/{id}/status` | `user.status.update` | auth |
 | GET | `/api/v1/products/health` | — | product |

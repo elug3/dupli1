@@ -6,7 +6,6 @@ import "context"
 type Claims struct {
 	UserID      string
 	Permissions []string
-	Roles       []string // legacy JWT claim during dual-read migration
 }
 
 // TokenGenerator defines the interface for token generation and validation.

@@ -3,6 +3,7 @@ module github.com/elug3/dupli1/cart
 go 1.26.3
 
 require (
+	github.com/elug3/dupli1/shared v0.0.0-00010101000000-000000000000
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v4 v4.18.3
 )
@@ -19,3 +20,5 @@ require (
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 )
+
+replace github.com/elug3/dupli1/shared => ../shared

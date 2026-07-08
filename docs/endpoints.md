@@ -34,7 +34,6 @@ Each service also registers `/health` directly for internal/sidecar use.
 | `GET` | `/api/v1/auth/me` | Bearer | Return the authenticated user's profile |
 | `GET` | `/api/v1/auth/users` | `user.read` | List users (filtered by auth ABAC hierarchy) |
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` | Replace a user's permissions (optional `account_type`) |
-| `PATCH` | `/api/v1/auth/users/:id/roles` | `user.permissions.update` | **Deprecated alias** — expands legacy roles to permissions |
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` | Set a new password for a user |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `user.status.update` | Activate or deactivate a user |
 
@@ -164,22 +163,6 @@ Request:
 Response `200`: user object (same shape as list item).
 
 Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permission, `404` user not found, `422` invalid account_type/permission, `500` internal error.
-
-### PATCH /api/v1/auth/users/:id/roles (deprecated)
-
-**Deprecated alias** for `PATCH …/permissions`. Header: `Authorization: Bearer <access_token>` (requires `user.permissions.update`)
-
-Request:
-```json
-{
-  "roles": ["admin"],
-  "account_type": "admin"
-}
-```
-
-Response `200`: user object (same shape as list item).
-
-Errors: same as `…/permissions`.
 
 ### PATCH /api/v1/auth/users/:id/password
 

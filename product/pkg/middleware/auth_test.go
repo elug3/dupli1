@@ -8,18 +8,19 @@ import (
 
 	"github.com/elug3/dupli1/product/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/middleware"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
 
 const testSecret = "middleware-test-secret"
 
-func makeAccessToken(t *testing.T, userID string, roles []string) string {
+func makeAccessToken(t *testing.T, userID string, perms []string) string {
 	t.Helper()
 	claims := jwt.MapClaims{
-		"sub":   userID,
-		"roles": roles,
-		"type":  "access",
-		"exp":   time.Now().Add(time.Hour).Unix(),
+		"sub":         userID,
+		"permissions": perms,
+		"type":        "access",
+		"exp":         time.Now().Add(time.Hour).Unix(),
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := tok.SignedString([]byte(testSecret))
@@ -47,13 +48,13 @@ func TestRequireAuthRejectsMissingToken(t *testing.T) {
 	}
 }
 
-func TestRequireAnyRoleAllowsProductManager(t *testing.T) {
+func TestRequireAnyPermissionAllowsProductManager(t *testing.T) {
 	validator := authjwt.NewHMACValidator(testSecret)
-	token := makeAccessToken(t, "mgr-1", []string{"product_manager"})
+	token := makeAccessToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleProductManager}))
 	called := false
 
 	handler := middleware.RequireAuth(validator,
-		middleware.RequireAnyRole(middleware.ProductManagerRoles...)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		middleware.RequireAnyPermission(permissions.ProductCreate)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			called = true
 		})))
 
@@ -70,13 +71,13 @@ func TestRequireAnyRoleAllowsProductManager(t *testing.T) {
 	}
 }
 
-func TestRequireAnyRoleAllowsOwner(t *testing.T) {
+func TestRequireAnyPermissionAllowsOwner(t *testing.T) {
 	validator := authjwt.NewHMACValidator(testSecret)
-	token := makeAccessToken(t, "owner-1", []string{"owner", "product_manager"})
+	token := makeAccessToken(t, "owner-1", []string{permissions.All})
 	called := false
 
 	handler := middleware.RequireAuth(validator,
-		middleware.RequireAnyRole(middleware.ProductManagerRoles...)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		middleware.RequireAnyPermission(permissions.ProductCreate)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			called = true
 		})))
 
@@ -93,13 +94,13 @@ func TestRequireAnyRoleAllowsOwner(t *testing.T) {
 	}
 }
 
-func TestRequireAnyRoleRejectsCustomer(t *testing.T) {
+func TestRequireAnyPermissionRejectsCustomer(t *testing.T) {
 	validator := authjwt.NewHMACValidator(testSecret)
-	token := makeAccessToken(t, "cust-1", []string{"customer"})
+	token := makeAccessToken(t, "cust-1", nil)
 	called := false
 
 	handler := middleware.RequireAuth(validator,
-		middleware.RequireAnyRole(middleware.ProductManagerRoles...)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		middleware.RequireAnyPermission(permissions.ProductCreate)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			called = true
 		})))
 

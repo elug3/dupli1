@@ -8,36 +8,38 @@ import (
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/handler"
 	"github.com/elug3/dupli1/product/pkg/infra/memory"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 func TestAdminListsProductsAtDocumentedPath(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BAG-001", Name: "Canvas Tote", Brand: "Baggu", Status: "active", Cost: 20},
+		{ID: "BAG-001", Name: "Canvas Tote", Brand: "Baggu", Status: "active"},
+		{ID: "BAG-002", Name: "Draft Tote", Brand: "Baggu", Status: "draft"},
 	}
 	mux := newAccessControlMux(store)
-	token := makeAccessToken(t, "admin-1", []string{"admin"})
+	token := makeAccessToken(t, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
 
 	w := serve(t, mux, http.MethodGet, handler.RouteProducts, token, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET /api/v1/products: status=%d, want 200; body=%s", w.Code, w.Body.String())
 	}
 
-	var products []domain.Product
-	if err := json.NewDecoder(w.Body).Decode(&products); err != nil {
+	var resp struct {
+		Total   int               `json:"total"`
+		Results []domain.Product `json:"results"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(products) != 1 {
-		t.Fatalf("len(products) = %d, want 1", len(products))
-	}
-	if products[0].Cost != 20 {
-		t.Fatalf("cost = %v, want admin list to include cost", products[0].Cost)
+	if resp.Total < 2 {
+		t.Fatalf("admin search total = %d, want at least 2 (includes drafts)", resp.Total)
 	}
 }
 
 func TestAdminCreatesProductAtDocumentedPath(t *testing.T) {
 	mux := newAccessControlMux(memory.NewProductStore())
-	token := makeAccessToken(t, "admin-1", []string{"admin"})
+	token := makeAccessToken(t, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
 	body := domain.Product{Name: "Tote", Brand: "Baggu", Price: 45}
 
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
@@ -52,9 +54,8 @@ func TestProductsAllIsNotAdminListEndpoint(t *testing.T) {
 		{ID: "BAG-001", Name: "Canvas Tote", Brand: "Baggu", Status: "active"},
 	}
 	mux := newAccessControlMux(store)
-	token := makeAccessToken(t, "admin-1", []string{"admin"})
+	token := makeAccessToken(t, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
 
-	// /api/v1/products/all is not documented; it falls through to the public PDP route.
 	w := serve(t, mux, http.MethodGet, "/api/v1/products/all", token, nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("GET /api/v1/products/all: status=%d, want 404", w.Code)

@@ -13,6 +13,7 @@ import (
 	"github.com/elug3/dupli1/product/pkg/middleware"
 	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 // App holds wired product service dependencies and the HTTP handler.
@@ -75,27 +76,25 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	protect := func(next http.Handler) http.Handler {
-		return middleware.RequireAuth(validator,
-			middleware.RequireAnyRole(middleware.ProductManagerRoles...)(next))
+	requirePerm := func(perm string, next http.Handler) http.Handler {
+		return middleware.RequireAuth(validator, middleware.RequireAnyPermission(perm)(next))
 	}
 
 	mux.Handle("GET "+handler.RouteProducts, middleware.OptionalAuth(validator, h.SearchProductsHandler()))
-	mux.Handle("POST "+handler.RouteProducts, protect(h.CreateProductHandler()))
-	mux.Handle("PUT "+handler.RouteProductByID, protect(h.SingleProductHandler()))
-	mux.Handle("DELETE "+handler.RouteProductByID, protect(h.SingleProductHandler()))
-	mux.Handle("POST "+handler.RouteProductImages, protect(h.UploadImageHandler()))
+	mux.Handle("POST "+handler.RouteProducts, requirePerm(permissions.ProductCreate, h.CreateProductHandler()))
+	mux.Handle("PUT "+handler.RouteProductByID, requirePerm(permissions.ProductUpdate, h.SingleProductHandler()))
+	mux.Handle("DELETE "+handler.RouteProductByID, requirePerm(permissions.ProductDelete, h.SingleProductHandler()))
+	mux.Handle("POST "+handler.RouteProductImages, requirePerm(permissions.ProductImageUpload, h.UploadImageHandler()))
 
-	mux.Handle("POST "+handler.RouteVariants, protect(h.CreateVariantHandler()))
-	mux.Handle("PUT "+handler.RouteVariantBySKU, protect(h.VariantBySKUHandler()))
-	mux.Handle("DELETE "+handler.RouteVariantBySKU, protect(h.VariantBySKUHandler()))
-	mux.Handle("POST "+handler.RouteVariantImages, protect(h.UploadVariantImageHandler()))
+	mux.Handle("POST "+handler.RouteVariants, requirePerm(permissions.ProductVariantCreate, h.CreateVariantHandler()))
+	mux.Handle("PUT "+handler.RouteVariantBySKU, requirePerm(permissions.ProductVariantUpdate, h.VariantBySKUHandler()))
+	mux.Handle("DELETE "+handler.RouteVariantBySKU, requirePerm(permissions.ProductVariantDelete, h.VariantBySKUHandler()))
+	mux.Handle("POST "+handler.RouteVariantImages, requirePerm(permissions.ProductImageUpload, h.UploadVariantImageHandler()))
 
-
-	mux.Handle("GET "+handler.RouteCoupons, protect(http.HandlerFunc(h.ListCoupons)))
-	mux.Handle("POST "+handler.RouteCoupons, protect(http.HandlerFunc(h.CreateCoupon)))
-	mux.Handle("PUT "+handler.RouteCouponByCode, protect(http.HandlerFunc(h.UpdateCoupon)))
-	mux.Handle("DELETE "+handler.RouteCouponByCode, protect(http.HandlerFunc(h.DeleteCoupon)))
+	mux.Handle("GET "+handler.RouteCoupons, requirePerm(permissions.CouponRead, http.HandlerFunc(h.ListCoupons)))
+	mux.Handle("POST "+handler.RouteCoupons, requirePerm(permissions.CouponCreate, http.HandlerFunc(h.CreateCoupon)))
+	mux.Handle("PUT "+handler.RouteCouponByCode, requirePerm(permissions.CouponUpdate, http.HandlerFunc(h.UpdateCoupon)))
+	mux.Handle("DELETE "+handler.RouteCouponByCode, requirePerm(permissions.CouponDelete, http.HandlerFunc(h.DeleteCoupon)))
 
 	return &App{
 		Handler:       mux,

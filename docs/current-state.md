@@ -39,12 +39,12 @@ See [service-layout.md](service-layout.md) for details.
   - Login returns a **refresh token**; `POST /refresh` returns a short-lived **access token** (`token` field)
   - RS256 JWT + JWKS at `/api/v1/auth/.well-known/jwks.json`
   - Access tokens include `type: "access"`; refresh tokens include `type: "refresh"`
-  - Fine-grained **permissions** stored on users (`users.permissions TEXT[]`); JWT access tokens include `permissions` claim (+ legacy `roles` for dual-read until Phase 5)
+  - Fine-grained **permissions** stored on users (`users.permissions TEXT[]`); JWT access tokens include `permissions` claim only
   - Permission constants and evaluation in `shared/pkg/permissions` (`github.com/elug3/dupli1/shared`)
   - Wildcards: `*`, `admin.*`, `{resource}.*` (e.g. `product.*`)
   - Account types: `customer`, `admin`, `service` (JSON field `account_type`; distinct from permissions)
   - Register requires `user.create` (not public); auth ABAC hierarchy governs who may manage whom
-  - User admin at `/api/v1/auth/users`; canonical update via `PATCH …/permissions` (`…/roles` deprecated alias)
+  - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `admin`)
   - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`)
   - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage` (`DUPLI1_ORDER_SERVICE_*`)
@@ -60,7 +60,7 @@ See [service-layout.md](service-layout.md) for details.
   - Parent (style) + variant (SKU) model: search returns parents only (no color duplicates)
   - Public: `GET /api/v1/products` (optional `product.read` widens view), `GET /api/v1/products/{id}`, coupon redeem
   - Admin: per-route permissions (`product.create`, `coupon.read`, …) — see [permissions.md](permissions.md)
-  - Protected routes validate RS256 via `AUTH_JWKS_URL`; dual-read `permissions` then legacy `roles`
+  - Protected routes validate RS256 via `AUTH_JWKS_URL`; authorization from `permissions` claim
   - Inline schema migration + variant backfill on startup
   - Plan: [product-variants-plan.md](product-variants-plan.md)
 - **Tests:** `cd product && go test ./...`

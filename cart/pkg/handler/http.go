@@ -10,6 +10,7 @@ import (
 	"github.com/elug3/dupli1/cart/pkg/domain"
 	"github.com/elug3/dupli1/cart/pkg/ports"
 	"github.com/elug3/dupli1/cart/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
 type AccessTokenValidator interface {
@@ -163,8 +164,8 @@ func (h *Handler) adminCart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims, _ := authjwt.FromContext(r.Context())
-	if h.jwtValidator != nil && !claims.HasRole("order_manager", "admin", "owner") {
-		respondError(w, http.StatusForbidden, "forbidden: insufficient role")
+	if h.jwtValidator != nil && !claims.HasPermission(permissions.CartRead) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
 		return
 	}
 

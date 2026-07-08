@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -19,20 +20,13 @@ type contextKey struct{}
 
 // Claims holds the verified identity extracted from a JWT.
 type Claims struct {
-	UserID string
-	Roles  []string
+	UserID      string
+	Permissions []string
 }
 
-// HasRole reports whether any of the given roles is present in the claims.
-func (c Claims) HasRole(roles ...string) bool {
-	for _, want := range roles {
-		for _, have := range c.Roles {
-			if have == want {
-				return true
-			}
-		}
-	}
-	return false
+// HasPermission reports whether any of the given permissions is granted.
+func (c Claims) HasPermission(perms ...string) bool {
+	return permissions.HasAny(c.Permissions, perms...)
 }
 
 // WithClaims stores claims in the context.
@@ -225,7 +219,11 @@ func claimsFromMap(mapClaims jwt.MapClaims) (Claims, error) {
 	if err != nil {
 		return Claims{}, err
 	}
-	return Claims{UserID: userID, Roles: extractRoles(mapClaims)}, nil
+	rawPerms := extractStringSlice(mapClaims, "permissions")
+	return Claims{
+		UserID:      userID,
+		Permissions: permissions.Dedupe(rawPerms),
+	}, nil
 }
 
 func extractSubject(claims jwt.MapClaims) (string, error) {
@@ -242,20 +240,20 @@ func extractSubject(claims jwt.MapClaims) (string, error) {
 	return "", fmt.Errorf("subject claim missing")
 }
 
-func extractRoles(claims jwt.MapClaims) []string {
-	raw, ok := claims["roles"]
+func extractStringSlice(claims jwt.MapClaims, key string) []string {
+	raw, ok := claims[key]
 	if !ok {
 		return []string{}
 	}
 	switch v := raw.(type) {
 	case []interface{}:
-		roles := make([]string, 0, len(v))
+		out := make([]string, 0, len(v))
 		for _, item := range v {
 			if s, ok := item.(string); ok {
-				roles = append(roles, s)
+				out = append(out, s)
 			}
 		}
-		return roles
+		return out
 	case []string:
 		return v
 	case string:

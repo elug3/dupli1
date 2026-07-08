@@ -81,7 +81,7 @@ Configuration lives in `bootstrap/config.go` and/or package `options.go`.
 Owns:
 
 - Login, logout, refresh, RS256 JWT + JWKS
-- Fine-grained **permissions** on users and in JWT `permissions` claim (legacy `roles` dual-read until Phase 5)
+- Fine-grained **permissions** on users and in JWT `permissions` claim
 - Account types: `customer`, `admin`, `service` on `User.AccountType` / JSON `account_type`
 - User admin at `/api/v1/auth/users` (not `/api/v1/users`); `PATCH …/permissions` canonical
 - Owner seeding via `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`)

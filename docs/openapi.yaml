@@ -6,8 +6,7 @@ info:
     HTTP API for the Dupli1 fashion bag marketplace.
 
     **Authorization:** protected routes require `Authorization: Bearer <access_token>`.
-    Access tokens include a `permissions` string array (primary) and a deprecated `roles`
-    array (dual-read until Phase 5). See [permissions.md](permissions.md) for the catalog.
+    Access tokens include a `permissions` string array. See [permissions.md](permissions.md) for the catalog.
 
     Gateway base URL (local): `http://localhost:8080`
 
@@ -23,7 +22,7 @@ components:
       bearerFormat: JWT
       description: |
         RS256 access token from `POST /api/v1/auth/refresh`.
-        Claims: `sub`, `type: access`, `permissions` (string[]), `roles` (deprecated string[]).
+        Claims: `sub`, `type: access`, `permissions` (string[]).
 
   schemas:
     User:
@@ -58,18 +57,6 @@ components:
       required: [permissions]
       properties:
         permissions:
-          type: array
-          items:
-            type: string
-        account_type:
-          type: string
-          enum: [customer, admin, service]
-
-    SetRolesRequestDeprecated:
-      type: object
-      description: Deprecated alias — expands legacy roles to permissions
-      properties:
-        roles:
           type: array
           items:
             type: string
@@ -161,30 +148,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
-
-  /api/v1/auth/users/{id}/roles:
-    patch:
-      summary: Replace user roles (deprecated)
-      deprecated: true
-      description: Deprecated alias for PATCH …/permissions. Expands legacy role names.
-      security:
-        - bearerAuth: []
-      tags: [Auth Admin]
-      x-required-permissions: [user.permissions.update]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetRolesRequestDeprecated'
-      responses:
-        '200':
-          description: Updated user
 
   /api/v1/products:
     get:

@@ -11,6 +11,7 @@ import (
 	"github.com/elug3/dupli1/payment/pkg/domain"
 	"github.com/elug3/dupli1/payment/pkg/ports"
 	"github.com/elug3/dupli1/payment/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/stripe/stripe-go/v81/webhook"
 )
 
@@ -85,6 +86,7 @@ func (h *Handler) payments(w http.ResponseWriter, r *http.Request) {
 		CustomerID:     claims.UserID,
 		BearerToken:    bearerToken,
 		IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		BypassABAC:     h.jwtValidator != nil && permissions.BypassesPaymentCreateABAC(claims.Permissions),
 	})
 	if err != nil {
 		respondServiceError(w, err)
@@ -123,10 +125,11 @@ func (h *Handler) paymentRoutes(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) getPayment(w http.ResponseWriter, r *http.Request, paymentID string) {
 	claims, _ := authjwt.FromContext(r.Context())
-	if h.jwtValidator != nil {
-		r = r.WithContext(authjwt.WithClaims(r.Context(), claims))
+	ownerID := claims.UserID
+	if h.jwtValidator != nil && permissions.BypassesPaymentReadABAC(claims.Permissions) {
+		ownerID = ""
 	}
-	payment, err := h.svc.GetPayment(r.Context(), paymentID, claims.UserID)
+	payment, err := h.svc.GetPayment(r.Context(), paymentID, ownerID)
 	if err != nil {
 		respondServiceError(w, err)
 		return
