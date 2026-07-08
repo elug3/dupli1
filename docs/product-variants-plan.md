@@ -125,7 +125,7 @@ Example PDP:
 }
 ```
 
-### Admin (auth: `product_manager`, `admin`, `owner`)
+### Admin (permissions: `product.create`, `product.update`, `product.variant.*`, `product.image.upload`, or wildcards `product.*` / `*`)
 
 | Method | Path | Behavior |
 |--------|------|----------|
