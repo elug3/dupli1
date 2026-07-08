@@ -181,7 +181,7 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| `POST` | `/api/v1/orders/{id}/ship` | order_manager / admin / owner | `paid` → `in_transit`, commit stock, audit |
+| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | `paid` → `in_transit`, commit stock, audit |
 | `PUT` | `/api/v1/orders/{id}/status` | RBAC | `fulfilled` from `in_transit`; `canceled` from `pending`/`paid` |
 
 **Ship response** includes `shipped_by`, `shipped_at`.

@@ -18,19 +18,32 @@ Authorization: Bearer <access_token>
 2. `POST /api/v1/auth/refresh` with that refresh token → `{ "token": "<access_jwt>" }`
 3. Use the access token on protected routes until it expires (default 15 min), then refresh again.
 
-Admin routes require a token belonging to a user with the `owner` or `admin` role (or `user_manager` where noted).
+**Access token claims**
+
+| Claim | Type | Notes |
+|-------|------|-------|
+| `sub` | string | User ID |
+| `type` | string | `"access"` |
+| `permissions` | string[] | Fine-grained authorization strings such as `product.create`, `order.ship`, `*` |
+| `exp`, `iat` | number | Standard JWT timestamps |
+
+Refresh tokens contain `sub` and `type: "refresh"` only. Permissions are loaded from the database on every refresh.
+
+Protected routes check the `permissions` claim. See [permissions.md](permissions.md) for the full catalog and endpoint matrix.
+
+Wildcards: `*` (everything), `admin.*` (user-admin domain), `{resource}.*` (e.g. `product.*`).
 
 ### Account types
 
-Every user has an `account_type` field (JSON key `account_type`) separate from RBAC `roles`:
+Every user has an `account_type` field (JSON key `account_type`) separate from **permissions**:
 
-| Value | Meaning | Typical roles |
-|-------|---------|----------------|
-| `customer` | End-user storefront account | `customer` |
-| `admin` | Human operator (owner, admin staff) | `owner`, `admin`, `user_manager`, `product_manager`, … |
-| `service` | Machine / integration account | `customer_registrar`, `order_manager`, … |
+| Value | Meaning | Typical permissions |
+|-------|---------|---------------------|
+| `customer` | End-user storefront account | `[]` (empty — ABAC self-service only) |
+| `admin` | Human operator | `admin.*`, `product.*`, … or `*` (owner) |
+| `service` | Machine / integration account | `user.create`, `order.ship`, … per job function |
 
-Seeded accounts: owner (`OWNER_EMAIL`) → `admin`; `dupli1-web` / `dupli1-order` service accounts → `service`. `POST /register` defaults to `customer` when `account_type` is omitted.
+Seeded accounts: owner (`OWNER_EMAIL`) → `permissions: ["*"]`; `dupli1-web` → `["user.create"]`; `dupli1-order` → `["order.ship", "order.status.update", "inventory.reservation.manage"]`. `POST /register` defaults to `customer` when `account_type` is omitted.
 
 ---
 
@@ -66,7 +79,7 @@ RS256 public key set for verifying access tokens issued by auth.
 
 ### `POST /api/v1/auth/register`
 
-Create a new user account. Requires `owner`, `admin`, `user_manager`, or `customer_registrar` role.
+Create a new user account. Requires `user.create`.
 
 **Headers** — `Authorization: Bearer <access_token>`
 
@@ -83,7 +96,7 @@ Create a new user account. Requires `owner`, `admin`, `user_manager`, or `custom
 |-------|------|-------------|
 | `email` | string | required, valid email |
 | `password` | string | required, min 8 chars |
-| `account_type` | string | optional; one of `customer`, `admin`, `service`; defaults to `customer`. `customer_registrar` may only create `customer` accounts |
+| `account_type` | string | optional; one of `customer`, `admin`, `service`; defaults to `customer`. Callers with only `user.create` (no `admin.*` or `*`) may register `customer` only |
 
 **Response `201`**
 ```json
@@ -95,7 +108,7 @@ Create a new user account. Requires `owner`, `admin`, `user_manager`, or `custom
 |--------|---------|
 | `400` | Validation failed (bad email, password too short) |
 | `401` | Missing or invalid access token |
-| `403` | Caller lacks register role, or `customer_registrar` requested a non-customer `account_type` |
+| `403` | Caller lacks `user.create`, or attempted a disallowed `account_type` / management target |
 | `409` | Email already registered |
 | `422` | Invalid email, weak password, or invalid `account_type` |
 
@@ -103,7 +116,7 @@ Create a new user account. Requires `owner`, `admin`, `user_manager`, or `custom
 
 ### Service account: dupli1-web
 
-The `dupli1-web` BFF uses a seeded machine account with the `customer_registrar` role and `account_type` `service`. It can call `POST /api/v1/auth/register` to create customer accounts, but cannot manage passwords, roles, or user status.
+The `dupli1-web` BFF uses a seeded machine account with `permissions: ["user.create"]` and `account_type: "service"`. It can call `POST /api/v1/auth/register` to create customer accounts, but cannot manage passwords, permissions, or user status.
 
 Configure on `dupli1-auth` startup:
 
@@ -156,7 +169,7 @@ Return the currently authenticated user's profile.
   "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
   "email": "user@example.com",
   "account_type": "customer",
-  "roles": ["customer"],
+  "permissions": [],
   "is_active": true,
   "locked_at": null,
   "failed_login_attempts": 0
@@ -220,7 +233,7 @@ Requires `Authorization: Bearer <access_token>`.
 
 ### `GET /api/v1/auth/users`
 
-List all users. Requires `owner` or `admin` role.
+List all users. Requires `user.read`. Results are filtered by auth ABAC hierarchy (callers only see accounts they may manage).
 
 **Response `200`**
 ```json
@@ -230,7 +243,7 @@ List all users. Requires `owner` or `admin` role.
       "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
       "email": "admin@dupli1.com",
       "account_type": "admin",
-      "roles": ["owner", "product_manager"],
+      "permissions": ["*"],
       "is_active": true,
       "locked_at": null,
       "failed_login_attempts": 0
@@ -243,43 +256,43 @@ List all users. Requires `owner` or `admin` role.
 | Status | Meaning |
 |--------|---------|
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `owner` or `admin` role |
+| `403` | Caller lacks `user.read` or management hierarchy forbids listing |
 
 ---
 
-### `PATCH /api/v1/auth/users/{id}/roles`
+### `PATCH /api/v1/auth/users/{id}/permissions`
 
-Replace the role list for a user. Requires `owner` or `admin` role.
+Replace the permission list for a user. Requires `user.permissions.update`. Subject to auth ABAC hierarchy (who may manage whom).
 
 **Request body**
 ```json
 {
-  "roles": ["user_manager"],
+  "permissions": ["user.password.update", "user.status.update"],
   "account_type": "admin"
 }
 ```
 
 | Field | Type | Constraints |
 |-------|------|-------------|
-| `roles` | string[] | required |
+| `permissions` | string[] | required |
 | `account_type` | string | optional; one of `customer`, `admin`, `service` |
 
-**Response `200`** — updated user object (includes `account_type`)
+**Response `200`** — updated user object (includes `account_type`, `permissions`)
 
 **Errors**
 | Status | Meaning |
 |--------|---------|
 | `400` | Missing or malformed body |
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `owner` or `admin` role |
+| `403` | Caller lacks `user.permissions.update` or may not manage this user |
 | `404` | User not found |
-| `422` | Invalid `account_type` |
+| `422` | Invalid `account_type` or permission string |
 
 ---
 
 ### `PATCH /api/v1/auth/users/{id}/password`
 
-Set a new password for a user. Requires `admin` or `user_manager` role.
+Set a new password for a user. Requires `user.password.update`.
 
 **Request body**
 ```json
@@ -293,7 +306,7 @@ Set a new password for a user. Requires `admin` or `user_manager` role.
 |--------|---------|
 | `400` | Missing or malformed body |
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `admin` or `user_manager` role |
+| `403` | Caller lacks `user.password.update` or may not manage this user |
 | `404` | User not found |
 | `422` | Password too short (min 8 chars) |
 
@@ -301,7 +314,7 @@ Set a new password for a user. Requires `admin` or `user_manager` role.
 
 ### `PATCH /api/v1/auth/users/{id}/status`
 
-Activate or deactivate a user. Requires `admin` or `user_manager` role.
+Activate or deactivate a user. Requires `user.status.update`.
 
 **Request body**
 ```json
@@ -315,7 +328,7 @@ Activate or deactivate a user. Requires `admin` or `user_manager` role.
 |--------|---------|
 | `400` | Missing or malformed body |
 | `401` | Missing or invalid access token |
-| `403` | Caller does not have `admin` or `user_manager` role |
+| `403` | Caller lacks `user.status.update` or may not manage this user |
 | `404` | User not found |
 
 ---
@@ -335,7 +348,7 @@ Product service liveness check.
 
 ### `GET /api/v1/products`
 
-Search **parent styles** (one row per style; colors are not duplicated). No authentication required for the public catalog view (active parents only; cost omitted). With a manager Bearer token, returns all statuses and includes cost.
+Search **parent styles** (one row per style; colors are not duplicated). No authentication required for the public catalog view (active parents only). With a valid Bearer token that includes `product.read` (or `product.*` / `*`), returns all statuses and includes cost.
 
 | Filter | Match type |
 |--------|-----------|
@@ -345,7 +358,7 @@ Search **parent styles** (one row per style; colors are not duplicated). No auth
 | `size` | parent has an active variant with this size |
 | `material` | exact |
 | `tags` | parent must include all listed tags (comma-separated or repeated) |
-| `status` | exact (managers only) |
+| `status` | exact (`product.read` or wildcard required) |
 
 Example: `GET /api/v1/products?category=bags&color=Green`
 
@@ -407,22 +420,22 @@ Public PDP. No authentication required. Returns an active **parent** with `varia
 
 ### Product CRUD (authenticated)
 
-All routes below require `Authorization: Bearer <access_token>` from auth with role `product_manager`, `admin`, or `owner`. Product validates RS256 tokens via JWKS (`AUTH_JWKS_URL`).
+Routes below require `Authorization: Bearer <access_token>`. Product validates RS256 tokens via JWKS (`AUTH_JWKS_URL`). Each route requires a specific permission (wildcards such as `product.*` also grant access).
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/products` | Create parent style |
-| PUT | `/api/v1/products/{id}` | Update parent |
-| DELETE | `/api/v1/products/{id}` | Delete parent (cascades variants) |
-| POST | `/api/v1/products/{id}/images` | Upload image to default variant |
-| POST | `/api/v1/products/{id}/variants` | Create variant (SKU) |
-| PUT | `/api/v1/products/{id}/variants/{sku}` | Update variant |
-| DELETE | `/api/v1/products/{id}/variants/{sku}` | Delete variant |
-| POST | `/api/v1/products/{id}/variants/{sku}/images` | Upload image for variant |
-| GET | `/api/v1/coupons` | List coupons |
-| POST | `/api/v1/coupons` | Create coupon |
-| PUT | `/api/v1/coupons/{code}` | Update coupon |
-| DELETE | `/api/v1/coupons/{code}` | Delete coupon |
+| Method | Path | Permission |
+|--------|------|------------|
+| POST | `/api/v1/products` | `product.create` |
+| PUT | `/api/v1/products/{id}` | `product.update` |
+| DELETE | `/api/v1/products/{id}` | `product.delete` |
+| POST | `/api/v1/products/{id}/images` | `product.image.upload` |
+| POST | `/api/v1/products/{id}/variants` | `product.variant.create` |
+| PUT | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` |
+| DELETE | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` |
+| POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` |
+| GET | `/api/v1/coupons` | `coupon.read` |
+| POST | `/api/v1/coupons` | `coupon.create` |
+| PUT | `/api/v1/coupons/{code}` | `coupon.update` |
+| DELETE | `/api/v1/coupons/{code}` | `coupon.delete` |
 
 Parent IDs use the brand prefix (e.g. `BOT-001`). Variants are sellable SKUs (e.g. `BOT-001-GRN`). See [product-variants-plan.md](product-variants-plan.md).
 
@@ -430,7 +443,16 @@ Parent IDs use the brand prefix (e.g. `BOT-001`). Variants are sellable SKUs (e.
 
 ## Inventory Service — `/api/v1/inventory`
 
-In-memory store. No authentication today.
+PostgreSQL-backed stock and reservations. **Reads are public.** Writes require Bearer JWT when `AUTH_JWKS_URL` is configured.
+
+| Method | Path | Permission |
+|--------|------|------------|
+| GET | `/api/v1/inventory/{sku}` | — (public) |
+| PUT | `/api/v1/inventory/{sku}` | `inventory.stock.write` |
+| POST | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` |
+| POST | `/api/v1/inventory/reservations` | `inventory.reservation.manage` |
+| POST | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` |
+| POST | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` |
 
 ### `GET /api/v1/inventory/health`
 
@@ -544,7 +566,7 @@ See [cart-service.md](cart-service.md) for architecture, service boundaries, and
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/carts/{customer_id}` | Get a customer's cart (`order_manager`, `admin`, or `owner`) |
+| GET | `/api/v1/carts/{customer_id}` | Get a customer's cart (`cart.read`) |
 
 ### Product variant lookup (used by cart)
 
@@ -558,7 +580,9 @@ See [cart-service.md](cart-service.md) for architecture, service boundaries, and
 
 In-memory store. Calls inventory to reserve stock and product to redeem coupons.
 
-When `AUTH_JWKS_URL` or `JWT_SECRET` is set, order and checkout routes require `Authorization: Bearer <access_token>` (RS256 via auth JWKS when configured; HS256 fallback in dev). Customers may only access their own `customer_id`.
+When `AUTH_JWKS_URL` or `JWT_SECRET` is set, order and checkout routes require `Authorization: Bearer <access_token>` (RS256 via auth JWKS when configured; HS256 fallback in dev).
+
+**Storefront ABAC:** callers with empty `permissions` may only access their own `customer_id` / checkout session (`sub` must match). `order.create` bypasses create ABAC; `order.read.all` bypasses read/list ABAC. See [permissions.md](permissions.md).
 
 See [checkout-session.md](checkout-session.md) for the full checkout flow.
 
@@ -588,7 +612,8 @@ See [checkout-session.md](checkout-session.md) for the full checkout flow.
 | POST | `/api/v1/orders` | Create order directly |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
-| PUT | `/api/v1/orders/{id}/status` | Confirm, cancel, or fulfill |
+| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship order (`paid` → `in_transit`) |
+| PUT | `/api/v1/orders/{id}/status` | `order.status.update` — cancel or fulfill |
 
 **Create order request**
 ```json
@@ -604,15 +629,18 @@ Supported status transitions: `pending` → `confirmed` | `canceled`; `confirmed
 
 ---
 
-## Payment Service — `/api/v1/payments` (planned)
+## Payment Service — `/api/v1/payments`
 
 Stripe Checkout **redirect** — Dupli1 never handles card numbers, CVC, or card passwords.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/payments` | Start Checkout for a pending order → `checkout_url` |
-| GET | `/api/v1/payments/{id}` | Payment status |
-| POST | `/api/v1/payments/webhooks/stripe` | Stripe webhooks |
+When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront callers may only pay for / read their own orders unless they hold `payment.create` or `payment.read.all`.
+
+| Method | Path | Permission / rule |
+|--------|------|-------------------|
+| POST | `/api/v1/payments` | ABAC or `payment.create` |
+| GET | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
+| POST | `/api/v1/payments/webhooks/stripe` | — (Stripe signature) |
+| GET | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
 
 Unpaid `pending` orders auto-cancel after **5 minutes**. Full design: [payment-service.md](payment-service.md).
 
@@ -642,42 +670,47 @@ All error responses use a JSON envelope:
 
 ## Quick reference
 
-| Method | Path | Auth? | Service |
-|--------|------|-------|---------|
+Permission strings are authoritative; see [permissions.md](permissions.md). `—` = no auth. `Bearer` = valid access token. `Bearer*` = required when JWT is configured on the service.
+
+| Method | Path | Permission / auth | Service |
+|--------|------|-------------------|---------|
 | GET | `/gateway/health` | — | nginx |
 | GET | `/api/v1/auth/health` | — | auth |
 | GET | `/api/v1/auth/.well-known/jwks.json` | — | auth |
-| POST | `/api/v1/auth/register` | `owner`, `admin`, `user_manager`, `customer_registrar` | auth |
+| POST | `/api/v1/auth/register` | `user.create` | auth |
 | POST | `/api/v1/auth/login` | — | auth |
 | GET | `/api/v1/auth/me` | Bearer | auth |
 | POST | `/api/v1/auth/refresh` | — | auth |
 | POST | `/api/v1/auth/logout` | — | auth |
-| GET | `/api/v1/auth/users` | `admin` | auth |
-| PATCH | `/api/v1/auth/users/{id}/roles` | `admin` | auth |
-| PATCH | `/api/v1/auth/users/{id}/password` | `admin`, `user_manager` | auth |
-| PATCH | `/api/v1/auth/users/{id}/status` | `admin`, `user_manager` | auth |
+| GET | `/api/v1/auth/users` | `user.read` | auth |
+| PATCH | `/api/v1/auth/users/{id}/permissions` | `user.permissions.update` | auth |
+| PATCH | `/api/v1/auth/users/{id}/password` | `user.password.update` | auth |
+| PATCH | `/api/v1/auth/users/{id}/status` | `user.status.update` | auth |
 | GET | `/api/v1/products/health` | — | product |
-| GET | `/api/v1/products` | optional manager Bearer | product |
+| GET | `/api/v1/products` | optional `product.read` | product |
 | GET | `/api/v1/products/{id}` | — | product |
 | POST | `/api/v1/coupons/redeem` | — | product |
-| POST | `/api/v1/products` | `product_manager`, `admin`, `owner` | product |
-| PUT/DELETE | `/api/v1/products/{id}` | `product_manager`, `admin`, `owner` | product |
-| POST | `/api/v1/products/{id}/images` | `product_manager`, `admin`, `owner` | product |
-| POST | `/api/v1/products/{id}/variants` | `product_manager`, `admin`, `owner` | product |
-| PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | `product_manager`, `admin`, `owner` | product |
-| POST | `/api/v1/products/{id}/variants/{sku}/images` | `product_manager`, `admin`, `owner` | product |
-| GET/POST/PUT/DELETE | `/api/v1/coupons` | `product_manager`, `admin`, `owner` | product |
+| POST | `/api/v1/products` | `product.create` | product |
+| PUT/DELETE | `/api/v1/products/{id}` | `product.update` / `product.delete` | product |
+| POST | `/api/v1/products/{id}/images` | `product.image.upload` | product |
+| POST | `/api/v1/products/{id}/variants` | `product.variant.create` | product |
+| PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` / `product.variant.delete` | product |
+| POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | product |
+| GET/POST/PUT/DELETE | `/api/v1/coupons` | `coupon.read` / `coupon.create` / `coupon.update` / `coupon.delete` | product |
 | GET | `/api/v1/inventory/health` | — | inventory |
-| GET/PUT | `/api/v1/inventory/{sku}` | — | inventory |
-| POST | `/api/v1/inventory/{sku}/adjust` | — | inventory |
-| POST | `/api/v1/inventory/reservations` | — | inventory |
-| POST | `/api/v1/inventory/reservations/{id}/commit` | — | inventory |
-| POST | `/api/v1/inventory/reservations/{id}/release` | — | inventory |
-| POST/GET | `/api/v1/checkout/sessions` | Bearer* | order |
-| GET/PUT/POST/DELETE | `/api/v1/checkout/sessions/{id}/...` | Bearer* | order |
-| POST/GET | `/api/v1/orders` | Bearer* | order |
-| GET | `/api/v1/orders/{id}` | Bearer* | order |
-| PUT | `/api/v1/orders/{id}/status` | Bearer* | order |
+| GET | `/api/v1/inventory/{sku}` | — | inventory |
+| PUT | `/api/v1/inventory/{sku}` | `inventory.stock.write` | inventory |
+| POST | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` | inventory |
+| POST | `/api/v1/inventory/reservations` | `inventory.reservation.manage` | inventory |
+| POST | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` | inventory |
+| POST | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` | inventory |
+| POST/GET | `/api/v1/checkout/sessions` | ABAC / `order.create` / `order.read.all` | order |
+| GET/PUT/POST/DELETE | `/api/v1/checkout/sessions/{id}/...` | ABAC (same as orders) | order |
+| POST/GET | `/api/v1/orders` | ABAC / `order.create` / `order.read.all` | order |
+| GET | `/api/v1/orders/{id}` | ABAC / `order.read.all` | order |
+| POST | `/api/v1/orders/{id}/ship` | `order.ship` | order |
+| PUT | `/api/v1/orders/{id}/status` | `order.status.update` | order |
+| GET/POST/PUT/DELETE | `/api/v1/cart/*` | Bearer (own `sub`) | cart |
+| GET | `/api/v1/carts/{customer_id}` | `cart.read` | cart |
+| POST/GET | `/api/v1/payments` | ABAC / `payment.create` / `payment.read.all` | payment |
 | GET | `/health` | — | notification |
-
-\* Bearer required when `AUTH_JWKS_URL` or `JWT_SECRET` is configured on the order service.

@@ -17,15 +17,13 @@ func buildMapClaims(userID string, tokenType string, expiry time.Time, userPermi
 		claims["type"] = tokenType
 	}
 	if tokenType != "refresh" {
-		perms := permissions.Dedupe(userPermissions)
-		claims["permissions"] = perms
-		claims["roles"] = permissions.InferLegacyRoles(perms)
+		claims["permissions"] = permissions.Dedupe(userPermissions)
 	}
 	return claims
 }
 
-func claimsFromMap(mapClaims jwt.MapClaims) (permissions []string, roles []string) {
-	return extractStringSlice(mapClaims, "permissions"), extractStringSlice(mapClaims, "roles")
+func claimsFromMap(mapClaims jwt.MapClaims) []string {
+	return extractStringSlice(mapClaims, "permissions")
 }
 
 func extractStringSlice(mapClaims jwt.MapClaims, key string) []string {

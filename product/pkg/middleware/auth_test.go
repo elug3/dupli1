@@ -14,13 +14,13 @@ import (
 
 const testSecret = "middleware-test-secret"
 
-func makeAccessToken(t *testing.T, userID string, roles []string) string {
+func makeAccessToken(t *testing.T, userID string, perms []string) string {
 	t.Helper()
 	claims := jwt.MapClaims{
-		"sub":   userID,
-		"roles": roles,
-		"type":  "access",
-		"exp":   time.Now().Add(time.Hour).Unix(),
+		"sub":         userID,
+		"permissions": perms,
+		"type":        "access",
+		"exp":         time.Now().Add(time.Hour).Unix(),
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := tok.SignedString([]byte(testSecret))
@@ -50,7 +50,7 @@ func TestRequireAuthRejectsMissingToken(t *testing.T) {
 
 func TestRequireAnyPermissionAllowsProductManager(t *testing.T) {
 	validator := authjwt.NewHMACValidator(testSecret)
-	token := makeAccessToken(t, "mgr-1", []string{"product_manager"})
+	token := makeAccessToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleProductManager}))
 	called := false
 
 	handler := middleware.RequireAuth(validator,
@@ -73,7 +73,7 @@ func TestRequireAnyPermissionAllowsProductManager(t *testing.T) {
 
 func TestRequireAnyPermissionAllowsOwner(t *testing.T) {
 	validator := authjwt.NewHMACValidator(testSecret)
-	token := makeAccessToken(t, "owner-1", []string{"owner"})
+	token := makeAccessToken(t, "owner-1", []string{permissions.All})
 	called := false
 
 	handler := middleware.RequireAuth(validator,
@@ -96,7 +96,7 @@ func TestRequireAnyPermissionAllowsOwner(t *testing.T) {
 
 func TestRequireAnyPermissionRejectsCustomer(t *testing.T) {
 	validator := authjwt.NewHMACValidator(testSecret)
-	token := makeAccessToken(t, "cust-1", []string{"customer"})
+	token := makeAccessToken(t, "cust-1", nil)
 	called := false
 
 	handler := middleware.RequireAuth(validator,

@@ -22,25 +22,11 @@ type contextKey struct{}
 type Claims struct {
 	UserID      string
 	Permissions []string
-	Roles       []string
 }
 
 // HasPermission reports whether any of the given permissions is granted.
 func (c Claims) HasPermission(perms ...string) bool {
 	return permissions.HasAny(c.Permissions, perms...)
-}
-
-// HasRole reports whether any of the given legacy roles is present in the token.
-// Prefer HasPermission for authorization checks.
-func (c Claims) HasRole(roles ...string) bool {
-	for _, want := range roles {
-		for _, have := range c.Roles {
-			if have == want {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // WithClaims stores claims in the context.
@@ -234,11 +220,9 @@ func claimsFromMap(mapClaims jwt.MapClaims) (Claims, error) {
 		return Claims{}, err
 	}
 	rawPerms := extractStringSlice(mapClaims, "permissions")
-	rawRoles := extractStringSlice(mapClaims, "roles")
 	return Claims{
 		UserID:      userID,
-		Permissions: permissions.Resolve(rawPerms, rawRoles),
-		Roles:       rawRoles,
+		Permissions: permissions.Dedupe(rawPerms),
 	}, nil
 }
 

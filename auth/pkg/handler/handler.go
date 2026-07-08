@@ -257,7 +257,6 @@ func (h *Handler) SetUserPermissions(c *gin.Context) {
 	userID := c.Param("id")
 	var body struct {
 		Permissions []string `json:"permissions"`
-		Roles       []string `json:"roles"` // deprecated alias
 		AccountType string   `json:"account_type"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -265,9 +264,6 @@ func (h *Handler) SetUserPermissions(c *gin.Context) {
 		return
 	}
 	perms := body.Permissions
-	if len(perms) == 0 && len(body.Roles) > 0 {
-		perms = permissions.ExpandLegacyRoles(body.Roles)
-	}
 	if len(perms) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "permissions is required"})
 		return

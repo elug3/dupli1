@@ -12,7 +12,7 @@ github.com/elug3/dupli1/shared
 
 ### `pkg/permissions`
 
-Fine-grained permission constants, wildcard evaluation, legacy role expansion, and named bundles. See [docs/permissions.md](../docs/permissions.md) for the full specification.
+Fine-grained permission constants, wildcard evaluation, legacy role expansion for DB migration, and named bundles. See [docs/permissions.md](../docs/permissions.md) for the full specification.
 
 ```go
 import "github.com/elug3/dupli1/shared/pkg/permissions"
@@ -23,14 +23,11 @@ permissions.Has("product.create", []string{"product.*"}) // true
 // Check any of several required permissions.
 permissions.HasAny(held, "product.create", "product.update")
 
-// Expand legacy RBAC roles during dual-read migration.
+// Expand legacy RBAC roles when migrating stored user data.
 permissions.ExpandLegacyRoles([]string{"product_manager"}) // ["coupon.*", "product.*"]
 
 // Apply a named bundle preset before saving a user.
 permissions.ExpandBundle("catalog_editor")
-
-// Resolve JWT claims: prefer permissions claim, fall back to roles.
-permissions.Resolve(nil, []string{"order_manager"})
 ```
 
 ### Testing

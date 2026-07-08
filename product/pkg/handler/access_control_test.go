@@ -20,13 +20,13 @@ import (
 
 const accessControlSecret = "product-access-control-secret"
 
-func makeAccessToken(t *testing.T, userID string, roles []string) string {
+func makeAccessToken(t *testing.T, userID string, perms []string) string {
 	t.Helper()
 	claims := jwt.MapClaims{
-		"sub":   userID,
-		"roles": roles,
-		"type":  "access",
-		"exp":   time.Now().Add(time.Hour).Unix(),
+		"sub":         userID,
+		"permissions": perms,
+		"type":        "access",
+		"exp":         time.Now().Add(time.Hour).Unix(),
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := tok.SignedString([]byte(accessControlSecret))
@@ -151,7 +151,7 @@ func TestProtectedRoutesRejectInvalidToken(t *testing.T) {
 
 func TestCustomerCannotManageProducts(t *testing.T) {
 	mux := newAccessControlMux(memory.NewProductStore())
-	token := makeAccessToken(t, "cust-1", []string{"customer"})
+	token := makeAccessToken(t, "cust-1", nil)
 
 	body := domain.Product{Name: "Mini Bag", Brand: "Gucci", Price: 100}
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
@@ -172,7 +172,7 @@ func TestCustomerCannotManageProducts(t *testing.T) {
 
 func TestProductManagerCanManageProducts(t *testing.T) {
 	mux := newAccessControlMux(memory.NewProductStore())
-	token := makeAccessToken(t, "mgr-1", []string{"product_manager"})
+	token := makeAccessToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleProductManager}))
 
 	body := domain.Product{Name: "Mini Bag", Brand: "Gucci", Price: 100}
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
@@ -200,7 +200,7 @@ func TestProductManagerCanManageProducts(t *testing.T) {
 
 func TestAdminCanManageProducts(t *testing.T) {
 	mux := newAccessControlMux(memory.NewProductStore())
-	token := makeAccessToken(t, "admin-1", []string{"admin"})
+	token := makeAccessToken(t, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
 
 	body := domain.Product{Name: "Tote", Brand: "Baggu", Price: 45}
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
@@ -216,7 +216,7 @@ func TestAdminCanManageProducts(t *testing.T) {
 
 func TestOwnerCanManageProducts(t *testing.T) {
 	mux := newAccessControlMux(memory.NewProductStore())
-	token := makeAccessToken(t, "owner-1", []string{"owner"})
+	token := makeAccessToken(t, "owner-1", []string{permissions.All})
 
 	body := domain.Product{Name: "Backpack", Brand: "Herschel", Price: 120}
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)

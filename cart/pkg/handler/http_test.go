@@ -14,6 +14,7 @@ import (
 	"github.com/elug3/dupli1/cart/pkg/infra/memory"
 	"github.com/elug3/dupli1/cart/pkg/ports"
 	"github.com/elug3/dupli1/cart/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -31,14 +32,14 @@ func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantI
 	}, nil
 }
 
-func makeToken(t *testing.T, userID string, roles []string) string {
+func makeToken(t *testing.T, userID string, perms []string) string {
 	t.Helper()
 	claims := jwt.MapClaims{
-		"sub":   userID,
-		"type":  "access",
-		"roles": roles,
-		"exp":   time.Now().Add(time.Hour).Unix(),
-		"iat":   time.Now().Unix(),
+		"sub":         userID,
+		"type":        "access",
+		"permissions": perms,
+		"exp":         time.Now().Add(time.Hour).Unix(),
+		"iat":         time.Now().Unix(),
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := tok.SignedString([]byte(testSecret))
@@ -74,7 +75,7 @@ func TestGetCartRequiresAuth(t *testing.T) {
 func TestCartCRUD(t *testing.T) {
 	mux := newMux(newTestHandler(t))
 	userID := "user-1"
-	token := makeToken(t, userID, []string{"customer"})
+	token := makeToken(t, userID, nil)
 
 	body, _ := json.Marshal(map[string]any{"sku": "BOT-001-BLK", "quantity": 2})
 	rec := httptest.NewRecorder()
@@ -116,7 +117,7 @@ func TestCartCRUD(t *testing.T) {
 
 func TestAdminCartForbiddenForCustomer(t *testing.T) {
 	mux := newMux(newTestHandler(t))
-	token := makeToken(t, "user-1", []string{"customer"})
+	token := makeToken(t, "user-1", nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/carts/other-user", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -129,8 +130,8 @@ func TestAdminCartForbiddenForCustomer(t *testing.T) {
 func TestAdminCartAllowed(t *testing.T) {
 	h := newTestHandler(t)
 	mux := newMux(h)
-	customerToken := makeToken(t, "customer-1", []string{"customer"})
-	adminToken := makeToken(t, "admin-1", []string{"admin"})
+	customerToken := makeToken(t, "customer-1", nil)
+	adminToken := makeToken(t, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
 
 	body, _ := json.Marshal(map[string]any{"sku": "BOT-001-BLK", "quantity": 1})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/cart/items", bytes.NewReader(body))

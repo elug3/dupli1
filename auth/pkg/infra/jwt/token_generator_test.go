@@ -27,12 +27,9 @@ func TestRoundtrip_UserIDAndPermissionsPreserved(t *testing.T) {
 	if len(claims.Permissions) != 1 || claims.Permissions[0] != permissions.UserCreate {
 		t.Fatalf("Permissions = %v, want [%s]", claims.Permissions, permissions.UserCreate)
 	}
-	if len(claims.Roles) != 1 || claims.Roles[0] != permissions.RoleCustomerRegistrar {
-		t.Fatalf("Roles = %v, want [%s]", claims.Roles, permissions.RoleCustomerRegistrar)
-	}
 }
 
-func TestGenerate_IncludesLegacyRolesForDualRead(t *testing.T) {
+func TestGenerate_IncludesPermissionsClaim(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
 	ctx := context.Background()
 
@@ -49,12 +46,9 @@ func TestGenerate_IncludesLegacyRolesForDualRead(t *testing.T) {
 	if !permissions.Has(claims.Permissions, permissions.AdminAll) {
 		t.Fatalf("Permissions = %v, want admin wildcard", claims.Permissions)
 	}
-	if len(claims.Roles) == 0 {
-		t.Fatal("expected legacy roles claim for dual-read")
-	}
 }
 
-func TestGenerate_EmptyPermissionsInfersCustomerRole(t *testing.T) {
+func TestGenerate_EmptyPermissionsForCustomer(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
 	ctx := context.Background()
 
@@ -70,12 +64,9 @@ func TestGenerate_EmptyPermissionsInfersCustomerRole(t *testing.T) {
 	if len(claims.Permissions) != 0 {
 		t.Fatalf("Permissions = %v, want empty", claims.Permissions)
 	}
-	if len(claims.Roles) != 1 || claims.Roles[0] != permissions.RoleCustomer {
-		t.Fatalf("Roles = %v, want [customer]", claims.Roles)
-	}
 }
 
-func TestRefreshToken_OmitsPermissionsAndRoles(t *testing.T) {
+func TestRefreshToken_OmitsPermissions(t *testing.T) {
 	gen := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
 	ctx := context.Background()
 
@@ -90,9 +81,6 @@ func TestRefreshToken_OmitsPermissionsAndRoles(t *testing.T) {
 	}
 	if len(claims.Permissions) != 0 {
 		t.Fatalf("refresh Permissions = %v, want empty", claims.Permissions)
-	}
-	if len(claims.Roles) != 0 {
-		t.Fatalf("refresh Roles = %v, want empty", claims.Roles)
 	}
 }
 
