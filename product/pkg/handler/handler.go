@@ -14,8 +14,9 @@ import (
 )
 
 type Handler struct {
-	svc       *service.ProductSearchService
-	couponSvc *service.CouponService
+	svc          *service.ProductSearchService
+	couponSvc    *service.CouponService
+	inventorySvc *service.InventoryService
 }
 
 type SearchResponse struct {
@@ -34,15 +35,20 @@ type HealthResponse struct {
 
 var searchFilters = []string{"category", "brand", "color", "size", "material", "status"}
 
-func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService) *Handler {
-	return &Handler{svc: svc, couponSvc: couponSvc}
+func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService) *Handler {
+	return &Handler{svc: svc, couponSvc: couponSvc, inventorySvc: inventorySvc}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+RouteHealth, h.Health)
 	mux.HandleFunc("GET "+RoutePublicProduct, h.PublicGetProduct)
 	mux.HandleFunc("GET "+RoutePublicVariant, h.PublicGetVariant)
+	mux.HandleFunc("GET "+RoutePublicVariantBySkuID, h.PublicGetVariantBySkuID)
 	mux.HandleFunc("POST "+RouteRedeemCoupon, h.RedeemCoupon)
+
+	mux.HandleFunc("GET "+RouteInventoryHealth, h.Health)
+	mux.HandleFunc("GET "+RouteInventoryItem, h.GetInventoryItem)
+	mux.HandleFunc("GET "+RouteInventoryItemBySkuID, h.GetInventoryItemBySkuID)
 }
 
 // SearchProductsHandler returns an http.Handler for GET /api/v1/products.
@@ -162,6 +168,24 @@ func (h *Handler) PublicGetVariant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	variant, err := h.svc.GetPublicVariant(sku)
+	if err != nil {
+		h.respondError(w, http.StatusNotFound, "variant not found")
+		return
+	}
+	h.respondJSON(w, http.StatusOK, variant)
+}
+
+func (h *Handler) PublicGetVariantBySkuID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	skuID := r.PathValue("skuId")
+	if skuID == "" {
+		h.respondError(w, http.StatusBadRequest, "missing skuId")
+		return
+	}
+	variant, err := h.svc.GetPublicVariantBySkuID(skuID)
 	if err != nil {
 		h.respondError(w, http.StatusNotFound, "variant not found")
 		return

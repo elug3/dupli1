@@ -19,7 +19,7 @@ import (
 func newMux(store *memory.ProductStore) *http.ServeMux {
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	h := handler.NewHandler(svc, couponSvc)
+	h := handler.NewHandler(svc, couponSvc, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
@@ -29,7 +29,7 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	h := handler.NewHandler(svc, couponSvc)
+	h := handler.NewHandler(svc, couponSvc, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())

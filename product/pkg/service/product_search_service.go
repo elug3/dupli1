@@ -6,9 +6,9 @@ import (
 	"io"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
+	"github.com/google/uuid"
 )
 
 const (
@@ -100,6 +100,21 @@ func (s *ProductSearchService) GetPublicVariant(sku string) (*domain.Variant, er
 	if err != nil {
 		return nil, err
 	}
+	return s.checkPublicVariant(v)
+}
+
+func (s *ProductSearchService) GetPublicVariantBySkuID(skuID string) (*domain.Variant, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("store not initialized")
+	}
+	v, err := s.store.GetVariantBySkuID(skuID)
+	if err != nil {
+		return nil, err
+	}
+	return s.checkPublicVariant(v)
+}
+
+func (s *ProductSearchService) checkPublicVariant(v *domain.Variant) (*domain.Variant, error) {
 	if v.Status != "active" {
 		return nil, fmt.Errorf("variant not found")
 	}

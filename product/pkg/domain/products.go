@@ -12,10 +12,12 @@ type Consultation struct {
 
 // Variant is a sellable option (SKU) under a parent product style.
 type Variant struct {
-	SKU       string   `json:"sku"`
-	ProductID string   `json:"productId"`
-	Color     string   `json:"color"`
-	Size      string   `json:"size,omitempty"`
+	// SkuID is the canonical, immutable cross-service identifier (ULID).
+	SkuID     string `json:"skuId,omitempty"`
+	SKU       string `json:"sku"`
+	ProductID string `json:"productId"`
+	Color     string `json:"color"`
+	Size      string `json:"size,omitempty"`
 	// SellingPrice is the official/display price (strikethrough / "was" price).
 	SellingPrice float64 `json:"sellingPrice,omitempty"`
 	// Price is the real sale price used for discount calculation.
@@ -27,27 +29,27 @@ type Variant struct {
 
 // Product is a parent catalog style. Sellable options live on Variants.
 type Product struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Brand       string  `json:"brand"`
-	Material    string  `json:"material"`
-	Category    string  `json:"category"`
-	Status      string  `json:"status"` // "active" | "draft" | "archived"
-	Capacity    string  `json:"capacity,omitempty"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Brand       string   `json:"brand"`
+	Material    string   `json:"material"`
+	Category    string   `json:"category"`
+	Status      string   `json:"status"` // "active" | "draft" | "archived"
+	Capacity    string   `json:"capacity,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
-	CreatedAt   string  `json:"createdAt"`
-	CreatedBy   string  `json:"createdBy,omitempty"`
+	CreatedAt   string   `json:"createdAt"`
+	CreatedBy   string   `json:"createdBy,omitempty"`
 
 	// Summary fields derived from variants (not stored on parent).
 	// SellingPriceFrom is the official/display price for the cheapest active variant.
-	SellingPriceFrom  float64   `json:"sellingPriceFrom,omitempty"`
+	SellingPriceFrom float64 `json:"sellingPriceFrom,omitempty"`
 	// PriceFrom is the real sale price (min active variant price).
-	PriceFrom         float64   `json:"priceFrom,omitempty"`
-	DefaultImageURL   string    `json:"defaultImageUrl,omitempty"`
-	AvailableColors   []string  `json:"availableColors,omitempty"`
-	AvailableSizes    []string  `json:"availableSizes,omitempty"`
-	Variants          []Variant `json:"variants,omitempty"`
+	PriceFrom       float64   `json:"priceFrom,omitempty"`
+	DefaultImageURL string    `json:"defaultImageUrl,omitempty"`
+	AvailableColors []string  `json:"availableColors,omitempty"`
+	AvailableSizes  []string  `json:"availableSizes,omitempty"`
+	Variants        []Variant `json:"variants,omitempty"`
 
 	// Legacy fields mirrored from the cheapest active variant for older clients.
 	// SellingPrice is the official/display price; Price is the real sale price.

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/elug3/dupli1/product/pkg/domain"
 )
 
 type ProductSearchStore struct {
@@ -92,11 +92,100 @@ func (s *ProductSearchStore) migrate() error {
 	s.pool.Exec(ctx,
 		`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS selling_price NUMERIC(10,2) NOT NULL DEFAULT 0`,
 	)
+	s.pool.Exec(ctx, `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS sku_id TEXT`)
 
 	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)`)
 
 	if err := s.backfillVariants(ctx); err != nil {
 		return err
+	}
+	if err := s.backfillSkuIDs(ctx); err != nil {
+		return err
+	}
+	if err := s.promoteSkuIDPrimaryKey(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// promoteSkuIDPrimaryKey makes sku_id the real primary key of
+// product_variants (converting the existing unique index into the PK
+// constraint, so no index rebuild is needed) and demotes sku to a plain
+// unique, still-NOT-NULL column. Safe to run on every startup: it checks the
+// current primary key column first and does nothing once already promoted.
+// By this point sku_id is always NOT NULL (backfillSkuIDs guarantees it), so
+// there's no gating needed here, unlike order's cross-service backfill.
+func (s *ProductSearchStore) promoteSkuIDPrimaryKey(ctx context.Context) error {
+	var pkColumn string
+	err := s.pool.QueryRow(ctx, `
+		SELECT a.attname
+		FROM pg_index i
+		JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+		WHERE i.indrelid = 'product_variants'::regclass AND i.indisprimary
+		LIMIT 1
+	`).Scan(&pkColumn)
+	if err != nil {
+		return fmt.Errorf("check product_variants primary key: %w", err)
+	}
+	if pkColumn == "sku_id" {
+		return nil
+	}
+
+	if _, err := s.pool.Exec(ctx, `ALTER TABLE product_variants DROP CONSTRAINT product_variants_pkey`); err != nil {
+		return fmt.Errorf("drop legacy product_variants pkey: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx,
+		`ALTER TABLE product_variants ADD CONSTRAINT product_variants_pkey PRIMARY KEY USING INDEX ux_product_variants_sku_id`,
+	); err != nil {
+		return fmt.Errorf("promote sku_id to primary key: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx,
+		`ALTER TABLE product_variants ADD CONSTRAINT product_variants_sku_key UNIQUE (sku)`,
+	); err != nil {
+		return fmt.Errorf("add sku unique constraint: %w", err)
+	}
+	return nil
+}
+
+// backfillSkuIDs assigns a canonical ULID sku_id to every variant row that
+// doesn't have one yet, then locks the column down (NOT NULL + unique index).
+// Runs to completion before the server accepts traffic, so CreateVariant only
+// ever needs to assign a sku_id for the single new row it's inserting.
+func (s *ProductSearchStore) backfillSkuIDs(ctx context.Context) error {
+	rows, err := s.pool.Query(ctx, `SELECT sku FROM product_variants WHERE sku_id IS NULL OR sku_id = ''`)
+	if err != nil {
+		return fmt.Errorf("scan variants missing sku_id: %w", err)
+	}
+	var skus []string
+	for rows.Next() {
+		var sku string
+		if err := rows.Scan(&sku); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan variants missing sku_id: %w", err)
+		}
+		skus = append(skus, sku)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("scan variants missing sku_id: %w", err)
+	}
+
+	for _, sku := range skus {
+		if _, err := s.pool.Exec(ctx,
+			`UPDATE product_variants SET sku_id = $2 WHERE sku = $1 AND (sku_id IS NULL OR sku_id = '')`,
+			sku, domain.NewSkuID(),
+		); err != nil {
+			return fmt.Errorf("backfill sku_id for %s: %w", sku, err)
+		}
+	}
+
+	if _, err := s.pool.Exec(ctx, `ALTER TABLE product_variants ALTER COLUMN sku_id SET NOT NULL`); err != nil {
+		return fmt.Errorf("set sku_id not null: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ux_product_variants_sku_id ON product_variants(sku_id)`,
+	); err != nil {
+		return fmt.Errorf("create sku_id unique index: %w", err)
 	}
 	return nil
 }

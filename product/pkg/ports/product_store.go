@@ -13,6 +13,7 @@ type ProductStore interface {
 
 	ListVariants(productID string) ([]domain.Variant, error)
 	GetVariant(sku string) (*domain.Variant, error)
+	GetVariantBySkuID(skuID string) (*domain.Variant, error)
 	CreateVariant(v domain.Variant) (*domain.Variant, error)
 	UpdateVariant(v domain.Variant) (*domain.Variant, error)
 	DeleteVariant(sku string) error

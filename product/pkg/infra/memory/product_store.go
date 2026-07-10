@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 )
@@ -233,32 +232,8 @@ func (s *ProductStore) DeleteProduct(id string) error {
 	return fmt.Errorf("product not found: %s", id)
 }
 
-func optionCode(value string) string {
-	var b strings.Builder
-	for _, r := range strings.ToUpper(strings.TrimSpace(value)) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
-		}
-	}
-	code := b.String()
-	if len(code) > 3 {
-		code = code[:3]
-	}
-	return code
-}
-
 func (s *ProductStore) nextVariantSKU(productID, color, size string) string {
-	parts := []string{productID}
-	if c := optionCode(color); c != "" {
-		parts = append(parts, c)
-	}
-	if sz := optionCode(size); sz != "" {
-		parts = append(parts, sz)
-	}
-	base := strings.Join(parts, "-")
-	if base == productID {
-		base = productID + "-VAR"
-	}
+	base := domain.BuildVariantSKUBase(productID, color, size)
 	candidate := base
 	for i := 1; ; i++ {
 		exists := false
@@ -289,6 +264,16 @@ func (s *ProductStore) GetVariant(sku string) (*domain.Variant, error) {
 	return nil, fmt.Errorf("variant not found: %s", sku)
 }
 
+func (s *ProductStore) GetVariantBySkuID(skuID string) (*domain.Variant, error) {
+	for _, v := range s.Variants {
+		if v.SkuID == skuID {
+			out := v
+			return &out, nil
+		}
+	}
+	return nil, fmt.Errorf("variant not found: %s", skuID)
+}
+
 func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) {
 	if v.ProductID == "" {
 		return nil, fmt.Errorf("productId is required")
@@ -309,9 +294,15 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 	if v.SKU == "" {
 		v.SKU = s.nextVariantSKU(v.ProductID, v.Color, v.Size)
 	}
+	if v.SkuID == "" {
+		v.SkuID = domain.NewSkuID()
+	}
 	for _, existing := range s.Variants {
 		if existing.SKU == v.SKU {
 			return nil, fmt.Errorf("variant already exists: %s", v.SKU)
+		}
+		if existing.SkuID == v.SkuID {
+			return nil, fmt.Errorf("variant already exists: %s", v.SkuID)
 		}
 		if existing.ProductID == v.ProductID && existing.Color == v.Color && existing.Size == v.Size {
 			return nil, fmt.Errorf("variant option already exists")
@@ -321,9 +312,12 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 	return &v, nil
 }
 
+// UpdateVariant updates a variant by its (immutable) sku. SkuID is always
+// preserved from the existing row regardless of what the caller passed in.
 func (s *ProductStore) UpdateVariant(v domain.Variant) (*domain.Variant, error) {
 	for i, existing := range s.Variants {
 		if existing.SKU == v.SKU {
+			v.SkuID = existing.SkuID
 			v.ProductID = existing.ProductID
 			v.CreatedAt = existing.CreatedAt
 			s.Variants[i] = v

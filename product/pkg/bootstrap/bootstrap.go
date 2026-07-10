@@ -71,7 +71,15 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 	couponSvc := service.NewCouponService(couponStore)
-	h := handler.NewHandler(svc, couponSvc)
+
+	inventoryStore, err := pg.NewInventoryStore(store.Pool())
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
+	inventorySvc := service.NewInventoryService(inventoryStore, store)
+
+	h := handler.NewHandler(svc, couponSvc, inventorySvc)
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -95,6 +103,14 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	mux.Handle("POST "+handler.RouteCoupons, requirePerm(permissions.CouponCreate, http.HandlerFunc(h.CreateCoupon)))
 	mux.Handle("PUT "+handler.RouteCouponByCode, requirePerm(permissions.CouponUpdate, http.HandlerFunc(h.UpdateCoupon)))
 	mux.Handle("DELETE "+handler.RouteCouponByCode, requirePerm(permissions.CouponDelete, http.HandlerFunc(h.DeleteCoupon)))
+
+	mux.Handle("PUT "+handler.RouteInventoryItem, requirePerm(permissions.InventoryStockWrite, h.UpsertInventoryItemHandler()))
+	mux.Handle("POST "+handler.RouteInventoryAdjust, requirePerm(permissions.InventoryStockWrite, h.AdjustInventoryItemHandler()))
+	mux.Handle("PUT "+handler.RouteInventoryItemBySkuID, requirePerm(permissions.InventoryStockWrite, h.UpsertInventoryItemBySkuIDHandler()))
+	mux.Handle("POST "+handler.RouteInventoryAdjustBySkuID, requirePerm(permissions.InventoryStockWrite, h.AdjustInventoryItemBySkuIDHandler()))
+	mux.Handle("POST "+handler.RouteInventoryReservations, requirePerm(permissions.InventoryReservationManage, h.CreateReservationHandler()))
+	mux.Handle("POST "+handler.RouteInventoryReservationCommit, requirePerm(permissions.InventoryReservationManage, h.CommitReservationHandler()))
+	mux.Handle("POST "+handler.RouteInventoryReservationRelease, requirePerm(permissions.InventoryReservationManage, h.ReleaseReservationHandler()))
 
 	return &App{
 		Handler:       mux,

@@ -47,6 +47,10 @@ func (s fakeProductStore) GetVariant(sku string) (*domain.Variant, error) {
 	return nil, nil
 }
 
+func (s fakeProductStore) GetVariantBySkuID(skuID string) (*domain.Variant, error) {
+	return nil, nil
+}
+
 func (s fakeProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) {
 	return nil, nil
 }
