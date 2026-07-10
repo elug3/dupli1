@@ -13,6 +13,11 @@ Dupli1 is a Go microservice backend for a fashion bag marketplace. The repo cont
 
 See [docs/current-state.md](docs/current-state.md) for the authoritative snapshot of what is implemented today. See [docs/service-layout.md](docs/service-layout.md) for directory and module layout.
 
+## Documentation conventions
+
+- AI agents must look up existing documents in `docs/` before writing new ones. You don't have to read everything — skim for relevant overlap first.
+- Add a service-name prefix when creating a new document (e.g. `product-*.md`, `cart-*.md`). You can skip the `order` document when working in `product-service`.
+
 ## Cursor Cloud specific instructions
 
 ### Prerequisites (pre-installed on the VM)
