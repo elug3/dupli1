@@ -1,7 +1,7 @@
 # Frontend migration: parent products + variants
 
 **Audience:** `dupli1-web` (storefront) and `dupli1-manage-web` (admin)  
-**Backend:** `dupli1-product` (catalog), `dupli1-inventory` (stock), `dupli1-order` (cart/checkout)  
+**Backend:** `dupli1-product` (catalog, stock, and reservations), `dupli1-order` (cart/checkout)  
 **Gateway base URL (local):** `http://localhost:8080`
 
 This document describes how to migrate clients from the old flat product model (one row = one color) to **parent style + variants (SKUs)**.

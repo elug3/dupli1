@@ -1,6 +1,6 @@
 # Cart Service
 
-The **cart service** (`dupli1-cart`) stores a persistent shopping cart per authenticated customer. It holds **what the customer intends to buy** (variant SKU + quantity). It does **not** reserve stock, apply coupons, or create orders — those remain in **order** and **inventory**.
+The **cart service** (`dupli1-cart`) stores a persistent shopping cart per authenticated customer. It holds **what the customer intends to buy** (variant SKU/SkuID + quantity). It does **not** reserve stock, apply coupons, or create orders — those remain in **order** and **product** (stock and reservations were merged into the product service; see [product-variants-plan.md](product-variants-plan.md)).
 
 For the short-lived checkout pipeline (coupon, TTL, inventory reservation), see [checkout-session.md](checkout-session.md).
 
@@ -10,19 +10,17 @@ For the short-lived checkout pipeline (coupon, TTL, inventory reservation), see 
 flowchart LR
     subgraph shopping["Shopping (persistent)"]
         Cart["dupli1-cart"]
-        Product["dupli1-product"]
-        InvRead["dupli1-inventory<br/>(read only)"]
+        Product["dupli1-product<br/>(catalog + stock)"]
     end
 
     subgraph checkout["Checkout (short-lived)"]
         Order["dupli1-order"]
-        InvWrite["dupli1-inventory<br/>(reserve)"]
     end
 
     Cart -->|"validate price"| Product
-    Cart -->|"available_qty hint"| InvRead
+    Cart -->|"available_qty hint"| Product
     Cart -.->|"client copies items"| Order
-    Order -->|"POST .../complete"| InvWrite
+    Order -->|"POST .../complete: reserve stock"| Product
     Order -.->|"pending order"| Pay["dupli1-payment"]
 ```
 
@@ -48,13 +46,13 @@ flowchart LR
 
 | Concern | Owner | Notes |
 |---------|-------|-------|
-| Stock levels | `dupli1-inventory` | Cart may **read** availability; never writes |
-| Stock reservations | `dupli1-inventory` | Triggered by order on checkout `complete` |
+| Stock levels | `dupli1-product` | Cart may **read** availability; never writes. Merged in from the former standalone inventory service |
+| Stock reservations | `dupli1-product` | Triggered by order on checkout `complete` |
 | Coupons / discounts | `dupli1-product` + `dupli1-order` | Applied in checkout session |
 | Orders | `dupli1-order` | Created when checkout completes |
 | Catalog / prices | `dupli1-product` | Cart validates SKU and resolves price on read |
 
-There is **no conflict** with inventory: cart stores **intent**; inventory stores **truth**. Overselling at checkout time is handled when order calls `POST /api/v1/inventory/reservations`.
+There is **no conflict** with inventory: cart stores **intent**; product stores **truth**. Overselling at checkout time is handled when order calls `POST /api/v1/inventory/reservations` (served by product).
 
 ---
 
@@ -65,13 +63,13 @@ There is **no conflict** with inventory: cart stores **intent**; inventory store
 ```text
 cart/       → persistent cart
 order/      → checkout sessions + orders
-inventory/  → stock + reservations
+product/    → catalog + stock + reservations (inventory merged in; see product-variants-plan.md)
 ```
 
 **Why split**
 
 - Different lifecycles (persistent cart vs 30‑min checkout vs committed order)
-- Clear bounded contexts (intent vs commitment vs warehouse)
+- Clear bounded contexts (intent vs commitment vs catalog/warehouse)
 - Cart can evolve (guest cart, merge on login) without bloating order
 
 **Costs**
@@ -88,7 +86,7 @@ Move cart tables and routes into `dupli1-order` so one “commerce” service ow
 - Small team and ops simplicity matter more than strict boundaries
 - You want server-side checkout handoff without a separate cart container
 
-**Not recommended:** merge cart into **inventory**. Inventory is SKU-centric stock truth; cart is customer-centric shopping intent.
+**Not recommended:** merge cart into **product**. Product (including stock) is SKU-centric catalog/inventory truth; cart is customer-centric shopping intent. This mirrors the reasoning that kept inventory itself SKU-centric even after it merged into product.
 
 ### Alternative: stay split + checkout handoff API (future)
 
@@ -119,7 +117,7 @@ Guest / anonymous carts are **not implemented** yet (planned phase 2).
 
 ### Persisted (PostgreSQL)
 
-Only **SKU + quantity** are stored. **Not** `product_id`, price, or images.
+**SKU/SkuID + quantity** are stored. **Not** `product_id`, price, or images.
 
 ```sql
 CREATE TABLE carts (
@@ -130,24 +128,25 @@ CREATE TABLE carts (
 CREATE TABLE cart_items (
     customer_id TEXT NOT NULL REFERENCES carts(customer_id) ON DELETE CASCADE,
     sku         TEXT NOT NULL,
+    sku_id      TEXT NOT NULL,
     quantity    INTEGER NOT NULL CHECK (quantity > 0),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (customer_id, sku)
+    PRIMARY KEY (customer_id, sku_id)
 );
 ```
 
-Sellable unit is the **variant SKU** (e.g. `BOT-001-BLK`), aligned with [product variants](product-variants-plan.md), inventory, and checkout.
+Sellable unit is the **variant SKU**, identified by a human-readable `sku` (e.g. `BOT-001-BLK`) and a canonical ULID `sku_id`, aligned with [product variants](product-variants-plan.md), inventory, and checkout. Cart resolves whichever identifier the caller sends against product and always persists both — writes self-heal toward a full pair over time.
 
 ### Enriched on read (not stored)
 
-On `GET /api/v1/cart` and after mutations, cart calls:
+On `GET /api/v1/cart` and after mutations, cart calls product for both variant info and stock:
 
 | Source | Endpoint | Fields added |
 |--------|----------|--------------|
-| Product | `GET /api/v1/variants/{sku}` | `product_id`, `unit_price_cents`, `color`, `image_url` |
-| Inventory | `GET /api/v1/inventory/{sku}` | `available_qty` (optional) |
+| Product | `GET /api/v1/variants/{sku}` or `/api/v1/variants/by-sku-id/{skuId}` | `product_id`, `unit_price_cents`, `color`, `image_url` |
+| Product (inventory) | `GET /api/v1/inventory/{sku}` or `/api/v1/inventory/by-sku-id/{skuId}` | `available_qty` (optional) |
 
-Prices are **server-sourced** from product — clients send only `{ "sku", "quantity" }` on add.
+Prices are **server-sourced** from product — clients send only `{ "sku" or "sku_id", "quantity" }` on add.
 
 ---
 
@@ -166,6 +165,7 @@ Return the authenticated user's cart.
   "items": [
     {
       "sku": "BOT-001-BLK",
+      "sku_id": "01JAY6Z9K3F8QW1G7H2T5X0ABC",
       "product_id": "BOT-001",
       "quantity": 1,
       "unit_price_cents": 125000,
@@ -183,11 +183,15 @@ Return the authenticated user's cart.
 
 ### `POST /api/v1/cart/items`
 
-Add or update one line (upsert by SKU).
+Add or update one line (upsert by `sku` or `sku_id`; either identifier resolves to the same variant).
 
 **Request**
 ```json
 { "sku": "BOT-001-BLK", "quantity": 2 }
+```
+or
+```json
+{ "sku_id": "01JAY6Z9K3F8QW1G7H2T5X0ABC", "quantity": 2 }
 ```
 
 **Response `200`** — updated cart (same shape as `GET`).
@@ -212,7 +216,7 @@ Replace all line items.
 
 ### `DELETE /api/v1/cart/items/{sku}`
 
-Remove one line.
+Remove one line by human SKU. `DELETE /api/v1/cart/items/by-sku-id/{skuId}` removes by canonical `sku_id` instead.
 
 ---
 
@@ -238,7 +242,7 @@ sequenceDiagram
     participant Cart as dupli1-cart
     participant Order as dupli1-order
     participant Pay as dupli1-payment
-    participant Inventory as dupli1-inventory
+    participant Product as dupli1-product
 
     Client->>Cart: GET /api/v1/cart
     Cart-->>Client: items + unit_price_cents
@@ -249,7 +253,7 @@ sequenceDiagram
 
     Client->>Order: POST .../coupon (optional)
     Client->>Order: POST .../complete
-    Order->>Inventory: reserve stock
+    Order->>Product: reserve stock (/api/v1/inventory/reservations)
     Order-->>Client: pending order
 
     Client->>Pay: POST /api/v1/payments → redirect Stripe

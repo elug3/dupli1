@@ -15,7 +15,6 @@ sequenceDiagram
     participant Client
     participant Order as dupli1-order
     participant Product as dupli1-product
-    participant Inventory as dupli1-inventory
 
     Client->>Order: POST /api/v1/checkout/sessions
     Order-->>Client: open session (expires in 30 min)
@@ -29,9 +28,13 @@ sequenceDiagram
     Order-->>Client: session with discount + total
 
     Client->>Order: POST /api/v1/checkout/sessions/{id}/complete
-    Order->>Inventory: reserve stock
+    Order->>Product: reserve stock (/api/v1/inventory/reservations)
     Order-->>Client: completed session + pending order
 ```
+
+Stock and reservations are owned by the product service (merged in from the
+former standalone inventory service) — `DUPLI1_INVENTORY_URL` points at
+`dupli1-product`.
 
 ## Session states
 
@@ -173,7 +176,7 @@ After completion, the order is **`pending`** with inventory reserved. The custom
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DUPLI1_ORDER_ADDR` | `:8083` | Listen address |
-| `DUPLI1_INVENTORY_URL` | `http://localhost:8082` | Inventory reservation API |
+| `DUPLI1_INVENTORY_URL` | `http://localhost:8081` | Inventory reservation API (product service — stock/reservations were merged in) |
 | `DUPLI1_PRODUCT_URL` | `http://localhost:8081` | Coupon redemption API |
 
 ## Errors

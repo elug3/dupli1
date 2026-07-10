@@ -1,6 +1,6 @@
 # Plan: Parent Product + Variants
 
-**Status:** Phases 1–3 implemented in product service (schema, backfill, read/write APIs). Phase 4 (`inStock` via inventory) and Phase 5 (drop legacy columns) remain.
+**Status:** Phases 1–3 implemented in product service (schema, backfill, read/write APIs). Phases 4–5 below (stock integration, cleanup) were superseded by a larger follow-up: every variant now has a canonical ULID `SkuID` (in addition to the human `sku`), and the standalone inventory service was merged into product outright (stock/reservations now live in product's own database, not read via an external HTTP client). See `product/pkg/domain/skuid.go`, `product/pkg/service/inventory_service.go`, and [current-state.md](current-state.md) for the implemented shape.
 
 **Frontend clients:** see [frontend-product-variants-migration.md](frontend-product-variants-migration.md) (`dupli1-web`, `dupli1-manage-web`).
 
@@ -157,7 +157,9 @@ Deprecate:
 
 ## Stock
 
-- **Source of truth:** inventory service by variant `sku`.
+_(Historical — see the status note at the top of this doc. As implemented, product is the source of truth directly; there is no separate inventory service to call.)_
+
+- **Source of truth:** inventory, by variant `sku` (originally planned as a separate service; now merged into product).
 - Remove reliance on `products.stock` for availability (stop writing it; ignore or drop later).
 - PDP `inStock`: either
   - **A (preferred for UX):** product service batch-reads inventory for variant SKUs when building PDP, or
@@ -238,6 +240,6 @@ Start with **B** if inventory client is not wired into product yet; add **A** wh
 ## References
 
 - Current product service: `product/pkg/`
-- Inventory SKU model: `inventory/pkg/`
+- Inventory SKU model (merged into product): `product/pkg/domain/inventory.go`, `product/pkg/service/inventory_service.go`
 - Order line items: `order/pkg/domain/order.go`
 - Prior note on removed `/manage`: [TODO.md](TODO.md)

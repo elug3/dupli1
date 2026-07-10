@@ -216,7 +216,11 @@ Login, refresh, logout, health, JWKS — public.
 | `DELETE` | `/api/v1/coupons/{code}` | `coupon.delete` |
 | `POST` | `/api/v1/coupons/{code}/redeem` | — (public) |
 
-### Inventory service
+### Inventory (served by the product service)
+
+Stock and reservations were merged from a standalone inventory service into
+`dupli1-product` after this spec was written; the permission names and route
+paths below are unchanged. Each route also has a `by-sku-id/{skuId}` sibling.
 
 | Method | Path | Permission |
 |--------|------|------------|
