@@ -10,7 +10,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 |------|--------|
 | Auth (login, JWT, fine-grained permissions) | Implemented |
 | Product catalog (bags, coupons, images, PDP) | Implemented |
-| Inventory (stock, reservations) | Implemented (PostgreSQL) |
+| Inventory (stock, reservations) | Implemented (PostgreSQL, owned by product) |
 | Orders + checkout sessions | Implemented (PostgreSQL) |
 | Shopping cart | Implemented (PostgreSQL) |
 | Payments (Stripe Checkout) | Implemented — see [payment-service.md](payment-service.md) |
@@ -22,7 +22,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 Services live in **per-service directories**, not `cmd/dupli1-*` / `pkg/*` at the repo root:
 
 ```text
-auth/, product/, inventory/, order/, cart/, payment/, notification/   # each has cmd/ + pkg/
+auth/, product/, order/, cart/, payment/, notification/   # each has cmd/ + pkg/
 api/nginx.conf                                      # gateway
 ```
 
@@ -58,20 +58,13 @@ See [service-layout.md](service-layout.md) for details.
 - **Persistence:** `products` on `postgres-product`
 - **Features:**
   - Parent (style) + variant (SKU) model: search returns parents only (no color duplicates)
-  - Public: `GET /api/v1/products` (optional `product.read` widens view), `GET /api/v1/products/{id}`, coupon redeem
-  - Admin: per-route permissions (`product.create`, `coupon.read`, …) — see [permissions.md](permissions.md)
+  - Public: `GET /api/v1/products` (optional `product.read` widens view; query filters `category`, `brand`, `color`, `size`, `material`, `tags`), `GET /api/v1/products/{id}` (parent + variants), coupon redeem
+  - Admin: per-route permissions (`product.create`, `coupon.read`, …) — see [permissions.md](permissions.md); parent CRUD, variant CRUD at `/api/v1/products/{id}/variants`, images on variant or default variant
+  - Stock and reservations at `/api/v1/inventory/*` (merged in from the former standalone `inventory` service), keyed by a canonical ULID `SkuID` with `sku` and `by-sku-id/{skuId}` lookups both supported; reads are public, writes require `inventory.stock.write` or `inventory.reservation.manage`
   - Protected routes validate RS256 via `AUTH_JWKS_URL`; authorization from `permissions` claim
   - Inline schema migration + variant backfill on startup
   - Plan: [product-variants-plan.md](product-variants-plan.md)
 - **Tests:** `cd product && go test ./...`
-
-### dupli1-inventory
-
-- **Host port:** 8082
-- **Persistence:** PostgreSQL (`inventory` on `postgres-inventory`)
-- **Features:** Stock and reservations at `/api/v1/inventory/*`
-- **Auth:** Public reads; writes require Bearer JWT with `inventory.stock.write` or `inventory.reservation.manage` when `AUTH_JWKS_URL` is set
-- **Tests:** `cd inventory && go test ./...`
 
 ### dupli1-order
 
@@ -82,7 +75,7 @@ See [service-layout.md](service-layout.md) for details.
   - Order lifecycle at `/api/v1/orders` — statuses: `pending`, `paid`, `in_transit`, `fulfilled`, `canceled`
   - Consumes **`payment.succeeded`** (NATS) → `paid`; 5-minute unpaid `pending` expiry worker
   - `POST /api/v1/orders/{id}/ship` → `in_transit` + commit inventory (plan B)
-  - Calls inventory to reserve stock; calls product to redeem coupons
+  - Calls product to reserve stock and redeem coupons
 - **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS; HS256 fallback in dev). Storefront ABAC on `customer_id`; `order.create` / `order.read.all` bypass ABAC. Ship requires `order.ship`; status changes require `order.status.update`
 - **Tests:** `cd order && go test ./...`
 
@@ -93,7 +86,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Features:**
   - Persistent per-customer cart at `/api/v1/cart` (see [cart-service.md](cart-service.md))
   - Admin read at `/api/v1/carts/{customer_id}` requires `cart.read`
-  - Enriches lines from product (price, images) and inventory (availability)
+  - Enriches lines from product (price, images, availability)
 - **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only), with `JWT_SECRET` HS256 fallback in dev
 - **Tests:** `cd cart && go test ./...`
 
@@ -125,8 +118,7 @@ See [service-layout.md](service-layout.md) for details.
 | Store | Used by | Local |
 |-------|---------|-------|
 | PostgreSQL `dupli1_db` | auth | `postgres-auth:5432` |
-| PostgreSQL `products` | product | `postgres-product:5433` |
-| PostgreSQL `inventory` | inventory | `postgres-inventory:5434` |
+| PostgreSQL `products` | product (also stock/reservations) | `postgres-product:5433` |
 | PostgreSQL `orders` | order | `postgres-order:5435` |
 | PostgreSQL `cart` | cart | `postgres-cart:5436` |
 | PostgreSQL `payments` | payment | `postgres-payment:5437` |
@@ -139,8 +131,7 @@ See [service-layout.md](service-layout.md) for details.
 | Service | Public | Authenticated |
 |---------|--------|---------------|
 | auth | login, refresh, logout, JWKS | register (`user.create`), me, user admin (permissions) |
-| product | health, product search/PDP, coupon redeem | product/coupon CRUD (per permission), image upload |
-| inventory | stock reads | stock writes (`inventory.stock.write`), reservations (`inventory.reservation.manage`) |
+| product | health, product search/PDP, coupon redeem, inventory reads | product/coupon CRUD (per permission), image upload, inventory writes (`inventory.stock.write`, `inventory.reservation.manage`) |
 | order | health only | orders, checkout (ABAC + permissions), ship (`order.ship`) |
 | cart | health only | own cart; admin read (`cart.read`) |
 | payment | health, dev simulate | payments (ABAC + permissions) |
@@ -155,7 +146,6 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Per
 | `github.com/elug3/dupli1` | root stub |
 | `github.com/elug3/dupli1/auth` | `auth/` |
 | `github.com/elug3/dupli1/product` | `product/` |
-| `github.com/elug3/dupli1/inventory` | `inventory/` |
 | `github.com/elug3/dupli1/order` | `order/` |
 | `github.com/elug3/dupli1/cart` | `cart/` |
 | `github.com/elug3/dupli1/payment` | `payment/` |

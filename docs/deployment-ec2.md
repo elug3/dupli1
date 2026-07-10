@@ -8,8 +8,8 @@ Run the full Dupli1 backend on one EC2 instance using Docker Compose. This repla
 Internet → EC2 (Elastic IP)
              └── docker compose
                    ├── dupli1-proxy (nginx :80/:443)
-                   ├── dupli1-auth, product, inventory, order, notification
-                   ├── postgres (single instance, 4 databases)
+                   ├── dupli1-auth, product, order, notification
+                   ├── postgres (single instance, 3 databases)
                    ├── redis, nats, minio
 ```
 
@@ -74,7 +74,7 @@ If you have production data on RDS:
 bash /opt/dupli1/app/infra/scripts/migrate-rds-to-ec2.sh
 ```
 
-This starts RDS if stopped, dumps `dupli1_db` and `products`, and restores into local Postgres. Inventory and orders were not on RDS and start empty.
+This starts RDS if stopped, dumps `dupli1_db` and `products`, and restores into local Postgres. Orders was not on RDS and starts empty.
 
 Stop RDS again after migration:
 

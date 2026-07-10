@@ -30,9 +30,8 @@ See [infra/terraform/README.md](../infra/terraform/README.md) for full steps.
 | Service | Purpose |
 |---------|---------|
 | `dupli1-auth` | Authentication API |
-| `dupli1-product` | Product catalog API |
+| `dupli1-product` | Product catalog API (also stock/reservations) |
 | `dupli1-proxy` | nginx reverse proxy (ALB mode) |
-| `dupli1-inventory` | Inventory API |
 | `dupli1-order` | Order API |
 | `dupli1-notification` | Notification API |
 

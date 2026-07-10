@@ -10,9 +10,6 @@ services:
   postgres-product:
     profiles: ["local-db"]
 
-  postgres-inventory:
-    profiles: ["local-db"]
-
   postgres-order:
     profiles: ["local-db"]
 
@@ -86,18 +83,6 @@ services:
     healthcheck:
       start_period: 60s
 
-  dupli1-inventory:
-    ports: []
-    environment:
-      DUPLI1_INVENTORY_DB: postgres://dupli1:${POSTGRES_PASSWORD}@postgres:5432/inventory?sslmode=disable
-    depends_on: !reset
-      postgres:
-        condition: service_healthy
-      dupli1-auth:
-        condition: service_healthy
-    healthcheck:
-      start_period: 60s
-
   dupli1-order:
     ports: []
     environment:
@@ -109,8 +94,6 @@ services:
       postgres:
         condition: service_healthy
       dupli1-auth:
-        condition: service_healthy
-      dupli1-inventory:
         condition: service_healthy
       nats:
         condition: service_healthy

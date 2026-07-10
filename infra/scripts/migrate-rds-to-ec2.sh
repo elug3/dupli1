@@ -84,7 +84,7 @@ echo "Ensuring local databases exist..."
 docker compose -f "$APP_DIR/docker-compose.yml" -f "$APP_DIR/docker-compose.prod.yml" \
   --env-file "$ENV_FILE" exec -T postgres psql -U dupli1 -d dupli1_db -c "SELECT 1" >/dev/null
 
-for db in products inventory orders; do
+for db in products orders; do
   docker compose -f "$APP_DIR/docker-compose.yml" -f "$APP_DIR/docker-compose.prod.yml" \
     --env-file "$ENV_FILE" exec -T postgres \
     psql -U dupli1 -d dupli1_db -tc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1 \

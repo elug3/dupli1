@@ -12,7 +12,6 @@ DESIRED_COUNT="${DESIRED_COUNT:-1}"
 SERVICES=(
   dupli1-web
   dupli1-notification
-  dupli1-inventory
   dupli1-manage-web
   dupli1-proxy
   dupli1-product

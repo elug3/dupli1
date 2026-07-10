@@ -58,22 +58,6 @@ jobs:
         working-directory: product
         run: go test ./... -count=1
 
-  inventory:
-    name: inventory
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: inventory/go.mod
-
-      - name: Test inventory module
-        working-directory: inventory
-        run: go test ./... -count=1
-
   order:
     name: order
     runs-on: ubuntu-latest

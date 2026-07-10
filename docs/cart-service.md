@@ -278,7 +278,7 @@ See [checkout-session.md](checkout-session.md) for checkout session details. See
 | `DUPLI1_CART_ADDR` | `:8086` | Listen address |
 | `DUPLI1_CART_DB` | — | Postgres URL (`cart` database); omit for in-memory (tests) |
 | `DUPLI1_PRODUCT_URL` | `http://localhost:8081` | Variant lookup |
-| `DUPLI1_INVENTORY_URL` | `http://localhost:8082` | Stock hints (optional) |
+| `DUPLI1_INVENTORY_URL` | `http://localhost:8081` | Stock hints (optional; product service — stock/reservations were merged in) |
 | `AUTH_JWKS_URL` | — | RS256 JWT validation (Compose: auth JWKS) |
 | `JWT_SECRET` | — | HS256 dev fallback |
 

@@ -8,7 +8,7 @@ All services listen on port `8080` inside Docker. The nginx gateway proxies by p
 | `/api/v1/auth/` | `dupli1-auth:8080` |
 | `/api/v1/products` | `dupli1-product:8080` |
 | `/api/v1/coupons` | `dupli1-product:8080` |
-| `/api/v1/inventory/` | `dupli1-inventory:8080` |
+| `/api/v1/inventory/` | `dupli1-product:8080` |
 | `/api/v1/orders` | `dupli1-order:8080` |
 | `/api/v1/checkout` | `dupli1-order:8080` |
 | `/api/v1/cart` | `dupli1-cart:8080` |
@@ -288,7 +288,11 @@ See [payment-service.md](payment-service.md) for Stripe redirect flow, 5-minute 
 
 ---
 
-## Inventory Service
+## Inventory (served by the product service)
+
+Merged into `dupli1-product` — same routes as the former standalone inventory
+service. Each route also has a `by-sku-id/{skuId}` sibling keyed by the
+variant's canonical ULID `skuId` (e.g. `GET /api/v1/inventory/by-sku-id/{skuId}`).
 
 | Method | Path | Permission | Description |
 |---|---|---|---|

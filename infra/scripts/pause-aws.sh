@@ -14,7 +14,6 @@ VPN_INSTANCE_ID="${VPN_INSTANCE_ID:-i-0f7a516c42a8b7afd}"
 SERVICES=(
   dupli1-web
   dupli1-notification
-  dupli1-inventory
   dupli1-manage-web
   dupli1-proxy
   dupli1-product

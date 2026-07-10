@@ -441,9 +441,12 @@ Parent IDs use the brand prefix (e.g. `BOT-001`). Variants are sellable SKUs (e.
 
 ---
 
-## Inventory Service — `/api/v1/inventory`
+## Inventory — `/api/v1/inventory` (served by the product service)
 
-PostgreSQL-backed stock and reservations. **Reads are public.** Writes require Bearer JWT when `AUTH_JWKS_URL` is configured.
+Merged into the product service; same routes as the former standalone
+inventory service. Each route also has a `by-sku-id/{skuId}` sibling keyed by
+the variant's canonical ULID `skuId`. **Reads are public.** Writes require
+Bearer JWT when `AUTH_JWKS_URL` is configured.
 
 | Method | Path | Permission |
 |--------|------|------------|
@@ -697,13 +700,13 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` / `product.variant.delete` | product |
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | product |
 | GET/POST/PUT/DELETE | `/api/v1/coupons` | `coupon.read` / `coupon.create` / `coupon.update` / `coupon.delete` | product |
-| GET | `/api/v1/inventory/health` | — | inventory |
-| GET | `/api/v1/inventory/{sku}` | — | inventory |
-| PUT | `/api/v1/inventory/{sku}` | `inventory.stock.write` | inventory |
-| POST | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` | inventory |
-| POST | `/api/v1/inventory/reservations` | `inventory.reservation.manage` | inventory |
-| POST | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` | inventory |
-| POST | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` | inventory |
+| GET | `/api/v1/inventory/health` | — | product |
+| GET | `/api/v1/inventory/{sku}` | — | product |
+| PUT | `/api/v1/inventory/{sku}` | `inventory.stock.write` | product |
+| POST | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` | product |
+| POST | `/api/v1/inventory/reservations` | `inventory.reservation.manage` | product |
+| POST | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` | product |
+| POST | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` | product |
 | POST/GET | `/api/v1/checkout/sessions` | ABAC / `order.create` / `order.read.all` | order |
 | GET/PUT/POST/DELETE | `/api/v1/checkout/sessions/{id}/...` | ABAC (same as orders) | order |
 | POST/GET | `/api/v1/orders` | ABAC / `order.create` / `order.read.all` | order |

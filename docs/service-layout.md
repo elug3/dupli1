@@ -9,10 +9,7 @@ dupli1/
 ├── auth/                     # Auth service module
 │   ├── cmd/                  # CLI entrypoint (cobra)
 │   └── pkg/                  # domain, service, ports, infra, handler, bootstrap
-├── product/                  # Product catalog module
-│   ├── cmd/
-│   └── pkg/
-├── inventory/
+├── product/                  # Product catalog module (also owns stock/reservations)
 │   ├── cmd/
 │   └── pkg/
 ├── order/
@@ -91,20 +88,14 @@ Owns:
 
 **Module:** `github.com/elug3/dupli1/product`  
 **Framework:** stdlib `net/http`  
-**Storage:** PostgreSQL (`products` table), MinIO/S3 (images)
+**Storage:** PostgreSQL (`products` table, plus stock/reservations tables), MinIO/S3 (images)
 
 Owns:
 
-- Parent styles + variants (SKUs): search returns parents only; PDP embeds variants
+- Parent styles + variants (SKUs, each with a canonical ULID `SkuID`): search returns parents only; PDP embeds variants
 - Admin product/variant/coupon CRUD; brand-prefixed parent IDs (`BOT-001`); images on variants
+- Stock and reservations at `/api/v1/inventory/*` (merged in from the former standalone `inventory` service — same routes, keyed by `SkuID` internally, `sku` and `by-sku-id/{skuId}` lookups both supported). Public reads; writes require `inventory.stock.write` or `inventory.reservation.manage`
 - JWT validation via `AUTH_JWKS_URL` (RS256 JWKS); per-route permission checks (`product.create`, `coupon.read`, …)
-
-### Inventory (`inventory/pkg`)
-
-**Module:** `github.com/elug3/dupli1/inventory`  
-**Storage:** PostgreSQL (`inventory` table set), in-memory fallback when no DB URL is configured (tests)
-
-Owns stock and reservations at `/api/v1/inventory/*`. Public reads; writes require Bearer JWT with `inventory.stock.write` or `inventory.reservation.manage` when auth is configured.
 
 ### Order (`order/pkg`)
 
@@ -142,7 +133,7 @@ Stripe Checkout redirect; publishes `payment.succeeded` on NATS. See [payment-se
 | `/api/v1/auth/` | dupli1-auth |
 | `/api/v1/products` | dupli1-product |
 | `/api/v1/coupons` | dupli1-product |
-| `/api/v1/inventory/` | dupli1-inventory |
+| `/api/v1/inventory/` | dupli1-product |
 | `/api/v1/orders` | dupli1-order |
 | `/api/v1/checkout` | dupli1-order |
 | `/api/v1/cart` | dupli1-cart |
@@ -151,7 +142,7 @@ Stripe Checkout redirect; publishes `payment.succeeded` on NATS. See [payment-se
 
 Checkout sessions are served by order (`/api/v1/checkout/sessions`). Cart routes are served by cart.
 
-Direct host ports (bypass gateway): auth **18080**, product **8081**, inventory **8082**, order **8083**, cart **8086**, notification **8084**.
+Direct host ports (bypass gateway): auth **18080**, product **8081**, order **8083**, cart **8086**, notification **8084**.
 
 ## Adding a new service
 
@@ -167,7 +158,6 @@ Direct host ports (bypass gateway): auth **18080**, product **8081**, inventory 
 ```bash
 cd auth && go test ./...
 cd product && go test ./...
-cd inventory && go test ./...
 cd order && go test ./...
 cd cart && go test ./...
 ```
