@@ -1,5 +1,34 @@
 package domain
 
+// MergeUpdate returns a copy of the variant with any non-zero-value fields
+// from incoming applied on top. Used by UpdateVariant so a partial request
+// body (e.g. price-only) can't silently blank out color/size/status/images —
+// omitted fields keep their current value instead of being overwritten with
+// the JSON zero value. Identity fields (SkuID, SKU, ProductID, CreatedAt)
+// are never taken from incoming; callers set those from the lookup key.
+func (existing Variant) MergeUpdate(incoming Variant) Variant {
+	merged := existing
+	if incoming.Color != "" {
+		merged.Color = incoming.Color
+	}
+	if incoming.Size != "" {
+		merged.Size = incoming.Size
+	}
+	if incoming.SellingPrice != 0 {
+		merged.SellingPrice = incoming.SellingPrice
+	}
+	if incoming.Price != 0 {
+		merged.Price = incoming.Price
+	}
+	if incoming.Status != "" {
+		merged.Status = incoming.Status
+	}
+	if len(incoming.ImageURLs) > 0 {
+		merged.ImageURLs = incoming.ImageURLs
+	}
+	return merged
+}
+
 // EnrichFromVariants fills summary and legacy fields from variants.
 // When includeVariants is false, Variants is left empty (list/search cards).
 func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {

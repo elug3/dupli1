@@ -183,6 +183,9 @@ func (s *ProductSearchService) CreateVariant(productID string, v domain.Variant)
 	return created, nil
 }
 
+// UpdateVariant merges the incoming (possibly partial) body onto the
+// existing variant rather than overwriting it outright, so an update that
+// only sets e.g. price can't silently blank color/size/status/images.
 func (s *ProductSearchService) UpdateVariant(productID, sku string, v domain.Variant) (*domain.Variant, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
@@ -194,9 +197,10 @@ func (s *ProductSearchService) UpdateVariant(productID, sku string, v domain.Var
 	if existing.ProductID != productID {
 		return nil, fmt.Errorf("variant not found")
 	}
-	v.SKU = sku
-	v.ProductID = productID
-	updated, err := s.store.UpdateVariant(v)
+	merged := existing.MergeUpdate(v)
+	merged.SKU = sku
+	merged.ProductID = productID
+	updated, err := s.store.UpdateVariant(merged)
 	if err != nil {
 		return nil, err
 	}
