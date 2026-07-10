@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
@@ -96,11 +97,77 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_due_at TIMESTAMPTZ`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_by TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMPTZ`,
+		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
+		`ALTER TABLE checkout_session_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
 	}
 	for _, stmt := range alterStmts {
 		_, _ = r.pool.Exec(ctx, stmt)
 	}
 	_, _ = r.pool.Exec(ctx, `UPDATE orders SET payment_due_at = created_at + INTERVAL '5 minutes' WHERE payment_due_at IS NULL`)
+
+	if err := r.promoteSkuIDPrimaryKey(ctx, "order_items", "order_id"); err != nil {
+		return err
+	}
+	if err := r.promoteSkuIDPrimaryKey(ctx, "checkout_session_items", "session_id"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// promoteSkuIDPrimaryKey swaps table's primary key from (parentCol, sku) to
+// (parentCol, sku_id), unlike cart's ephemeral data this table holds
+// permanent historical/financial records, so rows can't simply be purged.
+// Promotion is gated on every row already having a sku_id — cmd/backfill-sku-id
+// resolves historical sku strings via product's API first. Until that's
+// complete, this is a no-op on every startup (logged once, not an error) and
+// the table stays on its legacy (parentCol, sku) key.
+func (r *Repository) promoteSkuIDPrimaryKey(ctx context.Context, table, parentCol string) error {
+	var pkColumns []string
+	rows, err := r.pool.Query(ctx, `
+		SELECT a.attname
+		FROM pg_index i
+		JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+		WHERE i.indrelid = $1::regclass AND i.indisprimary
+		ORDER BY array_position(i.indkey, a.attnum)
+	`, table)
+	if err != nil {
+		return fmt.Errorf("check %s primary key: %w", table, err)
+	}
+	for rows.Next() {
+		var col string
+		if err := rows.Scan(&col); err != nil {
+			rows.Close()
+			return fmt.Errorf("check %s primary key: %w", table, err)
+		}
+		pkColumns = append(pkColumns, col)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("check %s primary key: %w", table, err)
+	}
+	if len(pkColumns) == 2 && pkColumns[1] == "sku_id" {
+		return nil
+	}
+
+	var remaining int
+	if err := r.pool.QueryRow(ctx, fmt.Sprintf(`SELECT count(*) FROM %s WHERE sku_id IS NULL`, table)).Scan(&remaining); err != nil {
+		return fmt.Errorf("count unresolved %s rows: %w", table, err)
+	}
+	if remaining > 0 {
+		log.Printf("order: %s has %d row(s) with no sku_id yet; run cmd/backfill-sku-id, then restart to promote the primary key (staying on legacy (%s, sku) key for now)",
+			table, remaining, parentCol)
+		return nil
+	}
+
+	if _, err := r.pool.Exec(ctx, fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN sku_id SET NOT NULL`, table)); err != nil {
+		return fmt.Errorf("set %s.sku_id not null: %w", table, err)
+	}
+	if _, err := r.pool.Exec(ctx, fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT %s_pkey`, table, table)); err != nil {
+		return fmt.Errorf("drop legacy %s pkey: %w", table, err)
+	}
+	if _, err := r.pool.Exec(ctx, fmt.Sprintf(`ALTER TABLE %s ADD PRIMARY KEY (%s, sku_id)`, table, parentCol)); err != nil {
+		return fmt.Errorf("promote %s primary key: %w", table, err)
+	}
+	log.Printf("order: promoted %s primary key to (%s, sku_id)", table, parentCol)
 	return nil
 }
 
@@ -174,13 +241,20 @@ func (r *Repository) Save(ctx context.Context, order *domain.Order) error {
 	}
 	for _, item := range order.Items {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO order_items (order_id, sku, quantity, unit_price_cents)
-			VALUES ($1, $2, $3, $4)
-		`, order.ID, item.SKU, item.Quantity, item.UnitPriceCents); err != nil {
+			INSERT INTO order_items (order_id, sku, sku_id, quantity, unit_price_cents)
+			VALUES ($1, $2, $3, $4, $5)
+		`, order.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceCents); err != nil {
 			return err
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) {
@@ -221,7 +295,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 
 func (r *Repository) loadOrderItems(ctx context.Context, orderID string) ([]domain.OrderItem, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT sku, quantity, unit_price_cents FROM order_items WHERE order_id = $1 ORDER BY sku
+		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_cents FROM order_items WHERE order_id = $1 ORDER BY sku
 	`, orderID)
 	if err != nil {
 		return nil, err
@@ -231,7 +305,7 @@ func (r *Repository) loadOrderItems(ctx context.Context, orderID string) ([]doma
 	var items []domain.OrderItem
 	for rows.Next() {
 		var item domain.OrderItem
-		if err := rows.Scan(&item.SKU, &item.Quantity, &item.UnitPriceCents); err != nil {
+		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -360,9 +434,9 @@ func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.Ch
 	}
 	for _, item := range session.Items {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO checkout_session_items (session_id, sku, quantity, unit_price_cents)
-			VALUES ($1, $2, $3, $4)
-		`, session.ID, item.SKU, item.Quantity, item.UnitPriceCents); err != nil {
+			INSERT INTO checkout_session_items (session_id, sku, sku_id, quantity, unit_price_cents)
+			VALUES ($1, $2, $3, $4, $5)
+		`, session.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceCents); err != nil {
 			return err
 		}
 	}
@@ -392,7 +466,7 @@ func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT sku, quantity, unit_price_cents FROM checkout_session_items WHERE session_id = $1 ORDER BY sku
+		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_cents FROM checkout_session_items WHERE session_id = $1 ORDER BY sku
 	`, id)
 	if err != nil {
 		return nil, err
@@ -401,7 +475,7 @@ func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain
 
 	for rows.Next() {
 		var item domain.OrderItem
-		if err := rows.Scan(&item.SKU, &item.Quantity, &item.UnitPriceCents); err != nil {
+		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents); err != nil {
 			return nil, err
 		}
 		session.Items = append(session.Items, item)

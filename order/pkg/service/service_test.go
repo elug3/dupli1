@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -38,10 +39,12 @@ func (f *fakeInventory) ReleaseReservation(ctx context.Context, reservationID st
 
 type recordedPublisher struct {
 	subjects []string
+	events   []any
 }
 
 func (p *recordedPublisher) Publish(ctx context.Context, subject string, event any) error {
 	p.subjects = append(p.subjects, subject)
+	p.events = append(p.events, event)
 	return nil
 }
 
@@ -155,5 +158,61 @@ func TestCancelInTransitOrderFails(t *testing.T) {
 	_, err = svc.CancelOrder(ctx, order.ID)
 	if !errors.Is(err, domain.ErrInvalidTransition) {
 		t.Fatalf("CancelOrder error = %v, want ErrInvalidTransition", err)
+	}
+}
+
+func TestCreateOrderReservesInventoryWithSkuID(t *testing.T) {
+	ctx := context.Background()
+	inventory := &fakeInventory{reservationID: "res-999"}
+	svc := service.New(memory.NewRepository(), inventory)
+
+	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items: []domain.OrderItem{
+			{SkuID: "SKUID-1", SKU: "shoe-1", Quantity: 2, UnitPriceCents: 1250},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if len(inventory.reservedItems) != 1 || inventory.reservedItems[0].SkuID != "SKUID-1" {
+		t.Fatalf("reserved items = %+v, want SkuID SKUID-1 forwarded", inventory.reservedItems)
+	}
+}
+
+func TestCreateOrderEventCarriesSkuID(t *testing.T) {
+	ctx := context.Background()
+	inventory := &fakeInventory{reservationID: "res-1"}
+	publisher := &recordedPublisher{}
+	svc := service.New(memory.NewRepository(), inventory, publisher)
+
+	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items: []domain.OrderItem{
+			{SkuID: "SKUID-2", SKU: "bag-2", Quantity: 1, UnitPriceCents: 5000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if len(publisher.events) == 0 {
+		t.Fatal("expected at least one published event")
+	}
+
+	raw, err := json.Marshal(publisher.events[0])
+	if err != nil {
+		t.Fatalf("marshal published event: %v", err)
+	}
+	var decoded struct {
+		Items []struct {
+			SkuID string `json:"sku_id"`
+			SKU   string `json:"sku"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("unmarshal published event: %v", err)
+	}
+	if len(decoded.Items) != 1 || decoded.Items[0].SkuID != "SKUID-2" || decoded.Items[0].SKU != "BAG-2" {
+		t.Fatalf("published event items = %+v, want sku_id SKUID-2 / sku BAG-2", decoded.Items)
 	}
 }

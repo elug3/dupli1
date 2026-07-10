@@ -138,6 +138,16 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 4 && parts[1] == "items" && parts[2] == "by-sku-id" && r.Method == http.MethodDelete {
+		session, err := h.svc.RemoveCheckoutItemBySkuID(r.Context(), sessionID, parts[3])
+		if err != nil {
+			respondServiceError(w, err)
+			return
+		}
+		respondJSON(w, http.StatusOK, session)
+		return
+	}
+
 	if len(parts) == 3 && parts[1] == "items" && r.Method == http.MethodDelete {
 		if err := h.withCheckoutSessionAccess(w, r, claims, sessionID, true); err != nil {
 			return

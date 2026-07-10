@@ -79,6 +79,17 @@ func (s *Service) RemoveCheckoutItem(ctx context.Context, sessionID, sku string)
 	return s.saveCheckoutSession(ctx, session)
 }
 
+func (s *Service) RemoveCheckoutItemBySkuID(ctx context.Context, sessionID, skuID string) (*domain.CheckoutSession, error) {
+	session, err := s.getOpenCheckoutSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if err := session.RemoveItemBySkuID(skuID, s.now()); err != nil {
+		return nil, err
+	}
+	return s.saveCheckoutSession(ctx, session)
+}
+
 func (s *Service) ApplyCheckoutCoupon(ctx context.Context, sessionID, code string) (*domain.CheckoutSession, error) {
 	if s.couponClient == nil {
 		return nil, ports.ErrCouponUnavailable

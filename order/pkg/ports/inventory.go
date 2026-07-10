@@ -3,6 +3,7 @@ package ports
 import "context"
 
 type InventoryItem struct {
+	SkuID    string `json:"sku_id,omitempty"`
 	SKU      string `json:"sku"`
 	Quantity int    `json:"quantity"`
 }

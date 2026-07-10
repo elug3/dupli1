@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	orderCreatedSubject      = "order.created"
-	orderUpdatedSubject        = "order.status_updated"
-	orderPaidSubject           = "order.paid"
-	paymentSucceededSubject    = "payment.succeeded"
+	orderCreatedSubject     = "order.created"
+	orderUpdatedSubject     = "order.status_updated"
+	orderPaidSubject        = "order.paid"
+	paymentSucceededSubject = "payment.succeeded"
 )
 
 type Service struct {
@@ -33,21 +33,22 @@ type CreateOrderInput struct {
 }
 
 type orderItemEvent struct {
+	SkuID          string `json:"sku_id,omitempty"`
 	SKU            string `json:"sku"`
 	Quantity       int    `json:"quantity"`
 	UnitPriceCents int64  `json:"unit_price_cents"`
 }
 
 type orderEvent struct {
-	EventType     string           `json:"event_type"`
-	OrderID       string           `json:"order_id"`
-	CustomerID    string           `json:"customer_id"`
+	EventType     string             `json:"event_type"`
+	OrderID       string             `json:"order_id"`
+	CustomerID    string             `json:"customer_id"`
 	Status        domain.OrderStatus `json:"status"`
-	SubtotalCents int64            `json:"subtotal_cents"`
-	DiscountCents int64            `json:"discount_cents"`
-	TotalCents    int64            `json:"total_cents"`
-	Items         []orderItemEvent `json:"items"`
-	Occurred      time.Time        `json:"occurred_at"`
+	SubtotalCents int64              `json:"subtotal_cents"`
+	DiscountCents int64              `json:"discount_cents"`
+	TotalCents    int64              `json:"total_cents"`
+	Items         []orderItemEvent   `json:"items"`
+	Occurred      time.Time          `json:"occurred_at"`
 }
 
 func New(repo ports.Repository, inventory ports.InventoryClient, eventPublisher ...ports.EventPublisher) *Service {
@@ -88,6 +89,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 	inventoryItems := make([]ports.InventoryItem, len(input.Items))
 	for i, item := range input.Items {
 		inventoryItems[i] = ports.InventoryItem{
+			SkuID:    item.SkuID,
 			SKU:      item.SKU,
 			Quantity: item.Quantity,
 		}
@@ -211,6 +213,7 @@ func (s *Service) publish(ctx context.Context, subject string, order *domain.Ord
 	items := make([]orderItemEvent, len(order.Items))
 	for i, item := range order.Items {
 		items[i] = orderItemEvent{
+			SkuID:          item.SkuID,
 			SKU:            item.SKU,
 			Quantity:       item.Quantity,
 			UnitPriceCents: item.UnitPriceCents,

@@ -77,8 +77,9 @@ func (s *CheckoutSession) SetItems(items []OrderItem, now time.Time) error {
 
 	copied := make([]OrderItem, len(items))
 	for i, item := range items {
+		item.SkuID = strings.TrimSpace(item.SkuID)
 		item.SKU = strings.ToUpper(strings.TrimSpace(item.SKU))
-		if item.SKU == "" || item.Quantity <= 0 || item.UnitPriceCents < 0 {
+		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceCents < 0 {
 			return ErrInvalidCheckoutSession
 		}
 		copied[i] = item
@@ -95,13 +96,14 @@ func (s *CheckoutSession) UpsertItem(item OrderItem, now time.Time) error {
 		return err
 	}
 
+	item.SkuID = strings.TrimSpace(item.SkuID)
 	item.SKU = strings.ToUpper(strings.TrimSpace(item.SKU))
-	if item.SKU == "" || item.Quantity <= 0 || item.UnitPriceCents < 0 {
+	if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceCents < 0 {
 		return ErrInvalidCheckoutSession
 	}
 
 	for i, existing := range s.Items {
-		if existing.SKU == item.SKU {
+		if sameItem(existing, item) {
 			s.Items[i] = item
 			s.recalculateTotals()
 			s.UpdatedAt = now
@@ -135,6 +137,39 @@ func (s *CheckoutSession) RemoveItem(sku string, now time.Time) error {
 	s.recalculateTotals()
 	s.UpdatedAt = now
 	return nil
+}
+
+func (s *CheckoutSession) RemoveItemBySkuID(skuID string, now time.Time) error {
+	if err := s.EnsureOpen(now); err != nil {
+		return err
+	}
+
+	skuID = strings.TrimSpace(skuID)
+	if skuID == "" {
+		return ErrInvalidCheckoutSession
+	}
+
+	filtered := s.Items[:0]
+	for _, item := range s.Items {
+		if item.SkuID != skuID {
+			filtered = append(filtered, item)
+		}
+	}
+	s.Items = filtered
+	s.recalculateTotals()
+	s.UpdatedAt = now
+	return nil
+}
+
+// sameItem reports whether two line items refer to the same variant. It
+// matches by SkuID when both sides have one populated, otherwise falls back
+// to the human SKU — this lets old (sku-only) and new (skuId-aware) callers
+// interoperate on the same checkout session.
+func sameItem(a, b OrderItem) bool {
+	if a.SkuID != "" && b.SkuID != "" {
+		return a.SkuID == b.SkuID
+	}
+	return a.SKU == b.SKU
 }
 
 func (s *CheckoutSession) ApplyCoupon(code string, discountFraction float64, now time.Time) error {
