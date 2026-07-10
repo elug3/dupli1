@@ -29,6 +29,7 @@ func New(repo ports.Repository, product ports.ProductClient, inventory ports.Inv
 }
 
 type ItemInput struct {
+	SkuID    string
 	SKU      string
 	Quantity int
 }
@@ -55,6 +56,7 @@ func (s *Service) ReplaceItems(ctx context.Context, customerID string, inputs []
 	stored := make([]domain.StoredItem, len(inputs))
 	for i, input := range inputs {
 		stored[i] = domain.StoredItem{
+			SkuID:    strings.TrimSpace(input.SkuID),
 			SKU:      domain.NormalizeSKU(input.SKU),
 			Quantity: input.Quantity,
 		}
@@ -62,10 +64,13 @@ func (s *Service) ReplaceItems(ctx context.Context, customerID string, inputs []
 	if err := domain.ValidateStoredItems(stored); err != nil {
 		return nil, err
 	}
-	for _, item := range stored {
-		if err := s.validateVariant(ctx, item.SKU); err != nil {
+	for i, item := range stored {
+		info, err := s.resolveVariant(ctx, item)
+		if err != nil {
 			return nil, err
 		}
+		stored[i].SkuID = info.SkuID
+		stored[i].SKU = info.SKU
 	}
 
 	now := s.now()
@@ -82,15 +87,19 @@ func (s *Service) UpsertItem(ctx context.Context, customerID string, input ItemI
 	}
 
 	item := domain.StoredItem{
+		SkuID:    strings.TrimSpace(input.SkuID),
 		SKU:      domain.NormalizeSKU(input.SKU),
 		Quantity: input.Quantity,
 	}
 	if err := domain.ValidateStoredItem(item); err != nil {
 		return nil, err
 	}
-	if err := s.validateVariant(ctx, item.SKU); err != nil {
+	info, err := s.resolveVariant(ctx, item)
+	if err != nil {
 		return nil, err
 	}
+	item.SkuID = info.SkuID
+	item.SKU = info.SKU
 
 	now := s.now()
 	if err := s.repo.UpsertItem(ctx, customerID, item, now); err != nil {
@@ -113,6 +122,20 @@ func (s *Service) RemoveItem(ctx context.Context, customerID, sku string) (*doma
 	return s.GetCart(ctx, customerID)
 }
 
+func (s *Service) RemoveItemBySkuID(ctx context.Context, customerID, skuID string) (*domain.Cart, error) {
+	customerID = strings.TrimSpace(customerID)
+	skuID = strings.TrimSpace(skuID)
+	if customerID == "" || skuID == "" {
+		return nil, domain.ErrInvalidCartItem
+	}
+
+	now := s.now()
+	if err := s.repo.RemoveItemBySkuID(ctx, customerID, skuID, now); err != nil {
+		return nil, err
+	}
+	return s.GetCart(ctx, customerID)
+}
+
 func (s *Service) ClearCart(ctx context.Context, customerID string) error {
 	customerID = strings.TrimSpace(customerID)
 	if customerID == "" {
@@ -121,18 +144,29 @@ func (s *Service) ClearCart(ctx context.Context, customerID string) error {
 	return s.repo.Clear(ctx, customerID)
 }
 
-func (s *Service) validateVariant(ctx context.Context, sku string) error {
+// resolveVariant looks up a variant by whichever identifier the item carries,
+// preferring SkuID when present. The returned VariantInfo always carries the
+// canonical SkuID/SKU pair, regardless of which one was used to look it up.
+func (s *Service) resolveVariant(ctx context.Context, item domain.StoredItem) (*ports.VariantInfo, error) {
 	if s.product == nil {
-		return ports.ErrProductUnavailable
+		return nil, ports.ErrProductUnavailable
 	}
-	_, err := s.product.GetVariant(ctx, sku)
+	var (
+		info *ports.VariantInfo
+		err  error
+	)
+	if item.SkuID != "" {
+		info, err = s.product.GetVariantBySkuID(ctx, item.SkuID)
+	} else {
+		info, err = s.product.GetVariant(ctx, item.SKU)
+	}
 	if err != nil {
 		if errors.Is(err, ports.ErrVariantNotFound) {
-			return err
+			return nil, err
 		}
-		return ports.ErrProductUnavailable
+		return nil, ports.ErrProductUnavailable
 	}
-	return nil
+	return info, nil
 }
 
 func (s *Service) enrichCart(ctx context.Context, customerID string, stored []domain.StoredItem, updatedAt time.Time) (*domain.Cart, error) {
@@ -141,20 +175,21 @@ func (s *Service) enrichCart(ctx context.Context, customerID string, stored []do
 
 	for _, item := range stored {
 		enriched := domain.CartItem{
+			SkuID:    item.SkuID,
 			SKU:      item.SKU,
 			Quantity: item.Quantity,
 		}
-		if s.product != nil {
-			info, err := s.product.GetVariant(ctx, item.SKU)
-			if err == nil && info != nil {
-				enriched.ProductID = info.ProductID
-				enriched.Color = info.Color
-				enriched.UnitPriceCents = info.UnitPriceCents
-				enriched.ImageURL = info.ImageURL
-			}
+		if info, err := s.resolveVariant(ctx, item); err == nil && info != nil {
+			enriched.SkuID = info.SkuID
+			enriched.SKU = info.SKU
+			enriched.ProductID = info.ProductID
+			enriched.Color = info.Color
+			enriched.UnitPriceCents = info.UnitPriceCents
+			enriched.ImageURL = info.ImageURL
 		}
 		if s.inventory != nil {
-			if qty, err := s.inventory.GetAvailableQty(ctx, item.SKU); err == nil {
+			qty, err := s.lookupAvailableQty(ctx, enriched.SkuID, item.SKU)
+			if err == nil {
 				enriched.AvailableQty = qty
 			}
 		}
@@ -168,4 +203,11 @@ func (s *Service) enrichCart(ctx context.Context, customerID string, stored []do
 		SubtotalCents: subtotal,
 		UpdatedAt:     updatedAt,
 	}, nil
+}
+
+func (s *Service) lookupAvailableQty(ctx context.Context, skuID, sku string) (int, error) {
+	if skuID != "" {
+		return s.inventory.GetAvailableQtyBySkuID(ctx, skuID)
+	}
+	return s.inventory.GetAvailableQty(ctx, sku)
 }

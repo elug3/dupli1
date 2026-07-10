@@ -27,6 +27,7 @@ func NewClient(baseURL string, httpClient *http.Client) *Client {
 }
 
 type variantResponse struct {
+	SkuID     string   `json:"skuId"`
 	SKU       string   `json:"sku"`
 	ProductID string   `json:"productId"`
 	Color     string   `json:"color"`
@@ -36,7 +37,15 @@ type variantResponse struct {
 }
 
 func (c *Client) GetVariant(ctx context.Context, sku string) (*ports.VariantInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/variants/"+sku, nil)
+	return c.fetchVariant(ctx, "/api/v1/variants/"+sku)
+}
+
+func (c *Client) GetVariantBySkuID(ctx context.Context, skuID string) (*ports.VariantInfo, error) {
+	return c.fetchVariant(ctx, "/api/v1/variants/by-sku-id/"+skuID)
+}
+
+func (c *Client) fetchVariant(ctx context.Context, path string) (*ports.VariantInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +74,7 @@ func (c *Client) GetVariant(ctx context.Context, sku string) (*ports.VariantInfo
 	}
 
 	return &ports.VariantInfo{
+		SkuID:          body.SkuID,
 		SKU:            strings.ToUpper(strings.TrimSpace(body.SKU)),
 		ProductID:      body.ProductID,
 		Color:          body.Color,

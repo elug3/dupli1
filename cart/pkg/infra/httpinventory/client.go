@@ -29,7 +29,15 @@ type stockResponse struct {
 }
 
 func (c *Client) GetAvailableQty(ctx context.Context, sku string) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/inventory/"+sku, nil)
+	return c.fetchAvailableQty(ctx, "/api/v1/inventory/"+sku)
+}
+
+func (c *Client) GetAvailableQtyBySkuID(ctx context.Context, skuID string) (int, error) {
+	return c.fetchAvailableQty(ctx, "/api/v1/inventory/by-sku-id/"+skuID)
+}
+
+func (c *Client) fetchAvailableQty(ctx context.Context, path string) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
 		return 0, err
 	}

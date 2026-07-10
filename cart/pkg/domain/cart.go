@@ -12,11 +12,13 @@ var (
 )
 
 type StoredItem struct {
+	SkuID    string
 	SKU      string
 	Quantity int
 }
 
 type CartItem struct {
+	SkuID          string `json:"sku_id,omitempty"`
 	SKU            string `json:"sku"`
 	ProductID      string `json:"product_id"`
 	Quantity       int    `json:"quantity"`
@@ -38,7 +40,7 @@ func NormalizeSKU(sku string) string {
 }
 
 func ValidateStoredItem(item StoredItem) error {
-	if NormalizeSKU(item.SKU) == "" || item.Quantity <= 0 {
+	if (NormalizeSKU(item.SKU) == "" && strings.TrimSpace(item.SkuID) == "") || item.Quantity <= 0 {
 		return ErrInvalidCartItem
 	}
 	return nil

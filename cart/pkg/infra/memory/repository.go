@@ -107,6 +107,30 @@ func (r *Repository) RemoveItem(ctx context.Context, customerID, sku string, upd
 	return nil
 }
 
+func (r *Repository) RemoveItemBySkuID(ctx context.Context, customerID, skuID string, updatedAt time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	record, ok := r.carts[customerID]
+	if !ok {
+		return nil
+	}
+
+	filtered := record.items[:0]
+	for _, item := range record.items {
+		if item.SkuID != skuID {
+			filtered = append(filtered, item)
+		}
+	}
+	record.items = filtered
+	record.updatedAt = updatedAt
+	return nil
+}
+
 func (r *Repository) Clear(ctx context.Context, customerID string) error {
 	if err := ctx.Err(); err != nil {
 		return err

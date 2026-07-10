@@ -95,6 +95,7 @@ func (h *Handler) cartItems(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		var req struct {
 			Items []struct {
+				SkuID    string `json:"sku_id"`
 				SKU      string `json:"sku"`
 				Quantity int    `json:"quantity"`
 			} `json:"items"`
@@ -105,7 +106,7 @@ func (h *Handler) cartItems(w http.ResponseWriter, r *http.Request) {
 		}
 		inputs := make([]service.ItemInput, len(req.Items))
 		for i, item := range req.Items {
-			inputs[i] = service.ItemInput{SKU: item.SKU, Quantity: item.Quantity}
+			inputs[i] = service.ItemInput{SkuID: item.SkuID, SKU: item.SKU, Quantity: item.Quantity}
 		}
 		cart, err := h.svc.ReplaceItems(r.Context(), claims.UserID, inputs)
 		if err != nil {
@@ -115,6 +116,7 @@ func (h *Handler) cartItems(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusOK, cart)
 	case http.MethodPost:
 		var req struct {
+			SkuID    string `json:"sku_id"`
 			SKU      string `json:"sku"`
 			Quantity int    `json:"quantity"`
 		}
@@ -123,6 +125,7 @@ func (h *Handler) cartItems(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cart, err := h.svc.UpsertItem(r.Context(), claims.UserID, service.ItemInput{
+			SkuID:    req.SkuID,
 			SKU:      req.SKU,
 			Quantity: req.Quantity,
 		})
@@ -139,17 +142,26 @@ func (h *Handler) cartItems(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) cartItem(w http.ResponseWriter, r *http.Request) {
 	claims, _ := authjwt.FromContext(r.Context())
 
-	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/v1/cart/items/"))
-	if len(parts) != 1 || parts[0] == "" {
-		respondError(w, http.StatusNotFound, "not found")
-		return
-	}
 	if r.Method != http.MethodDelete {
 		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	cart, err := h.svc.RemoveItem(r.Context(), claims.UserID, parts[0])
+	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/v1/cart/items/"))
+
+	var (
+		cart *domain.Cart
+		err  error
+	)
+	switch {
+	case len(parts) == 2 && parts[0] == "by-sku-id" && parts[1] != "":
+		cart, err = h.svc.RemoveItemBySkuID(r.Context(), claims.UserID, parts[1])
+	case len(parts) == 1 && parts[0] != "":
+		cart, err = h.svc.RemoveItem(r.Context(), claims.UserID, parts[0])
+	default:
+		respondError(w, http.StatusNotFound, "not found")
+		return
+	}
 	if err != nil {
 		respondServiceError(w, err)
 		return

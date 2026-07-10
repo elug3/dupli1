@@ -56,6 +56,61 @@ func (r *Repository) migrate() error {
 			return fmt.Errorf("migrate cart schema: %w", err)
 		}
 	}
+	if _, err := r.pool.Exec(ctx, `ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS sku_id TEXT`); err != nil {
+		return fmt.Errorf("migrate cart schema: %w", err)
+	}
+	if err := r.promoteSkuIDPrimaryKey(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// promoteSkuIDPrimaryKey swaps cart_items' primary key from (customer_id, sku)
+// to (customer_id, sku_id). Carts are ephemeral working state, not historical
+// records, so any row still missing sku_id (written before the service
+// started resolving/persisting it) is simply purged rather than backfilled —
+// the customer can just re-add the item. Safe to run on every startup: it
+// checks the current primary key columns first and does nothing once already
+// promoted.
+func (r *Repository) promoteSkuIDPrimaryKey(ctx context.Context) error {
+	var pkColumns []string
+	rows, err := r.pool.Query(ctx, `
+		SELECT a.attname
+		FROM pg_index i
+		JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+		WHERE i.indrelid = 'cart_items'::regclass AND i.indisprimary
+		ORDER BY array_position(i.indkey, a.attnum)
+	`)
+	if err != nil {
+		return fmt.Errorf("check cart_items primary key: %w", err)
+	}
+	for rows.Next() {
+		var col string
+		if err := rows.Scan(&col); err != nil {
+			rows.Close()
+			return fmt.Errorf("check cart_items primary key: %w", err)
+		}
+		pkColumns = append(pkColumns, col)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("check cart_items primary key: %w", err)
+	}
+	if len(pkColumns) == 2 && pkColumns[1] == "sku_id" {
+		return nil
+	}
+
+	if _, err := r.pool.Exec(ctx, `DELETE FROM cart_items WHERE sku_id IS NULL`); err != nil {
+		return fmt.Errorf("purge stale cart_items missing sku_id: %w", err)
+	}
+	if _, err := r.pool.Exec(ctx, `ALTER TABLE cart_items ALTER COLUMN sku_id SET NOT NULL`); err != nil {
+		return fmt.Errorf("set cart_items.sku_id not null: %w", err)
+	}
+	if _, err := r.pool.Exec(ctx, `ALTER TABLE cart_items DROP CONSTRAINT cart_items_pkey`); err != nil {
+		return fmt.Errorf("drop legacy cart_items pkey: %w", err)
+	}
+	if _, err := r.pool.Exec(ctx, `ALTER TABLE cart_items ADD PRIMARY KEY (customer_id, sku_id)`); err != nil {
+		return fmt.Errorf("promote cart_items primary key: %w", err)
+	}
 	return nil
 }
 
@@ -76,7 +131,7 @@ func (r *Repository) GetItems(ctx context.Context, customerID string) ([]domain.
 	}
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT sku, quantity FROM cart_items WHERE customer_id = $1 ORDER BY sku`, customerID,
+		`SELECT sku, quantity, COALESCE(sku_id, '') FROM cart_items WHERE customer_id = $1 ORDER BY sku`, customerID,
 	)
 	if err != nil {
 		return nil, time.Time{}, err
@@ -86,7 +141,7 @@ func (r *Repository) GetItems(ctx context.Context, customerID string) ([]domain.
 	var items []domain.StoredItem
 	for rows.Next() {
 		var item domain.StoredItem
-		if err := rows.Scan(&item.SKU, &item.Quantity); err != nil {
+		if err := rows.Scan(&item.SKU, &item.Quantity, &item.SkuID); err != nil {
 			return nil, time.Time{}, err
 		}
 		items = append(items, item)
@@ -123,8 +178,8 @@ func (r *Repository) ReplaceItems(ctx context.Context, customerID string, items 
 	}
 	for _, item := range items {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO cart_items (customer_id, sku, quantity, updated_at) VALUES ($1, $2, $3, $4)`,
-			customerID, item.SKU, item.Quantity, updatedAt,
+			`INSERT INTO cart_items (customer_id, sku, sku_id, quantity, updated_at) VALUES ($1, $2, $3, $4, $5)`,
+			customerID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, updatedAt,
 		); err != nil {
 			return err
 		}
@@ -151,9 +206,9 @@ func (r *Repository) UpsertItem(ctx context.Context, customerID string, item dom
 		return err
 	}
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO cart_items (customer_id, sku, quantity, updated_at) VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (customer_id, sku) DO UPDATE SET quantity = EXCLUDED.quantity, updated_at = EXCLUDED.updated_at`,
-		customerID, item.SKU, item.Quantity, updatedAt,
+		`INSERT INTO cart_items (customer_id, sku, sku_id, quantity, updated_at) VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (customer_id, sku_id) DO UPDATE SET sku = EXCLUDED.sku, quantity = EXCLUDED.quantity, updated_at = EXCLUDED.updated_at`,
+		customerID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, updatedAt,
 	); err != nil {
 		return err
 	}
@@ -182,6 +237,37 @@ func (r *Repository) RemoveItem(ctx context.Context, customerID, sku string, upd
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func (r *Repository) RemoveItemBySkuID(ctx context.Context, customerID, skuID string, updatedAt time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE carts SET updated_at = $2 WHERE customer_id = $1`, customerID, updatedAt,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM cart_items WHERE customer_id = $1 AND sku_id = $2`, customerID, skuID,
+	); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func (r *Repository) Clear(ctx context.Context, customerID string) error {

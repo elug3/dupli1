@@ -32,6 +32,17 @@ func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantI
 	}, nil
 }
 
+func (f *fakeProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports.VariantInfo, error) {
+	return &ports.VariantInfo{
+		SkuID:          skuID,
+		SKU:            skuID,
+		ProductID:      "BOT-001",
+		Color:          "Black",
+		UnitPriceCents: 125000,
+		ImageURL:       "https://example.com/img.jpg",
+	}, nil
+}
+
 func makeToken(t *testing.T, userID string, perms []string) string {
 	t.Helper()
 	claims := jwt.MapClaims{
