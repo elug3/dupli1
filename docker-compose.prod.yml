@@ -108,6 +108,22 @@ services:
       TELEGRAM_PRODUCT_CHAT_ID: ${TELEGRAM_PRODUCT_CHAT_ID:-}
     restart: unless-stopped
 
+  dupli1-web:
+    build:
+      context: ${DUPLI1_WEB_DIR:-../web}
+      dockerfile: Dockerfile
+    ports: []
+    environment:
+      DUPLI1_AUTH_API_BASE_URL: http://dupli1-auth:8080
+      DUPLI1_PRODUCT_API_BASE_URL: http://dupli1-product:8080
+      DUPLI1_WEB_SERVICE_TOKEN: ${DUPLI1_WEB_SERVICE_TOKEN:-}
+    depends_on:
+      dupli1-auth:
+        condition: service_healthy
+      dupli1-product:
+        condition: service_healthy
+    restart: unless-stopped
+
   dupli1-proxy:
     build:
       context: .
@@ -116,6 +132,15 @@ services:
       - "8080:80"
       - "80:80"
       - "443:443"
+    depends_on: !reset
+      dupli1-auth:
+        condition: service_healthy
+      dupli1-product:
+        condition: service_healthy
+      dupli1-order:
+        condition: service_healthy
+      dupli1-web:
+        condition: service_started
 
 volumes:
   postgres-data:

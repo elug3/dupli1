@@ -13,7 +13,7 @@ Internet → EC2 (Elastic IP)
                    ├── redis, nats, minio
 ```
 
-Frontends (`dupli1-web`, `dupli1-manage-web`) live in separate repositories. Add them as Compose services and extend `api/nginx.prod.conf` when ready.
+Frontends (`dupli1-web`, `dupli1-manage-web`) live in separate repositories. `dupli1-web` is cloned to `/opt/dupli1/web` and built as a Compose service; nginx on port **80** serves the storefront and proxies BFF routes to `dupli1-web:3000`.
 
 ## Cost comparison
 

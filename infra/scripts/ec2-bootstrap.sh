@@ -4,6 +4,8 @@ set -euo pipefail
 
 DUPLI1_HOME="${DUPLI1_HOME:-/opt/dupli1}"
 DUPLI1_REPO="${DUPLI1_REPO:-https://github.com/elug3/dupli1.git}"
+DUPLI1_WEB_REPO="${DUPLI1_WEB_REPO:-https://github.com/elug3/dupli1-web.git}"
+DUPLI1_WEB_BRANCH="${DUPLI1_WEB_BRANCH:-master}"
 DUPLI1_BRANCH="${DUPLI1_BRANCH:-main}"
 SECRETS_DIR="${DUPLI1_SECRETS_DIR:-${DUPLI1_HOME}/secrets}"
 
@@ -41,6 +43,16 @@ else
   git -C "${DUPLI1_HOME}/app" fetch origin "$DUPLI1_BRANCH"
   git -C "${DUPLI1_HOME}/app" checkout "$DUPLI1_BRANCH"
   git -C "${DUPLI1_HOME}/app" pull origin "$DUPLI1_BRANCH"
+fi
+
+if [[ ! -d "${DUPLI1_HOME}/web/.git" ]]; then
+  log "Cloning ${DUPLI1_WEB_REPO}..."
+  git clone --branch "$DUPLI1_WEB_BRANCH" "$DUPLI1_WEB_REPO" "${DUPLI1_HOME}/web"
+else
+  log "Updating dupli1-web..."
+  git -C "${DUPLI1_HOME}/web" fetch origin "$DUPLI1_WEB_BRANCH"
+  git -C "${DUPLI1_HOME}/web" checkout "$DUPLI1_WEB_BRANCH"
+  git -C "${DUPLI1_HOME}/web" pull origin "$DUPLI1_WEB_BRANCH"
 fi
 
 if [[ ! -f "${SECRETS_DIR}/jwt_private_key.pem" ]]; then
