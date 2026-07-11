@@ -89,6 +89,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	}
 
 	mux.Handle("GET "+handler.RouteProducts, middleware.OptionalAuth(validator, h.SearchProductsHandler()))
+	mux.Handle("GET "+handler.RouteProductsBags, middleware.OptionalAuth(validator, h.SearchBagsHandler()))
 	mux.Handle("POST "+handler.RouteProducts, requirePerm(permissions.ProductCreate, h.CreateProductHandler()))
 	mux.Handle("PUT "+handler.RouteProductByID, requirePerm(permissions.ProductUpdate, h.SingleProductHandler()))
 	mux.Handle("DELETE "+handler.RouteProductByID, requirePerm(permissions.ProductDelete, h.SingleProductHandler()))

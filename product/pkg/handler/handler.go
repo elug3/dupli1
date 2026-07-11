@@ -56,6 +56,11 @@ func (h *Handler) SearchProductsHandler() http.Handler {
 	return http.HandlerFunc(h.SearchProducts)
 }
 
+// SearchBagsHandler returns an http.Handler for GET /api/v1/products/bags.
+func (h *Handler) SearchBagsHandler() http.Handler {
+	return http.HandlerFunc(h.SearchBags)
+}
+
 // UploadImageHandler returns an http.Handler for POST /api/v1/products/{id}/images.
 // Images are stored on the default variant (legacy compatibility).
 func (h *Handler) UploadImageHandler() http.Handler {
@@ -122,6 +127,31 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := h.extractFilters(r)
+	public := true
+	if claims, ok := authjwt.FromContext(r.Context()); ok && claims.HasPermission(permissions.ProductRead) {
+		public = false
+	} else {
+		delete(filter, "status")
+	}
+	results, err := h.svc.SearchProducts(filter, public)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if results == nil {
+		results = []domain.Product{}
+	}
+	h.respondJSON(w, http.StatusOK, SearchResponse{Total: len(results), Results: results})
+}
+
+// SearchBags lists bag-category products (storefront alias for category=bags search).
+func (h *Handler) SearchBags(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	filter := h.extractFilters(r)
+	filter["category"] = "bags"
 	public := true
 	if claims, ok := authjwt.FromContext(r.Context()); ok && claims.HasPermission(permissions.ProductRead) {
 		public = false

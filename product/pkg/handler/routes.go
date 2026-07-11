@@ -4,6 +4,7 @@ package handler
 const (
 	RouteHealth               = "/api/v1/products/health"
 	RouteProducts             = "/api/v1/products"
+	RouteProductsBags         = "/api/v1/products/bags"
 	RoutePublicProduct        = "/api/v1/products/{id}"
 	RouteProductByID          = "/api/v1/products/{id}"
 	RouteProductImages        = "/api/v1/products/{id}/images"

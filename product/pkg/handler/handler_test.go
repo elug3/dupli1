@@ -23,6 +23,7 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
+	mux.Handle("GET "+handler.RouteProductsBags, h.SearchBagsHandler())
 	return mux
 }
 
@@ -92,6 +93,28 @@ func TestSearchProductsParentsOnly(t *testing.T) {
 	}
 	if products[0].PriceFrom != 2500 {
 		t.Fatalf("want priceFrom=2500, got %v", products[0].PriceFrom)
+	}
+}
+
+func TestSearchBagsEndpoint(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", Brand: "Bottega", Category: "bags", Status: "active"},
+		{ID: "GUC-001", Name: "Jackie", Brand: "Gucci", Category: "shoes", Status: "active"},
+	}
+	mux := newMux(store)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteProductsBags, nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	var resp handler.SearchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Total != 1 {
+		t.Fatalf("want total=1 bag product, got %d", resp.Total)
 	}
 }
 
