@@ -71,8 +71,8 @@ fi
 
 echo "Waiting for storefront on :80..."
 for _ in $(seq 1 30); do
-  if curl -sf http://localhost/gateway/health >/dev/null 2>&1; then
-    echo "Gateway is healthy on :80."
+  if curl -sf http://localhost/ | grep -q "Dupli1"; then
+    echo "Storefront is healthy on :80."
     docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file "$ENV_FILE" ps
     exit 0
   fi
