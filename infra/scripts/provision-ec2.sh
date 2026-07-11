@@ -25,6 +25,7 @@ cat >"$USER_DATA_FILE" <<EOF
 #!/bin/bash
 set -euo pipefail
 export DUPLI1_BRANCH=${DUPLI1_BRANCH}
+export DUPLI1_AUTO_DEPLOY=1
 curl -fsSL https://raw.githubusercontent.com/elug3/dupli1/${DUPLI1_BRANCH}/infra/scripts/ec2-bootstrap.sh -o /tmp/ec2-bootstrap.sh
 chmod +x /tmp/ec2-bootstrap.sh
 /tmp/ec2-bootstrap.sh >> /var/log/dupli1-bootstrap.log 2>&1
@@ -46,6 +47,7 @@ if [[ -z "$SG_ID" || "$SG_ID" == "None" ]]; then
     --query GroupId --output text)"
   aws ec2 authorize-security-group-ingress --region "$AWS_REGION" --group-id "$SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0
   aws ec2 authorize-security-group-ingress --region "$AWS_REGION" --group-id "$SG_ID" --protocol tcp --port 80 --cidr 0.0.0.0/0
+  aws ec2 authorize-security-group-ingress --region "$AWS_REGION" --group-id "$SG_ID" --protocol tcp --port 8080 --cidr 0.0.0.0/0
   aws ec2 authorize-security-group-ingress --region "$AWS_REGION" --group-id "$SG_ID" --protocol tcp --port 443 --cidr 0.0.0.0/0
   echo "Created security group $SG_ID"
 fi

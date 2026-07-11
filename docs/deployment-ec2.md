@@ -64,7 +64,7 @@ Set at minimum:
 bash /opt/dupli1/app/infra/scripts/deploy-ec2.sh
 ```
 
-Verify: `curl http://<public-ip>/gateway/health`
+Verify: `curl http://<public-ip>:8080/gateway/health`
 
 ### 4. Migrate data from RDS (optional)
 
