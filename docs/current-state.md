@@ -175,4 +175,4 @@ cd product && go test ./...
 
 ## Deployment
 
-Production: ECS Fargate, RDS PostgreSQL 16, Secrets Manager. See [deployment-aws.md](deployment-aws.md).
+Production: ECS on EC2, ALB, RDS PostgreSQL 16, S3, Secrets Manager. See [deployment-aws.md](deployment-aws.md).
