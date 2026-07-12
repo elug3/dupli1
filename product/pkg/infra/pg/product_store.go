@@ -541,6 +541,29 @@ func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, e
 }
 
 func (s *ProductSearchStore) DeleteProduct(id string) error {
-	_, err := s.pool.Exec(context.Background(), `DELETE FROM products WHERE id = $1`, id)
-	return err
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("delete product: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// products -> product_variants is ON DELETE CASCADE, but stock_items has an
+	// ON DELETE RESTRICT FK to product_variants(sku_id). So deleting a product
+	// that has any stock rows is blocked by stock_items_sku_id_fkey. Clear the
+	// product's stock rows first, then the cascade can remove the variants.
+	// (reservation_items intentionally has no FK to variants, so it isn't a blocker.)
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM stock_items
+		 WHERE sku_id IN (SELECT sku_id FROM product_variants WHERE product_id = $1)`,
+		id,
+	); err != nil {
+		return fmt.Errorf("delete product stock: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM products WHERE id = $1`, id); err != nil {
+		return fmt.Errorf("delete product: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
