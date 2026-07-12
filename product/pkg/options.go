@@ -31,6 +31,7 @@ type ServerOptions struct {
 	ReadTimeout        int // in seconds
 	WriteTimeout       int // in seconds
 	S3Endpoint         string
+	S3PublicEndpoint   string
 	S3AccessKey        string
 	S3SecretKey        string
 	S3Bucket           string

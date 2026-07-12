@@ -202,6 +202,9 @@ services:
       AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
       NATS_URL: nats://nats:4222
       S3_ENDPOINT: http://minio:9000
+      # MinIO's Docker-network hostname isn't resolvable by browsers; image
+      # URLs returned to clients use this host-reachable address instead.
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dupli1}
       S3_SECRET_KEY: ${MINIO_SECRET_KEY:-dupli1_dev}
       S3_BUCKET: product-images
