@@ -26,7 +26,23 @@ Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `p
 | ECR / S3 / CloudWatch / Secrets | ~$5 |
 | **Total** | **~$130–140/mo** |
 
-## Apply
+## Pause / resume (cost lightening)
+
+```bash
+# Stop ECS tasks, scale ASG to 0, stop RDS (~saves EC2 + RDS hours)
+bash infra/scripts/pause-aws.sh
+
+# Also delete NAT Gateway (~+$32/mo saved; slower resume)
+DELETE_NAT=1 bash infra/scripts/pause-aws.sh
+
+# Bring stack back
+bash infra/scripts/resume-aws.sh
+# If NAT was deleted:
+APPLY_NAT=1 bash infra/scripts/resume-aws.sh
+```
+
+While paused, ALB (and NAT unless deleted) still bill. RDS storage continues to bill; RDS auto-restarts after 7 days.
+
 
 ```bash
 cd infra/terraform
