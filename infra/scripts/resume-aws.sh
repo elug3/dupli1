@@ -51,26 +51,35 @@ if [[ "$APPLY_NAT" == "1" ]]; then
 fi
 
 log "Starting RDS instance $RDS_INSTANCE..."
-RDS_STATUS="$(aws rds describe-db-instances \
-  --region "$AWS_REGION" \
-  --db-instance-identifier "$RDS_INSTANCE" \
-  --query 'DBInstances[0].DBInstanceStatus' \
-  --output text 2>/dev/null || echo missing)"
-case "$RDS_STATUS" in
-  stopped)
-    aws rds start-db-instance \
-      --region "$AWS_REGION" \
-      --db-instance-identifier "$RDS_INSTANCE" \
-      --no-cli-pager >/dev/null
-    log "  RDS start requested"
-    ;;
-  available|starting)
-    log "  RDS already $RDS_STATUS"
-    ;;
-  *)
-    log "  RDS status=$RDS_STATUS — not starting"
-    ;;
-esac
+for _ in $(seq 1 40); do
+  RDS_STATUS="$(aws rds describe-db-instances \
+    --region "$AWS_REGION" \
+    --db-instance-identifier "$RDS_INSTANCE" \
+    --query 'DBInstances[0].DBInstanceStatus' \
+    --output text 2>/dev/null || echo missing)"
+  case "$RDS_STATUS" in
+    stopped)
+      aws rds start-db-instance \
+        --region "$AWS_REGION" \
+        --db-instance-identifier "$RDS_INSTANCE" \
+        --no-cli-pager >/dev/null
+      log "  RDS start requested"
+      break
+      ;;
+    available|starting|configuring-enhanced-monitoring|backing-up|modifying)
+      log "  RDS status=$RDS_STATUS"
+      break
+      ;;
+    stopping)
+      log "  RDS still stopping — waiting..."
+      sleep 15
+      ;;
+    *)
+      log "  RDS status=$RDS_STATUS — waiting..."
+      sleep 15
+      ;;
+  esac
+done
 
 if [[ -n "$VPN_INSTANCE_ID" ]]; then
   log "Starting VPN EC2 $VPN_INSTANCE_ID..."
@@ -92,7 +101,7 @@ aws autoscaling update-auto-scaling-group \
   --no-cli-pager
 log "  ASG update requested"
 
-if [[ "$WAIT_RDS" == "1" && "$RDS_STATUS" == "stopped" ]]; then
+if [[ "$WAIT_RDS" == "1" ]]; then
   log "Waiting for RDS to become available..."
   aws rds wait db-instance-available \
     --region "$AWS_REGION" \
@@ -116,8 +125,9 @@ for svc in "${SERVICES[@]}"; do
     --cluster "$CLUSTER" \
     --service "$svc" \
     --desired-count "$DESIRED_COUNT" \
+    --force-new-deployment \
     --no-cli-pager >/dev/null
-  log "  $svc -> desiredCount=$DESIRED_COUNT"
+  log "  $svc -> desiredCount=$DESIRED_COUNT (forced new deployment)"
 done
 
 echo ""
