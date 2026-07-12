@@ -16,8 +16,13 @@ type ImageStore struct {
 	publicBase string
 }
 
-// NewImageStore creates a MinIO-backed image store.
-func NewImageStore(endpoint, accessKey, secretKey, bucket string) (*ImageStore, error) {
+// NewImageStore creates a MinIO-backed image store. endpoint is used to reach
+// MinIO from this service (e.g. the Docker-internal "http://minio:9000").
+// publicEndpoint is embedded in URLs handed back to clients (e.g. browsers),
+// which may not be able to resolve the internal endpoint's host; it defaults
+// to endpoint when empty, preserving the old behavior for setups where the
+// two coincide (real S3, or endpoint already being publicly reachable).
+func NewImageStore(endpoint, publicEndpoint, accessKey, secretKey, bucket string) (*ImageStore, error) {
 	useSSL := strings.HasPrefix(endpoint, "https://")
 	host := strings.TrimPrefix(endpoint, "https://")
 	host = strings.TrimPrefix(host, "http://")
@@ -29,10 +34,13 @@ func NewImageStore(endpoint, accessKey, secretKey, bucket string) (*ImageStore, 
 	if err != nil {
 		return nil, fmt.Errorf("create minio client: %w", err)
 	}
+	if publicEndpoint == "" {
+		publicEndpoint = endpoint
+	}
 	return &ImageStore{
 		client:     client,
 		bucket:     bucket,
-		publicBase: strings.TrimRight(endpoint, "/"),
+		publicBase: strings.TrimRight(publicEndpoint, "/"),
 	}, nil
 }
 

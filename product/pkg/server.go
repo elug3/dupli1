@@ -116,6 +116,7 @@ func NewServer(opts ServerOptions) (*ProductServer, error) {
 		JWKSURL:            opts.JWKSURL,
 		NATSURL:            opts.NATSURL,
 		S3Endpoint:         opts.S3Endpoint,
+		S3PublicEndpoint:   opts.S3PublicEndpoint,
 		S3AccessKey:        opts.S3AccessKey,
 		S3SecretKey:        opts.S3SecretKey,
 		S3Bucket:           opts.S3Bucket,

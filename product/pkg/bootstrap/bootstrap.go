@@ -40,7 +40,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 
 	var imgStore ports.ImageStore
 	if cfg.S3Endpoint != "" {
-		imgStore, err = s3store.NewImageStore(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket)
+		imgStore, err = s3store.NewImageStore(cfg.S3Endpoint, cfg.S3PublicEndpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket)
 		if err != nil {
 			store.Close()
 			return nil, err

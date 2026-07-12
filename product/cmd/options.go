@@ -53,6 +53,9 @@ func applyEnv(opts *product.ServerOptions) {
 	if v := os.Getenv("S3_ENDPOINT"); v != "" {
 		opts.S3Endpoint = v
 	}
+	if v := os.Getenv("S3_PUBLIC_ENDPOINT"); v != "" {
+		opts.S3PublicEndpoint = v
+	}
 	if v := os.Getenv("S3_ACCESS_KEY"); v != "" {
 		opts.S3AccessKey = v
 	}
