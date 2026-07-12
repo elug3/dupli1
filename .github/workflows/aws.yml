@@ -39,7 +39,7 @@ jobs:
             context: .
             build_args: SERVICE=product
           - service: dupli1-proxy
-            dockerfile: api/Dockerfile
+            dockerfile: api/Dockerfile.ecs
             context: .
             build_args: ""
     steps:

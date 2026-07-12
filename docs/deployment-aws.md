@@ -1,41 +1,45 @@
 # AWS deployment
 
-Dupli1 production runs on **ECS Fargate** in `us-east-1`. Images are built and pushed by `.github/workflows/aws.yml`.
+Dupli1 production runs on **ECS (EC2 launch type)** in `us-east-1`, fronted by an **Application Load Balancer**. Images are built and pushed by `.github/workflows/aws.yml`.
+
+## Architecture
+
+```text
+Internet → ALB → dupli1-proxy (nginx)
+                   ├── auth.dupli1.local
+                   ├── product.dupli1.local
+                   ├── order.dupli1.local
+                   └── notification.dupli1.local
+         EC2 ASG (ECS capacity provider) in private subnets
+         NAT Gateway → ECR / Secrets Manager / CloudWatch
+         RDS PostgreSQL (private)
+         S3 (product images)
+```
+
+IaC lives in [`infra/terraform/`](../infra/terraform/README.md).
 
 ## Database
 
-Production uses **Amazon RDS PostgreSQL 16**, not the legacy `dupli1-postgres` ECS container.
+Production uses **Amazon RDS PostgreSQL 16** (`dupli1-production`).
 
 | Component | Details |
 |-----------|---------|
-| Instance | `dupli1-production` |
-| Databases | `dupli1_db` (auth), `products` (product) |
+| Databases | `schick_db` (auth), `products` (product) |
 | Credentials | AWS Secrets Manager (`dupli1/production/*`) |
-| Network | Private subnets in `web-prod-vpc` |
+| Network | Private subnets; tasks use SG rule to port 5432 |
 | SSL | `sslmode=require` |
-
-Provision and cut over with:
-
-```bash
-cd infra/terraform && terraform apply
-bash infra/scripts/create-product-database.sh
-bash infra/scripts/update-ecs-for-rds.sh
-bash infra/scripts/retire-ecs-postgres.sh
-```
-
-See [infra/terraform/README.md](../infra/terraform/README.md) for full steps.
 
 ## ECS services
 
 | Service | Purpose |
 |---------|---------|
 | `dupli1-auth` | Authentication API |
-| `dupli1-product` | Product catalog API (also stock/reservations) |
-| `dupli1-proxy` | nginx reverse proxy (ALB mode) |
-| `dupli1-order` | Order API |
-| `dupli1-notification` | Notification API |
-
-`dupli1-postgres` is deprecated after RDS cutover.
+| `dupli1-product` | Product catalog + inventory |
+| `dupli1-order` | Order / checkout API |
+| `dupli1-notification` | Notification consumer |
+| `dupli1-proxy` | nginx gateway (ALB target) |
+| `dupli1-redis` | Auth rate-limit / session cache |
+| `dupli1-nats` | Event bus |
 
 ## Required GitHub configuration
 
@@ -46,8 +50,6 @@ See [infra/terraform/README.md](../infra/terraform/README.md) for full steps.
 | Variable | `AWS_REGION` | `us-east-1` |
 | Variable | `ECS_CLUSTER` | `production` |
 
-Database URLs are injected via ECS task secrets, not GitHub secrets.
-
 ## Local development
 
-Local development still uses Docker Compose Postgres containers (`postgres-auth`, `postgres-product`). See the root `README.md`.
+Local development still uses Docker Compose. See the root `README.md`. For a single-box EC2 alternative, see [deployment-ec2.md](deployment-ec2.md).

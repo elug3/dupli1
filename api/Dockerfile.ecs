@@ -1,0 +1,8 @@
+# ECS image: Cloud Map upstreams (api/nginx.ecs.conf).
+# Local Compose keeps using api/Dockerfile + nginx.conf.
+# Single-EC2 Compose keeps using api/Dockerfile.prod + nginx.prod.conf.
+FROM nginx:1.27-alpine
+
+COPY api/nginx.ecs.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80 443

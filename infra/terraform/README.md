@@ -1,74 +1,58 @@
-# Dupli1 AWS RDS
+# Dupli1 AWS (ECS on EC2)
 
-Terraform for the production PostgreSQL database used by `dupli1-auth` and `dupli1-product`.
+Terraform provisions the production compute path on the existing VPC and RDS:
 
-## What this creates
+| Resource | Purpose |
+|----------|---------|
+| NAT Gateway (1 AZ) | Outbound for private ECS tasks (ECR, Secrets Manager, Logs) |
+| ALB | Public HTTP entry → `dupli1-proxy` |
+| EC2 ASG (`t3.large`) | ECS container instances |
+| ECS capacity provider | EC2 launch type for backend services |
+| S3 | Product image bucket (public `GetObject`) |
+| CloudWatch Logs | `/ecs/dupli1-*` log groups |
+| ECS services | auth, product, order, notification, proxy, redis, nats |
 
-- RDS PostgreSQL 16 (`dupli1-production`) in private subnets
-- Dedicated RDS security group (port 5432 from ECS tasks only)
-- Secrets Manager entries:
-  - `dupli1/production/database`
-  - `dupli1/production/auth-db-url`
-  - `dupli1/production/product-db-url`
+Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `production`, RDS `dupli1-production`, ECR repos, Cloud Map `dupli1.local`, Secrets Manager DB URLs.
 
-Local development continues to use Docker Compose Postgres containers. Production ECS services read connection strings from Secrets Manager.
+## Monthly cost (dev-sized, us-east-1, 24/7)
 
-## Prerequisites
-
-- Terraform 1.5+
-- AWS credentials with permission to manage RDS, Secrets Manager, EC2 security groups, and ECS
-- Existing VPC + private subnets + ECS security group (defaults match the current `production` cluster)
+| Service | Estimate |
+|---------|----------|
+| EC2 t3.large | ~$60 |
+| EBS 40 GB gp3 | ~$3 |
+| NAT Gateway | ~$32 + data |
+| ALB | ~$16–22 |
+| RDS db.t3.micro + storage | ~$17 |
+| ECR / S3 / CloudWatch / Secrets | ~$5 |
+| **Total** | **~$130–140/mo** |
 
 ## Apply
 
 ```bash
 cd infra/terraform
-cp terraform.tfvars.example terraform.tfvars
+cp terraform.tfvars.example terraform.tfvars   # optional overrides
 terraform init
 terraform plan
 terraform apply
 ```
 
-## Cutover from ECS Postgres
-
-After `terraform apply`:
+Before the first apply, remove the paused Fargate services so Terraform can recreate them on EC2:
 
 ```bash
-export AWS_REGION=us-east-1
-
-# 1. Create the products database on RDS
-bash infra/scripts/create-product-database.sh
-
-# 2. Optional: copy data from the legacy ECS postgres container
-bash infra/scripts/migrate-ecs-postgres-to-rds.sh
-
-# 3. Point auth/product ECS services at Secrets Manager
-bash infra/scripts/update-ecs-for-rds.sh
-
-# 4. Retire the old ECS postgres service
-bash infra/scripts/retire-ecs-postgres.sh
+bash infra/scripts/recreate-ecs-services-for-ec2.sh
 ```
 
-## Local development against RDS
+Or let the script call `terraform apply` after deleting the old services.
 
-RDS is in a private subnet. Connect via VPN, then:
+## Images
+
+GitHub Actions (`.github/workflows/aws.yml`) builds and pushes to ECR, then force-redeploys ECS services. Proxy uses `api/Dockerfile.ecs` (Cloud Map DNS).
+
+## Gateway
+
+After apply:
 
 ```bash
-bash infra/scripts/fetch-rds-env.sh
-docker compose -f docker-compose.yml -f docker-compose.rds.yml --env-file .env.rds up --build
+terraform output gateway_health_url
+curl "$(terraform output -raw gateway_health_url)"
 ```
-
-## Connection strings
-
-| Service | Env var | Database |
-|---------|---------|----------|
-| `dupli1-auth` | `DB_URL` | `dupli1_db` |
-| `dupli1-product` | `DUPLI1_PRODUCT_DB` | `products` |
-
-Production URLs use `sslmode=require`. Auth automatically selects SSL mode based on host (local/docker → disable, RDS → require).
-
-## Notes
-
-- RDS creates `dupli1_db` on first boot. Run `create-product-database.sh` for `products`.
-- The legacy `dupli1-postgres` ECS service is no longer needed after cutover.
-- Rotate credentials via Secrets Manager and redeploy ECS services.
