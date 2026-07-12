@@ -72,6 +72,9 @@ services:
     environment:
       DUPLI1_PRODUCT_DB: postgres://dupli1:${POSTGRES_PASSWORD}@postgres:5432/products?sslmode=disable
       JWT_SECRET: ${JWT_SECRET}
+      # Product images are served through the nginx gateway (see api/nginx.prod.conf),
+      # not MinIO directly, so this must be the gateway's public origin.
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:?set S3_PUBLIC_ENDPOINT in .env.prod to the gateway's public origin, e.g. https://your-domain.example}
       S3_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dupli1}
       S3_SECRET_KEY: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY in .env.prod}
     depends_on: !reset
