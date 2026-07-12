@@ -1,5 +1,5 @@
 variable "aws_region" {
-  description = "AWS region for Dupli1 production resources."
+  description = "AWS region for Dupli1 resources."
   type        = string
   default     = "us-east-1"
 }
@@ -16,25 +16,46 @@ variable "environment" {
   default     = "production"
 }
 
-variable "vpc_id" {
-  description = "VPC that hosts ECS services and RDS."
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC."
   type        = string
-  default     = "vpc-0e143b53ca2a4714c"
+  default     = "10.20.0.0/16"
 }
 
-variable "private_subnet_ids" {
-  description = "Private subnets for the RDS subnet group."
-  type        = list(string)
-  default = [
-    "subnet-01fd0882721f10499",
-    "subnet-006b8428713711816",
-  ]
+variable "az_count" {
+  description = "Number of availability zones (min 2 for ALB/RDS subnet groups)."
+  type        = number
+  default     = 2
 }
 
-variable "ecs_security_group_id" {
-  description = "Security group attached to ECS tasks that need database access."
+variable "ecs_instance_type" {
+  description = "EC2 instance type for the ECS capacity provider."
   type        = string
-  default     = "sg-06581371272cab230"
+  default     = "t3.large"
+}
+
+variable "ecs_asg_min_size" {
+  description = "Minimum ECS EC2 instances."
+  type        = number
+  default     = 1
+}
+
+variable "ecs_asg_max_size" {
+  description = "Maximum ECS EC2 instances."
+  type        = number
+  default     = 2
+}
+
+variable "ecs_asg_desired_capacity" {
+  description = "Desired ECS EC2 instances."
+  type        = number
+  default     = 1
+}
+
+variable "ecs_image_tag" {
+  description = "ECR image tag for application services (use latest after first CI push)."
+  type        = string
+  default     = "latest"
 }
 
 variable "db_instance_class" {
@@ -44,13 +65,13 @@ variable "db_instance_class" {
 }
 
 variable "db_allocated_storage_gb" {
-  description = "Initial allocated storage for RDS."
+  description = "Initial allocated storage for RDS (GiB)."
   type        = number
   default     = 20
 }
 
 variable "db_name" {
-  description = "Primary database created on the RDS instance."
+  description = "Primary database created on the RDS instance (auth)."
   type        = string
   default     = "dupli1_db"
 }
@@ -62,13 +83,31 @@ variable "db_username" {
 }
 
 variable "product_db_name" {
-  description = "Secondary database used by dupli1-product."
+  description = "Database used by dupli1-product."
   type        = string
   default     = "products"
 }
 
+variable "order_db_name" {
+  description = "Database used by dupli1-order."
+  type        = string
+  default     = "orders"
+}
+
+variable "cart_db_name" {
+  description = "Database used by dupli1-cart."
+  type        = string
+  default     = "cart"
+}
+
+variable "payment_db_name" {
+  description = "Database used by dupli1-payment."
+  type        = string
+  default     = "payments"
+}
+
 variable "backup_retention_period" {
-  description = "Number of days to retain automated backups."
+  description = "Number of days to retain automated RDS backups."
   type        = number
   default     = 7
 }
@@ -77,4 +116,29 @@ variable "deletion_protection" {
   description = "Prevent accidental RDS deletion."
   type        = bool
   default     = true
+}
+
+variable "owner_email" {
+  description = "Seeded owner account email for dupli1-auth."
+  type        = string
+  default     = "admin@dupli1.com"
+}
+
+variable "owner_password" {
+  description = "Seeded owner account password. Leave empty to auto-generate."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "certificate_arn" {
+  description = "Optional ACM certificate ARN for HTTPS on the ALB. Empty = HTTP only."
+  type        = string
+  default     = ""
+}
+
+variable "enable_container_insights" {
+  description = "Enable ECS Container Insights."
+  type        = bool
+  default     = false
 }
