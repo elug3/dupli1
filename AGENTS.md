@@ -121,3 +121,4 @@ cd payment && go test ./...
 - **Notification** subscribes to NATS (e.g. `order.paid` → Telegram when configured).
 - **Redis and NATS** are optional for auth (rate limits, session cache, events); Redis and NATS are wired in Compose. Order and payment use NATS for payment events.
 - **SMTP and OAuth providers** are external. **Stripe** is optional locally — without `STRIPE_SECRET_KEY`, payment uses a dev simulate endpoint.
+- **Local gateway DNS resolver:** `api/nginx.conf` (the local `dupli1-proxy` config; production uses `api/nginx.prod.conf`) uses variable `proxy_pass` with a `resolver`. It must list **only** Docker's embedded DNS `127.0.0.11`. Do not add the AWS VPC resolver `10.0.0.2` here — it's unreachable in local Compose, so nginx round-robins onto a dead resolver and returns intermittent `SERVFAIL` → `502 {"error":"bad gateway"}` on ~half of requests. After editing this file, rebuild the proxy: `sudo docker compose up -d --build dupli1-proxy`.
