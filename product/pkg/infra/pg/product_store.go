@@ -237,8 +237,12 @@ func brandPrefix(brand string) string {
 func (s *ProductSearchStore) nextProductID(ctx context.Context, brand string) (string, error) {
 	prefix := brandPrefix(brand)
 	var seq int
+	// $1 must be cast to int: SUBSTRING(text FROM ...) is ambiguous between the
+	// positional form (int) and the regex form (text). Without the cast Postgres
+	// infers $1 as text, so the driver rejects the integer offset with
+	// "cannot convert N to Text" and product-ID generation fails.
 	err := s.pool.QueryRow(ctx,
-		`SELECT COALESCE(MAX(CAST(SUBSTRING(id FROM $1) AS INTEGER)), 0)
+		`SELECT COALESCE(MAX(CAST(SUBSTRING(id FROM $1::int) AS INTEGER)), 0)
 		 FROM products WHERE id ~ ('^' || $2 || '-[0-9]+$')`,
 		len(prefix)+2, prefix,
 	).Scan(&seq)
