@@ -20,26 +20,26 @@ See [docs/current-state.md](docs/current-state.md) for the authoritative snapsho
 
 ## Cursor Cloud specific instructions
 
-### Prerequisites (pre-installed on the VM)
+### Prerequisites (on the VM)
 
 | Tool | Version / notes |
 |------|-----------------|
-| Go | 1.22+ (`/usr/bin/go`) — modules target Go 1.26 |
-| PostgreSQL | 16 — `localhost:5432` |
-| Redis | 7 — `localhost:6379` |
+| Go | 1.22 on `PATH`; modules target Go 1.26.3. `GOTOOLCHAIN=auto` (the default) auto-downloads the 1.26.3 toolchain on first `go build`/`go test` — needs network. |
+| Node / npm | Node 22, npm 10 — only needed for the sibling frontend repos. |
+| Docker + Compose | Installed. **The daemon is NOT auto-started** (no systemd) — run `sudo dockerd` once per session (see below). |
 
-### Starting infrastructure services
+Postgres, Redis, NATS and MinIO are **not** installed as system services; they run as Docker Compose containers (see below). There is no `service postgresql`/`service redis-server` on this VM.
 
-For tests or non-Docker workflows, start system services:
+### Starting Docker (required before Compose)
+
+The Docker daemon does not start automatically. Start it in the background once per session, then verify:
 
 ```bash
-sudo service postgresql start
-sudo service redis-server start
-pg_isready -h localhost
-redis-cli ping
+sudo dockerd >/tmp/dockerd.log 2>&1 &
+sudo docker info | grep -i "storage driver"   # expect: fuse-overlayfs
 ```
 
-Local development normally uses Docker Compose Postgres containers instead (see below).
+Docker is configured with the `fuse-overlayfs` storage driver and the containerd-snapshotter feature disabled (`/etc/docker/daemon.json`), and `iptables-legacy` — needed for Docker-in-Firecracker on this VM. All `docker`/`docker compose` commands need `sudo`.
 
 ### Database credentials (dev)
 
@@ -66,9 +66,11 @@ Production uses **Amazon RDS** — see [docs/deployment-aws.md](docs/deployment-
 ### Running locally
 
 ```bash
-cp .env.example .env   # set JWT_SECRET, OWNER_EMAIL, OWNER_PASSWORD
-docker compose up --build
+cp .env.example .env   # optional; compose already has working dev defaults
+sudo docker compose up --build   # all docker commands need sudo here
 ```
+
+The full stack (5 Postgres + Redis + NATS + MinIO + 6 Go services + nginx) comes up healthy in ~1–2 min after the first image build. The seeded owner account is `admin@dupli1.com` / `password`.
 
 Gateway (HTTP): `http://localhost:8080` or `http://localhost` (port 80). TLS certs exist in `certs/` but are not wired into local nginx yet.
 
@@ -119,3 +121,4 @@ cd payment && go test ./...
 - **Notification** subscribes to NATS (e.g. `order.paid` → Telegram when configured).
 - **Redis and NATS** are optional for auth (rate limits, session cache, events); Redis and NATS are wired in Compose. Order and payment use NATS for payment events.
 - **SMTP and OAuth providers** are external. **Stripe** is optional locally — without `STRIPE_SECRET_KEY`, payment uses a dev simulate endpoint.
+- **Local gateway DNS resolver:** `api/nginx.conf` (the local `dupli1-proxy` config; production uses `api/nginx.prod.conf`) uses variable `proxy_pass` with a `resolver`. It must list **only** Docker's embedded DNS `127.0.0.11`. Do not add the AWS VPC resolver `10.0.0.2` here — it's unreachable in local Compose, so nginx round-robins onto a dead resolver and returns intermittent `SERVFAIL` → `502 {"error":"bad gateway"}` on ~half of requests. After editing this file, rebuild the proxy: `sudo docker compose up -d --build dupli1-proxy`.
