@@ -64,7 +64,7 @@ dupli1/
 │   ├── nginx.conf        # Gateway routing
 │   └── Dockerfile
 ├── infra/
-│   ├── terraform/        # RDS and secrets
+│   ├── terraform/        # VPC, ECS/EC2, ALB, RDS, ECR, S3, CloudWatch
 │   └── scripts/          # RDS cutover helpers
 ├── certs/                # TLS material (not wired into local nginx yet)
 ├── Dockerfile            # Multi-service build (SERVICE build arg)
