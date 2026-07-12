@@ -1,0 +1,11 @@
+# ECS gateway image. Uses the official nginx envsubst templates entrypoint.
+FROM nginx:1.27-alpine
+
+COPY api/nginx.ecs.conf.template /etc/nginx/templates/default.conf.template
+
+# Defaults overridden by ECS task environment.
+ENV SERVICE_DOMAIN=dupli1.local \
+    S3_BUCKET_NAME=product-images \
+    S3_BUCKET_HOST=example.s3.us-east-1.amazonaws.com
+
+EXPOSE 80

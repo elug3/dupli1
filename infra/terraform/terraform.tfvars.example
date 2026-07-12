@@ -1,9 +1,18 @@
-aws_region            = "us-east-1"
-project_name          = "dupli1"
-environment           = "production"
-vpc_id                = "vpc-0e143b53ca2a4714c"
-private_subnet_ids    = ["subnet-01fd0882721f10499", "subnet-006b8428713711816"]
-ecs_security_group_id = "sg-06581371272cab230"
-db_instance_class     = "db.t3.micro"
-db_allocated_storage_gb = 20
-deletion_protection   = true
+aws_region   = "us-east-1"
+project_name = "dupli1"
+environment  = "production"
+
+# Dev-sized defaults (see README cost estimate).
+ecs_instance_type         = "t3.large"
+ecs_asg_min_size          = 1
+ecs_asg_max_size          = 2
+ecs_asg_desired_capacity  = 1
+db_instance_class         = "db.t3.micro"
+db_allocated_storage_gb   = 20
+deletion_protection       = true
+
+# Optional: ACM certificate ARN enables HTTPS listener + HTTP→HTTPS redirect.
+# certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/..."
+
+# Optional: override seeded owner password (otherwise auto-generated into Secrets Manager).
+# owner_password = "change-me"

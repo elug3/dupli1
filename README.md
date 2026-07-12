@@ -1,6 +1,6 @@
 # Dupli1
 
-Go microservice backend for a fashion bag marketplace. Services behind an nginx proxy, wired with Docker Compose for local dev and deployed to AWS ECS Fargate in production.
+Go microservice backend for a fashion bag marketplace. Services behind an nginx proxy, wired with Docker Compose for local dev and deployed to AWS ECS on EC2 (ALB, RDS, S3, CloudWatch Logs) in production.
 
 ## Services
 
