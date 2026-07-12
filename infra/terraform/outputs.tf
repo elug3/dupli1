@@ -47,3 +47,13 @@ output "gateway_health_url" {
   description = "ALB gateway health check URL."
   value       = "http://${aws_lb.prod.dns_name}/gateway/health"
 }
+
+output "storefront_note" {
+  description = "Public storefront is served at ALB / via proxy → web.dupli1.local."
+  value       = "http://${aws_lb.prod.dns_name}/"
+}
+
+output "manage_web_note" {
+  description = "Admin UI is VPN/private-DNS only (not on the public ALB)."
+  value       = "http://manage.dupli1.local (Cloud Map; requires VPC/VPN access)"
+}

@@ -32,6 +32,8 @@ SERVICES=(
   dupli1-order
   dupli1-notification
   dupli1-proxy
+  dupli1-web
+  dupli1-manage-web
 )
 
 log() { echo "$*"; }

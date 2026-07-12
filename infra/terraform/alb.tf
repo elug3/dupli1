@@ -78,8 +78,9 @@ resource "aws_lb_listener" "http" {
   port              = 80
   protocol          = "HTTP"
 
+  # Public storefront (dupli1-web). API paths are routed to proxy via listener rule.
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.proxy.arn
+    target_group_arn = aws_lb_target_group.web.arn
   }
 }
