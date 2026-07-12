@@ -107,8 +107,8 @@ resource "aws_ecs_task_definition" "redis" {
   network_mode             = local.common_task.network_mode
   requires_compatibilities = local.common_task.requires_compatibilities
   execution_role_arn       = local.common_task.execution_role_arn
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "128"
+  memory                   = "256"
 
   container_definitions = jsonencode([
     {
@@ -139,8 +139,8 @@ resource "aws_ecs_task_definition" "nats" {
   network_mode             = local.common_task.network_mode
   requires_compatibilities = local.common_task.requires_compatibilities
   execution_role_arn       = local.common_task.execution_role_arn
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "128"
+  memory                   = "256"
 
   container_definitions = jsonencode([
     {
@@ -172,8 +172,8 @@ resource "aws_ecs_task_definition" "auth" {
   network_mode             = local.common_task.network_mode
   requires_compatibilities = local.common_task.requires_compatibilities
   execution_role_arn       = local.common_task.execution_role_arn
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = "256"
+  memory                   = "512"
 
   container_definitions = jsonencode([
     {
@@ -216,8 +216,8 @@ resource "aws_ecs_task_definition" "product" {
   network_mode             = local.common_task.network_mode
   requires_compatibilities = local.common_task.requires_compatibilities
   execution_role_arn       = local.common_task.execution_role_arn
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = "256"
+  memory                   = "512"
 
   container_definitions = jsonencode([
     {
@@ -272,8 +272,8 @@ resource "aws_ecs_task_definition" "order" {
   network_mode             = local.common_task.network_mode
   requires_compatibilities = local.common_task.requires_compatibilities
   execution_role_arn       = local.common_task.execution_role_arn
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = "256"
+  memory                   = "512"
 
   container_definitions = jsonencode([
     {
@@ -311,8 +311,8 @@ resource "aws_ecs_task_definition" "notification" {
   network_mode             = local.common_task.network_mode
   requires_compatibilities = local.common_task.requires_compatibilities
   execution_role_arn       = local.common_task.execution_role_arn
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "128"
+  memory                   = "256"
 
   container_definitions = jsonencode([
     {
@@ -346,8 +346,8 @@ resource "aws_ecs_task_definition" "proxy" {
   network_mode             = local.common_task.network_mode
   requires_compatibilities = local.common_task.requires_compatibilities
   execution_role_arn       = local.common_task.execution_role_arn
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "128"
+  memory                   = "256"
 
   container_definitions = jsonencode([
     {

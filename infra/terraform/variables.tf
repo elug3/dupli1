@@ -103,7 +103,7 @@ variable "ecs_asg_min_size" {
 variable "ecs_asg_max_size" {
   description = "Maximum number of ECS container instances."
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "image_tag" {

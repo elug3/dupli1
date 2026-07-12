@@ -12,9 +12,9 @@ resource "aws_s3_bucket_public_access_block" "product_images" {
   bucket = aws_s3_bucket.product_images.id
 
   block_public_acls       = true
-  block_public_policy     = false
+  block_public_policy     = true
   ignore_public_acls      = true
-  restrict_public_buckets = false
+  restrict_public_buckets = true
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "product_images" {
@@ -35,24 +35,8 @@ resource "aws_s3_bucket_ownership_controls" "product_images" {
   }
 }
 
-resource "aws_s3_bucket_policy" "product_images_public_read" {
-  bucket = aws_s3_bucket.product_images.id
-
-  depends_on = [aws_s3_bucket_public_access_block.product_images]
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "PublicReadProductImages"
-        Effect    = "Allow"
-        Principal = "*"
-        Action    = ["s3:GetObject"]
-        Resource  = ["${aws_s3_bucket.product_images.arn}/*"]
-      }
-    ]
-  })
-}
+# Bucket stays private (account Block Public Access). Product uploads via IAM
+# access keys; expose objects later via CloudFront OAC or the gateway if needed.
 
 resource "aws_iam_user" "product_s3" {
   name = "${local.name_prefix}-product-s3"

@@ -18,7 +18,7 @@ Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `p
 
 | Service | Estimate |
 |---------|----------|
-| EC2 t3.large | ~$60 |
+| EC2 t3.large (1×, awsvpc trunking) | ~$60 |
 | EBS 40 GB gp3 | ~$3 |
 | NAT Gateway | ~$32 + data |
 | ALB | ~$16–22 |

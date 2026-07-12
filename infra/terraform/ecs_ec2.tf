@@ -125,10 +125,14 @@ resource "aws_launch_template" "ecs" {
   vpc_security_group_ids = [aws_security_group.ecs_instances.id]
 
   user_data = base64encode(<<-EOT
-    #!/bin/bash
-    echo ECS_CLUSTER=${var.ecs_cluster_name} >> /etc/ecs/ecs.config
-    echo ECS_ENABLE_CONTAINER_METADATA=true >> /etc/ecs/ecs.config
-  EOT
+#!/bin/bash
+cat > /etc/ecs/ecs.config <<EOF
+ECS_CLUSTER=${var.ecs_cluster_name}
+ECS_ENABLE_CONTAINER_METADATA=true
+ECS_ENABLE_TASK_ENI=true
+ECS_ENABLE_AWSVPC_TRUNKING=true
+EOF
+EOT
   )
 
   block_device_mappings {
