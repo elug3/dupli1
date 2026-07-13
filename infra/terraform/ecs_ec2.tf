@@ -78,6 +78,16 @@ resource "aws_security_group_rule" "rds_from_ecs_tasks" {
   source_security_group_id = aws_security_group.ecs_tasks.id
 }
 
+resource "aws_security_group_rule" "rds_from_ecs_instances" {
+  type                     = "ingress"
+  description              = "PostgreSQL from Dupli1 ECS container instances (ops / SSM)"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = var.rds_security_group_id
+  source_security_group_id = aws_security_group.ecs_instances.id
+}
+
 data "aws_iam_policy_document" "ecs_instance_assume" {
   statement {
     actions = ["sts:AssumeRole"]

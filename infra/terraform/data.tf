@@ -27,6 +27,8 @@ data "aws_ecr_repository" "services" {
     "dupli1-auth",
     "dupli1-product",
     "dupli1-order",
+    "dupli1-cart",
+    "dupli1-payment",
     "dupli1-notification",
     "dupli1-proxy",
   ])
@@ -60,6 +62,8 @@ locals {
     auth         = "${data.aws_ecr_repository.services["dupli1-auth"].repository_url}:${var.image_tag}"
     product      = "${data.aws_ecr_repository.services["dupli1-product"].repository_url}:${var.image_tag}"
     order        = "${data.aws_ecr_repository.services["dupli1-order"].repository_url}:${var.image_tag}"
+    cart         = "${data.aws_ecr_repository.services["dupli1-cart"].repository_url}:${var.image_tag}"
+    payment      = "${data.aws_ecr_repository.services["dupli1-payment"].repository_url}:${var.image_tag}"
     notification = "${data.aws_ecr_repository.services["dupli1-notification"].repository_url}:${var.image_tag}"
     proxy        = "${data.aws_ecr_repository.services["dupli1-proxy"].repository_url}:${var.image_tag}"
   }

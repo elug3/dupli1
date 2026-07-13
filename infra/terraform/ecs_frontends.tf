@@ -58,8 +58,25 @@ resource "aws_lb_target_group" "web" {
   }
 }
 
-# API + gateway stay on proxy; default listener action (alb.tf) forwards to web.
+# API + gateway stay on proxy; default HTTPS listener action forwards to web.
 resource "aws_lb_listener_rule" "api" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.proxy.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*", "/gateway/*"]
+    }
+  }
+}
+
+# Keep HTTP API/gateway working during clients that skip the redirect (health checks).
+resource "aws_lb_listener_rule" "api_http" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 10
 
@@ -183,7 +200,9 @@ resource "aws_ecs_service" "web" {
 
   depends_on = [
     aws_lb_listener_rule.api,
+    aws_lb_listener_rule.api_http,
     aws_lb_listener.http,
+    aws_lb_listener.https,
     aws_ecs_cluster_capacity_providers.production,
   ]
 
