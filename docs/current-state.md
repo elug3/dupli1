@@ -4,7 +4,7 @@ Authoritative snapshot of what is implemented in the Dupli1 repository today.
 
 ## Overview
 
-Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx gateway. Local dev uses Docker Compose; production uses AWS ECS on EC2 (ALB, RDS PostgreSQL, S3, CloudWatch Logs).
+Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx gateway. Local dev uses Docker Compose; production uses AWS ECS on EC2, ALB, and Amazon RDS PostgreSQL.
 
 | Area | Status |
 |------|--------|
@@ -175,4 +175,4 @@ cd product && go test ./...
 
 ## Deployment
 
-Production: ECS Fargate, RDS PostgreSQL 16, Secrets Manager. See [deployment-aws.md](deployment-aws.md).
+Production: ECS on EC2, ALB, RDS PostgreSQL 16, S3, Secrets Manager. See [deployment-aws.md](deployment-aws.md).

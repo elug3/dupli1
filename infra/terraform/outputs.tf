@@ -1,112 +1,59 @@
-output "vpc_id" {
-  description = "VPC ID."
-  value       = aws_vpc.main.id
-}
-
-output "public_subnet_ids" {
-  description = "Public subnet IDs (ALB + ECS)."
-  value       = aws_subnet.public[*].id
-}
-
-output "private_subnet_ids" {
-  description = "Private subnet IDs (RDS)."
-  value       = aws_subnet.private[*].id
-}
-
 output "alb_dns_name" {
-  description = "Public ALB DNS name."
-  value       = aws_lb.main.dns_name
+  description = "Public DNS name of the Application Load Balancer."
+  value       = aws_lb.prod.dns_name
 }
 
 output "alb_url" {
-  description = "Base URL for the gateway."
-  value       = var.certificate_arn != "" ? "https://${aws_lb.main.dns_name}" : "http://${aws_lb.main.dns_name}"
+  description = "HTTP URL for the gateway."
+  value       = "http://${aws_lb.prod.dns_name}"
 }
 
-output "ecs_cluster_name" {
-  description = "ECS cluster name (set GitHub variable ECS_CLUSTER to this)."
-  value       = aws_ecs_cluster.main.name
+output "nat_gateway_id" {
+  description = "NAT Gateway used by private ECS tasks."
+  value       = aws_nat_gateway.prod.id
 }
 
-output "ecr_repository_urls" {
-  description = "ECR repository URLs keyed by short service name."
-  value       = { for k, r in aws_ecr_repository.service : k => r.repository_url }
+output "ecs_capacity_provider" {
+  description = "ECS EC2 capacity provider name."
+  value       = aws_ecs_capacity_provider.ec2.name
+}
+
+output "ecs_asg_name" {
+  description = "Auto Scaling group for ECS container instances."
+  value       = aws_autoscaling_group.ecs.name
+}
+
+output "product_images_bucket" {
+  description = "S3 bucket for product images."
+  value       = aws_s3_bucket.product_images.id
+}
+
+output "product_images_public_base" {
+  description = "Public HTTPS base for product image objects."
+  value       = "https://${aws_s3_bucket.product_images.bucket_regional_domain_name}"
 }
 
 output "rds_endpoint" {
-  description = "RDS hostname."
-  value       = aws_db_instance.dupli1.address
+  description = "Existing RDS hostname."
+  value       = data.aws_db_instance.dupli1.address
 }
 
-output "rds_port" {
-  description = "RDS port."
-  value       = aws_db_instance.dupli1.port
+output "ecs_tasks_security_group_id" {
+  description = "Security group attached to ECS tasks."
+  value       = aws_security_group.ecs_tasks.id
 }
 
-output "rds_identifier" {
-  description = "RDS instance identifier."
-  value       = aws_db_instance.dupli1.id
+output "gateway_health_url" {
+  description = "ALB gateway health check URL."
+  value       = "http://${aws_lb.prod.dns_name}/gateway/health"
 }
 
-output "rds_security_group_id" {
-  description = "Security group attached to RDS."
-  value       = aws_security_group.rds.id
+output "storefront_note" {
+  description = "Public storefront is served at ALB / via proxy → web.dupli1.local."
+  value       = "http://${aws_lb.prod.dns_name}/"
 }
 
-output "s3_product_images_bucket" {
-  description = "S3 bucket for product images."
-  value       = aws_s3_bucket.product_images.bucket
-}
-
-output "cloudwatch_log_groups" {
-  description = "CloudWatch log group names."
-  value       = { for k, g in aws_cloudwatch_log_group.service : k => g.name }
-}
-
-output "db_secret_arn" {
-  description = "Secrets Manager ARN with database credentials and URLs."
-  value       = aws_secretsmanager_secret.db_credentials.arn
-}
-
-output "auth_db_url_secret_arn" {
-  description = "Secrets Manager ARN for dupli1-auth DB_URL."
-  value       = aws_secretsmanager_secret.auth_db_url.arn
-}
-
-output "product_db_url_secret_arn" {
-  description = "Secrets Manager ARN for dupli1-product DUPLI1_PRODUCT_DB."
-  value       = aws_secretsmanager_secret.product_db_url.arn
-}
-
-output "app_secret_arn" {
-  description = "Secrets Manager ARN for application secrets bundle."
-  value       = aws_secretsmanager_secret.app.arn
-}
-
-output "owner_email" {
-  description = "Seeded owner email."
-  value       = var.owner_email
-}
-
-output "service_discovery_domain" {
-  description = "Cloud Map private DNS domain."
-  value       = local.service_domain
-}
-
-output "auth_db_url_template" {
-  description = "Auth connection string with password redacted."
-  value       = "postgres://${var.db_username}:<password>@${aws_db_instance.dupli1.address}:${aws_db_instance.dupli1.port}/${var.db_name}?sslmode=require"
-}
-
-output "product_db_url_template" {
-  description = "Product connection string with password redacted."
-  value       = "postgres://${var.db_username}:<password>@${aws_db_instance.dupli1.address}:${aws_db_instance.dupli1.port}/${var.product_db_name}?sslmode=require"
-}
-
-output "github_actions_config" {
-  description = "Values to set in GitHub Actions variables/secrets."
-  value = {
-    AWS_REGION  = var.aws_region
-    ECS_CLUSTER = aws_ecs_cluster.main.name
-  }
+output "manage_web_note" {
+  description = "Admin UI is VPN/private-DNS only (not on the public ALB)."
+  value       = "http://manage.dupli1.local (Cloud Map; requires VPC/VPN access)"
 }

@@ -1,90 +1,74 @@
 # Dupli1 AWS (ECS on EC2)
 
-Terraform provisions a full Dupli1 backend in `us-east-1`:
+Terraform provisions the production compute path on the existing VPC and RDS:
 
 | Resource | Purpose |
 |----------|---------|
-| **VPC** | Public subnets (ALB + ECS EC2) + private subnets (RDS). No NAT Gateway (cost-conscious). |
-| **ECR** | Repositories for auth, product, order, cart, payment, notification, proxy |
-| **ECS + EC2** | Cluster with Auto Scaling Group capacity provider (`t3.large`) |
-| **ALB** | Internet-facing load balancer → `dupli1-proxy` |
-| **RDS** | PostgreSQL 16 (`db.t3.micro`), encrypted, private |
-| **S3** | Product images bucket (public read, private write) |
-| **CloudWatch Logs** | `/dupli1/<env>/<service>` log groups (14-day retention) |
-| **Secrets Manager** | DB URLs, JWT, seeded account passwords, S3 keys |
-| **Cloud Map** | Private DNS `*.dupli1.local` for inter-service calls |
+| NAT Gateway (1 AZ) | Outbound for private ECS tasks (ECR, Secrets Manager, Logs) |
+| ALB | Public HTTP entry → `dupli1-proxy` |
+| EC2 ASG (`t3.large`) | ECS container instances |
+| ECS capacity provider | EC2 launch type for backend services |
+| S3 | Product image bucket (public `GetObject`) |
+| CloudWatch Logs | `/ecs/dupli1-*` log groups |
+| ECS services | auth, product, order, notification, proxy, redis, nats |
 
-NATS runs as an ECS service (public `nats:2-alpine` image). Redis is optional for auth and is not provisioned by default.
+Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `production`, RDS `dupli1-production`, ECR repos, Cloud Map `dupli1.local`, Secrets Manager DB URLs.
 
-## Monthly cost estimate (dev-sized, us-east-1, ~730h)
+## Monthly cost (dev-sized, us-east-1, 24/7)
 
-| Component | Approx. |
-|-----------|---------|
-| EC2 `t3.large` ×1 | ~$60 |
+| Service | Estimate |
+|---------|----------|
+| EC2 t3.large (1×, awsvpc trunking) | ~$60 |
+| EBS 40 GB gp3 | ~$3 |
+| NAT Gateway | ~$32 + data |
 | ALB | ~$16–22 |
-| RDS `db.t3.micro` + 20 GB gp3 | ~$15–18 |
-| S3 + ECR + Secrets Manager + CloudWatch Logs | ~$5–10 |
-| Data transfer | variable |
-| **Total** | **~$100–120 / month** |
+| RDS db.t3.micro + storage | ~$17 |
+| ECR / S3 / CloudWatch / Secrets | ~$5 |
+| **Total** | **~$130–140/mo** |
 
-Not included: NAT Gateway (~$32/mo), Multi-AZ RDS, ElastiCache, ACM is free. Scale ASG or instance size up for production load.
+## Pause / resume (cost lightening)
 
-## Prerequisites
+```bash
+# Stop ECS tasks, scale ASG to 0, stop RDS (~saves EC2 + RDS hours)
+bash infra/scripts/pause-aws.sh
 
-- Terraform >= 1.5
-- AWS credentials with rights to create VPC, ECS, EC2, ECR, ALB, RDS, S3, IAM, Secrets Manager, CloudWatch, Cloud Map
-- Docker (to build/push images) or GitHub Actions secrets configured
+# Also delete NAT Gateway (~+$32/mo saved; slower resume)
+DELETE_NAT=1 bash infra/scripts/pause-aws.sh
 
-## Apply
+# Bring stack back
+bash infra/scripts/resume-aws.sh
+# If NAT was deleted:
+APPLY_NAT=1 bash infra/scripts/resume-aws.sh
+```
+
+While paused, ALB (and NAT unless deleted) still bill. RDS storage continues to bill; RDS auto-restarts after 7 days.
+
 
 ```bash
 cd infra/terraform
-cp terraform.tfvars.example terraform.tfvars
-# edit owner_password / certificate_arn if desired
+cp terraform.tfvars.example terraform.tfvars   # optional overrides
 terraform init
 terraform plan
 terraform apply
 ```
 
+Before the first apply, remove the paused Fargate services so Terraform can recreate them on EC2:
+
+```bash
+bash infra/scripts/recreate-ecs-services-for-ec2.sh
+```
+
+Or let the script call `terraform apply` after deleting the old services.
+
+## Images
+
+GitHub Actions (`.github/workflows/aws.yml`) builds and pushes to ECR, then force-redeploys ECS services. Proxy uses `api/Dockerfile.ecs` (Cloud Map DNS).
+
+## Gateway
+
 After apply:
 
 ```bash
-# 1. Create extra Postgres databases (products, orders, cart, payments)
-#    Requires network path to RDS (VPN / bastion / SSM port-forward).
-bash infra/scripts/create-rds-databases.sh
-
-# 2. Push images (or merge to main so .github/workflows/aws.yml does it)
-# 3. Force ECS redeploy if services started before images existed:
-aws ecs update-service --cluster production --service dupli1-proxy --force-new-deployment
+terraform output gateway_health_url
+curl "$(terraform output -raw gateway_health_url)"
 ```
-
-Gateway health:
-
-```bash
-curl http://$(terraform -chdir=infra/terraform output -raw alb_dns_name)/gateway/health
-```
-
-## GitHub Actions
-
-Set repository secrets/variables:
-
-| Type | Name | Value |
-|------|------|-------|
-| Secret | `AWS_ACCESS_KEY_ID` | deploy user |
-| Secret | `AWS_SECRET_ACCESS_KEY` | deploy user |
-| Variable | `AWS_REGION` | `us-east-1` |
-| Variable | `ECS_CLUSTER` | `terraform output -raw ecs_cluster_name` (usually `production`) |
-
-On push to `main`, the workflow builds all service images (including cart/payment) into ECR and force-redeploys ECS services.
-
-## Security defaults
-
-- RDS encrypted at rest, not publicly accessible, SG allows 5432 from ECS only
-- ALB drops invalid headers; HTTPS when `certificate_arn` is set
-- S3 bucket versioning + SSE-S3; writes via IAM user keys in Secrets Manager
-- ECS task execution role least-privilege to Secrets Manager ARNs
-- Container Insights off by default (`enable_container_insights`)
-
-## Legacy notes
-
-Older scripts under `infra/scripts/` (pause/resume, single-EC2 Compose, RDS cutover helpers) target a previous hand-built environment. Prefer this Terraform stack for new deploys.

@@ -1,10 +1,40 @@
-resource "aws_cloudwatch_log_group" "service" {
-  for_each = toset(concat(local.app_services, ["nats", "ecs-agent"]))
+resource "aws_cloudwatch_log_group" "services" {
+  for_each = toset([
+    "auth",
+    "product",
+    "order",
+    "notification",
+    "proxy",
+    "redis",
+    "nats",
+  ])
 
-  name              = "/dupli1/${var.environment}/${each.key}"
+  name              = "/ecs/${var.project_name}-${each.key}"
   retention_in_days = 14
 
   tags = {
-    Name = "${local.name_prefix}-${each.key}"
+    Environment = var.environment
+    Project     = var.project_name
   }
+}
+
+data "aws_iam_policy_document" "ecs_execution_secrets" {
+  statement {
+    sid    = "ReadDupli1Secrets"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+    ]
+    resources = [
+      var.auth_db_url_secret_arn,
+      var.product_db_url_secret_arn,
+      aws_secretsmanager_secret.product_s3.arn,
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_execution_secrets" {
+  name   = "${local.name_prefix}-ecs-execution-secrets"
+  role   = data.aws_iam_role.ecs_task_execution.name
+  policy = data.aws_iam_policy_document.ecs_execution_secrets.json
 }

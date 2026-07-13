@@ -1,11 +1,8 @@
-# ECS gateway image. Uses the official nginx envsubst templates entrypoint.
+# ECS image: Cloud Map upstreams (api/nginx.ecs.conf).
+# Local Compose keeps using api/Dockerfile + nginx.conf.
+# Single-EC2 Compose keeps using api/Dockerfile.prod + nginx.prod.conf.
 FROM nginx:1.27-alpine
 
-COPY api/nginx.ecs.conf.template /etc/nginx/templates/default.conf.template
+COPY api/nginx.ecs.conf /etc/nginx/conf.d/default.conf
 
-# Defaults overridden by ECS task environment.
-ENV SERVICE_DOMAIN=dupli1.local \
-    S3_BUCKET_NAME=product-images \
-    S3_BUCKET_HOST=example.s3.us-east-1.amazonaws.com
-
-EXPOSE 80
+EXPOSE 80 443

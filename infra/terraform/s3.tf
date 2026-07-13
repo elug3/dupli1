@@ -1,45 +1,20 @@
-# checkov:skip=CKV2_AWS_62:Product image bucket does not need event notifications for this workload
-# checkov:skip=CKV_AWS_18:Access logging omitted in cost-conscious default; enable for production hardening
-# checkov:skip=CKV_AWS_145:SSE-S3 is sufficient for product images at this stage
-# checkov:skip=CKV2_AWS_6:Public GetObject is intentional so ALB/nginx can proxy images
-# checkov:skip=CKV2_AWS_64:Cross-region replication not required for dev-sized deploy
 resource "aws_s3_bucket" "product_images" {
-  bucket = "${local.name_prefix}-product-images-${data.aws_caller_identity.current.account_id}"
+  bucket_prefix = "${var.project_name}-product-images-"
 
   tags = {
-    Name = "${local.name_prefix}-product-images"
+    Name        = "${local.name_prefix}-product-images"
+    Environment = var.environment
+    Project     = var.project_name
   }
 }
 
 resource "aws_s3_bucket_public_access_block" "product_images" {
   bucket = aws_s3_bucket.product_images.id
 
-  # Public GetObject so the ALB/nginx gateway can proxy image URLs without signed requests.
-  # Writes remain private (IAM user / task role only).
   block_public_acls       = true
-  block_public_policy     = false
+  block_public_policy     = true
   ignore_public_acls      = true
-  restrict_public_buckets = false
-}
-
-data "aws_iam_policy_document" "product_images_public_read" {
-  statement {
-    sid    = "PublicReadGetObject"
-    effect = "Allow"
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-    actions   = ["s3:GetObject"]
-    resources = ["${aws_s3_bucket.product_images.arn}/*"]
-  }
-}
-
-resource "aws_s3_bucket_policy" "product_images" {
-  bucket = aws_s3_bucket.product_images.id
-  policy = data.aws_iam_policy_document.product_images_public_read.json
-
-  depends_on = [aws_s3_bucket_public_access_block.product_images]
+  restrict_public_buckets = true
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "product_images" {
@@ -52,33 +27,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "product_images" {
   }
 }
 
-resource "aws_s3_bucket_versioning" "product_images" {
-  bucket = aws_s3_bucket.product_images.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "product_images" {
-  bucket = aws_s3_bucket.product_images.id
-
-  rule {
-    id     = "expire-noncurrent"
-    status = "Enabled"
-
-    filter {}
-
-    noncurrent_version_expiration {
-      noncurrent_days = 30
-    }
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 7
-    }
-  }
-}
-
 resource "aws_s3_bucket_ownership_controls" "product_images" {
   bucket = aws_s3_bucket.product_images.id
 
@@ -87,34 +35,66 @@ resource "aws_s3_bucket_ownership_controls" "product_images" {
   }
 }
 
+# Bucket stays private (account Block Public Access). Product uploads via IAM
+# access keys; expose objects later via CloudFront OAC or the gateway if needed.
+
 resource "aws_iam_user" "product_s3" {
   name = "${local.name_prefix}-product-s3"
-  path = "/dupli1/"
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_iam_user_policy" "product_s3" {
+  name = "${local.name_prefix}-product-s3"
+  user = aws_iam_user.product_s3.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ListBucket"
+        Effect = "Allow"
+        Action = ["s3:ListBucket"]
+        Resource = [aws_s3_bucket.product_images.arn]
+      },
+      {
+        Sid    = "ObjectRW"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+        ]
+        Resource = ["${aws_s3_bucket.product_images.arn}/*"]
+      }
+    ]
+  })
 }
 
 resource "aws_iam_access_key" "product_s3" {
   user = aws_iam_user.product_s3.name
 }
 
-data "aws_iam_policy_document" "product_s3" {
-  statement {
-    sid    = "ProductImagesRW"
-    effect = "Allow"
-    actions = [
-      "s3:PutObject",
-      "s3:GetObject",
-      "s3:DeleteObject",
-      "s3:ListBucket",
-    ]
-    resources = [
-      aws_s3_bucket.product_images.arn,
-      "${aws_s3_bucket.product_images.arn}/*",
-    ]
+resource "aws_secretsmanager_secret" "product_s3" {
+  name        = "${var.project_name}/${var.environment}/product-s3"
+  description = "S3 access credentials for dupli1-product image uploads"
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
   }
 }
 
-resource "aws_iam_user_policy" "product_s3" {
-  name   = "${local.name_prefix}-product-s3"
-  user   = aws_iam_user.product_s3.name
-  policy = data.aws_iam_policy_document.product_s3.json
+resource "aws_secretsmanager_secret_version" "product_s3" {
+  secret_id = aws_secretsmanager_secret.product_s3.id
+  secret_string = jsonencode({
+    S3_ENDPOINT        = "https://s3.${var.aws_region}.amazonaws.com"
+    S3_PUBLIC_ENDPOINT = "https://${aws_s3_bucket.product_images.bucket_regional_domain_name}"
+    S3_ACCESS_KEY      = aws_iam_access_key.product_s3.id
+    S3_SECRET_KEY      = aws_iam_access_key.product_s3.secret
+    S3_BUCKET          = aws_s3_bucket.product_images.id
+  })
 }

@@ -1,22 +1,59 @@
-resource "aws_lb" "main" {
+resource "aws_security_group" "alb" {
+  name        = "${local.name_prefix}-alb"
+  description = "Dupli1 ALB ingress"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-alb"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_lb" "prod" {
   name               = "${local.name_prefix}-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = aws_subnet.public[*].id
+  subnets            = var.public_subnet_ids
 
-  drop_invalid_header_fields = true
+  enable_deletion_protection = false
 
   tags = {
-    Name = "${local.name_prefix}-alb"
+    Name        = "${local.name_prefix}-alb"
+    Environment = var.environment
+    Project     = var.project_name
   }
 }
 
 resource "aws_lb_target_group" "proxy" {
-  name        = "${local.name_prefix}-proxy"
+  name        = "${local.name_prefix}-proxy-tg"
   port        = 80
   protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = var.vpc_id
   target_type = "ip"
 
   health_check {
@@ -30,47 +67,20 @@ resource "aws_lb_target_group" "proxy" {
   }
 
   tags = {
-    Name = "${local.name_prefix}-proxy"
+    Name        = "${local.name_prefix}-proxy-tg"
+    Environment = var.environment
+    Project     = var.project_name
   }
 }
 
 resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.main.arn
+  load_balancer_arn = aws_lb.prod.arn
   port              = 80
   protocol          = "HTTP"
 
-  dynamic "default_action" {
-    for_each = var.certificate_arn != "" ? [1] : []
-    content {
-      type = "redirect"
-      redirect {
-        port        = "443"
-        protocol    = "HTTPS"
-        status_code = "HTTP_301"
-      }
-    }
-  }
-
-  dynamic "default_action" {
-    for_each = var.certificate_arn == "" ? [1] : []
-    content {
-      type             = "forward"
-      target_group_arn = aws_lb_target_group.proxy.arn
-    }
-  }
-}
-
-resource "aws_lb_listener" "https" {
-  count = var.certificate_arn != "" ? 1 : 0
-
-  load_balancer_arn = aws_lb.main.arn
-  port              = 443
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = var.certificate_arn
-
+  # Public storefront (dupli1-web). API paths are routed to proxy via listener rule.
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.proxy.arn
+    target_group_arn = aws_lb_target_group.web.arn
   }
 }

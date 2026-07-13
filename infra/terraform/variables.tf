@@ -16,129 +16,111 @@ variable "environment" {
   default     = "production"
 }
 
-variable "vpc_cidr" {
-  description = "CIDR block for the VPC."
+variable "vpc_id" {
+  description = "Existing VPC that hosts ECS and RDS."
   type        = string
-  default     = "10.20.0.0/16"
+  default     = "vpc-0e143b53ca2a4714c"
 }
 
-variable "az_count" {
-  description = "Number of availability zones (min 2 for ALB/RDS subnet groups)."
-  type        = number
-  default     = 2
+variable "public_subnet_ids" {
+  description = "Public subnets for ALB and NAT."
+  type        = list(string)
+  default = [
+    "subnet-0d757c4cf8d71963b",
+    "subnet-02c1003124987322c",
+  ]
+}
+
+variable "private_subnet_ids" {
+  description = "Private subnets for ECS tasks and EC2 container instances."
+  type        = list(string)
+  default = [
+    "subnet-01fd0882721f10499",
+    "subnet-006b8428713711816",
+  ]
+}
+
+variable "ecs_cluster_name" {
+  description = "Existing ECS cluster name."
+  type        = string
+  default     = "production"
+}
+
+variable "service_discovery_namespace_id" {
+  description = "Cloud Map private DNS namespace ID (dupli1.local)."
+  type        = string
+  default     = "ns-5d53uocv3zvhmgrz"
+}
+
+variable "rds_security_group_id" {
+  description = "Security group attached to the existing RDS instance."
+  type        = string
+  default     = "sg-073c0d32fa81e03e6"
+}
+
+variable "rds_instance_identifier" {
+  description = "Existing RDS instance identifier."
+  type        = string
+  default     = "dupli1-production"
+}
+
+variable "auth_db_url_secret_arn" {
+  description = "Secrets Manager ARN for auth DB_URL."
+  type        = string
+  default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/auth-db-url-B6TnOD"
+}
+
+variable "product_db_url_secret_arn" {
+  description = "Secrets Manager ARN for product DUPLI1_PRODUCT_DB."
+  type        = string
+  default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/product-db-url-kaL4uk"
+}
+
+variable "ecs_ami_id" {
+  description = "ECS-optimized AMI. Empty = latest Amazon Linux 2023 from SSM."
+  type        = string
+  default     = ""
 }
 
 variable "ecs_instance_type" {
-  description = "EC2 instance type for the ECS capacity provider."
+  description = "EC2 instance type for the ECS capacity provider ASG."
   type        = string
   default     = "t3.large"
 }
 
+variable "ecs_asg_desired_capacity" {
+  description = "Desired number of ECS container instances."
+  type        = number
+  default     = 1
+}
+
 variable "ecs_asg_min_size" {
-  description = "Minimum ECS EC2 instances."
+  description = "Minimum number of ECS container instances."
   type        = number
   default     = 1
 }
 
 variable "ecs_asg_max_size" {
-  description = "Maximum ECS EC2 instances."
+  description = "Maximum number of ECS container instances."
   type        = number
-  default     = 2
+  default     = 3
 }
 
-variable "ecs_asg_desired_capacity" {
-  description = "Desired ECS EC2 instances."
-  type        = number
-  default     = 1
-}
-
-variable "ecs_image_tag" {
-  description = "ECR image tag for application services (use latest after first CI push)."
+variable "image_tag" {
+  description = "ECR image tag for backend services."
   type        = string
   default     = "latest"
 }
 
-variable "db_instance_class" {
-  description = "RDS instance class."
+variable "jwt_secret" {
+  description = "HS256 JWT fallback secret injected into task definitions."
   type        = string
-  default     = "db.t3.micro"
-}
-
-variable "db_allocated_storage_gb" {
-  description = "Initial allocated storage for RDS (GiB)."
-  type        = number
-  default     = 20
-}
-
-variable "db_name" {
-  description = "Primary database created on the RDS instance (auth)."
-  type        = string
-  default     = "dupli1_db"
-}
-
-variable "db_username" {
-  description = "Master database username."
-  type        = string
-  default     = "dupli1"
-}
-
-variable "product_db_name" {
-  description = "Database used by dupli1-product."
-  type        = string
-  default     = "products"
-}
-
-variable "order_db_name" {
-  description = "Database used by dupli1-order."
-  type        = string
-  default     = "orders"
-}
-
-variable "cart_db_name" {
-  description = "Database used by dupli1-cart."
-  type        = string
-  default     = "cart"
-}
-
-variable "payment_db_name" {
-  description = "Database used by dupli1-payment."
-  type        = string
-  default     = "payments"
-}
-
-variable "backup_retention_period" {
-  description = "Number of days to retain automated RDS backups."
-  type        = number
-  default     = 7
-}
-
-variable "deletion_protection" {
-  description = "Prevent accidental RDS deletion."
-  type        = bool
-  default     = true
-}
-
-variable "owner_email" {
-  description = "Seeded owner account email for dupli1-auth."
-  type        = string
-  default     = "admin@dupli1.com"
-}
-
-variable "owner_password" {
-  description = "Seeded owner account password. Leave empty to auto-generate."
-  type        = string
-  default     = ""
+  default     = "dupli1-prod-jwt-change-me"
   sensitive   = true
 }
 
-variable "certificate_arn" {
-  description = "Optional ACM certificate ARN for HTTPS on the ALB. Empty = HTTP only."
-  type        = string
-  default     = ""
-}
-
-variable "enable_container_insights" {
-  description = "Enable ECS Container Insights."
-  type        = bool
-  default     = false
+variable "desired_count" {
+  description = "Desired task count per application service."
+  type        = number
+  default     = 1
 }
