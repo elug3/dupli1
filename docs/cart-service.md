@@ -109,7 +109,7 @@ The cart owner is always **`sub` from the JWT** — clients do not send `custome
 | `/api/v1/cart` | `claims.UserID` from token |
 | `/api/v1/carts/{customer_id}` | Path id; requires `cart.read` |
 
-Guest / anonymous carts are **not implemented** yet (planned phase 2).
+Guest / anonymous carts are **not implemented** yet (planned phase 2). Identity should reuse the shared `dupli1_guest` browser cookie defined in [product-guest-views-plan.md](product-guest-views-plan.md) (minted on PDP in phase 1; cart mints if absent later).
 
 ---
 
@@ -328,7 +328,7 @@ Local Postgres: `postgres://dupli1:dupli1_dev@localhost:5436/cart?sslmode=disabl
 
 | Item | Status |
 |------|--------|
-| Guest cart + merge on login | Not started |
+| Guest cart + merge on login | Not started — reuse `dupli1_guest` from [product-guest-views-plan.md](product-guest-views-plan.md) |
 | `POST /api/v1/cart/checkout` | Not started |
 | Stock enforcement on add | Not started |
 | CI / ECS deploy for cart | Partial (Compose only) |
