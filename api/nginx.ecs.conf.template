@@ -46,62 +46,62 @@ server {
     }
 
     location /api/v1/auth/ {
-        set $$upstream http://dupli1-auth.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://auth.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/products {
-        set $$upstream http://dupli1-product.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://product.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/variants {
-        set $$upstream http://dupli1-product.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://product.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/coupons {
-        set $$upstream http://dupli1-product.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://product.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/inventory/ {
-        set $$upstream http://dupli1-product.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://product.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/orders {
-        set $$upstream http://dupli1-order.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://order.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/checkout {
-        set $$upstream http://dupli1-order.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://order.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/cart {
-        set $$upstream http://dupli1-cart.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://cart.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/carts/ {
-        set $$upstream http://dupli1-cart.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://cart.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/payments {
-        set $$upstream http://dupli1-payment.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://payment.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/payments/ {
-        set $$upstream http://dupli1-payment.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://payment.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 
     location /api/v1/notification/ {
-        set $$upstream http://dupli1-notification.${SERVICE_DOMAIN}:8080;
+        set $$upstream http://notification.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;
     }
 

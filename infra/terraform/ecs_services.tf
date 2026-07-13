@@ -19,6 +19,46 @@ resource "aws_service_discovery_service" "order" {
   }
 }
 
+resource "aws_service_discovery_service" "cart" {
+  name = "cart"
+
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_service_discovery_service" "payment" {
+  name = "payment"
+
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
 resource "aws_service_discovery_service" "redis" {
   name = "redis"
 
@@ -189,7 +229,6 @@ resource "aws_ecs_task_definition" "auth" {
       ]
       environment = [
         { name = "DUPLI1_AUTH_ADDR", value = ":8080" },
-        { name = "JWT_SECRET", value = var.jwt_secret },
         { name = "REDIS_URL", value = "redis://redis.dupli1.local:6379" },
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
       ]
@@ -197,7 +236,11 @@ resource "aws_ecs_task_definition" "auth" {
         {
           name      = "DB_URL"
           valueFrom = var.auth_db_url_secret_arn
-        }
+        },
+        {
+          name      = "JWT_SECRET"
+          valueFrom = var.jwt_secret_arn
+        },
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -234,7 +277,6 @@ resource "aws_ecs_task_definition" "product" {
       environment = [
         { name = "SERVER_HOST", value = "0.0.0.0" },
         { name = "SERVER_PORT", value = "8080" },
-        { name = "JWT_SECRET", value = var.jwt_secret },
         { name = "AUTH_JWKS_URL", value = "http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json" },
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
         { name = "S3_ENDPOINT", value = "https://s3.${var.aws_region}.amazonaws.com" },
@@ -245,6 +287,10 @@ resource "aws_ecs_task_definition" "product" {
         {
           name      = "DUPLI1_PRODUCT_DB"
           valueFrom = var.product_db_url_secret_arn
+        },
+        {
+          name      = "JWT_SECRET"
+          valueFrom = var.jwt_secret_arn
         },
         {
           name      = "S3_ACCESS_KEY"
@@ -288,11 +334,21 @@ resource "aws_ecs_task_definition" "order" {
         }
       ]
       environment = [
-        { name = "JWT_SECRET", value = var.jwt_secret },
+        { name = "DUPLI1_ORDER_ADDR", value = ":8080" },
         { name = "AUTH_JWKS_URL", value = "http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json" },
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
-        { name = "PRODUCT_BASE_URL", value = "http://product.dupli1.local:8080" },
-        { name = "INVENTORY_BASE_URL", value = "http://product.dupli1.local:8080" },
+        { name = "DUPLI1_PRODUCT_URL", value = "http://product.dupli1.local:8080" },
+        { name = "DUPLI1_INVENTORY_URL", value = "http://product.dupli1.local:8080" },
+      ]
+      secrets = [
+        {
+          name      = "DUPLI1_ORDER_DB"
+          valueFrom = var.order_db_url_secret_arn
+        },
+        {
+          name      = "JWT_SECRET"
+          valueFrom = var.jwt_secret_arn
+        },
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -306,6 +362,104 @@ resource "aws_ecs_task_definition" "order" {
   ])
 }
 
+resource "aws_ecs_task_definition" "cart" {
+  family                   = "${var.project_name}-cart"
+  network_mode             = local.common_task.network_mode
+  requires_compatibilities = local.common_task.requires_compatibilities
+  execution_role_arn       = local.common_task.execution_role_arn
+  cpu                      = "256"
+  memory                   = "512"
+
+  container_definitions = jsonencode([
+    {
+      name      = "cart"
+      image     = local.service_images.cart
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "DUPLI1_CART_ADDR", value = ":8080" },
+        { name = "AUTH_JWKS_URL", value = "http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json" },
+        { name = "DUPLI1_PRODUCT_URL", value = "http://product.dupli1.local:8080" },
+        { name = "DUPLI1_INVENTORY_URL", value = "http://product.dupli1.local:8080" },
+      ]
+      secrets = [
+        {
+          name      = "DUPLI1_CART_DB"
+          valueFrom = var.cart_db_url_secret_arn
+        },
+        {
+          name      = "JWT_SECRET"
+          valueFrom = var.jwt_secret_arn
+        },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.services["cart"].name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    }
+  ])
+}
+
+resource "aws_ecs_task_definition" "payment" {
+  family                   = "${var.project_name}-payment"
+  network_mode             = local.common_task.network_mode
+  requires_compatibilities = local.common_task.requires_compatibilities
+  execution_role_arn       = local.common_task.execution_role_arn
+  cpu                      = "256"
+  memory                   = "512"
+
+  container_definitions = jsonencode([
+    {
+      name      = "payment"
+      image     = local.service_images.payment
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "DUPLI1_PAYMENT_ADDR", value = ":8080" },
+        { name = "AUTH_JWKS_URL", value = "http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json" },
+        { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
+        { name = "DUPLI1_ORDER_URL", value = "http://order.dupli1.local:8080" },
+        { name = "DUPLI1_PAYMENT_PUBLIC_URL", value = "https://dupli1.com" },
+        { name = "STRIPE_SUCCESS_URL", value = "https://dupli1.com/checkout/success" },
+        { name = "STRIPE_CANCEL_URL", value = "https://dupli1.com/checkout/cancel" },
+      ]
+      secrets = [
+        {
+          name      = "DUPLI1_PAYMENT_DB"
+          valueFrom = var.payment_db_url_secret_arn
+        },
+        {
+          name      = "JWT_SECRET"
+          valueFrom = var.jwt_secret_arn
+        },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.services["payment"].name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    }
+  ])
+}
 resource "aws_ecs_task_definition" "notification" {
   family                   = "${var.project_name}-notification"
   network_mode             = local.common_task.network_mode
@@ -538,6 +692,71 @@ resource "aws_ecs_service" "order" {
     aws_ecs_service.auth,
     aws_ecs_service.product,
     aws_ecs_service.nats,
+    aws_iam_role_policy.ecs_execution_secrets,
+  ]
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
+}
+
+resource "aws_ecs_service" "cart" {
+  name            = "dupli1-cart"
+  cluster         = data.aws_ecs_cluster.production.id
+  task_definition = aws_ecs_task_definition.cart.arn
+  desired_count   = var.desired_count
+
+  capacity_provider_strategy {
+    capacity_provider = aws_ecs_capacity_provider.ec2.name
+    weight            = 1
+    base              = 1
+  }
+
+  network_configuration {
+    subnets         = local.private_network.subnets
+    security_groups = local.private_network.security_groups
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.cart.arn
+  }
+
+  depends_on = [
+    aws_ecs_service.auth,
+    aws_ecs_service.product,
+    aws_iam_role_policy.ecs_execution_secrets,
+  ]
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
+}
+
+resource "aws_ecs_service" "payment" {
+  name            = "dupli1-payment"
+  cluster         = data.aws_ecs_cluster.production.id
+  task_definition = aws_ecs_task_definition.payment.arn
+  desired_count   = var.desired_count
+
+  capacity_provider_strategy {
+    capacity_provider = aws_ecs_capacity_provider.ec2.name
+    weight            = 1
+    base              = 1
+  }
+
+  network_configuration {
+    subnets         = local.private_network.subnets
+    security_groups = local.private_network.security_groups
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.payment.arn
+  }
+
+  depends_on = [
+    aws_ecs_service.order,
+    aws_ecs_service.nats,
+    aws_iam_role_policy.ecs_execution_secrets,
   ]
 
   lifecycle {
@@ -602,9 +821,12 @@ resource "aws_ecs_service" "proxy" {
 
   depends_on = [
     aws_lb_listener.http,
+    aws_lb_listener.https,
     aws_ecs_service.auth,
     aws_ecs_service.product,
     aws_ecs_service.order,
+    aws_ecs_service.cart,
+    aws_ecs_service.payment,
   ]
 
   lifecycle {

@@ -4,8 +4,8 @@ output "alb_dns_name" {
 }
 
 output "alb_url" {
-  description = "HTTP URL for the gateway."
-  value       = "http://${aws_lb.prod.dns_name}"
+  description = "HTTPS URL for the public site (ALB)."
+  value       = "https://${aws_lb.prod.dns_name}"
 }
 
 output "nat_gateway_id" {
@@ -45,12 +45,12 @@ output "ecs_tasks_security_group_id" {
 
 output "gateway_health_url" {
   description = "ALB gateway health check URL."
-  value       = "http://${aws_lb.prod.dns_name}/gateway/health"
+  value       = "https://${aws_lb.prod.dns_name}/gateway/health"
 }
 
 output "storefront_note" {
-  description = "Public storefront is served at ALB / via proxy → web.dupli1.local."
-  value       = "http://${aws_lb.prod.dns_name}/"
+  description = "Public storefront is served at ALB / (dupli1-web)."
+  value       = "https://dupli1.com/"
 }
 
 output "manage_web_note" {
