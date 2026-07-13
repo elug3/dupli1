@@ -116,6 +116,7 @@ services:
       context: .
       dockerfile: api/Dockerfile.prod
     ports:
+      - "8080:80"
       - "80:80"
       - "443:443"
 

@@ -36,7 +36,7 @@ fi
 
 echo "Waiting for gateway health..."
 for _ in $(seq 1 30); do
-  if curl -sf http://localhost/gateway/health >/dev/null 2>&1; then
+  if curl -sf http://localhost:8080/gateway/health >/dev/null 2>&1; then
     echo "Gateway is healthy."
     docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
     exit 0

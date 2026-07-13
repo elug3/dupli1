@@ -54,9 +54,23 @@ if [[ ! -f "${DUPLI1_HOME}/app/.env.prod" ]]; then
   cp "${DUPLI1_HOME}/app/.env.prod.example" "${DUPLI1_HOME}/app/.env.prod"
   POSTGRES_PW="$(openssl rand -hex 24)"
   JWT_SEC="$(openssl rand -hex 32)"
+  OWNER_PW="$(openssl rand -hex 16)"
+  WEB_SVC_PW="$(openssl rand -hex 16)"
+  ORDER_SVC_PW="$(openssl rand -hex 16)"
+  MINIO_SEC="$(openssl rand -hex 24)"
   sed -i "s/change-me-strong-postgres-password/${POSTGRES_PW}/" "${DUPLI1_HOME}/app/.env.prod"
   sed -i "s/change-me-strong-jwt-secret/${JWT_SEC}/" "${DUPLI1_HOME}/app/.env.prod"
+  sed -i "s/change-me-owner-password/${OWNER_PW}/" "${DUPLI1_HOME}/app/.env.prod"
+  sed -i "s/change-me-web-service-password/${WEB_SVC_PW}/" "${DUPLI1_HOME}/app/.env.prod"
+  sed -i "s/change-me-order-service-password/${ORDER_SVC_PW}/" "${DUPLI1_HOME}/app/.env.prod"
+  sed -i "s/change-me-minio-secret/${MINIO_SEC}/" "${DUPLI1_HOME}/app/.env.prod"
   chmod 600 "${DUPLI1_HOME}/app/.env.prod"
+fi
+
+# Auto-deploy after bootstrap when requested (e.g. EC2 user-data).
+if [[ "${DUPLI1_AUTO_DEPLOY:-}" == "1" ]]; then
+  log "Running deploy-ec2.sh..."
+  bash "${DUPLI1_HOME}/app/infra/scripts/deploy-ec2.sh"
 fi
 
 log "Bootstrap complete."
