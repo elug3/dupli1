@@ -38,6 +38,14 @@ jobs:
             dockerfile: Dockerfile
             context: .
             build_args: SERVICE=product
+          - service: dupli1-cart
+            dockerfile: Dockerfile
+            context: .
+            build_args: SERVICE=cart
+          - service: dupli1-payment
+            dockerfile: Dockerfile
+            context: .
+            build_args: SERVICE=payment
           - service: dupli1-proxy
             dockerfile: api/Dockerfile.ecs
             context: .
@@ -112,6 +120,8 @@ jobs:
           - dupli1-notification
           - dupli1-order
           - dupli1-product
+          - dupli1-cart
+          - dupli1-payment
           - dupli1-proxy
 
     steps:
@@ -127,7 +137,7 @@ jobs:
           ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
           ECS_SERVICE: ${{ matrix.service }}
         run: |
-          echo ECS_CLUSTER: "$ECS_CLUSTER" \ ECS_SERVICE: "$ECS_SERVICE"
+          echo ECS_CLUSTER: "$ECS_CLUSTER" ECS_SERVICE: "$ECS_SERVICE"
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \

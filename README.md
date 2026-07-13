@@ -1,6 +1,6 @@
 # Dupli1
 
-Go microservice backend for a fashion bag marketplace. Services behind an nginx proxy, wired with Docker Compose for local dev and deployed to AWS ECS Fargate in production.
+Go microservice backend for a fashion bag marketplace. Services behind an nginx proxy, wired with Docker Compose for local dev and deployed to AWS ECS on EC2 (ALB, RDS, S3, CloudWatch Logs) in production.
 
 ## Services
 
@@ -64,7 +64,7 @@ dupli1/
 │   ├── nginx.conf        # Gateway routing
 │   └── Dockerfile
 ├── infra/
-│   ├── terraform/        # RDS and secrets
+│   ├── terraform/        # VPC, ECS/EC2, ALB, RDS, ECR, S3, CloudWatch
 │   └── scripts/          # RDS cutover helpers
 ├── certs/                # TLS material (not wired into local nginx yet)
 ├── Dockerfile            # Multi-service build (SERVICE build arg)
