@@ -3,6 +3,8 @@ resource "aws_cloudwatch_log_group" "services" {
     "auth",
     "product",
     "order",
+    "cart",
+    "payment",
     "notification",
     "proxy",
     "redis",
@@ -28,6 +30,10 @@ data "aws_iam_policy_document" "ecs_execution_secrets" {
     resources = [
       var.auth_db_url_secret_arn,
       var.product_db_url_secret_arn,
+      var.order_db_url_secret_arn,
+      var.cart_db_url_secret_arn,
+      var.payment_db_url_secret_arn,
+      var.jwt_secret_arn,
       aws_secretsmanager_secret.product_s3.arn,
     ]
   }

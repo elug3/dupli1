@@ -5,26 +5,29 @@ Terraform provisions the production compute path on the existing VPC and RDS:
 | Resource | Purpose |
 |----------|---------|
 | NAT Gateway (1 AZ) | Outbound for private ECS tasks (ECR, Secrets Manager, Logs) |
-| ALB | Public HTTP entry → `dupli1-proxy` |
-| EC2 ASG (`t3.large`) | ECS container instances |
+| ALB | Public HTTP + HTTPS → storefront + `dupli1-proxy` |
+| Route53 aliases | `dupli1.com` / `www` → ALB |
+| EC2 ASG (`t3.large`, default 5) | ECS container instances (awsvpc ENI headroom) |
 | ECS capacity provider | EC2 launch type for backend services |
-| S3 | Product image bucket (public `GetObject`) |
+| S3 | Product image bucket |
 | CloudWatch Logs | `/ecs/dupli1-*` log groups |
-| ECS services | auth, product, order, notification, proxy, redis, nats |
+| ECS services | auth, product, order, cart, payment, notification, proxy, web, manage-web, redis, nats |
 
-Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `production`, RDS `dupli1-production`, ECR repos, Cloud Map `dupli1.local`, Secrets Manager DB URLs.
+Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `production`, RDS `dupli1-production`, ECR repos, Cloud Map `dupli1.local`, Secrets Manager DB URLs / JWT.
 
 ## Monthly cost (dev-sized, us-east-1, 24/7)
 
 | Service | Estimate |
 |---------|----------|
-| EC2 t3.large (1×, awsvpc trunking) | ~$60 |
-| EBS 40 GB gp3 | ~$3 |
+| EC2 t3.large (5× without trunking) | ~$300 |
+| EBS 40 GB gp3 ×5 | ~$15 |
 | NAT Gateway | ~$32 + data |
 | ALB | ~$16–22 |
 | RDS db.t3.micro + storage | ~$17 |
-| ECR / S3 / CloudWatch / Secrets | ~$5 |
-| **Total** | **~$130–140/mo** |
+| ECR / S3 / CloudWatch / Secrets | ~$5–10 |
+| **Total** | **~$380–400/mo** |
+
+With account `awsvpcTrunking` enabled for the **ECS instance role**, ASG can shrink toward 1–2 instances (~$130–180/mo).
 
 ## Pause / resume (cost lightening)
 
@@ -42,7 +45,6 @@ APPLY_NAT=1 bash infra/scripts/resume-aws.sh
 ```
 
 While paused, ALB (and NAT unless deleted) still bill. RDS storage continues to bill; RDS auto-restarts after 7 days.
-
 
 ```bash
 cd infra/terraform
@@ -62,7 +64,7 @@ Or let the script call `terraform apply` after deleting the old services.
 
 ## Images
 
-GitHub Actions (`.github/workflows/aws.yml`) builds and pushes to ECR, then force-redeploys ECS services. Proxy uses `api/Dockerfile.ecs` (Cloud Map DNS).
+GitHub Actions (`.github/workflows/aws.yml`) builds and pushes to ECR (including `dupli1-cart` / `dupli1-payment`), then force-redeploys ECS services. Proxy uses `api/Dockerfile.ecs` (Cloud Map DNS).
 
 ## Gateway
 
@@ -70,5 +72,5 @@ After apply:
 
 ```bash
 terraform output gateway_health_url
-curl "$(terraform output -raw gateway_health_url)"
+curl -k "$(terraform output -raw gateway_health_url)"
 ```

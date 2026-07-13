@@ -76,6 +76,48 @@ variable "product_db_url_secret_arn" {
   default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/product-db-url-kaL4uk"
 }
 
+variable "order_db_url_secret_arn" {
+  description = "Secrets Manager ARN for order DUPLI1_ORDER_DB."
+  type        = string
+  default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/order-db-url-RAI64m"
+}
+
+variable "cart_db_url_secret_arn" {
+  description = "Secrets Manager ARN for cart DUPLI1_CART_DB."
+  type        = string
+  default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/cart-db-url-GSYbXs"
+}
+
+variable "payment_db_url_secret_arn" {
+  description = "Secrets Manager ARN for payment DUPLI1_PAYMENT_DB."
+  type        = string
+  default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/payments-db-url-XxgHJp"
+}
+
+variable "jwt_secret_arn" {
+  description = "Secrets Manager ARN for JWT_SECRET (HS256 fallback)."
+  type        = string
+  default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/jwt-secret-tTYcMy"
+}
+
+variable "acm_certificate_arn" {
+  description = "ACM certificate ARN for HTTPS on the ALB (dupli1.com)."
+  type        = string
+  default     = "arn:aws:acm:us-east-1:845061289093:certificate/a5e612a6-8bec-4d02-8f98-cc8484aa2fc1"
+}
+
+variable "route53_zone_id" {
+  description = "Public Route53 hosted zone ID for dupli1.com."
+  type        = string
+  default     = "Z04998762RV4NUS16WWXV"
+}
+
+variable "public_dns_names" {
+  description = "Public DNS names that should alias to the ALB."
+  type        = list(string)
+  default     = ["dupli1.com", "www.dupli1.com"]
+}
+
 variable "ecs_ami_id" {
   description = "ECS-optimized AMI. Empty = latest Amazon Linux 2023 from SSM."
   type        = string
@@ -91,32 +133,25 @@ variable "ecs_instance_type" {
 variable "ecs_asg_desired_capacity" {
   description = "Desired number of ECS container instances."
   type        = number
-  default     = 1
+  default     = 5
 }
 
 variable "ecs_asg_min_size" {
   description = "Minimum number of ECS container instances."
   type        = number
-  default     = 1
+  default     = 5
 }
 
 variable "ecs_asg_max_size" {
   description = "Maximum number of ECS container instances."
   type        = number
-  default     = 3
+  default     = 6
 }
 
 variable "image_tag" {
   description = "ECR image tag for backend services."
   type        = string
   default     = "latest"
-}
-
-variable "jwt_secret" {
-  description = "HS256 JWT fallback secret injected into task definitions."
-  type        = string
-  default     = "dupli1-prod-jwt-change-me"
-  sensitive   = true
 }
 
 variable "desired_count" {

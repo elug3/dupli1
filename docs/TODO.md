@@ -14,3 +14,27 @@
 ### Found while implementing SkuID + inventory merge (2026-07-10)
 
 - [ ] **Frontend repos (`dupli1-web`, `dupli1-manage-web`) not yet migrated to `skuId`** — PDP variant JSON exposes both `sku` and `skuId`; storefront and admin clients still only send/read `sku`. See the "SkuId migration" section in [frontend-product-variants-migration.md](frontend-product-variants-migration.md).
+
+## AWS deployment readiness (reviewed 2026-07-13)
+
+Architecture is suitable (ECS on EC2 + ALB + RDS + Terraform + GitHub Actions). See [deployment-aws.md](deployment-aws.md).
+
+### Working today (live ALB)
+
+- [x] Gateway health, auth, product catalog
+- [x] Storefront (`dupli1-web`) and admin (`dupli1-manage-web`) ECS services
+- [x] Redis, NATS, NAT, Secrets Manager (auth/product DB URLs), Cloud Map `dupli1.local`
+- [x] **Cart + payment on ECS** — ECR repos, Cloud Map (`cart` / `payment`), task defs, RDS DBs + secrets, nginx upstreams; APIs return 401 without auth (not 502)
+- [x] **Order stabilized** — listens on `:8080`, `DUPLI1_ORDER_DB` from Secrets Manager; ASG sized for awsvpc ENI limits
+- [x] **HTTPS on ALB** — ACM cert + `:443` listener; `/api/*` + `/gateway/*` → proxy
+- [x] **Route53 → current ALB** — `dupli1.com` / `www` alias `dupli1-production-alb`
+- [x] **JWT_SECRET in Secrets Manager** — no longer plain env default in task defs
+- [x] **Orphan `dupli1-inventory` Fargate service removed**
+- [x] **Docs updated** — [deployment-aws.md](deployment-aws.md) lists cart/payment/frontends/RDS DBs
+
+### Remaining
+
+- [ ] **Enable `awsvpcTrunking` for the ECS instance role** — account default is enabled, but instance-role principal still needs it (root/admin) so ASG can shrink below ~5×`t3.large`.
+- [ ] **Align `dupli1-web` / `dupli1-manage-web` CI task defs with live Terraform** — workflows still use Fargate/`awsvpc`/`web-container`; live storefront is EC2 `bridge` / family `dupli1-web` / container `web`.
+- [ ] **Prefer OIDC for backend CI** — replace long-lived `AWS_ACCESS_KEY_ID` secrets with `github-actions-deploy-role` (frontends already use OIDC).
+- [ ] **HTTP→HTTPS redirect on ALB `:80` default action** — Terraform models redirect; live still serves HTTP for health/clients (API rule intact).
