@@ -82,6 +82,7 @@ Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](doc
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/health` | — | Health check |
+| GET | `/settings` | — | Non-secret service settings |
 | GET | `/api/v1/auth/.well-known/jwks.json` | — | RS256 public key set |
 | POST | `/api/v1/auth/login` | — | Login; returns refresh token |
 | POST | `/api/v1/auth/refresh` | — | Exchange refresh token for access token |
@@ -106,6 +107,7 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/products/health` | Health check |
+| GET | `/api/v1/products/settings` | Non-secret service settings |
 | GET | `/api/v1/products` | Search **parent styles** (`?category=`, `?brand=`, `?color=`, `?size=`, `?tags=`) |
 | GET | `/api/v1/products/{id}` | PDP: parent + variants (colors/sizes/images per SKU) |
 | POST | `/api/v1/coupons/redeem` | Redeem a coupon code |
@@ -136,6 +138,7 @@ canonical ULID `skuId`; every route below has a `by-sku-id/{skuId}` sibling
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/inventory/health` | Health check |
+| GET | `/api/v1/inventory/settings` | Non-secret product-service settings |
 | GET | `/api/v1/inventory/{sku}` | Get stock for SKU |
 | PUT | `/api/v1/inventory/{sku}` | Set stock quantity |
 | POST | `/api/v1/inventory/{sku}/adjust` | Adjust stock by delta |
@@ -150,6 +153,7 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/orders/health` | Health check |
+| GET | `/api/v1/orders/settings` | Non-secret service settings |
 | POST | `/api/v1/checkout/sessions` | Create checkout session |
 | GET | `/api/v1/checkout/sessions/{id}` | Get session |
 | PUT/POST/DELETE | `/api/v1/checkout/sessions/{id}/items` | Manage cart items |
@@ -171,6 +175,7 @@ Full design (boundaries vs inventory/order, data model, checkout handoff): [docs
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/cart/health` | Health check |
+| GET | `/api/v1/cart/settings` | Non-secret service settings |
 | GET | `/api/v1/cart` | Get my cart |
 | DELETE | `/api/v1/cart` | Clear my cart |
 | PUT | `/api/v1/cart/items` | Replace all items |

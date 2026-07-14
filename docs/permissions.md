@@ -193,7 +193,7 @@ Stripe webhook and dev simulate endpoints are **unauthenticated** (signature / d
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `user.status.update` |
 
-Login, refresh, logout, health, JWKS — public.
+Login, refresh, logout, health, settings, JWKS — public.
 
 ### Product service
 

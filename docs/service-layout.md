@@ -48,6 +48,7 @@ Cross-service libraries with no service-specific dependencies. Services import v
 | Package | Purpose |
 |---------|---------|
 | `permissions` | Fine-grained permission constants, `Has` / `HasAny`, legacy role expansion, bundles — see [permissions.md](permissions.md) |
+| `settings` | Shared non-secret `GET /settings` response helpers used by all services |
 
 ```bash
 cd shared && go test ./...

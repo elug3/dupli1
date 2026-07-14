@@ -79,7 +79,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	}
 	inventorySvc := service.NewInventoryService(inventoryStore, store)
 
-	h := handler.NewHandler(svc, couponSvc, inventorySvc)
+	h := handler.NewHandler(svc, couponSvc, inventorySvc).WithSettings(BuildSettings(cfg))
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)

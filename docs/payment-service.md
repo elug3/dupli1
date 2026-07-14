@@ -153,6 +153,7 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/api/v1/payments/health` | — | Health |
+| `GET` | `/api/v1/payments/settings` | — | Non-secret service settings |
 | `POST` | `/api/v1/payments` | Bearer | Start Checkout → `checkout_url` |
 | `GET` | `/api/v1/payments/{id}` | Bearer | Payment status (poll after redirect) |
 | `POST` | `/api/v1/payments/webhooks/stripe` | Stripe signature | Webhook handler |

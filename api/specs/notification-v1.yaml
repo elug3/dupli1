@@ -5,19 +5,21 @@ info:
   description: |
     Private notification service API for the Dupli1 marketplace.
 
-    Currently exposes a health endpoint only. Outbound messaging is handled
+    Currently exposes health and settings endpoints. Outbound messaging is handled
     asynchronously via NATS event subscriptions (Telegram notifier) and is not
     part of this REST surface.
 
-    **Gateway:** nginx does not proxy `/api/v1/notification` — call the service
-    directly on port 8084 in local development.
+    **Gateway:** nginx proxies `/api/v1/notification/` in local Compose and ECS configs.
 
 servers:
+  - url: http://localhost:8080
+    description: Local nginx gateway
   - url: http://localhost:8084
-    description: Direct dupli1-notification service (not routed via gateway)
+    description: Direct dupli1-notification service
 
 tags:
   - name: Health
+  - name: Settings
 
 paths:
   /api/v1/notification/health:
@@ -44,6 +46,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /api/v1/notification/settings:
+    get:
+      tags: [Settings]
+      summary: Non-secret service settings
+      operationId: notificationSettings
+      responses:
+        '200':
+          description: Safe operational settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+        '405':
+          description: Method not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 components:
   schemas:
     Error:
@@ -52,4 +73,30 @@ components:
       properties:
         error:
           type: string
+    Settings:
+      type: object
+      required: [service, api_version]
+      properties:
+        service:
+          type: string
+          example: notification
+        api_version:
+          type: string
+          example: v1
+        features:
+          type: object
+          additionalProperties:
+            type: boolean
+        limits:
+          type: object
+          additionalProperties: true
+        dependencies:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              configured:
+                type: boolean
+              host:
+                type: string
           example: method not allowed

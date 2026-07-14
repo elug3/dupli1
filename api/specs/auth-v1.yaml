@@ -20,6 +20,7 @@ servers:
 
 tags:
   - name: Health
+  - name: Settings
   - name: Tokens
   - name: Users
 
@@ -33,10 +34,27 @@ paths:
         '200':
           description: Service is healthy
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-                example: ok
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/auth/settings:
+    get:
+      tags: [Settings]
+      summary: Non-secret service settings
+      operationId: authSettings
+      responses:
+        '200':
+          description: Safe operational settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
 
   /api/v1/auth/.well-known/jwks.json:
     get:
@@ -406,6 +424,46 @@ components:
       properties:
         error:
           type: string
+
+    Settings:
+      type: object
+      required: [service, api_version]
+      properties:
+        service:
+          type: string
+          example: auth
+        api_version:
+          type: string
+          example: v1
+        auth:
+          type: object
+          properties:
+            mode:
+              type: string
+              example: rs256
+            jwks_configured:
+              type: boolean
+            jwt_secret_fallback:
+              type: boolean
+        storage:
+          type: string
+          example: postgres
+        features:
+          type: object
+          additionalProperties:
+            type: boolean
+        limits:
+          type: object
+          additionalProperties: true
+        dependencies:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              configured:
+                type: boolean
+              host:
+                type: string
 
     LoginRequest:
       type: object

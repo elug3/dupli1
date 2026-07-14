@@ -30,6 +30,19 @@ permissions.ExpandLegacyRoles([]string{"product_manager"}) // ["coupon.*", "prod
 permissions.ExpandBundle("catalog_editor")
 ```
 
+### `pkg/settings`
+
+Shared non-secret settings response helpers for `GET /settings` and `GET /api/v1/<service>/settings` on every service. Builds a JSON payload with service name, auth mode, storage backend, feature flags, and dependency hostnames — never secrets or DSNs.
+
+```go
+import "github.com/elug3/dupli1/shared/pkg/settings"
+
+resp := settings.NewResponse("order")
+resp.Auth = settings.ConsumerAuth(jwksURL, jwtSecret)
+resp.Storage = settings.StorageMode(dbURL)
+mux.HandleFunc("/settings", settings.Handler(resp))
+```
+
 ### Testing
 
 ```bash

@@ -95,7 +95,7 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	)
 
 	h := handler.NewHandler(svc, cfg.Logger)
-	engine := newRouter(h, cfg.Debug, jwksJSON, redisClient, cfg.CORSOrigins)
+	engine := newRouter(h, cfg.Debug, jwksJSON, redisClient, cfg.CORSOrigins, BuildSettings(cfg))
 
 	app := &App{
 		Engine:  engine,

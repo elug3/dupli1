@@ -6,16 +6,17 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/handler"
 	redisinfra "github.com/elug3/dupli1/auth/pkg/infra/redis"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/settings"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
 
 // NewRouter wires the production auth HTTP routes.
 func NewRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *redis.Client, corsOrigins []string) *gin.Engine {
-	return newRouter(h, debug, jwksJSON, redisClient, corsOrigins)
+	return newRouter(h, debug, jwksJSON, redisClient, corsOrigins, settings.NewResponse("auth"))
 }
 
-func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *redis.Client, corsOrigins []string) *gin.Engine {
+func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *redis.Client, corsOrigins []string, settingsResp settings.Response) *gin.Engine {
 	if debug {
 		gin.SetMode(gin.DebugMode)
 	} else {
@@ -31,6 +32,12 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 	}
 	r.GET("/health", healthHandler)
 	r.GET("/api/v1/auth/health", healthHandler)
+
+	settingsHandler := func(c *gin.Context) {
+		c.JSON(http.StatusOK, settingsResp)
+	}
+	r.GET("/settings", settingsHandler)
+	r.GET("/api/v1/auth/settings", settingsHandler)
 
 	if len(jwksJSON) > 0 {
 		jwksHandler := func(c *gin.Context) {

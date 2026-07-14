@@ -18,7 +18,9 @@ All services listen on port `8080` inside Docker. The nginx gateway proxies by p
 
 Local gateway: `http://localhost:8080` (also host port 80).
 
-Each service also registers `/health` directly for internal/sidecar use.
+Each service also registers `/health` and `/settings` directly for internal/sidecar use (product uses versioned paths only: `/api/v1/products/health` and `/api/v1/products/settings`).
+
+`GET /settings` (and `GET /api/v1/<service>/settings`) returns non-secret operational configuration: service name, auth mode, storage backend, feature flags, and dependency hostnames. Secrets, DSNs, and API keys are never included.
 
 ---
 
@@ -27,6 +29,7 @@ Each service also registers `/health` directly for internal/sidecar use.
 | Method | Path | Permission | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/auth/health` | — | Health check |
+| `GET` | `/api/v1/auth/settings` | — | Non-secret service settings |
 | `POST` | `/api/v1/auth/register` | `user.create` | Create a new user account |
 | `POST` | `/api/v1/auth/login` | — | Login and receive a refresh token |
 | `POST` | `/api/v1/auth/logout` | — | Invalidate the current session |
@@ -45,7 +48,11 @@ See [permissions.md](permissions.md) for the full catalog, JWT claim shape, and 
 
 ### GET /api/v1/auth/health
 
-Response `200`: `ok` (plain text)
+Response `200`: `{"status":"ok"}`
+
+### GET /api/v1/auth/settings
+
+Response `200` JSON with non-secret operational settings (`service`, `api_version`, `auth`, `storage`, `features`, `limits`, `dependencies`).
 
 ### POST /api/v1/auth/register
 
@@ -197,6 +204,7 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | Method | Path | Permission | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/products/health` | — | Health check |
+| `GET` | `/api/v1/products/settings` | — | Non-secret service settings |
 | `GET` | `/api/v1/products` | optional `product.read` | Search **parent styles**; public active-only; `product.read` adds drafts/cost |
 | `GET` | `/api/v1/products/{id}` | — | Parent PDP with `variants[]`, `availableColors`, `availableSizes` |
 | `POST` | `/api/v1/coupons/redeem` | — | Redeem a coupon code |
@@ -219,8 +227,12 @@ Public search defaults to `status = active` on the **parent**. Query filters: `c
 
 Response `200`:
 ```json
-{ "status": "healthy" }
+{ "status": "ok" }
 ```
+
+### GET /api/v1/products/settings
+
+Response `200` JSON with non-secret operational settings. Also available at `/api/v1/inventory/settings`.
 
 ### GET /api/v1/products
 
@@ -263,6 +275,7 @@ Public variant lookup by SKU. Returns `404` when the variant or parent product i
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/cart/health` | — | Health check |
+| `GET` | `/api/v1/cart/settings` | — | Non-secret service settings |
 | `GET` | `/api/v1/cart` | Bearer | Get current user's cart |
 | `DELETE` | `/api/v1/cart` | Bearer | Clear current user's cart |
 | `PUT` | `/api/v1/cart/items` | Bearer | Replace all cart items |
@@ -279,6 +292,7 @@ See [cart-service.md](cart-service.md) for architecture, boundaries with invento
 | Method | Path | Permission / rule | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/payments/health` | — | Health check |
+| `GET` | `/api/v1/payments/settings` | — | Non-secret service settings |
 | `POST` | `/api/v1/payments` | ABAC / `payment.create` | Start Stripe Checkout for a pending order |
 | `GET` | `/api/v1/payments/{id}` | ABAC / `payment.read.all` | Payment status |
 | `POST` | `/api/v1/payments/webhooks/stripe` | Stripe signature | Webhook handler |
@@ -297,6 +311,7 @@ variant's canonical ULID `skuId` (e.g. `GET /api/v1/inventory/by-sku-id/{skuId}`
 | Method | Path | Permission | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/inventory/health` | — | Health check |
+| `GET` | `/api/v1/inventory/settings` | — | Non-secret product-service settings |
 | `GET` | `/api/v1/inventory/{sku}` | — | Get a stock item by SKU |
 | `PUT` | `/api/v1/inventory/{sku}` | `inventory.stock.write` | Create or overwrite stock quantity |
 | `POST` | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` | Add or subtract stock (delta) |
@@ -383,6 +398,7 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | Method | Path | Permission / rule | Description |
 |---|---|---|---|
 | `GET` | `/api/v1/orders/health` | — | Health check |
+| `GET` | `/api/v1/orders/settings` | — | Non-secret service settings |
 | `POST` | `/api/v1/checkout/sessions` | ABAC / `order.create` | Create checkout session |
 | `GET` | `/api/v1/checkout/sessions/{id}` | ABAC / `order.read.all` | Get session |
 | `PUT` | `/api/v1/checkout/sessions/{id}/items` | ABAC / `order.create` | Replace all items |

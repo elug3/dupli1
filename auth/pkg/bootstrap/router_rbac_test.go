@@ -14,6 +14,7 @@ import (
 	jwtgen "github.com/elug3/dupli1/auth/pkg/infra/jwt"
 	"github.com/elug3/dupli1/auth/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/settings"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -82,7 +83,7 @@ func TestOwnerCanRegisterAndListUsers(t *testing.T) {
 		t.Fatalf("Generate token: %v", err)
 	}
 
-	r := newRouter(h, false, nil, nil, nil)
+	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
 	body, _ := json.Marshal(map[string]string{
 		"email":    "new-user@example.com",
@@ -134,7 +135,7 @@ func TestCustomerRegistrarCanRegisterButNotManageUsers(t *testing.T) {
 		t.Fatalf("Generate token: %v", err)
 	}
 
-	r := newRouter(h, false, nil, nil, nil)
+	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
 	body, _ := json.Marshal(map[string]string{
 		"email":    "new-customer@example.com",
