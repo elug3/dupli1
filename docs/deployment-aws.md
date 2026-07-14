@@ -56,7 +56,7 @@ Container instances have **`awsvpcTrunking`** enabled. Task packing is no longer
 
 ## Cost
 
-Steady-state Dupli1 core (2×`t3.large` + NAT + ALB + RDS) is about **$210–230/mo**. Idle Global Accelerators, extra-region VMs, and an oversized ASG are the main avoidable charges — details and remediation in [aws-cost-optimization.md](aws-cost-optimization.md).
+Steady-state Dupli1 core (2×`t3.large` + NAT + ALB + RDS) is about **$210–230/mo**. Idle Global Accelerators, extra-region VMs, and an oversized ASG are the main avoidable charges — see the review in [aws-cost-optimization.md](aws-cost-optimization.md) and the phased cut plan in [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md).
 
 ## Required GitHub configuration
 

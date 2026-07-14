@@ -124,6 +124,7 @@ aws ecs list-tasks --cluster production --desired-status RUNNING \
 
 ## Related docs
 
+- [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md) — phased cut plan (targets, commands, checklist)
 - [deployment-aws.md](deployment-aws.md) — production architecture
 - [infra/terraform/README.md](../infra/terraform/README.md) — IaC + pause/resume
 - [deployment-ec2.md](deployment-ec2.md) — lowest-cost single-instance alternative
