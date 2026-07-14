@@ -5,8 +5,9 @@ Dupli1 production runs on **ECS (EC2 launch type)** in `us-east-1`, fronted by a
 ## Architecture
 
 ```text
-Internet → Route53 (dupli1.com)
+Internet → Route53 (dupli1.com / www / manage.dupli1.com)
         → ALB (HTTPS :443, HTTP :80)
+             ├── manage.dupli1.com   → dupli1-manage-web (admin)
              ├── /api/*, /gateway/* → dupli1-proxy (nginx → Cloud Map)
              │     auth / product / order / cart / payment / notification
              └── /*                 → dupli1-web (storefront, bridge mode)
@@ -14,7 +15,6 @@ Internet → Route53 (dupli1.com)
          NAT Gateway → ECR / Secrets Manager / CloudWatch
          RDS PostgreSQL (private)
          S3 (product images)
-         manage.dupli1.local → dupli1-manage-web (VPN / private DNS only)
 ```
 
 IaC lives in [`infra/terraform/`](../infra/terraform/README.md).
@@ -44,7 +44,7 @@ Create app DBs after RDS is up: `bash infra/scripts/create-rds-databases.sh`.
 | `dupli1-notification` | Notification consumer |
 | `dupli1-proxy` | nginx gateway (ALB `/api/*`, `/gateway/*`) |
 | `dupli1-web` | Public storefront (ALB default) |
-| `dupli1-manage-web` | Admin UI (Cloud Map only) |
+| `dupli1-manage-web` | Admin UI (`https://manage.dupli1.com`) |
 | `dupli1-redis` | Auth rate-limit / session cache |
 | `dupli1-nats` | Event bus |
 

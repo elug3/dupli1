@@ -35,7 +35,7 @@ Daily total after Fargate cutover (Jul 8–10 pause-ish): ~$3/day. With full EC2
 | ALB `dupli1-production-alb` | active (2 AZs → 2 public IPv4) | ~$16–22/mo + ~$7/mo IPv4 |
 | RDS `dupli1-production` | `db.t3.micro` available | ~$13–17/mo |
 | RDS `dupli1-ec2` | **stopped** (20 GB gp3) | Storage + auto-restart after 7 days |
-| `dupli1-vpn` | `t3.micro` + EIP | ~$8–12/mo |
+| `dupli1-vpn` | `t3.micro` + EIP | **Stopped 2026-07-14**; EIP disassociated (~$8–12/mo saved). Admin: `https://manage.dupli1.com` |
 | Global Accelerator `MyAcc`, `MyAccelerator` | **enabled, empty endpoint groups** | **~$36/mo fixed** — no traffic |
 | `ap-southeast-2`: `schick-test`, `mweb-vpn` | running `t3.micro` + public IPs | ~$15–25/mo |
 

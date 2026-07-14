@@ -66,7 +66,7 @@ Captured live from account `845061289093` before Phase 1–2 changes. Use these 
 | Resource | State |
 |----------|-------|
 | Global Accelerator `MyAcc`, `MyAccelerator` | enabled, DEPLOYED |
-| `dupli1-vpn` (`t3.micro`, us-east-1) | running |
+| `dupli1-vpn` (`t3.micro`, us-east-1) | **stopped** 2026-07-14; EIP disassociated (admin via `manage.dupli1.com`) |
 | `schick-test`, `mweb-vpn` (`t3.micro`, ap-southeast-2) | running |
 
 ### Success criteria after Phase 1–2
@@ -180,7 +180,7 @@ Only if Mode A is still too high:
 
 | Option | Extra save | Trade-off |
 |--------|------------|-----------|
-| Stop `dupli1-vpn` when unused | ~$8–12/mo | No VPN admin path until started |
+| Stop `dupli1-vpn` when unused | ~$8–12/mo | **Done 2026-07-14** — admin is public at `manage.dupli1.com` |
 | VPC endpoints (ECR/Logs/Secrets) ± drop NAT | up to ~$32/mo NAT | Endpoint hourly fees; more Terraform |
 | Right-size to `t3.medium` after Phase 2 | ~$30–40/mo | Tight for `manage-web` (1 vCPU) |
 | Move to single EC2 Compose (Mode D) | large (drop ALB/NAT/RDS) | Ops model change — [deployment-ec2.md](deployment-ec2.md) |
@@ -203,13 +203,14 @@ Verify with Cost Explorer 3–5 days after Phase 2 (`EC2 - Compute` and `EC2 - O
 ## Checklist
 
 - [x] Phase 0 baseline captured (**2026-07-14** — ASG 5/6/6 ×6 `t3.large`; ~$8.45/day Jul 12–13)
+- [x] Stopped `dupli1-vpn`; public admin at `https://manage.dupli1.com`
 - [ ] Phase 1.1 Global Accelerators deleted
 - [ ] Phase 1.2 Sydney stopped (if unused)
 - [ ] Phase 1.3 `dupli1-ec2` deleted (if unused)
 - [ ] Phase 2 ASG at 2/1/4; site healthy
 - [ ] Phase 2 Terraform plan does not scale ASG up
 - [ ] Phase 3 pause/resume documented for operators
-- [ ] Phase 4 decided (defer / VPN / endpoints / EC2 Compose)
+- [ ] Phase 4 decided (defer / endpoints / EC2 Compose)
 
 ## Owners / scripts
 
