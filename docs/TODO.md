@@ -34,7 +34,8 @@ Architecture is suitable (ECS on EC2 + ALB + RDS + Terraform + GitHub Actions). 
 
 ### Remaining
 
-- [ ] **Enable `awsvpcTrunking` for the ECS instance role** — account default is enabled, but instance-role principal still needs it (root/admin) so ASG can shrink below ~5×`t3.large`.
+- [x] **Enable `awsvpcTrunking` for the ECS instance role** — confirmed live on container instances (2026-07-14); ASG Terraform defaults lowered to 2/1/4.
 - [ ] **Align `dupli1-web` / `dupli1-manage-web` CI task defs with live Terraform** — workflows still use Fargate/`awsvpc`/`web-container`; live storefront is EC2 `bridge` / family `dupli1-web` / container `web`.
 - [ ] **Prefer OIDC for backend CI** — replace long-lived `AWS_ACCESS_KEY_ID` secrets with `github-actions-deploy-role` (frontends already use OIDC).
 - [ ] **HTTP→HTTPS redirect on ALB `:80` default action** — Terraform models redirect; live still serves HTTP for health/clients (API rule intact).
+- [ ] **Apply cost cleanup** — delete idle Global Accelerators, shrink live ASG, optional Sydney/RDS orphans; see [aws-cost-optimization.md](aws-cost-optimization.md) and `infra/scripts/cleanup-aws-orphans.sh`.

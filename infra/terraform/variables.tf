@@ -131,21 +131,21 @@ variable "ecs_instance_type" {
 }
 
 variable "ecs_asg_desired_capacity" {
-  description = "Desired number of ECS container instances."
+  description = "Desired number of ECS container instances (2×t3.large is enough once awsvpcTrunking is active)."
   type        = number
-  default     = 5
+  default     = 2
 }
 
 variable "ecs_asg_min_size" {
   description = "Minimum number of ECS container instances."
   type        = number
-  default     = 5
+  default     = 1
 }
 
 variable "ecs_asg_max_size" {
   description = "Maximum number of ECS container instances."
   type        = number
-  default     = 6
+  default     = 4
 }
 
 variable "image_tag" {

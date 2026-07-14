@@ -31,11 +31,13 @@ SERVICES=(
   dupli1-auth
   dupli1-product
   dupli1-order
+  dupli1-cart
+  dupli1-payment
   dupli1-notification
   dupli1-proxy
   dupli1-redis
   dupli1-nats
-  # Legacy / frontend services (no-op if missing)
+  # Frontend / legacy (no-op if missing)
   dupli1-web
   dupli1-manage-web
   dupli1-inventory

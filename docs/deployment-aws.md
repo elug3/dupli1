@@ -52,7 +52,11 @@ Cloud Map namespace: `dupli1.local` (short names: `auth`, `product`, `order`, `c
 
 ## Capacity notes
 
-Without **account-level `awsvpcTrunking` enabled for the ECS instance role**, each `t3.large` supports ~2 awsvpc tasks. The ASG defaults to **5 instances** so auth/product/order/cart/payment/notification/proxy/redis/nats/manage-web can place. Prefer enabling trunking (account default + instance role) and then lowering desired capacity.
+Container instances have **`awsvpcTrunking`** enabled. Task packing is no longer limited to ~2 awsvpc tasks per `t3.large`, so the ASG defaults to **2** instances (min 1, max 4). See [aws-cost-optimization.md](aws-cost-optimization.md) for the live cost review and cleanup script.
+
+## Cost
+
+Steady-state Dupli1 core (2×`t3.large` + NAT + ALB + RDS) is about **$210–230/mo**. Idle Global Accelerators, extra-region VMs, and an oversized ASG are the main avoidable charges — details and remediation in [aws-cost-optimization.md](aws-cost-optimization.md).
 
 ## Required GitHub configuration
 
