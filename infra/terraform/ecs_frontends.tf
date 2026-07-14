@@ -1,4 +1,4 @@
-# Public storefront (dupli1-web) and VPN-only admin (dupli1-manage-web).
+# Public storefront (dupli1-web) and public admin (manage.dupli1.com → dupli1-manage-web).
 
 data "aws_ecr_repository" "web" {
   name = "web"
@@ -58,6 +58,31 @@ resource "aws_lb_target_group" "web" {
   }
 }
 
+# Admin UI — awsvpc ENI targets (same pattern as proxy).
+resource "aws_lb_target_group" "manage_web" {
+  name        = "${local.name_prefix}-manage-tg"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    path                = "/"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 15
+    matcher             = "200-399"
+  }
+
+  tags = {
+    Name        = "${local.name_prefix}-manage-tg"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
 # API + gateway stay on proxy; default HTTPS listener action forwards to web.
 resource "aws_lb_listener_rule" "api" {
   listener_arn = aws_lb_listener.https.arn
@@ -89,6 +114,50 @@ resource "aws_lb_listener_rule" "api_http" {
     path_pattern {
       values = ["/api/*", "/gateway/*"]
     }
+  }
+}
+
+resource "aws_lb_listener_rule" "manage_https" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.manage_web.arn
+  }
+
+  condition {
+    host_header {
+      values = ["manage.dupli1.com"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "manage_http" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.manage_web.arn
+  }
+
+  condition {
+    host_header {
+      values = ["manage.dupli1.com"]
+    }
+  }
+}
+
+resource "aws_route53_record" "manage" {
+  zone_id = var.route53_zone_id
+  name    = "manage.dupli1.com"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.prod.dns_name
+    zone_id                = aws_lb.prod.zone_id
+    evaluate_target_health = true
   }
 }
 
@@ -211,7 +280,7 @@ resource "aws_ecs_service" "web" {
   }
 }
 
-# Admin UI — Cloud Map only (manage.dupli1.local). Not on the public ALB.
+# Admin UI — public ALB host manage.dupli1.com (+ Cloud Map manage.dupli1.local).
 resource "aws_ecs_service" "manage_web" {
   name            = "dupli1-manage-web"
   cluster         = data.aws_ecs_cluster.production.id
@@ -229,16 +298,25 @@ resource "aws_ecs_service" "manage_web" {
     security_groups = [aws_security_group.ecs_tasks.id]
   }
 
+  load_balancer {
+    target_group_arn = aws_lb_target_group.manage_web.arn
+    container_name   = "manage-web"
+    container_port   = 80
+  }
+
   service_registries {
     registry_arn = data.aws_service_discovery_service.manage.arn
   }
 
   depends_on = [
     aws_ecs_service.proxy,
+    aws_lb_listener_rule.manage_https,
+    aws_lb_listener_rule.manage_http,
     aws_ecs_cluster_capacity_providers.production,
   ]
 
   lifecycle {
-    ignore_changes = [desired_count]
+    # Live service may still use legacy family dupli1-manage-web-task / container name.
+    ignore_changes = [desired_count, task_definition, load_balancer]
   }
 }

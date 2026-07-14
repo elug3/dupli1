@@ -5,8 +5,9 @@ Dupli1 production runs on **ECS (EC2 launch type)** in `us-east-1`, fronted by a
 ## Architecture
 
 ```text
-Internet → Route53 (dupli1.com)
+Internet → Route53 (dupli1.com / www / manage.dupli1.com)
         → ALB (HTTPS :443, HTTP :80)
+             ├── manage.dupli1.com   → dupli1-manage-web (admin)
              ├── /api/*, /gateway/* → dupli1-proxy (nginx → Cloud Map)
              │     auth / product / order / cart / payment / notification
              └── /*                 → dupli1-web (storefront, bridge mode)
@@ -14,7 +15,6 @@ Internet → Route53 (dupli1.com)
          NAT Gateway → ECR / Secrets Manager / CloudWatch
          RDS PostgreSQL (private)
          S3 (product images)
-         manage.dupli1.local → dupli1-manage-web (VPN / private DNS only)
 ```
 
 IaC lives in [`infra/terraform/`](../infra/terraform/README.md).
@@ -44,7 +44,7 @@ Create app DBs after RDS is up: `bash infra/scripts/create-rds-databases.sh`.
 | `dupli1-notification` | Notification consumer |
 | `dupli1-proxy` | nginx gateway (ALB `/api/*`, `/gateway/*`) |
 | `dupli1-web` | Public storefront (ALB default) |
-| `dupli1-manage-web` | Admin UI (Cloud Map only) |
+| `dupli1-manage-web` | Admin UI (`https://manage.dupli1.com`) |
 | `dupli1-redis` | Auth rate-limit / session cache |
 | `dupli1-nats` | Event bus |
 
@@ -52,7 +52,11 @@ Cloud Map namespace: `dupli1.local` (short names: `auth`, `product`, `order`, `c
 
 ## Capacity notes
 
-Without **account-level `awsvpcTrunking` enabled for the ECS instance role**, each `t3.large` supports ~2 awsvpc tasks. The ASG defaults to **5 instances** so auth/product/order/cart/payment/notification/proxy/redis/nats/manage-web can place. Prefer enabling trunking (account default + instance role) and then lowering desired capacity.
+Container instances have **`awsvpcTrunking`** enabled. Task packing is no longer limited to ~2 awsvpc tasks per `t3.large`, so the ASG defaults to **2** instances (min 1, max 4). See [aws-cost-optimization.md](aws-cost-optimization.md) for the live cost review and cleanup script.
+
+## Cost
+
+Steady-state Dupli1 core (2×`t3.large` + NAT + ALB + RDS) is about **$210–230/mo**. Idle Global Accelerators, extra-region VMs, and an oversized ASG are the main avoidable charges — see the review in [aws-cost-optimization.md](aws-cost-optimization.md) and the phased cut plan in [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md).
 
 ## Required GitHub configuration
 

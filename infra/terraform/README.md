@@ -7,7 +7,7 @@ Terraform provisions the production compute path on the existing VPC and RDS:
 | NAT Gateway (1 AZ) | Outbound for private ECS tasks (ECR, Secrets Manager, Logs) |
 | ALB | Public HTTP + HTTPS → storefront + `dupli1-proxy` |
 | Route53 aliases | `dupli1.com` / `www` → ALB |
-| EC2 ASG (`t3.large`, default 5) | ECS container instances (awsvpc ENI headroom) |
+| EC2 ASG (`t3.large`, default 2) | ECS container instances (awsvpc trunking) |
 | ECS capacity provider | EC2 launch type for backend services |
 | S3 | Product image bucket |
 | CloudWatch Logs | `/ecs/dupli1-*` log groups |
@@ -19,15 +19,15 @@ Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `p
 
 | Service | Estimate |
 |---------|----------|
-| EC2 t3.large (5× without trunking) | ~$300 |
-| EBS 40 GB gp3 ×5 | ~$15 |
+| EC2 t3.large (2× with trunking) | ~$120 |
+| EBS 40 GB gp3 ×2 | ~$6 |
 | NAT Gateway | ~$32 + data |
-| ALB | ~$16–22 |
+| ALB + public IPv4 | ~$22–30 |
 | RDS db.t3.micro + storage | ~$17 |
 | ECR / S3 / CloudWatch / Secrets | ~$5–10 |
-| **Total** | **~$380–400/mo** |
+| **Total (Dupli1 core)** | **~$210–230/mo** |
 
-With account `awsvpcTrunking` enabled for the **ECS instance role**, ASG can shrink toward 1–2 instances (~$130–180/mo).
+Avoid leaving the ASG at 5–6 instances (~+$240–300/mo) or idle Global Accelerators (~+$36/mo). See [docs/aws-cost-optimization.md](../../docs/aws-cost-optimization.md).
 
 ## Pause / resume (cost lightening)
 

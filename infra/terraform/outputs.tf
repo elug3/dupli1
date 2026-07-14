@@ -53,7 +53,7 @@ output "storefront_note" {
   value       = "https://dupli1.com/"
 }
 
-output "manage_web_note" {
-  description = "Admin UI is VPN/private-DNS only (not on the public ALB)."
-  value       = "http://manage.dupli1.local (Cloud Map; requires VPC/VPN access)"
+output "manage_web_url" {
+  description = "Public admin UI URL (ALB host-header manage.dupli1.com)."
+  value       = "https://manage.dupli1.com"
 }

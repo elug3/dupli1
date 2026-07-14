@@ -16,9 +16,10 @@ AWS_REGION="${AWS_REGION:-us-east-1}"
 CLUSTER="${ECS_CLUSTER:-production}"
 RDS_INSTANCE="${RDS_INSTANCE:-dupli1-production}"
 ASG_NAME="${ECS_ASG_NAME:-dupli1-production-ecs-asg}"
-ASG_DESIRED="${ASG_DESIRED:-1}"
+# 2×t3.large packs all services once awsvpcTrunking is active (manage-web is 1 vCPU).
+ASG_DESIRED="${ASG_DESIRED:-2}"
 ASG_MIN="${ASG_MIN:-1}"
-ASG_MAX="${ASG_MAX:-3}"
+ASG_MAX="${ASG_MAX:-4}"
 DESIRED_COUNT="${DESIRED_COUNT:-1}"
 APPLY_NAT="${APPLY_NAT:-0}"
 VPN_INSTANCE_ID="${VPN_INSTANCE_ID:-}"
@@ -30,6 +31,8 @@ SERVICES=(
   dupli1-auth
   dupli1-product
   dupli1-order
+  dupli1-cart
+  dupli1-payment
   dupli1-notification
   dupli1-proxy
   dupli1-web
