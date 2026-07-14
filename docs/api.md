@@ -409,6 +409,8 @@ Redeem a coupon code. No authentication required.
 
 Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Omits `cost`. Cart lines use each variant's `sku` (inventory key).
 
+**Planned:** unique view counting via `dupli1_guest` cookie and public `viewCount` — see [product-guest-views-plan.md](product-guest-views-plan.md).
+
 **Response `200`** — parent product object with variants
 
 **Errors**

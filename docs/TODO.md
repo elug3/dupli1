@@ -4,6 +4,7 @@
 
 - [x] **Parent + variants** — implemented; see [product-variants-plan.md](product-variants-plan.md). Remaining: inventory `inStock` enrichment on PDP, drop legacy parent `color`/`stock`/`imageUrls` columns, merge pre-existing duplicate color products.
 - [ ] **Auth-aware `GET /api/v1/products/{id}`** — managers should see drafts/cost on PDP without a separate `/manage` path (optional Bearer, same pattern as list search).
+- [ ] **Guest session cookie + unique product view counter** — plan in [product-guest-views-plan.md](product-guest-views-plan.md). Browser `dupli1_guest` cookie; exact unique views per parent product on public PDP.
 
 ### Found in review (2026-07-08, size/color variants)
 
