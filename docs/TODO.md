@@ -38,4 +38,4 @@ Architecture is suitable (ECS on EC2 + ALB + RDS + Terraform + GitHub Actions). 
 - [ ] **Align `dupli1-web` / `dupli1-manage-web` CI task defs with live Terraform** — workflows still use Fargate/`awsvpc`/`web-container`; live storefront is EC2 `bridge` / family `dupli1-web` / container `web`.
 - [ ] **Prefer OIDC for backend CI** — replace long-lived `AWS_ACCESS_KEY_ID` secrets with `github-actions-deploy-role` (frontends already use OIDC).
 - [ ] **HTTP→HTTPS redirect on ALB `:80` default action** — Terraform models redirect; live still serves HTTP for health/clients (API rule intact).
-- [ ] **Apply cost cleanup** — delete idle Global Accelerators, shrink live ASG, optional Sydney/RDS orphans; see [aws-cost-optimization.md](aws-cost-optimization.md) and `infra/scripts/cleanup-aws-orphans.sh`.
+- [ ] **Apply cost cleanup** — follow [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md) (Phases 1–2); script: `infra/scripts/cleanup-aws-orphans.sh`. Evidence: [aws-cost-optimization.md](aws-cost-optimization.md).
