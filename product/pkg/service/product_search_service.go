@@ -57,9 +57,11 @@ func NewProductSearchService(store ports.ProductStore, imageStore ports.ImageSto
 
 // SearchProducts returns parent styles only (no duplicate colors).
 // When public is true, only active parents are returned.
-func (s *ProductSearchService) SearchProducts(filter map[string]string, public bool) ([]domain.Product, error) {
+// Optional filter keys "limit" and "offset" paginate results; total is the
+// full match count before pagination.
+func (s *ProductSearchService) SearchProducts(filter map[string]string, public bool) ([]domain.Product, int, error) {
 	if s.store == nil {
-		return nil, fmt.Errorf("store not initialized")
+		return nil, 0, fmt.Errorf("store not initialized")
 	}
 	f := make(map[string]string, len(filter)+1)
 	for k, v := range filter {

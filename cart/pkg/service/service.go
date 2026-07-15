@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/elug3/dupli1/cart/pkg/domain"
 	"github.com/elug3/dupli1/cart/pkg/ports"
 )
+
+const enrichConcurrency = 8
 
 type Service struct {
 	repo      ports.Repository
@@ -170,31 +173,53 @@ func (s *Service) resolveVariant(ctx context.Context, item domain.StoredItem) (*
 }
 
 func (s *Service) enrichCart(ctx context.Context, customerID string, stored []domain.StoredItem, updatedAt time.Time) (*domain.Cart, error) {
-	items := make([]domain.CartItem, 0, len(stored))
+	items := make([]domain.CartItem, len(stored))
 	var subtotal int64
 
-	for _, item := range stored {
-		enriched := domain.CartItem{
-			SkuID:    item.SkuID,
-			SKU:      item.SKU,
-			Quantity: item.Quantity,
-		}
-		if info, err := s.resolveVariant(ctx, item); err == nil && info != nil {
-			enriched.SkuID = info.SkuID
-			enriched.SKU = info.SKU
-			enriched.ProductID = info.ProductID
-			enriched.Color = info.Color
-			enriched.UnitPriceCents = info.UnitPriceCents
-			enriched.ImageURL = info.ImageURL
-		}
-		if s.inventory != nil {
-			qty, err := s.lookupAvailableQty(ctx, enriched.SkuID, item.SKU)
-			if err == nil {
-				enriched.AvailableQty = qty
+	workers := enrichConcurrency
+	if workers > len(stored) {
+		workers = len(stored)
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+
+	for i, item := range stored {
+		i, item := i, item
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			enriched := domain.CartItem{
+				SkuID:    item.SkuID,
+				SKU:      item.SKU,
+				Quantity: item.Quantity,
 			}
-		}
-		subtotal += int64(item.Quantity) * enriched.UnitPriceCents
-		items = append(items, enriched)
+			if info, err := s.resolveVariant(ctx, item); err == nil && info != nil {
+				enriched.SkuID = info.SkuID
+				enriched.SKU = info.SKU
+				enriched.ProductID = info.ProductID
+				enriched.Color = info.Color
+				enriched.UnitPriceCents = info.UnitPriceCents
+				enriched.ImageURL = info.ImageURL
+			}
+			if s.inventory != nil {
+				qty, err := s.lookupAvailableQty(ctx, enriched.SkuID, item.SKU)
+				if err == nil {
+					enriched.AvailableQty = qty
+				}
+			}
+			items[i] = enriched
+		}()
+	}
+	wg.Wait()
+
+	for _, enriched := range items {
+		subtotal += int64(enriched.Quantity) * enriched.UnitPriceCents
 	}
 
 	return &domain.Cart{

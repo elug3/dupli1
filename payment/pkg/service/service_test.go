@@ -100,3 +100,58 @@ func TestCreatePayment_RejectsNonPendingOrder(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+type failOncePublisher struct {
+	failFirst bool
+	events    []ports.PaymentSucceededEvent
+}
+
+func (p *failOncePublisher) Publish(_ context.Context, subject string, event any) error {
+	if subject != ports.PaymentSucceededSubject {
+		return nil
+	}
+	if p.failFirst {
+		p.failFirst = false
+		return fmt.Errorf("nats unavailable")
+	}
+	ev, ok := event.(ports.PaymentSucceededEvent)
+	if !ok {
+		return fmt.Errorf("unexpected event type %T", event)
+	}
+	p.events = append(p.events, ev)
+	return nil
+}
+
+func TestCompletePayment_RepublishesAfterPriorPublishFailure(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+	}}
+	pub := &failOncePublisher{failFirst: true}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), pub)
+
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	if _, err := svc.CompletePayment(context.Background(), created.ID); err == nil {
+		t.Fatal("expected first CompletePayment to fail on publish")
+	}
+	paid, err := repo.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Get after failed publish: %v", err)
+	}
+	if paid.Status != domain.StatusSucceeded {
+		t.Fatalf("status after failed publish = %s, want succeeded", paid.Status)
+	}
+
+	if _, err := svc.CompletePayment(context.Background(), created.ID); err != nil {
+		t.Fatalf("retry CompletePayment: %v", err)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("events after retry = %d, want 1", len(pub.events))
+	}
+}

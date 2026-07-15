@@ -11,8 +11,8 @@ type fakeProductStore struct {
 	products []domain.Product
 }
 
-func (s fakeProductStore) SearchProducts(filter map[string]string) ([]domain.Product, error) {
-	return s.products, nil
+func (s fakeProductStore) SearchProducts(filter map[string]string) ([]domain.Product, int, error) {
+	return s.products, len(s.products), nil
 }
 
 func (s fakeProductStore) ListProducts() ([]domain.Product, error) {

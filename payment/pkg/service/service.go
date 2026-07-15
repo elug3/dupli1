@@ -106,14 +106,15 @@ func (s *Service) CompletePayment(ctx context.Context, paymentID string) (*domai
 	if err != nil {
 		return nil, err
 	}
-	if payment.Status == domain.StatusSucceeded {
-		return payment, nil
+	if payment.Status != domain.StatusSucceeded {
+		now := s.now()
+		payment.MarkSucceeded(now)
+		if err := s.repo.Save(ctx, payment); err != nil {
+			return nil, err
+		}
 	}
-	now := s.now()
-	payment.MarkSucceeded(now)
-	if err := s.repo.Save(ctx, payment); err != nil {
-		return nil, err
-	}
+	// Always (re)publish when succeeded so a prior save+failed-publish retry
+	// still notifies order. MarkOrderPaid is idempotent for the same payment.
 	if s.events != nil {
 		if err := s.events.Publish(ctx, ports.PaymentSucceededSubject, ports.PaymentSucceededEvent{
 			EventType:   ports.PaymentSucceededSubject,

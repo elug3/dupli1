@@ -19,7 +19,7 @@ func TestSearchProductsNoColorDuplicates(t *testing.T) {
 	}
 	svc := service.NewProductSearchService(store, nil)
 
-	results, err := svc.SearchProducts(map[string]string{"category": "bags"}, true)
+	results, _, err := svc.SearchProducts(map[string]string{"category": "bags"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

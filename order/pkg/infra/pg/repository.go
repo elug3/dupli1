@@ -9,6 +9,7 @@ import (
 
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
+	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
@@ -58,6 +59,7 @@ func (r *Repository) migrate() error {
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_orders_pending_payment_due_at ON orders(payment_due_at) WHERE status = 'pending'`,
 		`CREATE TABLE IF NOT EXISTS order_items (
 			order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
 			sku TEXT NOT NULL,
@@ -294,23 +296,53 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 }
 
 func (r *Repository) loadOrderItems(ctx context.Context, orderID string) ([]domain.OrderItem, error) {
+	byOrder, err := r.loadOrderItemsBatch(ctx, []string{orderID})
+	if err != nil {
+		return nil, err
+	}
+	return byOrder[orderID], nil
+}
+
+func (r *Repository) loadOrderItemsBatch(ctx context.Context, orderIDs []string) (map[string][]domain.OrderItem, error) {
+	out := make(map[string][]domain.OrderItem, len(orderIDs))
+	if len(orderIDs) == 0 {
+		return out, nil
+	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_cents FROM order_items WHERE order_id = $1 ORDER BY sku
-	`, orderID)
+		SELECT order_id, sku, COALESCE(sku_id, ''), quantity, unit_price_cents
+		FROM order_items
+		WHERE order_id = ANY($1)
+		ORDER BY order_id, sku
+	`, toTextArray(orderIDs))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var items []domain.OrderItem
 	for rows.Next() {
+		var orderID string
 		var item domain.OrderItem
-		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents); err != nil {
+		if err := rows.Scan(&orderID, &item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents); err != nil {
 			return nil, err
 		}
-		items = append(items, item)
+		out[orderID] = append(out[orderID], item)
 	}
-	return items, rows.Err()
+	return out, rows.Err()
+}
+
+func toTextArray(ss []string) pgtype.TextArray {
+	if len(ss) == 0 {
+		return pgtype.TextArray{Status: pgtype.Present}
+	}
+	elements := make([]pgtype.Text, len(ss))
+	for i, s := range ss {
+		elements[i] = pgtype.Text{String: s, Status: pgtype.Present}
+	}
+	return pgtype.TextArray{
+		Elements:   elements,
+		Dimensions: []pgtype.ArrayDimension{{Length: int32(len(ss)), LowerBound: 1}},
+		Status:     pgtype.Present,
+	}
 }
 
 func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error) {
@@ -331,6 +363,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	defer rows.Close()
 
 	var orders []domain.Order
+	var ids []string
 	for rows.Next() {
 		var order domain.Order
 		var paidAt, shippedAt *time.Time
@@ -344,14 +377,20 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 		}
 		order.PaidAt = paidAt
 		order.ShippedAt = shippedAt
-		items, err := r.loadOrderItems(ctx, order.ID)
-		if err != nil {
-			return nil, err
-		}
-		order.Items = items
 		orders = append(orders, order)
+		ids = append(ids, order.ID)
 	}
-	return orders, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	itemsByOrder, err := r.loadOrderItemsBatch(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range orders {
+		orders[i].Items = itemsByOrder[orders[i].ID]
+	}
+	return orders, nil
 }
 
 func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Time) ([]domain.Order, error) {
@@ -373,6 +412,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 	defer rows.Close()
 
 	var orders []domain.Order
+	var ids []string
 	for rows.Next() {
 		var order domain.Order
 		var paidAt, shippedAt *time.Time
@@ -386,14 +426,20 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 		}
 		order.PaidAt = paidAt
 		order.ShippedAt = shippedAt
-		items, err := r.loadOrderItems(ctx, order.ID)
-		if err != nil {
-			return nil, err
-		}
-		order.Items = items
 		orders = append(orders, order)
+		ids = append(ids, order.ID)
 	}
-	return orders, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	itemsByOrder, err := r.loadOrderItemsBatch(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range orders {
+		orders[i].Items = itemsByOrder[orders[i].ID]
+	}
+	return orders, nil
 }
 
 func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.CheckoutSession) error {

@@ -34,7 +34,7 @@ func (s *ProductStore) enrich(products []domain.Product, includeVariants bool) {
 	}
 }
 
-func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Product, error) {
+func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Product, int, error) {
 	var results []domain.Product
 	for _, p := range s.Products {
 		if category := filter["category"]; category != "" && p.Category != category {
@@ -61,8 +61,36 @@ func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Produc
 		}
 		results = append(results, p)
 	}
+	total := len(results)
+	if limit, ok := atoiFilter(filter, "limit"); ok && limit > 0 {
+		offset, _ := atoiFilter(filter, "offset")
+		if offset < 0 {
+			offset = 0
+		}
+		if offset >= len(results) {
+			results = nil
+		} else {
+			end := offset + limit
+			if end > len(results) {
+				end = len(results)
+			}
+			results = results[offset:end]
+		}
+	}
 	s.enrich(results, false)
-	return results, nil
+	return results, total, nil
+}
+
+func atoiFilter(filter map[string]string, key string) (int, bool) {
+	raw, ok := filter[key]
+	if !ok || raw == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 func hasActiveOption(variants []domain.Variant, field, want string) bool {
@@ -105,7 +133,8 @@ func hasAllTags(have []string, wantCSV string) bool {
 }
 
 func (s *ProductStore) ListProducts() ([]domain.Product, error) {
-	return s.SearchProducts(nil)
+	results, _, err := s.SearchProducts(nil)
+	return results, err
 }
 
 func (s *ProductStore) GetProduct(id string) (*domain.Product, error) {

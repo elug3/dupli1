@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/elug3/dupli1/product/pkg/authjwt"
@@ -24,6 +25,8 @@ type Handler struct {
 
 type SearchResponse struct {
 	Total   int         `json:"total"`
+	Limit   int         `json:"limit"`
+	Offset  int         `json:"offset"`
 	Results interface{} `json:"results"`
 }
 
@@ -141,6 +144,7 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 // SearchProducts lists/search products via query params.
 // Public callers see active products only.
 // Authenticated product managers see all statuses.
+// Pagination: limit (default 50, max 100) and offset (default 0).
 func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -153,7 +157,11 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	} else {
 		delete(filter, "status")
 	}
-	results, err := h.svc.SearchProducts(filter, public)
+	limit, offset := parseSearchPagination(r)
+	filter["limit"] = strconv.Itoa(limit)
+	filter["offset"] = strconv.Itoa(offset)
+
+	results, total, err := h.svc.SearchProducts(filter, public)
 	if err != nil {
 		h.respondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -161,7 +169,35 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	if results == nil {
 		results = []domain.Product{}
 	}
-	h.respondJSON(w, http.StatusOK, SearchResponse{Total: len(results), Results: results})
+	h.respondJSON(w, http.StatusOK, SearchResponse{
+		Total:   total,
+		Limit:   limit,
+		Offset:  offset,
+		Results: results,
+	})
+}
+
+const (
+	defaultSearchLimit = 50
+	maxSearchLimit     = 100
+)
+
+func parseSearchPagination(r *http.Request) (limit, offset int) {
+	limit = defaultSearchLimit
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > maxSearchLimit {
+		limit = maxSearchLimit
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("offset")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			offset = n
+		}
+	}
+	return limit, offset
 }
 
 func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {

@@ -161,6 +161,7 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Per
 2. **Notification** — no outbound messaging
 3. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
 4. **Planned packages not started** — user, chat, analytics (beyond `shared/pkg/permissions`)
+5. **Quality/performance** — see [quality-performance-review.md](quality-performance-review.md) (2026-07-15); top remaining risk is client-trusted order prices
 
 ## Running and testing
 

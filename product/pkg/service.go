@@ -38,7 +38,7 @@ func (s *ProductSearchService) SearchProducts(filter map[string]string) ([]domai
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	results, err := s.store.SearchProducts(filter)
+	results, _, err := s.store.SearchProducts(filter)
 	if err != nil {
 		return nil, err
 	}

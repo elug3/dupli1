@@ -21,10 +21,11 @@ type AccessTokenValidator interface {
 }
 
 type Handler struct {
-	svc           *service.Service
-	jwtValidator  AccessTokenValidator
-	webhookSecret string
-	settings      settings.Response
+	svc              *service.Service
+	jwtValidator     AccessTokenValidator
+	webhookSecret    string
+	allowDevSimulate bool
+	settings         settings.Response
 }
 
 func New(svc *service.Service, jwtValidator AccessTokenValidator, webhookSecret string) *Handler {
@@ -34,6 +35,12 @@ func New(svc *service.Service, jwtValidator AccessTokenValidator, webhookSecret 
 		webhookSecret: webhookSecret,
 		settings:      settings.NewResponse("payment"),
 	}
+}
+
+// WithDevSimulate enables GET /api/v1/payments/{id}/simulate-success (local/dev only).
+func (h *Handler) WithDevSimulate(allow bool) *Handler {
+	h.allowDevSimulate = allow
+	return h
 }
 
 // WithSettings sets the non-secret settings payload served by GET /settings.
@@ -132,6 +139,10 @@ func (h *Handler) paymentRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 2 && parts[1] == "simulate-success" && r.Method == http.MethodGet {
+		if !h.allowDevSimulate {
+			respondError(w, http.StatusNotFound, "not found")
+			return
+		}
 		h.simulateSuccess(w, r, parts[0])
 		return
 	}
