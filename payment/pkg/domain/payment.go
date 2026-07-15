@@ -20,6 +20,9 @@ const (
 
 const DefaultPaymentTTL = 5 * time.Minute
 
+// DefaultCurrency is the storefront / payment currency when none is supplied.
+const DefaultCurrency = "krw"
+
 type Payment struct {
 	ID            string        `json:"id"`
 	OrderID       string        `json:"order_id"`
@@ -41,7 +44,7 @@ func NewPayment(id, orderID, customerID string, amountCents int64, currency, pro
 		return nil, ErrInvalidPayment
 	}
 	if currency == "" {
-		currency = "usd"
+		currency = DefaultCurrency
 	}
 	return &Payment{
 		ID:          id,

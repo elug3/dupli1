@@ -186,7 +186,7 @@ Content-Type: application/merge-patch+json
 {
   "maintenance_mode": false,
   "maintenance_message": "",
-  "currency": "usd",
+  "currency": "krw",
   "store_name": "Dupli1",
   "etag": "…"
 }
@@ -195,7 +195,7 @@ Content-Type: application/merge-patch+json
 | Control | Global action gated |
 |---------|---------------------|
 | `maintenance_mode` | Storefront browse/checkout (manage-web stays up) |
-| `currency` | All price display / payment currency |
+| `currency` | All price display / payment currency (default **`krw`**) |
 
 ---
 

@@ -98,6 +98,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Persistence:** PostgreSQL (`payments` on `postgres-payment`)
 - **Features:**
   - Stripe Checkout redirect at `POST /api/v1/payments` (see [payment-service.md](payment-service.md))
+  - Default payment currency: **`krw`**
   - Dev mode without `STRIPE_SECRET_KEY`: simulate URL `GET /api/v1/payments/{id}/simulate-success`
   - Publishes **`payment.succeeded`** on NATS when payment completes
 - **Auth:** Bearer JWT on customer routes; ownership ABAC unless `payment.create` / `payment.read.all`. Stripe signature on webhook

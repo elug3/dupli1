@@ -54,6 +54,12 @@ func TestCreatePayment_DevCheckout(t *testing.T) {
 	if payment.CheckoutURL == "" {
 		t.Fatal("expected checkout URL")
 	}
+	if payment.Currency != domain.DefaultCurrency {
+		t.Fatalf("currency = %q, want %q", payment.Currency, domain.DefaultCurrency)
+	}
+	if domain.DefaultCurrency != "krw" {
+		t.Fatalf("DefaultCurrency = %q, want krw", domain.DefaultCurrency)
+	}
 }
 
 func TestCompletePayment_PublishesEvent(t *testing.T) {
