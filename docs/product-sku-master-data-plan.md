@@ -1,17 +1,19 @@
 # Plan: SKU Master Data (Code → Name) Runtime CRUD
 
-**Status:** Phase A + B implemented (styles master, FKs, catalog CRUD APIs). Phase C–D pending.  
-**Branch context:** builds on the luxury SKU format already in product service
+**Status:** Phase A + B implemented. Phase C–D pending.  
+**As-built reference:** [product-sku-system.md](product-sku-system.md) (skuId, human SKU, masters, catalog APIs).
 
 ## Intent
 
-Operators must maintain **code → name** dictionaries for SKU segments at runtime (create / update name / delete when unused). Dictionaries live in PostgreSQL and are referenced by catalog styles and sellable SKU rows.
+Operators maintain **code → name** dictionaries for SKU segments at runtime (create / update name / delete when unused). Dictionaries live in PostgreSQL and are referenced by catalog styles and sellable SKU rows (`skuId` + human `sku`).
 
-Focus entities from the request: **brand**, **style**, **color**. Size and edition follow the same pattern (include them so the model stays complete).
+Focus: **brand**, **style**, **color** (size and edition use the same pattern).
 
 ---
 
-## Review of current state (gaps)
+## Review of current state (historical gaps — pre Phase A/B)
+
+> **Note:** Phase A+B closed these gaps. Keep this section as context for why the design chose explicit CRUD + FKs + a `styles` table. For the live model, see [product-sku-system.md](product-sku-system.md).
 
 | Area | Today | Gap |
 |------|-------|-----|
