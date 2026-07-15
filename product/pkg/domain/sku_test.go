@@ -133,4 +133,13 @@ func TestAssignProductCodes(t *testing.T) {
 	if p.BrandCode != "BOT" || p.StyleCode != "S001" {
 		t.Fatalf("got brand=%q style=%q", p.BrandCode, p.StyleCode)
 	}
+
+	ulidProduct := Product{ID: "01JAY6Z9K3F8QW1G7H2T5X0ABC", Brand: "Bottega Veneta", StyleCode: "CAS001"}
+	AssignProductCodes(&ulidProduct)
+	if ulidProduct.BrandCode != "BOT" || ulidProduct.StyleCode != "CAS001" {
+		t.Fatalf("ulid product codes: brand=%q style=%q", ulidProduct.BrandCode, ulidProduct.StyleCode)
+	}
+	if err := RequireProductSKUCodes(&Product{Brand: "Bottega Veneta"}); err == nil {
+		t.Fatal("expected error without styleCode for ULID-era create")
+	}
 }

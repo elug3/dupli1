@@ -11,3 +11,6 @@ var ErrMasterExists = errors.New("master data already exists")
 
 // ErrMasterNotFound is returned when a master code does not exist.
 var ErrMasterNotFound = errors.New("master data not found")
+
+// ErrMissingSKUCodes is returned when product/variant create omits required codes.
+var ErrMissingSKUCodes = errors.New("required sku master codes missing")

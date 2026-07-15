@@ -38,9 +38,13 @@ func TestAdminListsProductsAtDocumentedPath(t *testing.T) {
 }
 
 func TestAdminCreatesProductAtDocumentedPath(t *testing.T) {
-	mux := newAccessControlMux(memory.NewProductStore())
+	store := memory.NewProductStore()
+	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "GUC", Code: "TOTE01", Name: "Tote"}); err != nil {
+		t.Fatal(err)
+	}
+	mux := newAccessControlMux(store)
 	token := makeAccessToken(t, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
-	body := domain.Product{Name: "Tote", Brand: "Baggu", Price: 45}
+	body := domain.Product{Name: "Tote", Brand: "Gucci", StyleCode: "TOTE01", Price: 45, Color: "Black"}
 
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
 	if w.Code != http.StatusCreated {

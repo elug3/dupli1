@@ -58,7 +58,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Persistence:** `products` on `postgres-product`
 - **Features:**
   - Parent (style) + variant (SKU) model: search returns parents only (no color duplicates)
-  - Dual SKU identity + master dictionaries: [product-sku-system.md](product-sku-system.md) (`skuId` ULID + human `sku`; `/api/v1/catalog/…`)
+  - Dual SKU identity + master dictionaries: [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`; human `sku`; `/api/v1/catalog/…`; Phase C enforces existing master codes on create)
   - Public: `GET /api/v1/products` (optional `product.read` widens view; query filters `category`, `brand`, `color`, `size`, `material`, `tags`), `GET /api/v1/products/{id}` (parent + variants), coupon redeem
   - Admin: per-route permissions (`product.create`, `coupon.read`, …) — see [permissions.md](permissions.md); parent CRUD, variant CRUD at `/api/v1/products/{id}/variants`, images on variant or default variant
   - Stock and reservations at `/api/v1/inventory/*` (merged in from the former standalone `inventory` service), keyed by a canonical ULID `SkuID` with `sku` and `by-sku-id/{skuId}` lookups both supported; reads are public, writes require `inventory.stock.write` or `inventory.reservation.manage`

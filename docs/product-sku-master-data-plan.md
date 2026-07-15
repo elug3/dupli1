@@ -1,7 +1,7 @@
 # Plan: SKU Master Data (Code → Name) Runtime CRUD
 
-**Status:** Phase A + B implemented. Phase C–D pending.  
-**As-built reference:** [product-sku-system.md](product-sku-system.md) (skuId, human SKU, masters, catalog APIs).
+**Status:** Phase A + B + C implemented. Phase D pending.  
+**As-built reference:** [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`, human SKU, masters, catalog APIs, write enforce).
 
 ## Intent
 
@@ -217,10 +217,10 @@ Code↔name lookups:
 2. Permissions `product.master.read` / `product.master.write`.
 3. OpenAPI + `docs/endpoints.md` (+ manage-web hooks later in Phase D).
 
-### Phase C — Enforce on SKU writes
+### Phase C — Enforce on SKU writes ✅
 
 1. Variant create requires codes that exist (404/400 with clear errors).
-2. Product create requires brand+style exist; optional: auto-create style only via explicit flag / separate call (prefer separate).
+2. Product create requires brand+style exist (create style only via catalog API). New products use ULID `id` via `domain.NewProductID()`; human identity stays on `brandCode` + `styleCode`.
 3. Enrich API responses with master names when display fields blank.
 
 ### Phase D — Admin UI / cleanup

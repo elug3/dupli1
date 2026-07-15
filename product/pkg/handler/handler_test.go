@@ -17,9 +17,12 @@ import (
 )
 
 func newMux(store *memory.ProductStore) *http.ServeMux {
+	if store.Catalog == nil {
+		store.Catalog = memory.NewCatalogStore()
+	}
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	catalogSvc := service.NewCatalogService(memory.NewCatalogStore())
+	catalogSvc := service.NewCatalogService(store.Catalog)
 	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -28,9 +31,12 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 }
 
 func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
+	if store.Catalog == nil {
+		store.Catalog = memory.NewCatalogStore()
+	}
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	catalogSvc := service.NewCatalogService(memory.NewCatalogStore())
+	catalogSvc := service.NewCatalogService(store.Catalog)
 	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -56,6 +62,13 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	mux.Handle("PATCH "+handler.RouteCatalogColorByCode, http.HandlerFunc(h.UpdateColor))
 	mux.Handle("DELETE "+handler.RouteCatalogColorByCode, http.HandlerFunc(h.DeleteColor))
 	return mux, h
+}
+
+func seedCatalogStyle(t *testing.T, catalog *memory.CatalogStore, brandCode, styleCode, name string) {
+	t.Helper()
+	if _, err := catalog.CreateStyle(domain.Style{BrandCode: brandCode, Code: styleCode, Name: name}); err != nil {
+		t.Fatalf("seed style %s/%s: %v", brandCode, styleCode, err)
+	}
 }
 
 func TestHealth(t *testing.T) {
@@ -178,14 +191,14 @@ func TestSearchProductsByTags(t *testing.T) {
 	}
 }
 
-func TestCreateProductBrandPrefixID(t *testing.T) {
-	mux, _ := newFullMux(memory.NewProductStore())
+func TestCreateProductUsesULID(t *testing.T) {
+	store := memory.NewProductStore()
+	seedCatalogStyle(t, store.Catalog, "BOT", "MINI01", "Mini Bag")
+	mux, _ := newFullMux(store)
 
 	body, _ := json.Marshal(domain.Product{
-		Name:  "Mini Bag",
-		Brand: "Bottega Veneta",
-		Price: 2500,
-		Color: "Green",
+		Name: "Mini Bag", Brand: "Bottega Veneta", StyleCode: "MINI01",
+		Price: 2500, Color: "Green",
 	})
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteProducts, bytes.NewReader(body)))
@@ -197,40 +210,56 @@ func TestCreateProductBrandPrefixID(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&p); err != nil {
 		t.Fatal(err)
 	}
-	if p.ID != "BOT-001" {
-		t.Errorf("want BOT-001, got %q", p.ID)
+	if len(p.ID) != 26 {
+		t.Errorf("want ULID product id (26 chars), got %q", p.ID)
+	}
+	if p.BrandCode != "BOT" || p.StyleCode != "MINI01" {
+		t.Errorf("codes: brand=%q style=%q", p.BrandCode, p.StyleCode)
 	}
 	if len(p.Variants) != 1 {
 		t.Fatalf("want 1 default variant, got %d", len(p.Variants))
 	}
-	if p.Variants[0].SKU != "BOT-001" {
-		t.Errorf("want default sku BOT-001, got %q", p.Variants[0].SKU)
+	if p.Variants[0].SKU != "BOT_MINI01_GRN_OS" {
+		t.Errorf("want composed sku BOT_MINI01_GRN_OS, got %q", p.Variants[0].SKU)
 	}
 }
 
-func TestCreateProductSequentialIDs(t *testing.T) {
-	mux, _ := newFullMux(memory.NewProductStore())
-
+func TestCreateProductUniqueULIDs(t *testing.T) {
+	store := memory.NewProductStore()
+	mux, _ := newFullMux(store)
+	ids := map[string]bool{}
 	for i := 1; i <= 3; i++ {
-		body, _ := json.Marshal(domain.Product{Name: fmt.Sprintf("Bag %d", i), Brand: "Gucci", Price: 100})
+		style := fmt.Sprintf("S%03d", i)
+		seedCatalogStyle(t, store.Catalog, "GUC", style, fmt.Sprintf("Bag %d", i))
+		body, _ := json.Marshal(domain.Product{
+			Name: fmt.Sprintf("Bag %d", i), Brand: "Gucci", StyleCode: style, Price: 100, Color: "Black",
+		})
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteProducts, bytes.NewReader(body)))
 		if rec.Code != http.StatusCreated {
-			t.Fatalf("create %d: want 201, got %d", i, rec.Code)
+			t.Fatalf("create %d: want 201, got %d: %s", i, rec.Code, rec.Body.String())
 		}
 		var p domain.Product
 		json.NewDecoder(rec.Body).Decode(&p)
-		want := fmt.Sprintf("GUC-%03d", i)
-		if p.ID != want {
-			t.Errorf("create %d: want %s, got %q", i, want, p.ID)
+		if ids[p.ID] {
+			t.Fatalf("duplicate product id %q", p.ID)
+		}
+		ids[p.ID] = true
+		if len(p.ID) != 26 {
+			t.Errorf("create %d: want ULID, got %q", i, p.ID)
 		}
 	}
 }
 
 func TestCreateVariant(t *testing.T) {
 	store := memory.NewProductStore()
-	store.Products = []domain.Product{{ID: "BOT-001", Name: "Cassette", Status: "active"}}
-	store.Variants = []domain.Variant{{SKU: "BOT-001", ProductID: "BOT-001", Color: "Green", Status: "active"}}
+	seedCatalogStyle(t, store.Catalog, "BOT", "CAS001", "Cassette")
+	store.Products = []domain.Product{{
+		ID: "BOT-001", Name: "Cassette", BrandCode: "BOT", StyleCode: "CAS001", Status: "active",
+	}}
+	store.Variants = []domain.Variant{{
+		SKU: "BOT_CAS001_GRN_OS", ProductID: "BOT-001", Color: "Green", ColorCode: "GRN", SizeCode: "OS", Status: "active",
+	}}
 	mux, _ := newFullMux(store)
 
 	body, _ := json.Marshal(domain.Variant{Color: "Black", Price: 2500})
@@ -245,8 +274,8 @@ func TestCreateVariant(t *testing.T) {
 	if v.Color != "Black" {
 		t.Errorf("want Black, got %q", v.Color)
 	}
-	if v.SKU == "" {
-		t.Fatal("want generated sku")
+	if v.SKU != "BOT_CAS001_BLK_OS" {
+		t.Fatalf("want BOT_CAS001_BLK_OS, got %q", v.SKU)
 	}
 
 	rec = httptest.NewRecorder()
@@ -263,6 +292,7 @@ func TestCreateVariant(t *testing.T) {
 
 func TestCreateVariantLuxurySKU(t *testing.T) {
 	store := memory.NewProductStore()
+	seedCatalogStyle(t, store.Catalog, "BOT", "CAS001", "Cassette")
 	store.Products = []domain.Product{{
 		ID: "BOT-001", Name: "Cassette", Brand: "Bottega Veneta",
 		BrandCode: "BOT", StyleCode: "CAS001", Status: "active",
@@ -288,11 +318,25 @@ func TestCreateVariantLuxurySKU(t *testing.T) {
 	}
 }
 
-func TestCreateProductAssignsBrandAndStyleCodes(t *testing.T) {
+func TestCreateProductRequiresStyle(t *testing.T) {
 	mux, _ := newFullMux(memory.NewProductStore())
-
 	body, _ := json.Marshal(domain.Product{
 		Name: "Mini Bag", Brand: "Bottega Veneta", Price: 2500, Color: "Green",
+	})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteProducts, bytes.NewReader(body)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 without styleCode, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCreateProductAssignsBrandAndStyleCodes(t *testing.T) {
+	store := memory.NewProductStore()
+	seedCatalogStyle(t, store.Catalog, "BOT", "S001", "Mini Bag")
+	mux, _ := newFullMux(store)
+
+	body, _ := json.Marshal(domain.Product{
+		Name: "Mini Bag", Brand: "Bottega Veneta", StyleCode: "S001", Price: 2500, Color: "Green",
 	})
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteProducts, bytes.NewReader(body)))

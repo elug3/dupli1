@@ -8,3 +8,9 @@ import (
 func NewSkuID() string {
 	return ulid.Make().String()
 }
+
+// NewProductID returns a new canonical, sortable parent product identifier (ULID).
+// Human brand/style identity lives on brandCode + styleCode, not on this id.
+func NewProductID() string {
+	return ulid.Make().String()
+}

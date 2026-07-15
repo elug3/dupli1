@@ -6,7 +6,21 @@ Related: [product-sku-master-data-plan.md](product-sku-master-data-plan.md) (pha
 
 ---
 
-## Dual identity
+## Identifiers
+
+### Parent product `id`
+
+| Field | JSON | Type | Role | Mutable? |
+|-------|------|------|------|----------|
+| **id** | `id` | ULID string (new) | Opaque parent / PDP key | Never after create |
+
+```text
+id  =  01JAY6Z9K3F8QW1G7H2T5X0ABC     ← domain.NewProductID()
+```
+
+Human design identity is **not** encoded in `id`. Use `brandCode` + `styleCode` (and master names) for ops. Legacy rows may still use brand-prefixed ids (e.g. `BOT-001`); they remain valid.
+
+### Dual identity (variants)
 
 Every sellable variant (`product_variants` row) has **two** identifiers:
 
@@ -27,7 +41,7 @@ sku    =  BOT_CAS001_BLK_V_MED            ← composed from master codes
 - **skuId** is opaque and stable even if human naming conventions evolve; it is the primary key of `product_variants` and is what stock/cart/order store.
 - **sku** is deterministic and readable: ops can see brand, style, color, edition, and size without joining tables.
 
-Generation: `domain.NewSkuID()` (ULID) on variant create; human `sku` from `BuildSKU` / `ComposeVariantSKU` when parent brand/style codes and variant color/size codes are present.
+Generation: `domain.NewProductID()` / `domain.NewSkuID()` (ULID) on create; human `sku` from `BuildSKU` / `ComposeVariantSKU` when parent brand/style codes and variant color/size codes are present.
 
 ---
 
@@ -126,14 +140,23 @@ Covered by `product.*` and the `catalog_editor` bundle. See [endpoints.md](endpo
 1. `POST /catalog/brands` → `BOT` / Bottega Veneta  
 2. `POST /catalog/brands/BOT/styles` → `CAS001` / Cassette  
 3. Ensure color/size/edition (seeded or create)  
-4. Create product with `brandCode` + `styleCode`  
-5. Create variant with color/size/(edition) → human `sku` composed; new `skuId` assigned  
+4. `POST /products` with `brandCode` + `styleCode` (required; masters must already exist) → ULID `id`  
+5. Create variant with color/size/(edition) codes that exist → human `sku` composed; new `skuId` assigned  
+
+### Phase C — enforce on writes
+
+| Create | Required | Missing codes | Unknown code |
+|--------|----------|---------------|--------------|
+| Product | Existing `brandCode` + `styleCode` | `400` (`ErrMissingSKUCodes`) | `404` (`ErrMasterNotFound`) |
+| Variant | Existing `colorCode` + `sizeCode` (+ `editionCode` if set); parent must have brand/style | `400` | `404` |
+
+No silent invent-on-create. Reads enrich blank `brand` / `color` / `size` display names from master tables (`enrichMasterNames`).
 
 ---
 
 ## API fields (product / variant JSON)
 
-**Product (parent):** `brand`, `brandCode`, `styleCode`, …  
+**Product (parent):** `id` (ULID), `brand`, `brandCode`, `styleCode`, …  
 **Variant:** `skuId`, `sku`, `color`, `size`, `colorCode`, `editionCode`, `sizeCode`, …
 
 Lookup:
@@ -154,9 +177,10 @@ On product DB migrate, common rows are seeded (idempotent): brands (`PR`, `BOT`,
 
 | Concern | Location |
 |---------|----------|
-| ULID `skuId` | `product/pkg/domain/skuid.go` |
-| Build / parse human SKU | `product/pkg/domain/sku.go`, `sku_compose.go` |
+| ULID `id` / `skuId` | `product/pkg/domain/skuid.go` (`NewProductID`, `NewSkuID`) |
+| Build / parse / require codes | `product/pkg/domain/sku.go`, `sku_compose.go` |
 | Master entity types + seeds | `product/pkg/domain/sku_master.go` |
 | Migrate masters, styles, FKs | `product/pkg/infra/pg/sku_master.go` |
+| Require masters + enrich names | `product/pkg/infra/pg/master_require.go` |
 | Catalog store / HTTP | `product/pkg/infra/pg/catalog_store.go`, `handler/catalog_handler.go` |
 | Inventory keyed by `sku_id` | `product/pkg/infra/pg/inventory_store.go`, `service/inventory_service.go` |

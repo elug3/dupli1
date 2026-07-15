@@ -208,11 +208,11 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | `GET` | `/api/v1/products` | optional `product.read` | Search **parent styles**; public active-only; `product.read` adds drafts/cost |
 | `GET` | `/api/v1/products/{id}` | — | Parent PDP with `variants[]`, `availableColors`, `availableSizes` |
 | `POST` | `/api/v1/coupons/redeem` | — | Redeem a coupon code |
-| `POST` | `/api/v1/products` | `product.create` | Create parent |
+| `POST` | `/api/v1/products` | `product.create` | Create parent (ULID `id`; requires existing `brandCode`+`styleCode`) |
 | `PUT` | `/api/v1/products/{id}` | `product.update` | Update parent |
 | `DELETE` | `/api/v1/products/{id}` | `product.delete` | Delete parent (cascades variants) |
 | `POST` | `/api/v1/products/{id}/images` | `product.image.upload` | Upload image to default variant |
-| `POST` | `/api/v1/products/{id}/variants` | `product.variant.create` | Create variant (SKU) |
+| `POST` | `/api/v1/products/{id}/variants` | `product.variant.create` | Create variant (SKU; requires existing color/size codes) |
 | `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` | Update variant |
 | `DELETE` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` | Delete variant |
 | `POST` | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | Upload image for variant |
