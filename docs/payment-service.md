@@ -83,6 +83,7 @@ sequenceDiagram
 |-------|--------|
 | PG UI | **Stripe Checkout redirect** |
 | Card data on Dupli1 | **Never** |
+| Default currency | **`krw`** |
 | Unpaid `pending` TTL | **5 minutes** → auto-cancel + release stock |
 | Inventory plan | **B** — reserve on checkout complete; **commit on `in_transit`** |
 | Payment → order | **`payment.succeeded` event** (not HTTP confirm from payment) |
@@ -169,7 +170,7 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
   "id": "pay_000001",
   "order_id": "ord_000001",
   "amount_cents": 70000,
-  "currency": "usd",
+  "currency": "krw",
   "status": "requires_payment",
   "checkout_url": "https://checkout.stripe.com/...",
   "expires_at": "2026-07-05T12:05:00Z"

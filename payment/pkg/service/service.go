@@ -67,7 +67,7 @@ func (s *Service) CreatePayment(ctx context.Context, input CreatePaymentInput) (
 		OrderID:     order.ID,
 		PaymentID:   paymentID,
 		AmountCents: order.TotalCents,
-		Currency:    "usd",
+		Currency:    domain.DefaultCurrency,
 		CustomerID:  order.CustomerID,
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func (s *Service) CreatePayment(ctx context.Context, input CreatePaymentInput) (
 		provider = "dev"
 	}
 
-	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalCents, "usd", provider, session.ProviderRef, session.CheckoutURL, now)
+	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalCents, domain.DefaultCurrency, provider, session.ProviderRef, session.CheckoutURL, now)
 	if err != nil {
 		return nil, err
 	}
