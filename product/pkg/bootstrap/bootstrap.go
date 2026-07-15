@@ -79,7 +79,10 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	}
 	inventorySvc := service.NewInventoryService(inventoryStore, store)
 
-	h := handler.NewHandler(svc, couponSvc, inventorySvc)
+	catalogStore := pg.NewCatalogStore(store.Pool())
+	catalogSvc := service.NewCatalogService(catalogStore)
+
+	h := handler.NewHandler(svc, couponSvc, inventorySvc, catalogSvc)
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -98,6 +101,27 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	mux.Handle("PUT "+handler.RouteVariantBySKU, requirePerm(permissions.ProductVariantUpdate, h.VariantBySKUHandler()))
 	mux.Handle("DELETE "+handler.RouteVariantBySKU, requirePerm(permissions.ProductVariantDelete, h.VariantBySKUHandler()))
 	mux.Handle("POST "+handler.RouteVariantImages, requirePerm(permissions.ProductImageUpload, h.UploadVariantImageHandler()))
+
+	mux.Handle("GET "+handler.RouteCatalogBrands, requirePerm(permissions.ProductMasterRead, http.HandlerFunc(h.ListBrands)))
+	mux.Handle("POST "+handler.RouteCatalogBrands, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.CreateBrand)))
+	mux.Handle("PATCH "+handler.RouteCatalogBrandByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.UpdateBrand)))
+	mux.Handle("DELETE "+handler.RouteCatalogBrandByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.DeleteBrand)))
+	mux.Handle("GET "+handler.RouteCatalogStyles, requirePerm(permissions.ProductMasterRead, http.HandlerFunc(h.ListStyles)))
+	mux.Handle("POST "+handler.RouteCatalogStyles, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.CreateStyle)))
+	mux.Handle("PATCH "+handler.RouteCatalogStyleByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.UpdateStyle)))
+	mux.Handle("DELETE "+handler.RouteCatalogStyleByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.DeleteStyle)))
+	mux.Handle("GET "+handler.RouteCatalogColors, requirePerm(permissions.ProductMasterRead, http.HandlerFunc(h.ListColors)))
+	mux.Handle("POST "+handler.RouteCatalogColors, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.CreateColor)))
+	mux.Handle("PATCH "+handler.RouteCatalogColorByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.UpdateColor)))
+	mux.Handle("DELETE "+handler.RouteCatalogColorByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.DeleteColor)))
+	mux.Handle("GET "+handler.RouteCatalogSizes, requirePerm(permissions.ProductMasterRead, http.HandlerFunc(h.ListSizes)))
+	mux.Handle("POST "+handler.RouteCatalogSizes, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.CreateSize)))
+	mux.Handle("PATCH "+handler.RouteCatalogSizeByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.UpdateSize)))
+	mux.Handle("DELETE "+handler.RouteCatalogSizeByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.DeleteSize)))
+	mux.Handle("GET "+handler.RouteCatalogEditions, requirePerm(permissions.ProductMasterRead, http.HandlerFunc(h.ListEditions)))
+	mux.Handle("POST "+handler.RouteCatalogEditions, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.CreateEdition)))
+	mux.Handle("PATCH "+handler.RouteCatalogEditionByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.UpdateEdition)))
+	mux.Handle("DELETE "+handler.RouteCatalogEditionByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.DeleteEdition)))
 
 	mux.Handle("GET "+handler.RouteCoupons, requirePerm(permissions.CouponRead, http.HandlerFunc(h.ListCoupons)))
 	mux.Handle("POST "+handler.RouteCoupons, requirePerm(permissions.CouponCreate, http.HandlerFunc(h.CreateCoupon)))

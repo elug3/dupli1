@@ -208,6 +208,26 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` | Update variant |
 | `DELETE` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` | Delete variant |
 | `POST` | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | Upload image for variant |
+| `GET` | `/api/v1/catalog/brands` | `product.master.read` | List brand codes |
+| `POST` | `/api/v1/catalog/brands` | `product.master.write` | Create brand `{code,name}` |
+| `PATCH` | `/api/v1/catalog/brands/{code}` | `product.master.write` | Rename brand |
+| `DELETE` | `/api/v1/catalog/brands/{code}` | `product.master.write` | Delete brand (409 if in use) |
+| `GET` | `/api/v1/catalog/brands/{code}/styles` | `product.master.read` | List styles for brand |
+| `POST` | `/api/v1/catalog/brands/{code}/styles` | `product.master.write` | Create style |
+| `PATCH` | `/api/v1/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` | Rename style |
+| `DELETE` | `/api/v1/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` | Delete style (409 if in use) |
+| `GET` | `/api/v1/catalog/colors` | `product.master.read` | List colors |
+| `POST` | `/api/v1/catalog/colors` | `product.master.write` | Create color |
+| `PATCH` | `/api/v1/catalog/colors/{code}` | `product.master.write` | Rename color |
+| `DELETE` | `/api/v1/catalog/colors/{code}` | `product.master.write` | Delete color (409 if in use) |
+| `GET` | `/api/v1/catalog/sizes` | `product.master.read` | List sizes |
+| `POST` | `/api/v1/catalog/sizes` | `product.master.write` | Create size |
+| `PATCH` | `/api/v1/catalog/sizes/{code}` | `product.master.write` | Rename size |
+| `DELETE` | `/api/v1/catalog/sizes/{code}` | `product.master.write` | Delete size (409 if in use) |
+| `GET` | `/api/v1/catalog/editions` | `product.master.read` | List editions (VariantCode) |
+| `POST` | `/api/v1/catalog/editions` | `product.master.write` | Create edition |
+| `PATCH` | `/api/v1/catalog/editions/{code}` | `product.master.write` | Rename edition |
+| `DELETE` | `/api/v1/catalog/editions/{code}` | `product.master.write` | Delete edition (409 if in use) |
 | `GET` | `/api/v1/coupons` | `coupon.read` | List coupons |
 | `POST` | `/api/v1/coupons` | `coupon.create` | Create coupon |
 | `PUT` | `/api/v1/coupons/{code}` | `coupon.update` | Update coupon |

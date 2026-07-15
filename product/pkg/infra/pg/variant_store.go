@@ -11,7 +11,9 @@ import (
 	"github.com/jackc/pgtype"
 )
 
-const variantSelectCols = `sku_id, sku, product_id, color, size, color_code, edition_code, size_code, selling_price, price, status, image_urls, created_at`
+const variantSelectCols = `sku_id, sku, product_id, color, size,
+	COALESCE(color_code, ''), COALESCE(edition_code, ''), COALESCE(size_code, ''),
+	selling_price, price, status, image_urls, created_at`
 
 func scanVariant(scan func(...any) error) (domain.Variant, error) {
 	var v domain.Variant
@@ -76,11 +78,18 @@ func (s *ProductSearchStore) GetVariantBySkuID(skuID string) (*domain.Variant, e
 }
 
 func (s *ProductSearchStore) parentSKUCodes(ctx context.Context, productID string) (brandCode, styleCode string, err error) {
+	var bc, sc *string
 	err = s.pool.QueryRow(ctx,
 		`SELECT brand_code, style_code FROM products WHERE id = $1`, productID,
-	).Scan(&brandCode, &styleCode)
+	).Scan(&bc, &sc)
 	if err != nil {
 		return "", "", err
+	}
+	if bc != nil {
+		brandCode = *bc
+	}
+	if sc != nil {
+		styleCode = *sc
 	}
 	return brandCode, styleCode, nil
 }
@@ -96,7 +105,6 @@ func (s *ProductSearchStore) nextVariantSKU(ctx context.Context, productID, bran
 	if !exists {
 		return base, nil
 	}
-	// Deterministic luxury SKUs must not collide; duplicate attribute combo is an error.
 	if brandCode != "" && styleCode != "" && v.ColorCode != "" {
 		return "", fmt.Errorf("duplicate sku %s: same brand/style/color/edition/size already exists", base)
 	}
@@ -128,21 +136,8 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 	}
 
 	domain.ResolveVariantCodes(&v)
-	if v.ColorCode != "" {
-		if err := s.ensureColor(ctx, v.ColorCode, v.Color); err != nil {
-			return nil, err
-		}
-	}
-	if v.SizeCode != "" {
-		if err := s.ensureSize(ctx, v.SizeCode, v.Size); err != nil {
-			return nil, err
-		}
-	}
-	if v.EditionCode != "" {
-		if err := s.ensureEdition(ctx, v.EditionCode, v.EditionCode); err != nil {
-			return nil, err
-		}
-	}
+	// Do not invent master rows at runtime (Phase A). Codes must already exist
+	// (seeded or created via catalog APIs). Empty edition stays NULL.
 
 	if v.SKU == "" {
 		sku, err := s.nextVariantSKU(ctx, v.ProductID, brandCode, styleCode, &v)
@@ -160,10 +155,15 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 		`INSERT INTO product_variants (sku_id, sku, product_id, color, size, color_code, edition_code, size_code, selling_price, price, status, image_urls)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 RETURNING created_at`,
-		v.SkuID, v.SKU, v.ProductID, v.Color, v.Size, v.ColorCode, v.EditionCode, v.SizeCode,
+		v.SkuID, v.SKU, v.ProductID, v.Color, v.Size,
+		nullEmpty(v.ColorCode), nullEmpty(v.EditionCode), nullEmpty(v.SizeCode),
 		v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
 	).Scan(&createdAt)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return nil, fmt.Errorf("%w: %s", domain.ErrMasterNotFound, pgErr.Message)
+		}
 		return nil, err
 	}
 	v.CreatedAt = createdAt.Format(time.RFC3339)
@@ -180,7 +180,8 @@ func (s *ProductSearchStore) UpdateVariant(v domain.Variant) (*domain.Variant, e
 		     selling_price=$7, price=$8, status=$9, image_urls=$10
 		 WHERE sku=$1
 		 RETURNING sku_id, product_id, created_at`,
-		v.SKU, v.Color, v.Size, v.ColorCode, v.EditionCode, v.SizeCode,
+		v.SKU, v.Color, v.Size,
+		nullEmpty(v.ColorCode), nullEmpty(v.EditionCode), nullEmpty(v.SizeCode),
 		v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
 	).Scan(&v.SkuID, &v.ProductID, &createdAt)
 	if err != nil {

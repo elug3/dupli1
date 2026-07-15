@@ -1,6 +1,6 @@
 # Plan: SKU Master Data (Code → Name) Runtime CRUD
 
-**Status:** Plan (improves the mapping layer on top of [product-sku-system.md](product-sku-system.md))  
+**Status:** Phase A + B implemented (styles master, FKs, catalog CRUD APIs). Phase C–D pending.  
 **Branch context:** builds on the luxury SKU format already in product service
 
 ## Intent
@@ -202,18 +202,18 @@ Code↔name lookups:
 
 ## Implementation phases
 
-### Phase A — Styles master + FKs (data integrity)
+### Phase A — Styles master + FKs (data integrity) ✅
 
 1. Create `styles` table; backfill from `products`.
 2. Normalize `edition_code`: `''` → `NULL`.
 3. Add FKs (`RESTRICT`) once backfill has no orphans.
-4. Remove runtime `ensure*` from CreateProduct/CreateVariant (migrate-only helpers remain).
+4. Remove runtime `ensure*` from CreateProduct/CreateVariant (migrate-only helpers remain). Product create inserts a `styles` row when brand already exists.
 
-### Phase B — Catalog master APIs
+### Phase B — Catalog master APIs ✅
 
 1. Handlers + service + pg/memory stores for brand/style/color/size/edition.
 2. Permissions `product.master.read` / `product.master.write`.
-3. OpenAPI + `docs/endpoints.md` + manage-web hooks later.
+3. OpenAPI + `docs/endpoints.md` (+ manage-web hooks later in Phase D).
 
 ### Phase C — Enforce on SKU writes
 

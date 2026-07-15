@@ -4,21 +4,25 @@ import "strings"
 
 // Brand is a master brand entity. Code is 2–3 uppercase letters and never changes.
 type Brand struct {
-	ID   int64  `json:"id,omitempty"`
 	Code string `json:"code"`
 	Name string `json:"name"`
 }
 
+// Style is a master style (design family) scoped to a brand.
+type Style struct {
+	BrandCode string `json:"brandCode"`
+	Code      string `json:"code"`
+	Name      string `json:"name"`
+}
+
 // Color is a master color entity. Code is reused across all products.
 type Color struct {
-	ID   int64  `json:"id,omitempty"`
 	Code string `json:"code"`
 	Name string `json:"name"`
 }
 
 // Size is a master size / capacity entity.
 type Size struct {
-	ID   int64  `json:"id,omitempty"`
 	Code string `json:"code"`
 	Name string `json:"name"`
 }
@@ -26,7 +30,6 @@ type Size struct {
 // Edition is a construction / manufacturing variant (SKU VariantCode segment).
 // Named Edition in code to avoid confusion with product_variants (sellable rows).
 type Edition struct {
-	ID   int64  `json:"id,omitempty"`
 	Code string `json:"code"`
 	Name string `json:"name"`
 }

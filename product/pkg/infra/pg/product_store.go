@@ -281,13 +281,20 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	var createdAt time.Time
 	var tags pgtype.TextArray
 	var capacity string
+	var brandCode, styleCode *string
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
-		&p.Brand, &p.BrandCode, &p.StyleCode, &p.Material, &p.Category, &p.Status,
+		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category, &p.Status,
 		&capacity, &tags, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err
+	}
+	if brandCode != nil {
+		p.BrandCode = *brandCode
+	}
+	if styleCode != nil {
+		p.StyleCode = *styleCode
 	}
 	p.Capacity = capacity
 	p.Tags = scanTextArray(tags)
@@ -474,8 +481,8 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 		p.Status = "active"
 	}
 	domain.AssignProductCodes(&p)
-	if p.BrandCode != "" {
-		if err := s.ensureBrand(ctx, p.BrandCode, p.Brand); err != nil {
+	if p.BrandCode != "" && p.StyleCode != "" {
+		if err := s.insertStyleForProduct(ctx, p.BrandCode, p.StyleCode, p.Name); err != nil {
 			return nil, err
 		}
 	}
@@ -486,7 +493,7 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description, p.Price,
-		p.Brand, p.BrandCode, p.StyleCode, p.Color, p.Material, p.Stock, p.Category, p.Status,
+		p.Brand, nullEmpty(p.BrandCode), nullEmpty(p.StyleCode), p.Color, p.Material, p.Stock, p.Category, p.Status,
 		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), p.CreatedBy,
 	).Scan(&createdAt)
 	if err != nil {

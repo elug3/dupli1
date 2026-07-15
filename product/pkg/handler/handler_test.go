@@ -19,7 +19,8 @@ import (
 func newMux(store *memory.ProductStore) *http.ServeMux {
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	h := handler.NewHandler(svc, couponSvc, nil)
+	catalogSvc := service.NewCatalogService(memory.NewCatalogStore())
+	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
@@ -29,7 +30,8 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	h := handler.NewHandler(svc, couponSvc, nil)
+	catalogSvc := service.NewCatalogService(memory.NewCatalogStore())
+	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
@@ -41,6 +43,18 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	mux.Handle("PUT "+handler.RouteVariantBySKU, h.VariantBySKUHandler())
 	mux.Handle("DELETE "+handler.RouteVariantBySKU, h.VariantBySKUHandler())
 	mux.Handle("POST "+handler.RouteVariantImages, h.UploadVariantImageHandler())
+	mux.Handle("GET "+handler.RouteCatalogBrands, http.HandlerFunc(h.ListBrands))
+	mux.Handle("POST "+handler.RouteCatalogBrands, http.HandlerFunc(h.CreateBrand))
+	mux.Handle("PATCH "+handler.RouteCatalogBrandByCode, http.HandlerFunc(h.UpdateBrand))
+	mux.Handle("DELETE "+handler.RouteCatalogBrandByCode, http.HandlerFunc(h.DeleteBrand))
+	mux.Handle("GET "+handler.RouteCatalogStyles, http.HandlerFunc(h.ListStyles))
+	mux.Handle("POST "+handler.RouteCatalogStyles, http.HandlerFunc(h.CreateStyle))
+	mux.Handle("PATCH "+handler.RouteCatalogStyleByCode, http.HandlerFunc(h.UpdateStyle))
+	mux.Handle("DELETE "+handler.RouteCatalogStyleByCode, http.HandlerFunc(h.DeleteStyle))
+	mux.Handle("GET "+handler.RouteCatalogColors, http.HandlerFunc(h.ListColors))
+	mux.Handle("POST "+handler.RouteCatalogColors, http.HandlerFunc(h.CreateColor))
+	mux.Handle("PATCH "+handler.RouteCatalogColorByCode, http.HandlerFunc(h.UpdateColor))
+	mux.Handle("DELETE "+handler.RouteCatalogColorByCode, http.HandlerFunc(h.DeleteColor))
 	return mux, h
 }
 

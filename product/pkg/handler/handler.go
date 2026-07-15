@@ -17,6 +17,7 @@ type Handler struct {
 	svc          *service.ProductSearchService
 	couponSvc    *service.CouponService
 	inventorySvc *service.InventoryService
+	catalogSvc   *service.CatalogService
 }
 
 type SearchResponse struct {
@@ -35,8 +36,8 @@ type HealthResponse struct {
 
 var searchFilters = []string{"category", "brand", "color", "size", "material", "status"}
 
-func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService) *Handler {
-	return &Handler{svc: svc, couponSvc: couponSvc, inventorySvc: inventorySvc}
+func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
+	return &Handler{svc: svc, couponSvc: couponSvc, inventorySvc: inventorySvc, catalogSvc: catalogSvc}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
