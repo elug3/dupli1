@@ -12,6 +12,7 @@
 - [x] **`UpdateVariant` silently clears omitted fields** — fixed with merge-on-update semantics: `domain.Variant.MergeUpdate` (`product/pkg/domain/enrich.go`) applies only the non-zero-value fields from the request onto the existing row, and `ProductSearchService.UpdateVariant` fetches the existing variant and merges before writing. A price-only `PUT` now keeps `color`/`size`/`status`/`imageUrls` untouched instead of blanking them; status specifically keeps its current value rather than resetting to `"active"`, so an update can't accidentally reactivate a deliberately-archived variant. The store layer (`infra/pg/variant_store.go`, `infra/memory/product_store.go`) is unchanged — it still writes whatever full struct it's given, which is now always the merged one.
 - [x] **Variant SKU auto-naming (`optionCode`) differs between stores** — fixed by extracting `domain.OptionCode`/`domain.BuildVariantSKUBase` as shared helpers (`product/pkg/domain/skuid.go`) used by both `infra/pg/variant_store.go` and `infra/memory/product_store.go`; no longer possible to diverge.
 - [x] **Luxury SKU naming system** — `Brand_Style_Color[_Edition]_Size` with master tables (`brands`, `colors`, `sizes`, `sku_editions`); see [product-sku-system.md](product-sku-system.md).
+- [ ] **SKU master-data runtime CRUD** — code→name dictionaries with create/delete, dedicated `styles` table, FKs, catalog APIs; plan in [product-sku-master-data-plan.md](product-sku-master-data-plan.md).
 
 ### Found while implementing SkuID + inventory merge (2026-07-10)
 

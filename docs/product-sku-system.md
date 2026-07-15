@@ -100,10 +100,12 @@ Common luxury brand codes (`PR`, `BOT`, `LV`, `CD`, `CH`, `GUC`, …), standard 
 - Product JSON includes `brandCode`, `styleCode` (in addition to display `brand` name).
 - Variant JSON includes `colorCode`, `editionCode`, `sizeCode` (in addition to display `color` / `size` names).
 - Explicit `sku` on create still allowed (admin override); when omitted, the composed SKU is used.
-- Master-data seed runs on product DB migrate; admin CRUD for masters can be added later.
+- Master-data seed runs on product DB migrate.
+- **Runtime code→name CRUD** (create / rename / delete-when-unused), dedicated `styles` master, and FKs: see [product-sku-master-data-plan.md](product-sku-master-data-plan.md).
 
 ## References
 
 - Implementation: `product/pkg/domain/sku.go`, `product/pkg/domain/sku_master.go`, migrate in `product/pkg/infra/pg/product_store.go`
+- Master-data CRUD plan: [product-sku-master-data-plan.md](product-sku-master-data-plan.md)
 - Parent + variants plan: [product-variants-plan.md](product-variants-plan.md)
 - Canonical `skuId`: `product/pkg/domain/skuid.go`
