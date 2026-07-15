@@ -43,3 +43,38 @@ func TestSettingsDoesNotRequireAuth(t *testing.T) {
 		}
 	}
 }
+
+func TestSimulateSuccess_DisabledWhenNotDev(t *testing.T) {
+	repo := memory.NewRepository()
+	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret"), "").WithDevSimulate(false)
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/payments/pay-1/simulate-success", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestSimulateSuccess_EnabledInDev(t *testing.T) {
+	repo := memory.NewRepository()
+	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret"), "").WithDevSimulate(true)
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/payments/"+created.ID+"/simulate-success", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+}

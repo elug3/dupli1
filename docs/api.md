@@ -363,13 +363,17 @@ Search **parent styles** (one row per style; colors are not duplicated). No auth
 | `material` | exact |
 | `tags` | parent must include all listed tags (comma-separated or repeated) |
 | `status` | exact (`product.read` or wildcard required) |
+| `limit` | page size (default `50`, max `100`) |
+| `offset` | rows to skip (default `0`) |
 
-Example: `GET /api/v1/products?category=bags&color=Green`
+Example: `GET /api/v1/products?category=bags&color=Green&limit=20&offset=0`
 
 **Response `200`**
 ```json
 {
   "total": 1,
+  "limit": 50,
+  "offset": 0,
   "results": [
     {
       "id": "BOT-001",
@@ -388,6 +392,8 @@ Example: `GET /api/v1/products?category=bags&color=Green`
   ]
 }
 ```
+
+`total` is the full match count before pagination; `results` is the current page.
 
 ---
 

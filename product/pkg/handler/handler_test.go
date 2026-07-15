@@ -409,3 +409,39 @@ func TestRedeemCoupon(t *testing.T) {
 		t.Errorf("want SUMMER30, got %q", coupon.Code)
 	}
 }
+
+func TestSearchProductsPagination(t *testing.T) {
+	store := memory.NewProductStore()
+	for i := 1; i <= 5; i++ {
+		id := fmt.Sprintf("BAG-%03d", i)
+		store.Products = append(store.Products, domain.Product{
+			ID: id, Name: id, Category: "bags", Status: "active",
+		})
+		store.Variants = append(store.Variants, domain.Variant{
+			SKU: id, ProductID: id, Status: "active",
+		})
+	}
+	mux := newMux(store)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteProducts+"?category=bags&limit=2&offset=1", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	var resp handler.SearchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Total != 5 {
+		t.Fatalf("total = %d, want 5", resp.Total)
+	}
+	if resp.Limit != 2 || resp.Offset != 1 {
+		t.Fatalf("limit/offset = %d/%d, want 2/1", resp.Limit, resp.Offset)
+	}
+	raw, _ := json.Marshal(resp.Results)
+	var products []domain.Product
+	json.Unmarshal(raw, &products)
+	if len(products) != 2 {
+		t.Fatalf("page len = %d, want 2", len(products))
+	}
+}

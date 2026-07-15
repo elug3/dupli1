@@ -1,5 +1,27 @@
 # TODO
 
+## Quality / performance (reviewed 2026-07-15)
+
+Full write-up: [quality-performance-review.md](quality-performance-review.md).
+
+### Fixed in review PR
+
+- [x] Checkout `DELETE …/items/by-sku-id/{id}` ownership ABAC
+- [x] Payment `CompletePayment` republishes `payment.succeeded` after prior publish failure
+- [x] Gate `simulate-success` behind dev-only flag (Stripe unset)
+- [x] Product search pagination (`limit`/`offset`) + filter indexes
+- [x] Order list / expiry batch item load + pending `payment_due_at` index
+- [x] Cart enrichment parallelized (bounded concurrency)
+
+### Still open (priority)
+
+- [ ] **Server-side order/checkout pricing** — ignore client `unit_price_cents`; resolve from product
+- [ ] Inventory service token refresh in order bootstrap
+- [ ] NATS handler errors / outbox for payment→order events
+- [ ] Batch cart/product APIs (`?sku_ids=`); Redis catalog cache
+- [ ] Plumb request `context` through product PG stores; sanitize 500 responses
+- [ ] Consolidate duplicated `authjwt` into `shared/`
+
 ## Product API
 
 - [x] **Parent + variants** — implemented; see [product-variants-plan.md](product-variants-plan.md). Remaining: inventory `inStock` enrichment on PDP, drop legacy parent `color`/`stock`/`imageUrls` columns, merge pre-existing duplicate color products.

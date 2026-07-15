@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -95,6 +96,11 @@ func (s *ProductSearchStore) migrate() error {
 	s.pool.Exec(ctx, `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS sku_id TEXT`)
 
 	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)`)
+	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_products_status_created_at ON products(status, created_at DESC)`)
+	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)`)
+	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_products_tags ON products USING GIN (tags)`)
+	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_product_variants_product_status_color ON product_variants(product_id, status, color)`)
+	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_product_variants_product_status_size ON product_variants(product_id, status, size)`)
 
 	if err := s.backfillVariants(ctx); err != nil {
 		return err
@@ -341,8 +347,52 @@ func (s *ProductSearchStore) enrich(products []domain.Product, includeVariants b
 	return nil
 }
 
-func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.Product, error) {
-	query := "SELECT " + parentSelectCols + " FROM products p WHERE 1=1"
+func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.Product, int, error) {
+	where, args := buildProductSearchWhere(filter)
+	countQuery := "SELECT COUNT(*) FROM products p WHERE 1=1" + where
+	var total int
+	if err := s.pool.QueryRow(context.Background(), countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := "SELECT " + parentSelectCols + " FROM products p WHERE 1=1" + where
+	query += " ORDER BY p.created_at DESC"
+
+	limit, hasLimit := atoiFilter(filter, "limit")
+	offset, _ := atoiFilter(filter, "offset")
+	if hasLimit && limit > 0 {
+		if offset < 0 {
+			offset = 0
+		}
+		query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.pool.Query(context.Background(), query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var results []domain.Product
+	for rows.Next() {
+		p, err := scanParent(rows.Scan)
+		if err != nil {
+			return nil, 0, err
+		}
+		results = append(results, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if err := s.enrich(results, false); err != nil {
+		return nil, 0, err
+	}
+	return results, total, nil
+}
+
+func buildProductSearchWhere(filter map[string]string) (string, []interface{}) {
+	query := ""
 	args := []interface{}{}
 	idx := 1
 
@@ -388,30 +438,19 @@ func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.
 			idx++
 		}
 	}
+	return query, args
+}
 
-	query += " ORDER BY p.created_at DESC"
-
-	rows, err := s.pool.Query(context.Background(), query, args...)
+func atoiFilter(filter map[string]string, key string) (int, bool) {
+	raw, ok := filter[key]
+	if !ok || raw == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(raw)
 	if err != nil {
-		return nil, err
+		return 0, false
 	}
-	defer rows.Close()
-
-	var results []domain.Product
-	for rows.Next() {
-		p, err := scanParent(rows.Scan)
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if err := s.enrich(results, false); err != nil {
-		return nil, err
-	}
-	return results, nil
+	return n, true
 }
 
 func splitTags(value string) []string {
@@ -427,7 +466,8 @@ func splitTags(value string) []string {
 }
 
 func (s *ProductSearchStore) ListProducts() ([]domain.Product, error) {
-	return s.SearchProducts(nil)
+	results, _, err := s.SearchProducts(nil)
+	return results, err
 }
 
 func (s *ProductSearchStore) GetActiveProduct(id string) (*domain.Product, error) {

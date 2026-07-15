@@ -390,3 +390,59 @@ func TestUpdateStatus_ConfirmedRejected(t *testing.T) {
 		t.Fatalf("status = %d, want 400", w.Code)
 	}
 }
+
+// ── Checkout session ABAC ─────────────────────────────────────────────────────
+
+func TestCheckoutDeleteBySkuID_ForeignUserForbidden(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	ownerToken := makeToken(t, "u-1", nil)
+	createBody := map[string]any{"customer_id": "u-1"}
+	w := do(t, mux, http.MethodPost, "/api/v1/checkout/sessions", ownerToken, createBody)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+	var session domain.CheckoutSession
+	if err := json.NewDecoder(w.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+
+	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
+	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+		t.Fatalf("seed checkout item: %v", err)
+	}
+
+	foreignToken := makeToken(t, "u-2", nil)
+	path := fmt.Sprintf("/api/v1/checkout/sessions/%s/items/by-sku-id/sku-abc", session.ID)
+	w = do(t, mux, http.MethodDelete, path, foreignToken, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCheckoutDeleteBySkuID_OwnerSuccess(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	ownerToken := makeToken(t, "u-1", nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/checkout/sessions", ownerToken, map[string]any{"customer_id": "u-1"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+	var session domain.CheckoutSession
+	if err := json.NewDecoder(w.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+
+	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
+	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+		t.Fatalf("seed checkout item: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/v1/checkout/sessions/%s/items/by-sku-id/sku-abc", session.ID)
+	w = do(t, mux, http.MethodDelete, path, ownerToken, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+}
