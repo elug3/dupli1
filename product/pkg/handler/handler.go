@@ -11,12 +11,14 @@ import (
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
 type Handler struct {
 	svc          *service.ProductSearchService
 	couponSvc    *service.CouponService
 	inventorySvc *service.InventoryService
+	settings     settings.Response
 }
 
 type SearchResponse struct {
@@ -36,17 +38,30 @@ type HealthResponse struct {
 var searchFilters = []string{"category", "brand", "color", "size", "material", "status"}
 
 func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService) *Handler {
-	return &Handler{svc: svc, couponSvc: couponSvc, inventorySvc: inventorySvc}
+	return &Handler{
+		svc:          svc,
+		couponSvc:    couponSvc,
+		inventorySvc: inventorySvc,
+		settings:     settings.NewResponse("product"),
+	}
+}
+
+// WithSettings sets the non-secret settings payload served by GET /settings.
+func (h *Handler) WithSettings(s settings.Response) *Handler {
+	h.settings = s
+	return h
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+RouteHealth, h.Health)
+	mux.HandleFunc("GET "+RouteSettings, h.Settings)
 	mux.HandleFunc("GET "+RoutePublicProduct, h.PublicGetProduct)
 	mux.HandleFunc("GET "+RoutePublicVariant, h.PublicGetVariant)
 	mux.HandleFunc("GET "+RoutePublicVariantBySkuID, h.PublicGetVariantBySkuID)
 	mux.HandleFunc("POST "+RouteRedeemCoupon, h.RedeemCoupon)
 
 	mux.HandleFunc("GET "+RouteInventoryHealth, h.Health)
+	mux.HandleFunc("GET "+RouteInventorySettings, h.Settings)
 	mux.HandleFunc("GET "+RouteInventoryItem, h.GetInventoryItem)
 	mux.HandleFunc("GET "+RouteInventoryItemBySkuID, h.GetInventoryItemBySkuID)
 }
@@ -111,6 +126,14 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.respondJSON(w, http.StatusOK, HealthResponse{Status: "ok"})
+}
+
+func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	h.respondJSON(w, http.StatusOK, h.settings)
 }
 
 // SearchProducts lists/search products via query params.

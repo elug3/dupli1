@@ -66,10 +66,14 @@ ok
 
 Auth service liveness check.
 
-**Response `200`** (plain text)
+**Response `200`**
+```json
+{ "status": "ok" }
 ```
-ok
-```
+
+### `GET /settings` or `GET /api/v1/auth/settings`
+
+Non-secret operational settings (auth mode, feature flags, dependency configured flags). Never includes secrets or DSNs.
 
 ### `GET /api/v1/auth/.well-known/jwks.json`
 
@@ -341,7 +345,7 @@ Product service liveness check.
 
 **Response `200`**
 ```json
-{ "status": "healthy" }
+{ "status": "ok" }
 ```
 
 ---
@@ -653,7 +657,7 @@ Unpaid `pending` orders auto-cancel after **5 minutes**. Full design: [payment-s
 
 ## Notification Service
 
-Health check only (`GET /health`). Outbound messaging is not implemented.
+Health and settings (`GET /health`, `GET /api/v1/notification/health`, `GET /settings`, `GET /api/v1/notification/settings`). Outbound messaging is driven by NATS subscriptions (Telegram when configured).
 
 ---
 
@@ -681,6 +685,7 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 |--------|------|-------------------|---------|
 | GET | `/gateway/health` | — | nginx |
 | GET | `/api/v1/auth/health` | — | auth |
+| GET | `/api/v1/auth/settings` | — | auth |
 | GET | `/api/v1/auth/.well-known/jwks.json` | — | auth |
 | POST | `/api/v1/auth/register` | `user.create` | auth |
 | POST | `/api/v1/auth/login` | — | auth |
@@ -692,6 +697,7 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | PATCH | `/api/v1/auth/users/{id}/password` | `user.password.update` | auth |
 | PATCH | `/api/v1/auth/users/{id}/status` | `user.status.update` | auth |
 | GET | `/api/v1/products/health` | — | product |
+| GET | `/api/v1/products/settings` | — | product |
 | GET | `/api/v1/products` | optional `product.read` | product |
 | GET | `/api/v1/products/{id}` | — | product |
 | POST | `/api/v1/coupons/redeem` | — | product |
@@ -703,6 +709,7 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | product |
 | GET/POST/PUT/DELETE | `/api/v1/coupons` | `coupon.read` / `coupon.create` / `coupon.update` / `coupon.delete` | product |
 | GET | `/api/v1/inventory/health` | — | product |
+| GET | `/api/v1/inventory/settings` | — | product |
 | GET | `/api/v1/inventory/{sku}` | — | product |
 | PUT | `/api/v1/inventory/{sku}` | `inventory.stock.write` | product |
 | POST | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` | product |
@@ -710,12 +717,19 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | POST | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` | product |
 | POST | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` | product |
 | POST/GET | `/api/v1/checkout/sessions` | ABAC / `order.create` / `order.read.all` | order |
+| GET | `/api/v1/orders/health` | — | order |
+| GET | `/api/v1/orders/settings` | — | order |
 | GET/PUT/POST/DELETE | `/api/v1/checkout/sessions/{id}/...` | ABAC (same as orders) | order |
 | POST/GET | `/api/v1/orders` | ABAC / `order.create` / `order.read.all` | order |
 | GET | `/api/v1/orders/{id}` | ABAC / `order.read.all` | order |
 | POST | `/api/v1/orders/{id}/ship` | `order.ship` | order |
 | PUT | `/api/v1/orders/{id}/status` | `order.status.update` | order |
+| GET | `/api/v1/cart/health` | — | cart |
+| GET | `/api/v1/cart/settings` | — | cart |
 | GET/POST/PUT/DELETE | `/api/v1/cart/*` | Bearer (own `sub`) | cart |
 | GET | `/api/v1/carts/{customer_id}` | `cart.read` | cart |
+| GET | `/api/v1/payments/health` | — | payment |
+| GET | `/api/v1/payments/settings` | — | payment |
 | POST/GET | `/api/v1/payments` | ABAC / `payment.create` / `payment.read.all` | payment |
-| GET | `/health` | — | notification |
+| GET | `/api/v1/notification/health` | — | notification |
+| GET | `/api/v1/notification/settings` | — | notification |

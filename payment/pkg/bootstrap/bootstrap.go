@@ -95,7 +95,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		jwtValidator = validator
 	}
 
-	h := handler.New(svc, jwtValidator, cfg.StripeWebhookSecret)
+	h := handler.New(svc, jwtValidator, cfg.StripeWebhookSecret).WithSettings(BuildSettings(cfg))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

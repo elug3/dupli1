@@ -11,6 +11,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
 // AccessTokenValidator validates Bearer access tokens and returns claims.
@@ -21,15 +22,28 @@ type AccessTokenValidator interface {
 type Handler struct {
 	svc          *service.Service
 	jwtValidator AccessTokenValidator
+	settings     settings.Response
 }
 
 func New(svc *service.Service, jwtValidator AccessTokenValidator) *Handler {
-	return &Handler{svc: svc, jwtValidator: jwtValidator}
+	return &Handler{
+		svc:          svc,
+		jwtValidator: jwtValidator,
+		settings:     settings.NewResponse("order"),
+	}
+}
+
+// WithSettings sets the non-secret settings payload served by GET /settings.
+func (h *Handler) WithSettings(s settings.Response) *Handler {
+	h.settings = s
+	return h
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.health)
 	mux.HandleFunc("/api/v1/orders/health", h.health)
+	mux.HandleFunc("/settings", h.settingsHandler)
+	mux.HandleFunc("/api/v1/orders/settings", h.settingsHandler)
 	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
 	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
 	mux.HandleFunc("/api/v1/checkout/sessions", h.requireAuth(h.checkoutSessions))
@@ -42,6 +56,14 @@ func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) settingsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	respondJSON(w, http.StatusOK, h.settings)
 }
 
 // requireAuth extracts and validates the Bearer token, stores claims in context.

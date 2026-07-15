@@ -14,6 +14,7 @@ import (
 	jwtgen "github.com/elug3/dupli1/auth/pkg/infra/jwt"
 	"github.com/elug3/dupli1/auth/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/settings"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -26,7 +27,7 @@ func TestManagerCanManageCustomerPassword(t *testing.T) {
 	refreshGen := jwtgen.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
 	svc := service.NewService(repo, accessGen, service.WithRefreshTokenGen(refreshGen, time.Hour))
 	h := handler.NewHandler(svc, zerolog.Nop())
-	r := newRouter(h, false, nil, nil, nil)
+	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
 	manager, _ := domain.NewUser(uuid.New().String(), "mgr@dupli1.com", "password", domain.AccountTypeAdmin,
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
@@ -53,7 +54,7 @@ func TestManagerCannotManageAdminPassword(t *testing.T) {
 	refreshGen := jwtgen.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
 	svc := service.NewService(repo, accessGen, service.WithRefreshTokenGen(refreshGen, time.Hour))
 	h := handler.NewHandler(svc, zerolog.Nop())
-	r := newRouter(h, false, nil, nil, nil)
+	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
 	manager, _ := domain.NewUser(uuid.New().String(), "mgr@dupli1.com", "password", domain.AccountTypeAdmin,
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
@@ -81,7 +82,7 @@ func TestAdminCanManageManagerPassword(t *testing.T) {
 	refreshGen := jwtgen.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
 	svc := service.NewService(repo, accessGen, service.WithRefreshTokenGen(refreshGen, time.Hour))
 	h := handler.NewHandler(svc, zerolog.Nop())
-	r := newRouter(h, false, nil, nil, nil)
+	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
 	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeAdmin,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
@@ -109,7 +110,7 @@ func TestAdminCannotManageOwnerPassword(t *testing.T) {
 	refreshGen := jwtgen.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
 	svc := service.NewService(repo, accessGen, service.WithRefreshTokenGen(refreshGen, time.Hour))
 	h := handler.NewHandler(svc, zerolog.Nop())
-	r := newRouter(h, false, nil, nil, nil)
+	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
 	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeAdmin,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
@@ -136,7 +137,7 @@ func TestOwnerCanManageAdminPassword(t *testing.T) {
 	refreshGen := jwtgen.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
 	svc := service.NewService(repo, accessGen, service.WithRefreshTokenGen(refreshGen, time.Hour))
 	h := handler.NewHandler(svc, zerolog.Nop())
-	r := newRouter(h, false, nil, nil, nil)
+	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
 	owner, _ := domain.NewUser(uuid.New().String(), "owner@dupli1.com", "password", domain.AccountTypeAdmin, permissions.All)
 	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeAdmin,

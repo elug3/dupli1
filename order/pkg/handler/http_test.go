@@ -149,6 +149,28 @@ func TestHealthEndpoint_DoesNotRequireAuth(t *testing.T) {
 	}
 }
 
+func TestSettingsEndpoint_DoesNotRequireAuth(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+
+	for _, path := range []string{"/settings", "/api/v1/orders/settings"} {
+		w := do(t, mux, http.MethodGet, path, "", nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, w.Code)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+			t.Fatalf("%s decode: %v", path, err)
+		}
+		if body["service"] != "order" {
+			t.Fatalf("%s service = %v, want order", path, body["service"])
+		}
+		if body["api_version"] != "v1" {
+			t.Fatalf("%s api_version = %v, want v1", path, body["api_version"])
+		}
+	}
+}
+
 // ── POST /api/v1/orders ───────────────────────────────────────────────────────
 
 func TestCreateOrder_CustomerCanCreateOwnOrder(t *testing.T) {

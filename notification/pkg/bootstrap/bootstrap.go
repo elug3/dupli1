@@ -11,6 +11,7 @@ import (
 	telegraminfra "github.com/elug3/dupli1/notification/pkg/infra/telegram"
 	"github.com/elug3/dupli1/notification/pkg/ports"
 	"github.com/elug3/dupli1/notification/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
 // App holds wired notification dependencies.
@@ -37,6 +38,9 @@ func Bootstrap(cfg Config) (*App, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", health)
 	mux.HandleFunc("/api/v1/notification/health", health)
+	settingsResp := BuildSettings(cfg)
+	mux.HandleFunc("/settings", settings.Handler(settingsResp))
+	mux.HandleFunc("/api/v1/notification/settings", settings.Handler(settingsResp))
 
 	httpSrv := &http.Server{
 		Addr:         cfg.Addr,

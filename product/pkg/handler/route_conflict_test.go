@@ -30,6 +30,11 @@ func TestPublicRoutesStayOpen(t *testing.T) {
 		t.Fatalf("GET health: status=%d, want 200", w.Code)
 	}
 
+	w = serve(t, mux, http.MethodGet, handler.RouteSettings, "", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET settings: status=%d, want 200", w.Code)
+	}
+
 	w = serve(t, mux, http.MethodGet, handler.RouteProducts, "", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET products search: status=%d, want 200", w.Code)

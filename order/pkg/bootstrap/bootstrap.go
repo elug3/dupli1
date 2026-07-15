@@ -122,7 +122,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		jwtValidator = validator
 	}
 
-	h := handler.New(svc, jwtValidator)
+	h := handler.New(svc, jwtValidator).WithSettings(BuildSettings(cfg))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

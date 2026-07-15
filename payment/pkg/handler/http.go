@@ -12,6 +12,7 @@ import (
 	"github.com/elug3/dupli1/payment/pkg/ports"
 	"github.com/elug3/dupli1/payment/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/settings"
 	"github.com/stripe/stripe-go/v81/webhook"
 )
 
@@ -20,18 +21,32 @@ type AccessTokenValidator interface {
 }
 
 type Handler struct {
-	svc            *service.Service
-	jwtValidator   AccessTokenValidator
-	webhookSecret  string
+	svc           *service.Service
+	jwtValidator  AccessTokenValidator
+	webhookSecret string
+	settings      settings.Response
 }
 
 func New(svc *service.Service, jwtValidator AccessTokenValidator, webhookSecret string) *Handler {
-	return &Handler{svc: svc, jwtValidator: jwtValidator, webhookSecret: webhookSecret}
+	return &Handler{
+		svc:           svc,
+		jwtValidator:  jwtValidator,
+		webhookSecret: webhookSecret,
+		settings:      settings.NewResponse("payment"),
+	}
+}
+
+// WithSettings sets the non-secret settings payload served by GET /settings.
+func (h *Handler) WithSettings(s settings.Response) *Handler {
+	h.settings = s
+	return h
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.health)
 	mux.HandleFunc("/api/v1/payments/health", h.health)
+	mux.HandleFunc("/settings", h.settingsHandler)
+	mux.HandleFunc("/api/v1/payments/settings", h.settingsHandler)
 	mux.HandleFunc("/api/v1/payments", h.requireAuth(h.payments))
 	mux.HandleFunc("/api/v1/payments/", h.paymentRoutes)
 }
@@ -42,6 +57,14 @@ func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) settingsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	respondJSON(w, http.StatusOK, h.settings)
 }
 
 func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
