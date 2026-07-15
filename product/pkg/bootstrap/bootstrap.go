@@ -82,7 +82,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	catalogStore := pg.NewCatalogStore(store.Pool())
 	catalogSvc := service.NewCatalogService(catalogStore)
 
-	h := handler.NewHandler(svc, couponSvc, inventorySvc, catalogSvc)
+	h := handler.NewHandler(svc, couponSvc, inventorySvc, catalogSvc).WithSettings(BuildSettings(cfg))
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)

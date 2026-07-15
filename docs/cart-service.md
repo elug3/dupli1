@@ -96,7 +96,7 @@ Keep services separate but add `POST /api/v1/cart/checkout` in cart to create a 
 
 ## Authentication
 
-All cart routes except health require a Bearer **access** token (same flow as order):
+All cart routes except health and settings require a Bearer **access** token (same flow as order):
 
 1. `POST /api/v1/auth/login` → `refresh_token`
 2. `POST /api/v1/auth/refresh` → `token` (access JWT)

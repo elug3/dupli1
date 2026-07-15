@@ -3,6 +3,7 @@ package handler
 // API route paths (v1).
 const (
 	RouteHealth               = "/api/v1/products/health"
+	RouteSettings             = "/api/v1/products/settings"
 	RouteProducts             = "/api/v1/products"
 	RoutePublicProduct        = "/api/v1/products/{id}"
 	RouteProductByID          = "/api/v1/products/{id}"
@@ -18,6 +19,7 @@ const (
 
 	// Inventory (merged in from the standalone inventory service).
 	RouteInventoryHealth             = "/api/v1/inventory/health"
+	RouteInventorySettings           = "/api/v1/inventory/settings"
 	RouteInventoryItem               = "/api/v1/inventory/{sku}"
 	RouteInventoryAdjust             = "/api/v1/inventory/{sku}/adjust"
 	RouteInventoryItemBySkuID        = "/api/v1/inventory/by-sku-id/{skuId}"

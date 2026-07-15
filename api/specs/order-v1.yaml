@@ -22,6 +22,7 @@ servers:
 
 tags:
   - name: Health
+  - name: Settings
   - name: Orders
   - name: Checkout
 
@@ -43,6 +44,19 @@ paths:
                   status:
                     type: string
                     example: ok
+
+  /api/v1/orders/settings:
+    get:
+      tags: [Settings]
+      summary: Non-secret service settings
+      operationId: orderSettings
+      responses:
+        '200':
+          description: Safe operational settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
 
   /api/v1/orders:
     post:
@@ -412,6 +426,44 @@ components:
       example: cs_000001
 
   schemas:
+    Settings:
+      type: object
+      required: [service, api_version]
+      properties:
+        service:
+          type: string
+          example: order
+        api_version:
+          type: string
+          example: v1
+        auth:
+          type: object
+          properties:
+            mode:
+              type: string
+            jwks_configured:
+              type: boolean
+            jwt_secret_fallback:
+              type: boolean
+        storage:
+          type: string
+        features:
+          type: object
+          additionalProperties:
+            type: boolean
+        limits:
+          type: object
+          additionalProperties: true
+        dependencies:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              configured:
+                type: boolean
+              host:
+                type: string
+
     ErrorResponse:
       type: object
       required: [error, code]

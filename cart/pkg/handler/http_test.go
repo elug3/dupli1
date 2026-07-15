@@ -83,6 +83,24 @@ func TestGetCartRequiresAuth(t *testing.T) {
 	}
 }
 
+func TestSettingsDoesNotRequireAuth(t *testing.T) {
+	mux := newMux(newTestHandler(t))
+	for _, path := range []string{"/settings", "/api/v1/cart/settings"} {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, rec.Code)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("%s decode: %v", path, err)
+		}
+		if body["service"] != "cart" {
+			t.Fatalf("%s service = %v, want cart", path, body["service"])
+		}
+	}
+}
+
 func TestCartCRUD(t *testing.T) {
 	mux := newMux(newTestHandler(t))
 	userID := "user-1"

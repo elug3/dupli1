@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	jwtinfra "github.com/elug3/dupli1/auth/pkg/infra/jwt"
+	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
 func buildTestJWKS(t *testing.T) []byte {
@@ -26,7 +27,7 @@ func buildTestJWKS(t *testing.T) []byte {
 
 func TestJWKSEndpoint_RootPath(t *testing.T) {
 	jwksJSON := buildTestJWKS(t)
-	r := newRouter(nil, false, jwksJSON, nil, nil)
+	r := newRouter(nil, false, jwksJSON, nil, nil, settings.NewResponse("auth"))
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil)
@@ -45,7 +46,7 @@ func TestJWKSEndpoint_RootPath(t *testing.T) {
 
 func TestJWKSEndpoint_PrefixedPath(t *testing.T) {
 	jwksJSON := buildTestJWKS(t)
-	r := newRouter(nil, false, jwksJSON, nil, nil)
+	r := newRouter(nil, false, jwksJSON, nil, nil, settings.NewResponse("auth"))
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/.well-known/jwks.json", nil)
@@ -61,7 +62,7 @@ func TestJWKSEndpoint_PrefixedPath(t *testing.T) {
 
 func TestJWKSEndpoint_ResponseIsValidJSON(t *testing.T) {
 	jwksJSON := buildTestJWKS(t)
-	r := newRouter(nil, false, jwksJSON, nil, nil)
+	r := newRouter(nil, false, jwksJSON, nil, nil, settings.NewResponse("auth"))
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil)
@@ -82,7 +83,7 @@ func TestJWKSEndpoint_ResponseIsValidJSON(t *testing.T) {
 
 func TestJWKSEndpoint_NotRegisteredWhenNoKey(t *testing.T) {
 	// When jwksJSON is nil (HMAC mode), the well-known routes must not exist.
-	r := newRouter(nil, false, nil, nil, nil)
+	r := newRouter(nil, false, nil, nil, nil, settings.NewResponse("auth"))
 
 	for _, path := range []string{
 		"/.well-known/jwks.json",
@@ -99,7 +100,7 @@ func TestJWKSEndpoint_NotRegisteredWhenNoKey(t *testing.T) {
 
 func TestJWKSEndpoint_BothPathsReturnIdenticalBody(t *testing.T) {
 	jwksJSON := buildTestJWKS(t)
-	r := newRouter(nil, false, jwksJSON, nil, nil)
+	r := newRouter(nil, false, jwksJSON, nil, nil, settings.NewResponse("auth"))
 
 	get := func(path string) string {
 		w := httptest.NewRecorder()
@@ -111,5 +112,24 @@ func TestJWKSEndpoint_BothPathsReturnIdenticalBody(t *testing.T) {
 	prefixed := get("/api/v1/auth/.well-known/jwks.json")
 	if root != prefixed {
 		t.Errorf("responses differ:\n  root:     %s\n  prefixed: %s", root, prefixed)
+	}
+}
+
+func TestSettingsEndpoint_DoesNotRequireAuth(t *testing.T) {
+	r := newRouter(nil, false, nil, nil, nil, settings.NewResponse("auth"))
+
+	for _, path := range []string{"/settings", "/api/v1/auth/settings"} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, w.Code)
+		}
+		var body map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("%s decode: %v", path, err)
+		}
+		if body["service"] != "auth" {
+			t.Fatalf("%s service = %v, want auth", path, body["service"])
+		}
 	}
 }

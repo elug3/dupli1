@@ -96,6 +96,7 @@ func TestPublicRoutesDoNotRequireAuth(t *testing.T) {
 		path   string
 	}{
 		{http.MethodGet, handler.RouteHealth},
+		{http.MethodGet, handler.RouteSettings},
 		{http.MethodGet, handler.RouteProducts},
 		{http.MethodGet, "/api/v1/products/BOT-001"},
 		{http.MethodPost, handler.RouteRedeemCoupon},

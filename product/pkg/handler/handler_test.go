@@ -75,6 +75,27 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestSettings(t *testing.T) {
+	mux := newMux(memory.NewProductStore())
+	for _, path := range []string{handler.RouteSettings, handler.RouteInventorySettings} {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s want 200, got %d", path, rec.Code)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("%s decode: %v", path, err)
+		}
+		if body["service"] != "product" {
+			t.Fatalf("%s service = %v, want product", path, body["service"])
+		}
+		if body["api_version"] != "v1" {
+			t.Fatalf("%s api_version = %v, want v1", path, body["api_version"])
+		}
+	}
+}
+
 func TestSearchProductsParentsOnly(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
