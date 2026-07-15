@@ -1,5 +1,7 @@
 package domain
 
+import "fmt"
+
 // ResolveVariantCodes fills ColorCode / SizeCode on v from display names or
 // explicit codes when they are blank. Empty size defaults to OS (one size).
 // EditionCode is normalized when already set; it stays optional.
@@ -53,7 +55,8 @@ func ComposeVariantSKU(productID, brandCode, styleCode string, v *Variant) strin
 }
 
 // AssignProductCodes sets BrandCode / StyleCode on a new or backfilled product
-// when they are blank. Style defaults from the product id (BOT-001 → S001).
+// when they are blank. Style is derived from legacy ids only (BOT-001 → S001);
+// ULID product ids require an explicit styleCode.
 func AssignProductCodes(p *Product) {
 	if p == nil {
 		return
@@ -65,9 +68,41 @@ func AssignProductCodes(p *Product) {
 	} else {
 		p.BrandCode = NormalizeCode(p.BrandCode)
 	}
-	if p.StyleCode == "" {
-		p.StyleCode = StyleCodeFromProductID(p.ID)
-	} else {
+	if p.StyleCode != "" {
 		p.StyleCode = NormalizeCode(p.StyleCode)
+		return
 	}
+	if style := StyleCodeFromProductID(p.ID); style != "" {
+		p.StyleCode = style
+	}
+}
+
+// RequireProductSKUCodes reports whether brand and style codes are present for create.
+func RequireProductSKUCodes(p *Product) error {
+	if p == nil {
+		return ErrMissingSKUCodes
+	}
+	AssignProductCodes(p)
+	if !ValidBrandCode(p.BrandCode) || !ValidSegmentCode(p.StyleCode) {
+		return fmt.Errorf("%w: brandCode and styleCode are required", ErrMissingSKUCodes)
+	}
+	return nil
+}
+
+// RequireVariantSKUCodes resolves and checks color/size codes for create.
+func RequireVariantSKUCodes(v *Variant) error {
+	if v == nil {
+		return ErrMissingSKUCodes
+	}
+	ResolveVariantCodes(v)
+	if !ValidSegmentCode(v.ColorCode) {
+		return fmt.Errorf("%w: colorCode is required (set colorCode or color)", ErrMissingSKUCodes)
+	}
+	if !ValidSegmentCode(v.SizeCode) {
+		return fmt.Errorf("%w: sizeCode is required", ErrMissingSKUCodes)
+	}
+	if v.EditionCode != "" && !ValidSegmentCode(v.EditionCode) {
+		return fmt.Errorf("%w: invalid editionCode", ErrMissingSKUCodes)
+	}
+	return nil
 }

@@ -12,10 +12,18 @@ import (
 type ProductStore struct {
 	Products []domain.Product
 	Variants []domain.Variant
+	Catalog  *CatalogStore
 }
 
 func NewProductStore() *ProductStore {
-	return &ProductStore{}
+	return &ProductStore{Catalog: NewCatalogStore()}
+}
+
+func (s *ProductStore) catalog() *CatalogStore {
+	if s.Catalog == nil {
+		s.Catalog = NewCatalogStore()
+	}
+	return s.Catalog
 }
 
 func (s *ProductStore) variantsFor(productID string) []domain.Variant {
@@ -28,10 +36,36 @@ func (s *ProductStore) variantsFor(productID string) []domain.Variant {
 	return out
 }
 
+func (s *ProductStore) enrichMasterNames(products []domain.Product) {
+	cat := s.catalog()
+	for i := range products {
+		p := &products[i]
+		if p.Brand == "" && p.BrandCode != "" {
+			if b, err := cat.GetBrand(p.BrandCode); err == nil {
+				p.Brand = b.Name
+			}
+		}
+		for j := range p.Variants {
+			v := &p.Variants[j]
+			if v.Color == "" && v.ColorCode != "" {
+				if c, err := cat.GetColor(v.ColorCode); err == nil {
+					v.Color = c.Name
+				}
+			}
+			if v.Size == "" && v.SizeCode != "" {
+				if sz, err := cat.GetSize(v.SizeCode); err == nil {
+					v.Size = sz.Name
+				}
+			}
+		}
+	}
+}
+
 func (s *ProductStore) enrich(products []domain.Product, includeVariants bool) {
 	for i := range products {
 		products[i].EnrichFromVariants(s.variantsFor(products[i].ID), includeVariants)
 	}
+	s.enrichMasterNames(products)
 }
 
 func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Product, int, error) {
@@ -188,13 +222,28 @@ func (s *ProductStore) nextProductID(brand string) string {
 
 func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) {
 	if p.ID == "" {
-		p.ID = s.nextProductID(p.Brand)
+		p.ID = domain.NewProductID()
 	}
 	if p.Status == "" {
 		p.Status = "active"
 	}
-	domain.AssignProductCodes(&p)
+	if err := domain.RequireProductSKUCodes(&p); err != nil {
+		return nil, err
+	}
+	cat := s.catalog()
+	if _, err := cat.GetBrand(p.BrandCode); err != nil {
+		return nil, fmt.Errorf("%w: brand %s", domain.ErrMasterNotFound, p.BrandCode)
+	}
+	if _, err := cat.GetStyle(p.BrandCode, p.StyleCode); err != nil {
+		return nil, fmt.Errorf("%w: style %s/%s", domain.ErrMasterNotFound, p.BrandCode, p.StyleCode)
+	}
+	if p.Brand == "" {
+		if b, err := cat.GetBrand(p.BrandCode); err == nil {
+			p.Brand = b.Name
+		}
+	}
 	s.Products = append(s.Products, p)
+	cat.ProductBrandStyles[p.ID] = p.BrandCode + "|" + p.StyleCode
 
 	switch {
 	case len(p.Variants) > 0:
@@ -209,7 +258,6 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 		}
 	case p.Color != "" || p.Price > 0 || p.SellingPrice > 0 || len(p.ImageURLs) > 0:
 		if _, err := s.CreateVariant(domain.Variant{
-			SKU:          p.ID,
 			ProductID:    p.ID,
 			Color:        p.Color,
 			SellingPrice: p.SellingPrice,
@@ -317,10 +365,37 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 	if !found {
 		return nil, fmt.Errorf("product not found: %s", v.ProductID)
 	}
+	if brandCode == "" || styleCode == "" {
+		return nil, fmt.Errorf("%w: parent product missing brandCode/styleCode", domain.ErrMissingSKUCodes)
+	}
 	if v.Status == "" {
 		v.Status = "active"
 	}
-	domain.ResolveVariantCodes(&v)
+	if err := domain.RequireVariantSKUCodes(&v); err != nil {
+		return nil, err
+	}
+	cat := s.catalog()
+	if _, err := cat.GetColor(v.ColorCode); err != nil {
+		return nil, fmt.Errorf("%w: color %s", domain.ErrMasterNotFound, v.ColorCode)
+	}
+	if _, err := cat.GetSize(v.SizeCode); err != nil {
+		return nil, fmt.Errorf("%w: size %s", domain.ErrMasterNotFound, v.SizeCode)
+	}
+	if v.EditionCode != "" {
+		if _, err := cat.GetEdition(v.EditionCode); err != nil {
+			return nil, fmt.Errorf("%w: edition %s", domain.ErrMasterNotFound, v.EditionCode)
+		}
+	}
+	if v.Color == "" {
+		if c, err := cat.GetColor(v.ColorCode); err == nil {
+			v.Color = c.Name
+		}
+	}
+	if v.Size == "" {
+		if sz, err := cat.GetSize(v.SizeCode); err == nil {
+			v.Size = sz.Name
+		}
+	}
 	if v.SKU == "" {
 		sku, err := s.nextVariantSKU(v.ProductID, brandCode, styleCode, &v)
 		if err != nil {
@@ -343,6 +418,11 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 		}
 	}
 	s.Variants = append(s.Variants, v)
+	cat.VariantColorCodes[v.SKU] = v.ColorCode
+	cat.VariantSizeCodes[v.SKU] = v.SizeCode
+	if v.EditionCode != "" {
+		cat.VariantEditionCodes[v.SKU] = v.EditionCode
+	}
 	return &v, nil
 }
 

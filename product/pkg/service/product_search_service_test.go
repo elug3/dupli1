@@ -36,11 +36,14 @@ func TestSearchProductsNoColorDuplicates(t *testing.T) {
 
 func TestCreateVariantUnderParent(t *testing.T) {
 	store := memory.NewProductStore()
+	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "BOT", Code: "CAS001", Name: "Cassette"}); err != nil {
+		t.Fatal(err)
+	}
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Cassette", Status: "active"},
+		{ID: "BOT-001", Name: "Cassette", BrandCode: "BOT", StyleCode: "CAS001", Status: "active"},
 	}
 	store.Variants = []domain.Variant{
-		{SKU: "BOT-001", ProductID: "BOT-001", Color: "Green", Price: 2500, Status: "active"},
+		{SKU: "BOT_CAS001_GRN_OS", ProductID: "BOT-001", Color: "Green", ColorCode: "GRN", SizeCode: "OS", Price: 2500, Status: "active"},
 	}
 	svc := service.NewProductSearchService(store, nil)
 
@@ -48,7 +51,7 @@ func TestCreateVariantUnderParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.SKU == "" || v.ProductID != "BOT-001" {
+	if v.SKU != "BOT_CAS001_BLK_OS" || v.ProductID != "BOT-001" {
 		t.Fatalf("unexpected variant: %+v", v)
 	}
 

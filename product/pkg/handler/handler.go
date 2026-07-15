@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -269,7 +270,7 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := h.svc.CreateProduct(p)
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.respondProductWriteError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusCreated, created)
@@ -417,7 +418,7 @@ func (h *Handler) CreateVariant(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := h.svc.CreateVariant(id, v)
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.respondProductWriteError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusCreated, created)
@@ -552,4 +553,15 @@ func (h *Handler) respondJSON(w http.ResponseWriter, status int, data interface{
 
 func (h *Handler) respondError(w http.ResponseWriter, status int, message string) {
 	h.respondJSON(w, status, ErrorResponse{Error: message, Code: status})
+}
+
+func (h *Handler) respondProductWriteError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, domain.ErrMissingSKUCodes):
+		h.respondError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, domain.ErrMasterNotFound):
+		h.respondError(w, http.StatusNotFound, err.Error())
+	default:
+		h.respondError(w, http.StatusBadRequest, err.Error())
+	}
 }

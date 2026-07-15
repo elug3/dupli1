@@ -39,10 +39,13 @@ func makeAccessToken(t *testing.T, userID string, perms []string) string {
 func bearer(token string) string { return "Bearer " + token }
 
 func newAccessControlMux(store *memory.ProductStore) *http.ServeMux {
+	if store.Catalog == nil {
+		store.Catalog = memory.NewCatalogStore()
+	}
 	validator := authjwt.NewHMACValidator(accessControlSecret)
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	h := handler.NewHandler(svc, couponSvc, nil, service.NewCatalogService(memory.NewCatalogStore()))
+	h := handler.NewHandler(svc, couponSvc, nil, service.NewCatalogService(store.Catalog))
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -172,10 +175,14 @@ func TestCustomerCannotManageProducts(t *testing.T) {
 }
 
 func TestProductManagerCanManageProducts(t *testing.T) {
-	mux := newAccessControlMux(memory.NewProductStore())
+	store := memory.NewProductStore()
+	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "GUC", Code: "MINI01", Name: "Mini Bag"}); err != nil {
+		t.Fatal(err)
+	}
+	mux := newAccessControlMux(store)
 	token := makeAccessToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleProductManager}))
 
-	body := domain.Product{Name: "Mini Bag", Brand: "Gucci", Price: 100}
+	body := domain.Product{Name: "Mini Bag", Brand: "Gucci", StyleCode: "MINI01", Price: 100, Color: "Black"}
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create product: status = %d, want 201; body: %s", w.Code, w.Body.String())
@@ -200,10 +207,14 @@ func TestProductManagerCanManageProducts(t *testing.T) {
 }
 
 func TestAdminCanManageProducts(t *testing.T) {
-	mux := newAccessControlMux(memory.NewProductStore())
+	store := memory.NewProductStore()
+	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "GUC", Code: "TOTE01", Name: "Tote"}); err != nil {
+		t.Fatal(err)
+	}
+	mux := newAccessControlMux(store)
 	token := makeAccessToken(t, "admin-1", permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin}))
 
-	body := domain.Product{Name: "Tote", Brand: "Baggu", Price: 45}
+	body := domain.Product{Name: "Tote", Brand: "Gucci", StyleCode: "TOTE01", Price: 45, Color: "Black"}
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
@@ -216,10 +227,14 @@ func TestAdminCanManageProducts(t *testing.T) {
 }
 
 func TestOwnerCanManageProducts(t *testing.T) {
-	mux := newAccessControlMux(memory.NewProductStore())
+	store := memory.NewProductStore()
+	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "GUC", Code: "PACK01", Name: "Backpack"}); err != nil {
+		t.Fatal(err)
+	}
+	mux := newAccessControlMux(store)
 	token := makeAccessToken(t, "owner-1", []string{permissions.All})
 
-	body := domain.Product{Name: "Backpack", Brand: "Herschel", Price: 120}
+	body := domain.Product{Name: "Backpack", Brand: "Gucci", StyleCode: "PACK01", Price: 120, Color: "Black"}
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())

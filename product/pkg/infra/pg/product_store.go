@@ -344,6 +344,7 @@ func (s *ProductSearchStore) enrich(products []domain.Product, includeVariants b
 	for i := range products {
 		products[i].EnrichFromVariants(byProduct[products[i].ID], includeVariants)
 	}
+	s.enrichMasterNames(products)
 	return nil
 }
 
@@ -489,7 +490,9 @@ func (s *ProductSearchStore) GetActiveProduct(id string) (*domain.Product, error
 		}
 	}
 	p.EnrichFromVariants(active, true)
-	return &p, nil
+	products := []domain.Product{p}
+	s.enrichMasterNames(products)
+	return &products[0], nil
 }
 
 func (s *ProductSearchStore) GetProduct(id string) (*domain.Product, error) {
@@ -505,26 +508,30 @@ func (s *ProductSearchStore) GetProduct(id string) (*domain.Product, error) {
 		return nil, err
 	}
 	p.EnrichFromVariants(variants, true)
-	return &p, nil
+	products := []domain.Product{p}
+	s.enrichMasterNames(products)
+	return &products[0], nil
 }
 
 func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, error) {
 	ctx := context.Background()
 	if p.ID == "" {
-		id, err := s.nextProductID(ctx, p.Brand)
-		if err != nil {
-			return nil, err
-		}
-		p.ID = id
+		p.ID = domain.NewProductID()
 	}
 	if p.Status == "" {
 		p.Status = "active"
 	}
-	domain.AssignProductCodes(&p)
-	if p.BrandCode != "" && p.StyleCode != "" {
-		if err := s.insertStyleForProduct(ctx, p.BrandCode, p.StyleCode, p.Name); err != nil {
-			return nil, err
-		}
+	if err := domain.RequireProductSKUCodes(&p); err != nil {
+		return nil, err
+	}
+	if err := s.requireBrand(ctx, p.BrandCode); err != nil {
+		return nil, err
+	}
+	if err := s.requireStyle(ctx, p.BrandCode, p.StyleCode); err != nil {
+		return nil, err
+	}
+	if p.Brand == "" {
+		p.Brand = s.brandName(ctx, p.BrandCode)
 	}
 
 	var createdAt time.Time
@@ -553,9 +560,8 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 			}
 		}
 	case p.Color != "" || p.Price > 0 || p.SellingPrice > 0 || len(p.ImageURLs) > 0:
-		// Legacy create: seed a default variant (sku = product id).
+		// Legacy create: seed a default variant; SKU is composed from masters (not product id).
 		if _, err := s.CreateVariant(domain.Variant{
-			SKU:          p.ID,
 			ProductID:    p.ID,
 			Color:        p.Color,
 			SellingPrice: p.SellingPrice,

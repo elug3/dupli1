@@ -134,10 +134,28 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 	if err != nil {
 		return nil, fmt.Errorf("product not found: %w", err)
 	}
+	if brandCode == "" || styleCode == "" {
+		return nil, fmt.Errorf("%w: parent product missing brandCode/styleCode", domain.ErrMissingSKUCodes)
+	}
 
-	domain.ResolveVariantCodes(&v)
-	// Do not invent master rows at runtime (Phase A). Codes must already exist
-	// (seeded or created via catalog APIs). Empty edition stays NULL.
+	if err := domain.RequireVariantSKUCodes(&v); err != nil {
+		return nil, err
+	}
+	if err := s.requireColor(ctx, v.ColorCode); err != nil {
+		return nil, err
+	}
+	if err := s.requireSize(ctx, v.SizeCode); err != nil {
+		return nil, err
+	}
+	if err := s.requireEdition(ctx, v.EditionCode); err != nil {
+		return nil, err
+	}
+	if v.Color == "" {
+		v.Color = s.colorName(ctx, v.ColorCode)
+	}
+	if v.Size == "" {
+		v.Size = s.sizeName(ctx, v.SizeCode)
+	}
 
 	if v.SKU == "" {
 		sku, err := s.nextVariantSKU(ctx, v.ProductID, brandCode, styleCode, &v)

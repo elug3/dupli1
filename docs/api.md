@@ -449,7 +449,7 @@ Routes below require `Authorization: Bearer <access_token>`. Product validates R
 | PUT | `/api/v1/coupons/{code}` | `coupon.update` |
 | DELETE | `/api/v1/coupons/{code}` | `coupon.delete` |
 
-Parent IDs use the brand prefix (e.g. `BOT-001`). New variants use the luxury SKU format `Brand_Style_Color[_Edition]_Size` (e.g. `BOT_CAS001_BLK_V_MED`) when the parent has `brandCode`/`styleCode`; see [product-sku-system.md](product-sku-system.md). Legacy `{parentId}-{color}` SKUs remain valid. Canonical inventory/order key is ULID `skuId`. See [product-variants-plan.md](product-variants-plan.md).
+New parent `id`s are ULIDs (`domain.NewProductID()`); legacy brand-prefixed ids (e.g. `BOT-001`) remain valid. Human identity is `brandCode` + `styleCode`. Dual variant identity and master dictionaries: [product-sku-system.md](product-sku-system.md) — ULID `skuId` (canonical) + human `sku` (`Brand_Style_Color[_Edition]_Size`). Catalog CRUD at `/api/v1/catalog/…`. Product/variant create requires existing master codes (Phase C). See also [product-variants-plan.md](product-variants-plan.md).
 
 ---
 
