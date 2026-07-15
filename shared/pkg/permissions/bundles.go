@@ -19,6 +19,8 @@ var bundles = map[string][]string{
 		ProductVariantCreate,
 		ProductVariantUpdate,
 		ProductImageUpload,
+		ProductMasterRead,
+		ProductMasterWrite,
 	},
 	BundleCatalogAdmin: {
 		ProductAll,

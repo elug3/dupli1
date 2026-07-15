@@ -32,6 +32,8 @@ const (
 	ProductVariantUpdate  = "product.variant.update"
 	ProductVariantDelete  = "product.variant.delete"
 	ProductImageUpload    = "product.image.upload"
+	ProductMasterRead     = "product.master.read"
+	ProductMasterWrite    = "product.master.write"
 )
 
 // Coupon permissions (product service).
@@ -83,6 +85,8 @@ var Catalog = []string{
 	ProductVariantUpdate,
 	ProductVariantDelete,
 	ProductImageUpload,
+	ProductMasterRead,
+	ProductMasterWrite,
 	CouponRead,
 	CouponCreate,
 	CouponUpdate,

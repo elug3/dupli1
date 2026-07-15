@@ -19,7 +19,8 @@ import (
 func newMux(store *memory.ProductStore) *http.ServeMux {
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	h := handler.NewHandler(svc, couponSvc, nil)
+	catalogSvc := service.NewCatalogService(memory.NewCatalogStore())
+	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
@@ -29,7 +30,8 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	h := handler.NewHandler(svc, couponSvc, nil)
+	catalogSvc := service.NewCatalogService(memory.NewCatalogStore())
+	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
@@ -41,6 +43,18 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	mux.Handle("PUT "+handler.RouteVariantBySKU, h.VariantBySKUHandler())
 	mux.Handle("DELETE "+handler.RouteVariantBySKU, h.VariantBySKUHandler())
 	mux.Handle("POST "+handler.RouteVariantImages, h.UploadVariantImageHandler())
+	mux.Handle("GET "+handler.RouteCatalogBrands, http.HandlerFunc(h.ListBrands))
+	mux.Handle("POST "+handler.RouteCatalogBrands, http.HandlerFunc(h.CreateBrand))
+	mux.Handle("PATCH "+handler.RouteCatalogBrandByCode, http.HandlerFunc(h.UpdateBrand))
+	mux.Handle("DELETE "+handler.RouteCatalogBrandByCode, http.HandlerFunc(h.DeleteBrand))
+	mux.Handle("GET "+handler.RouteCatalogStyles, http.HandlerFunc(h.ListStyles))
+	mux.Handle("POST "+handler.RouteCatalogStyles, http.HandlerFunc(h.CreateStyle))
+	mux.Handle("PATCH "+handler.RouteCatalogStyleByCode, http.HandlerFunc(h.UpdateStyle))
+	mux.Handle("DELETE "+handler.RouteCatalogStyleByCode, http.HandlerFunc(h.DeleteStyle))
+	mux.Handle("GET "+handler.RouteCatalogColors, http.HandlerFunc(h.ListColors))
+	mux.Handle("POST "+handler.RouteCatalogColors, http.HandlerFunc(h.CreateColor))
+	mux.Handle("PATCH "+handler.RouteCatalogColorByCode, http.HandlerFunc(h.UpdateColor))
+	mux.Handle("DELETE "+handler.RouteCatalogColorByCode, http.HandlerFunc(h.DeleteColor))
 	return mux, h
 }
 
@@ -243,7 +257,55 @@ func TestCreateVariant(t *testing.T) {
 		t.Fatalf("want 2 variants on PDP, got %d", len(p.Variants))
 	}
 	if len(p.AvailableColors) != 2 {
-		t.Fatalf("want 2 colors, got %v", p.AvailableColors)
+		t.Fatalf("want 2 availableColors, got %d", len(p.AvailableColors))
+	}
+}
+
+func TestCreateVariantLuxurySKU(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{{
+		ID: "BOT-001", Name: "Cassette", Brand: "Bottega Veneta",
+		BrandCode: "BOT", StyleCode: "CAS001", Status: "active",
+	}}
+	mux, _ := newFullMux(store)
+
+	body, _ := json.Marshal(domain.Variant{
+		Color: "Black", Size: "Medium", EditionCode: "V", Price: 2500,
+	})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/products/BOT-001/variants", bytes.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var v domain.Variant
+	json.NewDecoder(rec.Body).Decode(&v)
+	if v.SKU != "BOT_CAS001_BLK_V_MED" {
+		t.Fatalf("want BOT_CAS001_BLK_V_MED, got %q (colorCode=%q sizeCode=%q edition=%q)",
+			v.SKU, v.ColorCode, v.SizeCode, v.EditionCode)
+	}
+	if v.ColorCode != "BLK" || v.SizeCode != "MED" || v.EditionCode != "V" {
+		t.Fatalf("unexpected codes: %+v", v)
+	}
+}
+
+func TestCreateProductAssignsBrandAndStyleCodes(t *testing.T) {
+	mux, _ := newFullMux(memory.NewProductStore())
+
+	body, _ := json.Marshal(domain.Product{
+		Name: "Mini Bag", Brand: "Bottega Veneta", Price: 2500, Color: "Green",
+	})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteProducts, bytes.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var p domain.Product
+	json.NewDecoder(rec.Body).Decode(&p)
+	if p.BrandCode != "BOT" {
+		t.Errorf("brandCode: want BOT, got %q", p.BrandCode)
+	}
+	if p.StyleCode != "S001" {
+		t.Errorf("styleCode: want S001, got %q", p.StyleCode)
 	}
 }
 

@@ -48,8 +48,9 @@ status                            size: "" (optional)
 **ID rules**
 
 - Keep parent ids as today: brand prefix + sequence (`BOT-001`).
-- Variant SKUs are unique sellable ids, e.g. `BOT-001-GRN` or `BOT-001-GRN-M`.
-- Do not encode options only in the parent id; options belong on the variant row.
+- Parent also stores immutable `brandCode` + `styleCode` used to compose human SKUs.
+- Variant human SKUs follow [product-sku-system.md](product-sku-system.md): `Brand_Style_Color[_Edition]_Size` (e.g. `BOT_CAS001_BLK_V_MED`). Legacy `{parentId}-{color}` SKUs remain for rows created before codes existed.
+- Canonical cross-service id is ULID `skuId`; do not encode options only in the parent id.
 
 ## Data model (product DB)
 

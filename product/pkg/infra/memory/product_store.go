@@ -138,19 +138,10 @@ func (s *ProductStore) GetActiveProduct(id string) (*domain.Product, error) {
 }
 
 func brandPrefix(brand string) string {
-	fields := strings.Fields(strings.TrimSpace(brand))
-	word := "PRD"
-	if len(fields) > 0 {
-		word = fields[0]
+	if code := domain.BrandCodeFromName(brand); code != "" {
+		return code
 	}
-	runes := []rune(strings.ToUpper(word))
-	if len(runes) > 3 {
-		runes = runes[:3]
-	}
-	for len(runes) < 3 {
-		runes = append(runes, 'X')
-	}
-	return string(runes)
+	return "PRD"
 }
 
 func (s *ProductStore) nextProductID(brand string) string {
@@ -173,6 +164,7 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 	if p.Status == "" {
 		p.Status = "active"
 	}
+	domain.AssignProductCodes(&p)
 	s.Products = append(s.Products, p)
 
 	switch {
@@ -208,6 +200,9 @@ func (s *ProductStore) UpdateProduct(p domain.Product) (*domain.Product, error) 
 		if existing.ID == p.ID {
 			p.CreatedAt = existing.CreatedAt
 			p.CreatedBy = existing.CreatedBy
+			// Brand/style codes are immutable after creation.
+			p.BrandCode = existing.BrandCode
+			p.StyleCode = existing.StyleCode
 			s.Products[i] = p
 			return s.GetProduct(p.ID)
 		}
@@ -232,19 +227,22 @@ func (s *ProductStore) DeleteProduct(id string) error {
 	return fmt.Errorf("product not found: %s", id)
 }
 
-func (s *ProductStore) nextVariantSKU(productID, color, size string) string {
-	base := domain.BuildVariantSKUBase(productID, color, size)
+func (s *ProductStore) nextVariantSKU(productID, brandCode, styleCode string, v *domain.Variant) (string, error) {
+	base := domain.ComposeVariantSKU(productID, brandCode, styleCode, v)
 	candidate := base
 	for i := 1; ; i++ {
 		exists := false
-		for _, v := range s.Variants {
-			if v.SKU == candidate {
+		for _, existing := range s.Variants {
+			if existing.SKU == candidate {
 				exists = true
 				break
 			}
 		}
 		if !exists {
-			return candidate
+			return candidate, nil
+		}
+		if brandCode != "" && styleCode != "" && v != nil && v.ColorCode != "" {
+			return "", fmt.Errorf("duplicate sku %s: same brand/style/color/edition/size already exists", base)
 		}
 		candidate = fmt.Sprintf("%s-%d", base, i+1)
 	}
@@ -278,10 +276,12 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 	if v.ProductID == "" {
 		return nil, fmt.Errorf("productId is required")
 	}
+	var brandCode, styleCode string
 	found := false
 	for _, p := range s.Products {
 		if p.ID == v.ProductID {
 			found = true
+			brandCode, styleCode = p.BrandCode, p.StyleCode
 			break
 		}
 	}
@@ -291,8 +291,13 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 	if v.Status == "" {
 		v.Status = "active"
 	}
+	domain.ResolveVariantCodes(&v)
 	if v.SKU == "" {
-		v.SKU = s.nextVariantSKU(v.ProductID, v.Color, v.Size)
+		sku, err := s.nextVariantSKU(v.ProductID, brandCode, styleCode, &v)
+		if err != nil {
+			return nil, err
+		}
+		v.SKU = sku
 	}
 	if v.SkuID == "" {
 		v.SkuID = domain.NewSkuID()

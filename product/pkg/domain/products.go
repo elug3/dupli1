@@ -18,6 +18,10 @@ type Variant struct {
 	ProductID string `json:"productId"`
 	Color     string `json:"color"`
 	Size      string `json:"size,omitempty"`
+	// Normalized SKU segment codes (see docs/product-sku-system.md).
+	ColorCode   string `json:"colorCode,omitempty"`
+	EditionCode string `json:"editionCode,omitempty"` // optional VariantCode segment
+	SizeCode    string `json:"sizeCode,omitempty"`
 	// SellingPrice is the official/display price (strikethrough / "was" price).
 	SellingPrice float64 `json:"sellingPrice,omitempty"`
 	// Price is the real sale price used for discount calculation.
@@ -33,6 +37,8 @@ type Product struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Brand       string   `json:"brand"`
+	BrandCode   string   `json:"brandCode,omitempty"`
+	StyleCode   string   `json:"styleCode,omitempty"`
 	Material    string   `json:"material"`
 	Category    string   `json:"category"`
 	Status      string   `json:"status"` // "active" | "draft" | "archived"

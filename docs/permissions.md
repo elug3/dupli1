@@ -124,6 +124,8 @@ Tiers are derived from permissions inside auth only. Other services continue to 
 | `product.variant.update` | Update variant |
 | `product.variant.delete` | Delete variant |
 | `product.image.upload` | Upload image on parent default variant or specific variant |
+| `product.master.read` | List SKU master dictionaries (brands, styles, colors, sizes, editions) |
+| `product.master.write` | Create / rename / delete SKU master dictionary rows |
 
 Public `GET /api/v1/products` and `GET /api/v1/products/{id}` stay **unauthenticated**. `product.read` only widens manager view when a valid token is present (same as today's `product_manager` optional-auth behaviour).
 
@@ -210,6 +212,26 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` |
 | `DELETE` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` |
 | `POST` | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` |
+| `GET` | `/api/v1/catalog/brands` | `product.master.read` |
+| `POST` | `/api/v1/catalog/brands` | `product.master.write` |
+| `PATCH` | `/api/v1/catalog/brands/{code}` | `product.master.write` |
+| `DELETE` | `/api/v1/catalog/brands/{code}` | `product.master.write` |
+| `GET` | `/api/v1/catalog/brands/{code}/styles` | `product.master.read` |
+| `POST` | `/api/v1/catalog/brands/{code}/styles` | `product.master.write` |
+| `PATCH` | `/api/v1/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` |
+| `DELETE` | `/api/v1/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` |
+| `GET` | `/api/v1/catalog/colors` | `product.master.read` |
+| `POST` | `/api/v1/catalog/colors` | `product.master.write` |
+| `PATCH` | `/api/v1/catalog/colors/{code}` | `product.master.write` |
+| `DELETE` | `/api/v1/catalog/colors/{code}` | `product.master.write` |
+| `GET` | `/api/v1/catalog/sizes` | `product.master.read` |
+| `POST` | `/api/v1/catalog/sizes` | `product.master.write` |
+| `PATCH` | `/api/v1/catalog/sizes/{code}` | `product.master.write` |
+| `DELETE` | `/api/v1/catalog/sizes/{code}` | `product.master.write` |
+| `GET` | `/api/v1/catalog/editions` | `product.master.read` |
+| `POST` | `/api/v1/catalog/editions` | `product.master.write` |
+| `PATCH` | `/api/v1/catalog/editions/{code}` | `product.master.write` |
+| `DELETE` | `/api/v1/catalog/editions/{code}` | `product.master.write` |
 | `GET` | `/api/v1/coupons` | `coupon.read` |
 | `POST` | `/api/v1/coupons` | `coupon.create` |
 | `PUT` | `/api/v1/coupons/{code}` | `coupon.update` |
@@ -268,7 +290,7 @@ Code-defined sets for common job functions. Assigning a bundle expands to explic
 
 | Bundle | Permissions |
 |--------|-------------|
-| `catalog_editor` | `product.create`, `product.update`, `product.read`, `product.variant.create`, `product.variant.update`, `product.image.upload` |
+| `catalog_editor` | `product.create`, `product.update`, `product.read`, `product.variant.create`, `product.variant.update`, `product.image.upload`, `product.master.read`, `product.master.write` |
 | `catalog_admin` | `product.*`, `coupon.*` |
 | `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read` |
 | `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update` |

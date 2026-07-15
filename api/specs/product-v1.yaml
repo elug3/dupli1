@@ -585,6 +585,12 @@ components:
           description: Real sale price used for discount calculation (legacy mirror of cheapest active variant)
         brand:
           type: string
+        brandCode:
+          type: string
+          description: Immutable 2–3 letter brand code (e.g. BOT). See product-sku-system.md.
+        styleCode:
+          type: string
+          description: Immutable style code unique within brand (e.g. CAS001).
         color:
           type: string
         material:
@@ -636,9 +642,13 @@ components:
       type: object
       required: [sku, productId, color, price, status]
       properties:
+        skuId:
+          type: string
+          description: Canonical ULID identifier
         sku:
           type: string
-          example: BOT-001-GRN
+          example: BOT_CAS001_BLK_V_MED
+          description: Human SKU (Brand_Style_Color[_Edition]_Size). See product-sku-system.md.
         productId:
           type: string
           example: BOT-001
@@ -646,6 +656,16 @@ components:
           type: string
         size:
           type: string
+        colorCode:
+          type: string
+          example: BLK
+        editionCode:
+          type: string
+          example: V
+          description: Optional construction/edition (VariantCode segment)
+        sizeCode:
+          type: string
+          example: MED
         sellingPrice:
           type: number
           format: double
@@ -670,10 +690,16 @@ components:
       properties:
         sku:
           type: string
-          description: Optional; auto-generated from parent id + color/size when omitted
+          description: Optional; auto-composed from brand/style/color/edition/size codes when omitted
         color:
           type: string
         size:
+          type: string
+        colorCode:
+          type: string
+        editionCode:
+          type: string
+        sizeCode:
           type: string
         sellingPrice:
           type: number
@@ -715,6 +741,12 @@ components:
           description: Real sale price used for discount calculation
         brand:
           type: string
+        brandCode:
+          type: string
+          description: Optional; resolved from brand name when omitted
+        styleCode:
+          type: string
+          description: Optional; derived from product id (e.g. BOT-001 → S001) when omitted
         color:
           type: string
         material:

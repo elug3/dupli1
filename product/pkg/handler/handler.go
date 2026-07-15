@@ -18,6 +18,7 @@ type Handler struct {
 	svc          *service.ProductSearchService
 	couponSvc    *service.CouponService
 	inventorySvc *service.InventoryService
+	catalogSvc   *service.CatalogService
 	settings     settings.Response
 }
 
@@ -37,11 +38,12 @@ type HealthResponse struct {
 
 var searchFilters = []string{"category", "brand", "color", "size", "material", "status"}
 
-func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService) *Handler {
+func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
 	return &Handler{
 		svc:          svc,
 		couponSvc:    couponSvc,
 		inventorySvc: inventorySvc,
+		catalogSvc:   catalogSvc,
 		settings:     settings.NewResponse("product"),
 	}
 }

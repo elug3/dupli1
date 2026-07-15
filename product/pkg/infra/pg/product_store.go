@@ -105,6 +105,9 @@ func (s *ProductSearchStore) migrate() error {
 	if err := s.promoteSkuIDPrimaryKey(ctx); err != nil {
 		return err
 	}
+	if err := s.migrateSKUMasters(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -219,19 +222,10 @@ func (s *ProductSearchStore) Pool() *pgxpool.Pool {
 }
 
 func brandPrefix(brand string) string {
-	fields := strings.Fields(strings.TrimSpace(brand))
-	word := "PRD"
-	if len(fields) > 0 {
-		word = fields[0]
+	if code := domain.BrandCodeFromName(brand); code != "" {
+		return code
 	}
-	runes := []rune(strings.ToUpper(word))
-	if len(runes) > 3 {
-		runes = runes[:3]
-	}
-	for len(runes) < 3 {
-		runes = append(runes, 'X')
-	}
-	return string(runes)
+	return "PRD"
 }
 
 func (s *ProductSearchStore) nextProductID(ctx context.Context, brand string) (string, error) {
@@ -280,20 +274,27 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, brand, material, category, status, capacity, tags, created_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, status, capacity, tags, created_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
 	var createdAt time.Time
 	var tags pgtype.TextArray
 	var capacity string
+	var brandCode, styleCode *string
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
-		&p.Brand, &p.Material, &p.Category, &p.Status,
+		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category, &p.Status,
 		&capacity, &tags, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err
+	}
+	if brandCode != nil {
+		p.BrandCode = *brandCode
+	}
+	if styleCode != nil {
+		p.StyleCode = *styleCode
 	}
 	p.Capacity = capacity
 	p.Tags = scanTextArray(tags)
@@ -479,14 +480,20 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 	if p.Status == "" {
 		p.Status = "active"
 	}
+	domain.AssignProductCodes(&p)
+	if p.BrandCode != "" && p.StyleCode != "" {
+		if err := s.insertStyleForProduct(ctx, p.BrandCode, p.StyleCode, p.Name); err != nil {
+			return nil, err
+		}
+	}
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO products (id, name, description, price, brand, color, material, stock, category, status, image_urls, capacity, tags, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		`INSERT INTO products (id, name, description, price, brand, brand_code, style_code, color, material, stock, category, status, image_urls, capacity, tags, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description, p.Price,
-		p.Brand, p.Color, p.Material, p.Stock, p.Category, p.Status,
+		p.Brand, nullEmpty(p.BrandCode), nullEmpty(p.StyleCode), p.Color, p.Material, p.Stock, p.Category, p.Status,
 		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), p.CreatedBy,
 	).Scan(&createdAt)
 	if err != nil {

@@ -14,6 +14,15 @@ func (existing Variant) MergeUpdate(incoming Variant) Variant {
 	if incoming.Size != "" {
 		merged.Size = incoming.Size
 	}
+	if incoming.ColorCode != "" {
+		merged.ColorCode = incoming.ColorCode
+	}
+	if incoming.EditionCode != "" {
+		merged.EditionCode = incoming.EditionCode
+	}
+	if incoming.SizeCode != "" {
+		merged.SizeCode = incoming.SizeCode
+	}
 	if incoming.SellingPrice != 0 {
 		merged.SellingPrice = incoming.SellingPrice
 	}
