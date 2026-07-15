@@ -11,14 +11,16 @@ import (
 	"github.com/jackc/pgtype"
 )
 
-const variantSelectCols = `sku_id, sku, product_id, color, size, selling_price, price, status, image_urls, created_at`
+const variantSelectCols = `sku_id, sku, product_id, color, size, color_code, edition_code, size_code, selling_price, price, status, image_urls, created_at`
 
 func scanVariant(scan func(...any) error) (domain.Variant, error) {
 	var v domain.Variant
 	var createdAt time.Time
 	var imageURLs pgtype.TextArray
 	err := scan(
-		&v.SkuID, &v.SKU, &v.ProductID, &v.Color, &v.Size, &v.SellingPrice, &v.Price, &v.Status, &imageURLs, &createdAt,
+		&v.SkuID, &v.SKU, &v.ProductID, &v.Color, &v.Size,
+		&v.ColorCode, &v.EditionCode, &v.SizeCode,
+		&v.SellingPrice, &v.Price, &v.Status, &imageURLs, &createdAt,
 	)
 	if err != nil {
 		return domain.Variant{}, err
@@ -73,8 +75,18 @@ func (s *ProductSearchStore) GetVariantBySkuID(skuID string) (*domain.Variant, e
 	return &v, nil
 }
 
-func (s *ProductSearchStore) nextVariantSKU(ctx context.Context, productID, color, size string) (string, error) {
-	base := domain.BuildVariantSKUBase(productID, color, size)
+func (s *ProductSearchStore) parentSKUCodes(ctx context.Context, productID string) (brandCode, styleCode string, err error) {
+	err = s.pool.QueryRow(ctx,
+		`SELECT brand_code, style_code FROM products WHERE id = $1`, productID,
+	).Scan(&brandCode, &styleCode)
+	if err != nil {
+		return "", "", err
+	}
+	return brandCode, styleCode, nil
+}
+
+func (s *ProductSearchStore) nextVariantSKU(ctx context.Context, productID, brandCode, styleCode string, v *domain.Variant) (string, error) {
+	base := domain.ComposeVariantSKU(productID, brandCode, styleCode, v)
 
 	var exists bool
 	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM product_variants WHERE sku = $1)`, base).Scan(&exists)
@@ -83,6 +95,10 @@ func (s *ProductSearchStore) nextVariantSKU(ctx context.Context, productID, colo
 	}
 	if !exists {
 		return base, nil
+	}
+	// Deterministic luxury SKUs must not collide; duplicate attribute combo is an error.
+	if brandCode != "" && styleCode != "" && v.ColorCode != "" {
+		return "", fmt.Errorf("duplicate sku %s: same brand/style/color/edition/size already exists", base)
 	}
 	for i := 2; i < 1000; i++ {
 		candidate := fmt.Sprintf("%s-%d", base, i)
@@ -105,8 +121,31 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 	if v.Status == "" {
 		v.Status = "active"
 	}
+
+	brandCode, styleCode, err := s.parentSKUCodes(ctx, v.ProductID)
+	if err != nil {
+		return nil, fmt.Errorf("product not found: %w", err)
+	}
+
+	domain.ResolveVariantCodes(&v)
+	if v.ColorCode != "" {
+		if err := s.ensureColor(ctx, v.ColorCode, v.Color); err != nil {
+			return nil, err
+		}
+	}
+	if v.SizeCode != "" {
+		if err := s.ensureSize(ctx, v.SizeCode, v.Size); err != nil {
+			return nil, err
+		}
+	}
+	if v.EditionCode != "" {
+		if err := s.ensureEdition(ctx, v.EditionCode, v.EditionCode); err != nil {
+			return nil, err
+		}
+	}
+
 	if v.SKU == "" {
-		sku, err := s.nextVariantSKU(ctx, v.ProductID, v.Color, v.Size)
+		sku, err := s.nextVariantSKU(ctx, v.ProductID, brandCode, styleCode, &v)
 		if err != nil {
 			return nil, err
 		}
@@ -117,11 +156,12 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 	}
 
 	var createdAt time.Time
-	err := s.pool.QueryRow(ctx,
-		`INSERT INTO product_variants (sku_id, sku, product_id, color, size, selling_price, price, status, image_urls)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	err = s.pool.QueryRow(ctx,
+		`INSERT INTO product_variants (sku_id, sku, product_id, color, size, color_code, edition_code, size_code, selling_price, price, status, image_urls)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 RETURNING created_at`,
-		v.SkuID, v.SKU, v.ProductID, v.Color, v.Size, v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
+		v.SkuID, v.SKU, v.ProductID, v.Color, v.Size, v.ColorCode, v.EditionCode, v.SizeCode,
+		v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, err
@@ -130,17 +170,18 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 	return &v, nil
 }
 
-// UpdateVariant updates a variant by its (immutable) sku. sku_id is never
-// written here — it's read back via RETURNING so the response is always
-// correct regardless of what the caller's v.SkuID happened to be set to.
+// UpdateVariant updates a variant by its (immutable) sku. sku_id and sku are never
+// rewritten — codes may be filled when previously blank, but the human sku stays stable.
 func (s *ProductSearchStore) UpdateVariant(v domain.Variant) (*domain.Variant, error) {
 	var createdAt time.Time
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE product_variants
-		 SET color=$2, size=$3, selling_price=$4, price=$5, status=$6, image_urls=$7
+		 SET color=$2, size=$3, color_code=$4, edition_code=$5, size_code=$6,
+		     selling_price=$7, price=$8, status=$9, image_urls=$10
 		 WHERE sku=$1
 		 RETURNING sku_id, product_id, created_at`,
-		v.SKU, v.Color, v.Size, v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
+		v.SKU, v.Color, v.Size, v.ColorCode, v.EditionCode, v.SizeCode,
+		v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
 	).Scan(&v.SkuID, &v.ProductID, &createdAt)
 	if err != nil {
 		return nil, err

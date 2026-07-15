@@ -439,7 +439,7 @@ Routes below require `Authorization: Bearer <access_token>`. Product validates R
 | PUT | `/api/v1/coupons/{code}` | `coupon.update` |
 | DELETE | `/api/v1/coupons/{code}` | `coupon.delete` |
 
-Parent IDs use the brand prefix (e.g. `BOT-001`). Variants are sellable SKUs (e.g. `BOT-001-GRN`). See [product-variants-plan.md](product-variants-plan.md).
+Parent IDs use the brand prefix (e.g. `BOT-001`). New variants use the luxury SKU format `Brand_Style_Color[_Edition]_Size` (e.g. `BOT_CAS001_BLK_V_MED`) when the parent has `brandCode`/`styleCode`; see [product-sku-system.md](product-sku-system.md). Legacy `{parentId}-{color}` SKUs remain valid. Canonical inventory/order key is ULID `skuId`. See [product-variants-plan.md](product-variants-plan.md).
 
 ---
 

@@ -213,7 +213,7 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | `PUT` | `/api/v1/coupons/{code}` | `coupon.update` | Update coupon |
 | `DELETE` | `/api/v1/coupons/{code}` | `coupon.delete` | Delete coupon |
 
-Public search defaults to `status = active` on the **parent**. Query filters: `category`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** with inventory. See [product-variants-plan.md](product-variants-plan.md).
+Public search defaults to `status = active` on the **parent**. Query filters: `category`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** (human `sku` or canonical `skuId`) with inventory. Human SKU format: [product-sku-system.md](product-sku-system.md). See also [product-variants-plan.md](product-variants-plan.md).
 
 ### GET /api/v1/products/health
 
