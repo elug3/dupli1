@@ -195,7 +195,7 @@ Content-Type: application/merge-patch+json
 | Control | Global action gated |
 |---------|---------------------|
 | `maintenance_mode` | Storefront browse/checkout (manage-web stays up) |
-| `currency` | All price display / payment currency (default **`krw`**) |
+| `currency` | All price display / payment currency (default **`krw`** — primary users are Korean; English is supported) |
 
 ---
 
