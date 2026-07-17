@@ -280,7 +280,7 @@ resource "aws_ecs_task_definition" "product" {
         { name = "AUTH_JWKS_URL", value = "http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json" },
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
         { name = "S3_ENDPOINT", value = "https://s3.${var.aws_region}.amazonaws.com" },
-        { name = "S3_PUBLIC_ENDPOINT", value = "https://${aws_s3_bucket.product_images.bucket_regional_domain_name}" },
+        { name = "S3_PUBLIC_ENDPOINT", value = local.product_images_public_base },
         { name = "S3_BUCKET", value = aws_s3_bucket.product_images.id },
       ]
       secrets = [

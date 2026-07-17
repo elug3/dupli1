@@ -5,18 +5,19 @@ Dupli1 production runs on **ECS (EC2 launch type)** in `us-east-1`, fronted by a
 ## Architecture
 
 ```text
-Internet → Route53 (dupli1.com / www / manage.dupli1.com)
+Internet → Route53 (dupli1.com / www / manage.dupli1.com / images.dupli1.com)
         → ALB (HTTPS :443, HTTP :80)
              ├── manage.dupli1.com   → dupli1-manage-web (admin)
              ├── /api/*, /gateway/* → dupli1-proxy (nginx → Cloud Map)
              │     auth / product / order / cart / payment / notification
              └── /*                 → dupli1-web (storefront, bridge mode)
+        → CloudFront (images.dupli1.com) → private S3 product-images (OAC)
          EC2 ASG (ECS capacity provider) in private subnets
          NAT Gateway → ECR / Secrets Manager / CloudWatch
          RDS PostgreSQL (private)
-         S3 (product images)
 ```
 
+Product `imageUrls` use `S3_PUBLIC_ENDPOINT` (CloudFront / `images.dupli1.com`). Do not point browsers at the raw S3 bucket URL — see [product-images-browser-access.md](product-images-browser-access.md).
 IaC lives in [`infra/terraform/`](../infra/terraform/README.md).
 
 ## Database

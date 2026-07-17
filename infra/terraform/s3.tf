@@ -36,7 +36,7 @@ resource "aws_s3_bucket_ownership_controls" "product_images" {
 }
 
 # Bucket stays private (account Block Public Access). Product uploads via IAM
-# access keys; expose objects later via CloudFront OAC or the gateway if needed.
+# access keys; browsers read via CloudFront OAC (cloudfront_images.tf).
 
 resource "aws_iam_user" "product_s3" {
   name = "${local.name_prefix}-product-s3"
@@ -92,7 +92,7 @@ resource "aws_secretsmanager_secret_version" "product_s3" {
   secret_id = aws_secretsmanager_secret.product_s3.id
   secret_string = jsonencode({
     S3_ENDPOINT        = "https://s3.${var.aws_region}.amazonaws.com"
-    S3_PUBLIC_ENDPOINT = "https://${aws_s3_bucket.product_images.bucket_regional_domain_name}"
+    S3_PUBLIC_ENDPOINT = local.product_images_public_base
     S3_ACCESS_KEY      = aws_iam_access_key.product_s3.id
     S3_SECRET_KEY      = aws_iam_access_key.product_s3.secret
     S3_BUCKET          = aws_s3_bucket.product_images.id

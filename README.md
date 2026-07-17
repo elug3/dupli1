@@ -238,7 +238,8 @@ curl -X POST http://localhost:8080/api/v1/products/BOT-001/images \
 | `JWT_SECRET` | — | HS256 fallback when JWKS is unavailable |
 | `SERVER_HOST` | `localhost` | Listen host |
 | `SERVER_PORT` | `8080` | Listen port |
-| `S3_ENDPOINT` | — | MinIO/S3 endpoint URL |
+| `S3_ENDPOINT` | — | MinIO/S3 endpoint URL (uploads) |
+| `S3_PUBLIC_ENDPOINT` | — | Browser base for `imageUrls` (Compose: `http://localhost:8080/product-images`; AWS: CloudFront / `images.dupli1.com`) |
 | `S3_ACCESS_KEY` | — | S3 access key |
 | `S3_SECRET_KEY` | — | S3 secret key |
 | `S3_BUCKET` | `product-images` | Bucket name |
