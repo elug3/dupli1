@@ -11,6 +11,8 @@ Dupli1 is a Go microservice backend for a fashion bag marketplace. The repo cont
 - Docker Compose for local development
 - Terraform and GitHub Actions for AWS ECS deployment
 
+**Audience:** primary users are Korean; English is supported. Prefer Korean-friendly defaults (e.g. **KRW**) and regional assumptions unless a change explicitly targets another market. See [docs/current-state.md](docs/current-state.md#audience-and-locale).
+
 See [docs/current-state.md](docs/current-state.md) for the authoritative snapshot of what is implemented today. See [docs/service-layout.md](docs/service-layout.md) for directory and module layout.
 
 ## Documentation conventions

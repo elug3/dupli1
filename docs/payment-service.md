@@ -83,7 +83,7 @@ sequenceDiagram
 |-------|--------|
 | PG UI | **Stripe Checkout redirect** |
 | Card data on Dupli1 | **Never** |
-| Default currency | **`krw`** |
+| Default currency | **`krw`** (primary users are Korean; English is also supported — see [current-state.md](current-state.md#audience-and-locale)) |
 | Unpaid `pending` TTL | **5 minutes** → auto-cancel + release stock |
 | Inventory plan | **B** — reserve on checkout complete; **commit on `in_transit`** |
 | Payment → order | **`payment.succeeded` event** (not HTTP confirm from payment) |

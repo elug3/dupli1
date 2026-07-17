@@ -6,6 +6,12 @@ Authoritative snapshot of what is implemented in the Dupli1 repository today.
 
 Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx gateway. Local dev uses Docker Compose; production uses AWS ECS on EC2, ALB, and Amazon RDS PostgreSQL.
 
+### Audience and locale
+
+- **Primary users:** Korean shoppers and operators.
+- **English:** Supported for API docs, code, and UI/copy where bilingual or English-first surfaces exist.
+- **Defaults that follow from this:** payment and store currency default to **`krw`** (see [payment-service.md](payment-service.md) and [manager-settings-api.md](manager-settings-api.md)). Prefer Korean-friendly UX, copy, and regional assumptions (KRW, Korea-oriented shipping/ops) unless a change explicitly targets another market.
+
 | Area | Status |
 |------|--------|
 | Auth (login, JWT, fine-grained permissions) | Implemented |
