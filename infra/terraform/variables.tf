@@ -106,6 +106,24 @@ variable "acm_certificate_arn" {
   default     = "arn:aws:acm:us-east-1:845061289093:certificate/a5e612a6-8bec-4d02-8f98-cc8484aa2fc1"
 }
 
+variable "product_images_cdn_aliases" {
+  description = "Custom domain aliases for the product-images CloudFront distribution (e.g. images.dupli1.com). Empty uses the default *.cloudfront.net domain."
+  type        = list(string)
+  default     = ["images.dupli1.com"]
+}
+
+variable "product_images_cdn_certificate_arn" {
+  description = "ACM certificate ARN for product-images CDN aliases (must be in us-east-1). Defaults to acm_certificate_arn."
+  type        = string
+  default     = ""
+}
+
+variable "product_images_cdn_price_class" {
+  description = "CloudFront price class for product images (PriceClass_100 = NA/EU, cheaper)."
+  type        = string
+  default     = "PriceClass_100"
+}
+
 variable "route53_zone_id" {
   description = "Public Route53 hosted zone ID for dupli1.com."
   type        = string

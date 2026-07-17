@@ -15,6 +15,7 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 
 ### Still open (priority)
 
+- [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md))
 - [ ] **Server-side order/checkout pricing** — ignore client `unit_price_cents`; resolve from product
 - [ ] Inventory service token refresh in order bootstrap
 - [ ] NATS handler errors / outbox for payment→order events

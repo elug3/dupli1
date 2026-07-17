@@ -28,9 +28,19 @@ output "product_images_bucket" {
   value       = aws_s3_bucket.product_images.id
 }
 
+output "product_images_cdn_domain" {
+  description = "CloudFront domain name for product images."
+  value       = aws_cloudfront_distribution.product_images.domain_name
+}
+
+output "product_images_cdn_url" {
+  description = "Public HTTPS base for product image objects (custom alias or CloudFront domain). Set as S3_PUBLIC_ENDPOINT."
+  value       = local.product_images_public_base
+}
+
 output "product_images_public_base" {
-  description = "Public HTTPS base for product image objects."
-  value       = "https://${aws_s3_bucket.product_images.bucket_regional_domain_name}"
+  description = "Deprecated alias of product_images_cdn_url."
+  value       = local.product_images_public_base
 }
 
 output "rds_endpoint" {

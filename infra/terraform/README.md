@@ -9,7 +9,8 @@ Terraform provisions the production compute path on the existing VPC and RDS:
 | Route53 aliases | `dupli1.com` / `www` → ALB |
 | EC2 ASG (`t3.large`, default 2) | ECS container instances (awsvpc trunking) |
 | ECS capacity provider | EC2 launch type for backend services |
-| S3 | Product image bucket |
+| S3 | Private product-image bucket |
+| CloudFront + OAC | Public CDN for product images (`images.dupli1.com`) |
 | CloudWatch Logs | `/ecs/dupli1-*` log groups |
 | ECS services | auth, product, order, cart, payment, notification, proxy, web, manage-web, redis, nats |
 
@@ -65,6 +66,19 @@ Or let the script call `terraform apply` after deleting the old services.
 ## Images
 
 GitHub Actions (`.github/workflows/aws.yml`) builds and pushes to ECR (including `dupli1-cart` / `dupli1-payment`), then force-redeploys ECS services. Proxy uses `api/Dockerfile.ecs` (Cloud Map DNS).
+
+## Product images (CloudFront)
+
+The product-images bucket stays **private**. Browsers load objects via CloudFront Origin Access Control. After apply:
+
+```bash
+terraform output product_images_cdn_url
+# → https://images.dupli1.com  (or https://dxxxx.cloudfront.net)
+```
+
+`dupli1-product` gets `S3_PUBLIC_ENDPOINT` from that value (task env + Secrets Manager). See [docs/product-images-browser-access.md](../../docs/product-images-browser-access.md).
+
+If the ACM certificate does not include `images.dupli1.com`, either add the SAN or set `product_images_cdn_aliases = []` to use the default CloudFront domain.
 
 ## Gateway
 

@@ -15,3 +15,7 @@ ecs_asg_min_size           = 1
 ecs_asg_max_size           = 4
 desired_count              = 1
 image_tag                  = "latest"
+
+# Product images CDN (CloudFront + OAC). Requires ACM SAN or *.dupli1.com.
+# product_images_cdn_aliases = ["images.dupli1.com"]
+# product_images_cdn_aliases = []  # use *.cloudfront.net only

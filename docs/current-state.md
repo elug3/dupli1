@@ -125,7 +125,8 @@ See [service-layout.md](service-layout.md) for details.
 | PostgreSQL `orders` | order | `postgres-order:5435` |
 | PostgreSQL `cart` | cart | `postgres-cart:5436` |
 | PostgreSQL `payments` | payment | `postgres-payment:5437` |
-| MinIO `product-images` | product | `minio:9000` |
+| MinIO `product-images` | product (local) | `minio:9000` via gateway `/product-images/` |
+| S3 + CloudFront OAC | product (AWS) | `images.dupli1.com` — see [product-images-browser-access.md](product-images-browser-access.md) |
 | Redis | auth | `redis:6379` (in Compose) |
 | NATS | auth, order, payment, notification | `nats:4222` (in Compose) |
 
