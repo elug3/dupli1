@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/ports"
 )
 
 // CatalogStore is an in-memory ports.CatalogStore for tests.
@@ -17,19 +18,19 @@ type CatalogStore struct {
 	Editions map[string]domain.Edition
 
 	// Optional back-refs for delete-in-use checks (set by tests or product store).
-	ProductBrandStyles map[string]string // productID -> brandCode+"|"+styleCode
-	VariantColorCodes  map[string]string // sku -> colorCode
-	VariantSizeCodes   map[string]string // sku -> sizeCode
+	ProductBrandStyles  map[string]string // productID -> brandCode+"|"+styleCode
+	VariantColorCodes   map[string]string // sku -> colorCode
+	VariantSizeCodes    map[string]string // sku -> sizeCode
 	VariantEditionCodes map[string]string
 }
 
 func NewCatalogStore() *CatalogStore {
 	s := &CatalogStore{
-		Brands:   map[string]domain.Brand{},
-		Styles:   map[string]domain.Style{},
-		Colors:   map[string]domain.Color{},
-		Sizes:    map[string]domain.Size{},
-		Editions: map[string]domain.Edition{},
+		Brands:              map[string]domain.Brand{},
+		Styles:              map[string]domain.Style{},
+		Colors:              map[string]domain.Color{},
+		Sizes:               map[string]domain.Size{},
+		Editions:            map[string]domain.Edition{},
 		ProductBrandStyles:  map[string]string{},
 		VariantColorCodes:   map[string]string{},
 		VariantSizeCodes:    map[string]string{},
@@ -75,10 +76,10 @@ func (s *CatalogStore) CreateBrand(b domain.Brand) (*domain.Brand, error) {
 	b.Code = domain.NormalizeCode(b.Code)
 	b.Name = strings.TrimSpace(b.Name)
 	if !domain.ValidBrandCode(b.Code) {
-		return nil, fmt.Errorf("invalid brand code %q", b.Code)
+		return nil, ports.Invalid(fmt.Sprintf("invalid brand code %q", b.Code))
 	}
 	if b.Name == "" {
-		return nil, fmt.Errorf("name is required")
+		return nil, ports.Invalid("name is required")
 	}
 	if _, ok := s.Brands[b.Code]; ok {
 		return nil, domain.ErrMasterExists
@@ -95,7 +96,7 @@ func (s *CatalogStore) UpdateBrandName(code, name string) (*domain.Brand, error)
 		return nil, domain.ErrMasterNotFound
 	}
 	if name == "" {
-		return nil, fmt.Errorf("name is required")
+		return nil, ports.Invalid("name is required")
 	}
 	b.Name = name
 	s.Brands[code] = b
@@ -145,14 +146,17 @@ func (s *CatalogStore) CreateStyle(st domain.Style) (*domain.Style, error) {
 	st.BrandCode = domain.NormalizeCode(st.BrandCode)
 	st.Code = domain.NormalizeCode(st.Code)
 	st.Name = strings.TrimSpace(st.Name)
-	if _, ok := s.Brands[st.BrandCode]; !ok {
-		return nil, fmt.Errorf("%w: brand %s", domain.ErrMasterNotFound, st.BrandCode)
+	if !domain.ValidBrandCode(st.BrandCode) {
+		return nil, ports.Invalid(fmt.Sprintf("invalid brand code %q", st.BrandCode))
 	}
 	if !domain.ValidSegmentCode(st.Code) {
-		return nil, fmt.Errorf("invalid style code %q", st.Code)
+		return nil, ports.Invalid(fmt.Sprintf("invalid style code %q", st.Code))
 	}
 	if st.Name == "" {
-		return nil, fmt.Errorf("name is required")
+		return nil, ports.Invalid("name is required")
+	}
+	if _, ok := s.Brands[st.BrandCode]; !ok {
+		return nil, fmt.Errorf("%w: brand %s", domain.ErrMasterNotFound, st.BrandCode)
 	}
 	key := styleKey(st.BrandCode, st.Code)
 	if _, ok := s.Styles[key]; ok {
@@ -170,7 +174,7 @@ func (s *CatalogStore) UpdateStyleName(brandCode, code, name string) (*domain.St
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, fmt.Errorf("name is required")
+		return nil, ports.Invalid("name is required")
 	}
 	st.Name = name
 	s.Styles[key] = st
@@ -211,8 +215,11 @@ func (s *CatalogStore) GetColor(code string) (*domain.Color, error) {
 func (s *CatalogStore) CreateColor(c domain.Color) (*domain.Color, error) {
 	c.Code = domain.NormalizeCode(c.Code)
 	c.Name = strings.TrimSpace(c.Name)
-	if !domain.ValidSegmentCode(c.Code) || c.Name == "" {
-		return nil, fmt.Errorf("invalid color")
+	if !domain.ValidSegmentCode(c.Code) {
+		return nil, ports.Invalid(fmt.Sprintf("invalid color code %q", c.Code))
+	}
+	if c.Name == "" {
+		return nil, ports.Invalid("name is required")
 	}
 	if _, ok := s.Colors[c.Code]; ok {
 		return nil, domain.ErrMasterExists
@@ -229,7 +236,7 @@ func (s *CatalogStore) UpdateColorName(code, name string) (*domain.Color, error)
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, fmt.Errorf("name is required")
+		return nil, ports.Invalid("name is required")
 	}
 	c.Name = name
 	s.Colors[code] = c
@@ -270,8 +277,11 @@ func (s *CatalogStore) GetSize(code string) (*domain.Size, error) {
 func (s *CatalogStore) CreateSize(sz domain.Size) (*domain.Size, error) {
 	sz.Code = domain.NormalizeCode(sz.Code)
 	sz.Name = strings.TrimSpace(sz.Name)
-	if !domain.ValidSegmentCode(sz.Code) || sz.Name == "" {
-		return nil, fmt.Errorf("invalid size")
+	if !domain.ValidSegmentCode(sz.Code) {
+		return nil, ports.Invalid(fmt.Sprintf("invalid size code %q", sz.Code))
+	}
+	if sz.Name == "" {
+		return nil, ports.Invalid("name is required")
 	}
 	if _, ok := s.Sizes[sz.Code]; ok {
 		return nil, domain.ErrMasterExists
@@ -288,7 +298,7 @@ func (s *CatalogStore) UpdateSizeName(code, name string) (*domain.Size, error) {
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, fmt.Errorf("name is required")
+		return nil, ports.Invalid("name is required")
 	}
 	sz.Name = name
 	s.Sizes[code] = sz
@@ -329,8 +339,11 @@ func (s *CatalogStore) GetEdition(code string) (*domain.Edition, error) {
 func (s *CatalogStore) CreateEdition(e domain.Edition) (*domain.Edition, error) {
 	e.Code = domain.NormalizeCode(e.Code)
 	e.Name = strings.TrimSpace(e.Name)
-	if !domain.ValidSegmentCode(e.Code) || e.Name == "" {
-		return nil, fmt.Errorf("invalid edition")
+	if !domain.ValidSegmentCode(e.Code) {
+		return nil, ports.Invalid(fmt.Sprintf("invalid edition code %q", e.Code))
+	}
+	if e.Name == "" {
+		return nil, ports.Invalid("name is required")
 	}
 	if _, ok := s.Editions[e.Code]; ok {
 		return nil, domain.ErrMasterExists
@@ -347,7 +360,7 @@ func (s *CatalogStore) UpdateEditionName(code, name string) (*domain.Edition, er
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, fmt.Errorf("name is required")
+		return nil, ports.Invalid("name is required")
 	}
 	e.Name = name
 	s.Editions[code] = e
