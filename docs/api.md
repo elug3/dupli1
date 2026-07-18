@@ -430,6 +430,31 @@ Public PDP. No authentication required. Returns an active **parent** with `varia
 
 ---
 
+### `GET /api/v1/products/{id}/recommendations` (planned)
+
+Public related-product list for PDP. No authentication required. Returns ordered active **parent** cards (seed excluded). Algorithm: same-category content similarity + soft `view_count` boost — see [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
+
+**Query**
+| Param | Default | Notes |
+|-------|---------|-------|
+| `limit` | `8` | Clamped 1–24 |
+
+**Response `200`** (planned shape)
+
+```json
+{
+  "seedId": "BOT-001",
+  "items": [ /* parent list cards */ ]
+}
+```
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `404` | Seed product not found or not active |
+
+---
+
 ### Product CRUD (authenticated)
 
 Routes below require `Authorization: Bearer <access_token>`. Product validates RS256 tokens via JWKS (`AUTH_JWKS_URL`). Each route requires a specific permission (wildcards such as `product.*` also grant access).
