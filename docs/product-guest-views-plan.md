@@ -184,11 +184,13 @@ Config flags (product `options`):
 
 - `GUEST_COOKIE_NAME` (default `dupli1_guest`)
 - `GUEST_COOKIE_SECURE` / `GUEST_COOKIE_HTTP_ONLY` / `GUEST_COOKIE_MAX_AGE`
-- `PRODUCT_VIEWS_ENABLED` (default true) for kill-switch
+- `PRODUCT_VIEWS_ENABLED` (default true) for kill-switch — mirrored in `GET …/settings` as `features.product_views`
+
+Production ECS sets `GUEST_COOKIE_SECURE=true` on `dupli1-product`. Local Compose leaves Secure unset/false (HTTP).
 
 ## Privacy & security
 
-- Guest id is a random opaque token — treat like a session secret (HttpOnly, Secure).
+- Guest id is a Crockford ULID (26 chars). Invalid / overlong cookie values are rejected and reminted.
 - No IP logging required for uniqueness; do not store IP in `product_views` for v1.
 - Cookie is not evidence of consent for marketing cookies; it is strictly functional (cart/views). Confirm with product/legal if a banner is required in your jurisdiction.
 - Rate-limit is not required for correctness; optional later to blunt view inflation from scripted cookie rotation (each new cookie can inflate counts — accept for v1 or add soft per-IP caps later).

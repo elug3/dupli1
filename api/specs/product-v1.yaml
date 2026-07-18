@@ -73,7 +73,11 @@ paths:
       tags: [Products]
       summary: Get public product detail
       operationId: productPublicGet
-      description: Returns an active parent style with variants, availableColors, and availableSizes.
+      description: |
+        Returns an active parent style with variants, availableColors, and availableSizes.
+        Ensures a `dupli1_guest` HttpOnly cookie and records a unique view (one count per
+        guest × product). Response includes public `viewCount`. View-store failures do not
+        fail the PDP.
       parameters:
         - $ref: '#/components/parameters/ProductId'
       responses:
@@ -83,6 +87,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PublicProduct'
+          headers:
+            Set-Cookie:
+              description: Set when minting or replacing an invalid `dupli1_guest` cookie
+              schema:
+                type: string
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -135,6 +144,37 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/{id}/recommendations:
+    get:
+      tags: [Products]
+      summary: Related products for PDP
+      operationId: productRecommendations
+      description: |
+        Returns ordered active parent product cards related to the seed id (seed excluded).
+        Ranking uses same-category content similarity (brand, material, tags, price band)
+        plus a soft `viewCount` boost. See docs/product-recommendations.md.
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 24
+            default: 8
+          description: Max items to return (clamped 1–24)
+      responses:
+        '200':
+          description: Recommendation list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/products:
     get:
@@ -612,6 +652,10 @@ components:
           type: array
           items:
             type: string
+        viewCount:
+          type: integer
+          format: int64
+          description: Unique guest PDP views (denormalized). Public on PDP and recommendations.
         createdAt:
           type: string
           format: date-time
@@ -773,6 +817,19 @@ components:
           type: integer
         results:
           type: array
+          items:
+            $ref: '#/components/schemas/PublicProduct'
+
+    RecommendationsResponse:
+      type: object
+      required: [seedId, items]
+      properties:
+        seedId:
+          type: string
+          description: Echo of the path product id
+        items:
+          type: array
+          description: Ordered related parent cards (never null; empty when none)
           items:
             $ref: '#/components/schemas/PublicProduct'
 

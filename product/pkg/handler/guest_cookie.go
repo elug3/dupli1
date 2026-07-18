@@ -4,7 +4,9 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/oklog/ulid/v2"
 )
@@ -12,6 +14,7 @@ import (
 const (
 	defaultGuestCookieName   = "dupli1_guest"
 	defaultGuestCookieMaxAge = 365 * 24 * 60 * 60 // 1 year
+	maxGuestIDLen            = 26                 // Crockford ULID string length
 )
 
 // GuestCookieConfig controls the anonymous guest identity cookie.
@@ -56,14 +59,30 @@ func GuestCookieConfigFromEnv() GuestCookieConfig {
 	return cfg
 }
 
-// ensureGuestID returns the guest id from the cookie, minting one when absent.
+// ValidGuestID reports whether id is a Crockford ULID (26 chars) suitable as a guest cookie.
+func ValidGuestID(id string) bool {
+	id = strings.TrimSpace(id)
+	if len(id) != maxGuestIDLen {
+		return false
+	}
+	for _, r := range id {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			continue
+		}
+		return false
+	}
+	_, err := ulid.Parse(id)
+	return err == nil
+}
+
+// ensureGuestID returns the guest id from the cookie, minting one when absent or invalid.
 // When minted is true, the caller should Set-Cookie on the response.
 func (h *Handler) ensureGuestID(r *http.Request) (guestID string, minted bool) {
 	cfg := h.guestCookie
 	if cfg.Name == "" {
 		cfg = defaultGuestCookieConfig()
 	}
-	if c, err := r.Cookie(cfg.Name); err == nil && c.Value != "" {
+	if c, err := r.Cookie(cfg.Name); err == nil && ValidGuestID(c.Value) {
 		return c.Value, false
 	}
 	return ulid.Make().String(), true

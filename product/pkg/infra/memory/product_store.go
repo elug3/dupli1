@@ -314,25 +314,26 @@ func (s *ProductStore) DeleteProduct(id string) error {
 }
 
 // RecordUniqueView implements ports.ProductViewStore.
-func (s *ProductStore) RecordUniqueView(guestID, productID string) (bool, error) {
+func (s *ProductStore) RecordUniqueView(guestID, productID string) (bool, int64, error) {
 	if guestID == "" || productID == "" {
-		return false, fmt.Errorf("guest id and product id are required")
+		return false, 0, fmt.Errorf("guest id and product id are required")
 	}
 	if s.views == nil {
 		s.views = make(map[string]struct{})
 	}
 	key := guestID + "\x00" + productID
-	if _, ok := s.views[key]; ok {
-		return false, nil
-	}
 	for i := range s.Products {
-		if s.Products[i].ID == productID {
-			s.views[key] = struct{}{}
-			s.Products[i].ViewCount++
-			return true, nil
+		if s.Products[i].ID != productID {
+			continue
 		}
+		if _, ok := s.views[key]; ok {
+			return false, s.Products[i].ViewCount, nil
+		}
+		s.views[key] = struct{}{}
+		s.Products[i].ViewCount++
+		return true, s.Products[i].ViewCount, nil
 	}
-	return false, fmt.Errorf("product %s: %w", productID, ports.ErrNotFound)
+	return false, 0, fmt.Errorf("product %s: %w", productID, ports.ErrNotFound)
 }
 
 func (s *ProductStore) nextVariantSKU(productID, brandCode, styleCode string, v *domain.Variant) (string, error) {

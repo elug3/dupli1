@@ -5,7 +5,8 @@ import (
 )
 
 // BuildSettings returns the public, non-secret settings payload for the product service.
-func BuildSettings(cfg Config) settings.Response {
+// productViewsEnabled should mirror GuestCookieConfig.Enabled / PRODUCT_VIEWS_ENABLED.
+func BuildSettings(cfg Config, productViewsEnabled bool) settings.Response {
 	resp := settings.NewResponse("product")
 	resp.Auth = settings.ConsumerAuth(cfg.JWKSURL, cfg.JWTSecret)
 	resp.Storage = settings.StorageMode(cfg.DatabaseConnString)
@@ -13,7 +14,7 @@ func BuildSettings(cfg Config) settings.Response {
 		"s3_images":        cfg.S3Endpoint != "",
 		"nats_events":      cfg.NATSURL != "",
 		"inventory_merged": true,
-		"product_views":    true,
+		"product_views":    productViewsEnabled,
 		"recommendations":  true,
 	}
 	if cfg.S3Bucket != "" {

@@ -250,14 +250,13 @@ func (h *Handler) recordProductView(w http.ResponseWriter, r *http.Request, prod
 	if minted {
 		h.setGuestCookie(w, guestID)
 	}
-	inserted, err := h.viewStore.RecordUniqueView(guestID, product.ID)
+	_, viewCount, err := h.viewStore.RecordUniqueView(guestID, product.ID)
 	if err != nil {
 		log.Printf("product view: record %s for guest: %v", product.ID, err)
 		return
 	}
-	if inserted {
-		product.ViewCount++
-	}
+	// Prefer the post-write counter so concurrent first views do not under-report.
+	product.ViewCount = viewCount
 }
 
 func (h *Handler) PublicGetRecommendations(w http.ResponseWriter, r *http.Request) {
