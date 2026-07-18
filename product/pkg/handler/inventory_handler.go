@@ -2,10 +2,8 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
-	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
 )
 
@@ -172,15 +170,5 @@ func (h *Handler) ReleaseReservation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) respondInventoryError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, ports.ErrInventoryItemNotFound):
-		h.respondError(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, service.ErrInvalidSKU),
-		errors.Is(err, service.ErrInvalidQuantity),
-		errors.Is(err, service.ErrInsufficientStock),
-		errors.Is(err, service.ErrReservationClosed):
-		h.respondError(w, http.StatusBadRequest, err.Error())
-	default:
-		h.respondError(w, http.StatusInternalServerError, err.Error())
-	}
+	h.respondServiceError(w, err)
 }

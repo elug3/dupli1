@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgtype"
 )
@@ -40,7 +41,7 @@ func (s *ProductSearchStore) ListVariants(productID string) ([]domain.Variant, e
 		productID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("list variants", err)
 	}
 	defer rows.Close()
 
@@ -48,11 +49,11 @@ func (s *ProductSearchStore) ListVariants(productID string) ([]domain.Variant, e
 	for rows.Next() {
 		v, err := scanVariant(rows.Scan)
 		if err != nil {
-			return nil, err
+			return nil, wrapDB("list variants", err)
 		}
 		results = append(results, v)
 	}
-	return results, rows.Err()
+	return results, wrapDB("list variants", rows.Err())
 }
 
 func (s *ProductSearchStore) GetVariant(sku string) (*domain.Variant, error) {
@@ -61,7 +62,7 @@ func (s *ProductSearchStore) GetVariant(sku string) (*domain.Variant, error) {
 	)
 	v, err := scanVariant(row.Scan)
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("get variant", err)
 	}
 	return &v, nil
 }
@@ -72,7 +73,7 @@ func (s *ProductSearchStore) GetVariantBySkuID(skuID string) (*domain.Variant, e
 	)
 	v, err := scanVariant(row.Scan)
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("get variant by sku id", err)
 	}
 	return &v, nil
 }
@@ -83,7 +84,7 @@ func (s *ProductSearchStore) parentSKUCodes(ctx context.Context, productID strin
 		`SELECT brand_code, style_code FROM products WHERE id = $1`, productID,
 	).Scan(&bc, &sc)
 	if err != nil {
-		return "", "", err
+		return "", "", wrapDB("parent sku codes", err)
 	}
 	if bc != nil {
 		brandCode = *bc
@@ -100,31 +101,31 @@ func (s *ProductSearchStore) nextVariantSKU(ctx context.Context, productID, bran
 	var exists bool
 	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM product_variants WHERE sku = $1)`, base).Scan(&exists)
 	if err != nil {
-		return "", err
+		return "", wrapDB("next variant sku", err)
 	}
 	if !exists {
 		return base, nil
 	}
 	if brandCode != "" && styleCode != "" && v.ColorCode != "" {
-		return "", fmt.Errorf("duplicate sku %s: same brand/style/color/edition/size already exists", base)
+		return "", ports.Conflict(fmt.Sprintf("duplicate sku %s: same brand/style/color/edition/size already exists", base))
 	}
 	for i := 2; i < 1000; i++ {
 		candidate := fmt.Sprintf("%s-%d", base, i)
 		err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM product_variants WHERE sku = $1)`, candidate).Scan(&exists)
 		if err != nil {
-			return "", err
+			return "", wrapDB("next variant sku", err)
 		}
 		if !exists {
 			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("generate variant sku: exhausted candidates for %s", productID)
+	return "", ports.Invalid(fmt.Sprintf("generate variant sku: exhausted candidates for %s", productID))
 }
 
 func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, error) {
 	ctx := context.Background()
 	if v.ProductID == "" {
-		return nil, fmt.Errorf("productId is required")
+		return nil, ports.Invalid("productId is required")
 	}
 	if v.Status == "" {
 		v.Status = "active"
@@ -132,7 +133,7 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 
 	brandCode, styleCode, err := s.parentSKUCodes(ctx, v.ProductID)
 	if err != nil {
-		return nil, fmt.Errorf("product not found: %w", err)
+		return nil, err
 	}
 	if brandCode == "" || styleCode == "" {
 		return nil, fmt.Errorf("%w: parent product missing brandCode/styleCode", domain.ErrMissingSKUCodes)
@@ -182,7 +183,7 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 			return nil, fmt.Errorf("%w: %s", domain.ErrMasterNotFound, pgErr.Message)
 		}
-		return nil, err
+		return nil, wrapDB("create variant", err)
 	}
 	v.CreatedAt = createdAt.Format(time.RFC3339)
 	return &v, nil
@@ -203,7 +204,7 @@ func (s *ProductSearchStore) UpdateVariant(v domain.Variant) (*domain.Variant, e
 		v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
 	).Scan(&v.SkuID, &v.ProductID, &createdAt)
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("update variant", err)
 	}
 	v.CreatedAt = createdAt.Format(time.RFC3339)
 	return &v, nil
@@ -214,12 +215,12 @@ func (s *ProductSearchStore) DeleteVariant(sku string) error {
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			return fmt.Errorf("cannot delete variant %s: stock exists for it in inventory", sku)
+			return ports.Conflict(fmt.Sprintf("cannot delete variant %s: stock exists for it in inventory", sku))
 		}
-		return err
+		return wrapDB("delete variant", err)
 	}
 	if cmd.RowsAffected() == 0 {
-		return fmt.Errorf("variant not found: %s", sku)
+		return fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 	}
 	return nil
 }

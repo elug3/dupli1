@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -164,7 +163,7 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 
 	results, total, err := h.svc.SearchProducts(filter, public)
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.respondServiceError(w, err)
 		return
 	}
 	if results == nil {
@@ -213,7 +212,7 @@ func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	product, err := h.svc.GetPublicProduct(id)
 	if err != nil {
-		h.respondError(w, http.StatusNotFound, "product not found")
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusOK, product)
@@ -231,7 +230,7 @@ func (h *Handler) PublicGetVariant(w http.ResponseWriter, r *http.Request) {
 	}
 	variant, err := h.svc.GetPublicVariant(sku)
 	if err != nil {
-		h.respondError(w, http.StatusNotFound, "variant not found")
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusOK, variant)
@@ -249,7 +248,7 @@ func (h *Handler) PublicGetVariantBySkuID(w http.ResponseWriter, r *http.Request
 	}
 	variant, err := h.svc.GetPublicVariantBySkuID(skuID)
 	if err != nil {
-		h.respondError(w, http.StatusNotFound, "variant not found")
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusOK, variant)
@@ -270,7 +269,7 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := h.svc.CreateProduct(p)
 	if err != nil {
-		h.respondProductWriteError(w, err)
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusCreated, created)
@@ -290,7 +289,7 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	p.ID = id
 	updated, err := h.svc.UpdateProduct(p)
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusOK, updated)
@@ -303,7 +302,7 @@ func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DeleteProduct(id); err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.respondServiceError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -337,7 +336,7 @@ func (h *Handler) CreateCoupon(w http.ResponseWriter, r *http.Request) {
 		Active:      body.Active,
 	})
 	if err != nil {
-		h.respondError(w, http.StatusConflict, err.Error())
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusCreated, created)
@@ -361,7 +360,7 @@ func (h *Handler) UpdateCoupon(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, err := h.couponSvc.Update(code, body.Discount, body.Description, body.Expires, body.Active)
 	if err != nil {
-		h.respondError(w, http.StatusNotFound, err.Error())
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusOK, updated)
@@ -374,7 +373,7 @@ func (h *Handler) DeleteCoupon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.couponSvc.Delete(code); err != nil {
-		h.respondError(w, http.StatusNotFound, err.Error())
+		h.respondServiceError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -399,7 +398,7 @@ func (h *Handler) UploadProductImage(w http.ResponseWriter, r *http.Request) {
 	}
 	product, err := h.svc.UploadImage(r.Context(), id, file, header.Size, contentType)
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusCreated, product)
@@ -418,7 +417,7 @@ func (h *Handler) CreateVariant(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := h.svc.CreateVariant(id, v)
 	if err != nil {
-		h.respondProductWriteError(w, err)
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusCreated, created)
@@ -438,7 +437,7 @@ func (h *Handler) UpdateVariant(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, err := h.svc.UpdateVariant(id, sku, v)
 	if err != nil {
-		h.respondError(w, http.StatusNotFound, err.Error())
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusOK, updated)
@@ -452,7 +451,7 @@ func (h *Handler) DeleteVariant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DeleteVariant(id, sku); err != nil {
-		h.respondError(w, http.StatusNotFound, err.Error())
+		h.respondServiceError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -478,7 +477,7 @@ func (h *Handler) UploadVariantImage(w http.ResponseWriter, r *http.Request) {
 	}
 	variant, err := h.svc.UploadVariantImage(r.Context(), id, sku, file, header.Size, contentType)
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusCreated, variant)
@@ -553,15 +552,4 @@ func (h *Handler) respondJSON(w http.ResponseWriter, status int, data interface{
 
 func (h *Handler) respondError(w http.ResponseWriter, status int, message string) {
 	h.respondJSON(w, status, ErrorResponse{Error: message, Code: status})
-}
-
-func (h *Handler) respondProductWriteError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, domain.ErrMissingSKUCodes):
-		h.respondError(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, domain.ErrMasterNotFound):
-		h.respondError(w, http.StatusNotFound, err.Error())
-	default:
-		h.respondError(w, http.StatusBadRequest, err.Error())
-	}
 }

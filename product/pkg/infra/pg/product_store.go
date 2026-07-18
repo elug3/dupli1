@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
@@ -325,7 +326,7 @@ func (s *ProductSearchStore) enrich(products []domain.Product, includeVariants b
 		toTextArray(ids),
 	)
 	if err != nil {
-		return err
+		return wrapDB("enrich products", err)
 	}
 	defer rows.Close()
 
@@ -333,12 +334,12 @@ func (s *ProductSearchStore) enrich(products []domain.Product, includeVariants b
 	for rows.Next() {
 		v, err := scanVariant(rows.Scan)
 		if err != nil {
-			return err
+			return wrapDB("enrich products", err)
 		}
 		byProduct[v.ProductID] = append(byProduct[v.ProductID], v)
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return wrapDB("enrich products", err)
 	}
 
 	for i := range products {
@@ -353,7 +354,7 @@ func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.
 	countQuery := "SELECT COUNT(*) FROM products p WHERE 1=1" + where
 	var total int
 	if err := s.pool.QueryRow(context.Background(), countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, err
+		return nil, 0, wrapDB("search products", err)
 	}
 
 	query := "SELECT " + parentSelectCols + " FROM products p WHERE 1=1" + where
@@ -371,7 +372,7 @@ func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.
 
 	rows, err := s.pool.Query(context.Background(), query, args...)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, wrapDB("search products", err)
 	}
 	defer rows.Close()
 
@@ -379,12 +380,12 @@ func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.
 	for rows.Next() {
 		p, err := scanParent(rows.Scan)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, wrapDB("search products", err)
 		}
 		results = append(results, p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, err
+		return nil, 0, wrapDB("search products", err)
 	}
 	if err := s.enrich(results, false); err != nil {
 		return nil, 0, err
@@ -477,7 +478,7 @@ func (s *ProductSearchStore) GetActiveProduct(id string) (*domain.Product, error
 	)
 	p, err := scanParent(row.Scan)
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("get active product", err)
 	}
 	variants, err := s.ListVariants(id)
 	if err != nil {
@@ -501,7 +502,7 @@ func (s *ProductSearchStore) GetProduct(id string) (*domain.Product, error) {
 	)
 	p, err := scanParent(row.Scan)
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("get product", err)
 	}
 	variants, err := s.ListVariants(id)
 	if err != nil {
@@ -544,7 +545,7 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), p.CreatedBy,
 	).Scan(&createdAt)
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("create product", err)
 	}
 	p.CreatedAt = createdAt.Format(time.RFC3339)
 
@@ -588,7 +589,7 @@ func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, e
 		p.Capacity, toTextArray(p.Tags),
 	).Scan(&createdAt)
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("update product", err)
 	}
 	return s.GetProduct(p.ID)
 }
@@ -597,7 +598,7 @@ func (s *ProductSearchStore) DeleteProduct(id string) error {
 	ctx := context.Background()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("delete product: begin tx: %w", err)
+		return wrapDB("delete product: begin tx", err)
 	}
 	defer tx.Rollback(ctx)
 
@@ -611,12 +612,19 @@ func (s *ProductSearchStore) DeleteProduct(id string) error {
 		 WHERE sku_id IN (SELECT sku_id FROM product_variants WHERE product_id = $1)`,
 		id,
 	); err != nil {
-		return fmt.Errorf("delete product stock: %w", err)
+		return wrapDB("delete product stock", err)
 	}
 
-	if _, err := tx.Exec(ctx, `DELETE FROM products WHERE id = $1`, id); err != nil {
-		return fmt.Errorf("delete product: %w", err)
+	tag, err := tx.Exec(ctx, `DELETE FROM products WHERE id = $1`, id)
+	if err != nil {
+		return wrapDB("delete product", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("product %s: %w", id, ports.ErrNotFound)
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return wrapDB("delete product: commit", err)
+	}
+	return nil
 }

@@ -118,10 +118,10 @@ func (s *ProductSearchService) GetPublicVariantBySkuID(skuID string) (*domain.Va
 
 func (s *ProductSearchService) checkPublicVariant(v *domain.Variant) (*domain.Variant, error) {
 	if v.Status != "active" {
-		return nil, fmt.Errorf("variant not found")
+		return nil, fmt.Errorf("variant: %w", ports.ErrNotFound)
 	}
 	if _, err := s.store.GetActiveProduct(v.ProductID); err != nil {
-		return nil, fmt.Errorf("variant not found")
+		return nil, fmt.Errorf("variant: %w", ports.ErrNotFound)
 	}
 	return v, nil
 }
@@ -173,7 +173,7 @@ func (s *ProductSearchService) CreateVariant(productID string, v domain.Variant)
 		return nil, fmt.Errorf("store not initialized")
 	}
 	if _, err := s.store.GetProduct(productID); err != nil {
-		return nil, fmt.Errorf("product not found: %w", err)
+		return nil, err
 	}
 	v.ProductID = productID
 	created, err := s.store.CreateVariant(v)
@@ -197,7 +197,7 @@ func (s *ProductSearchService) UpdateVariant(productID, sku string, v domain.Var
 		return nil, err
 	}
 	if existing.ProductID != productID {
-		return nil, fmt.Errorf("variant not found")
+		return nil, fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 	}
 	merged := existing.MergeUpdate(v)
 	merged.SKU = sku
@@ -220,7 +220,7 @@ func (s *ProductSearchService) DeleteVariant(productID, sku string) error {
 		return err
 	}
 	if existing.ProductID != productID {
-		return fmt.Errorf("variant not found")
+		return fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 	}
 	parent, _ := s.store.GetProduct(productID)
 	if err := s.store.DeleteVariant(sku); err != nil {
@@ -233,7 +233,7 @@ func (s *ProductSearchService) DeleteVariant(productID, sku string) error {
 func (s *ProductSearchService) UploadImage(ctx context.Context, productID string, r io.Reader, size int64, contentType string) (*domain.Product, error) {
 	p, err := s.store.GetProduct(productID)
 	if err != nil {
-		return nil, fmt.Errorf("product not found: %w", err)
+		return nil, err
 	}
 	sku, err := defaultVariantSKU(p)
 	if err != nil {
@@ -252,10 +252,10 @@ func (s *ProductSearchService) UploadVariantImage(ctx context.Context, productID
 	}
 	v, err := s.store.GetVariant(sku)
 	if err != nil {
-		return nil, fmt.Errorf("variant not found: %w", err)
+		return nil, err
 	}
 	if v.ProductID != productID {
-		return nil, fmt.Errorf("variant not found")
+		return nil, fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 	}
 	objectKey := productID + "/" + sku + "/" + uuid.New().String()
 	url, err := s.imageStore.Upload(ctx, objectKey, r, size, contentType)
@@ -276,7 +276,7 @@ func (s *ProductSearchService) UploadVariantImage(ctx context.Context, productID
 
 func defaultVariantSKU(p *domain.Product) (string, error) {
 	if p == nil || len(p.Variants) == 0 {
-		return "", fmt.Errorf("product has no variants")
+		return "", ports.Invalid("product has no variants")
 	}
 	for _, v := range p.Variants {
 		if v.SKU == p.ID {

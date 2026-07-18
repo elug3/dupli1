@@ -20,7 +20,8 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 - [ ] Inventory service token refresh in order bootstrap
 - [ ] NATS handler errors / outbox for payment→order events
 - [ ] Batch cart/product APIs (`?sku_ids=`); Redis catalog cache
-- [ ] Plumb request `context` through product PG stores; sanitize 500 responses
+- [ ] Plumb request `context` through product PG stores
+- [x] Sanitize product 500 responses (error wrapping) — see [product-error-wrapping.md](product-error-wrapping.md); auth/order/cart/payment still leak `err.Error()` on some 500s
 - [ ] Consolidate duplicated `authjwt` into `shared/`
 
 ## Product API

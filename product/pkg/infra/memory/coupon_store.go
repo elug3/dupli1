@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/ports"
 )
 
 type CouponStore struct {
@@ -38,13 +39,13 @@ func (s *CouponStore) List() ([]domain.Coupon, error) {
 func (s *CouponStore) Create(c domain.Coupon) error {
 	code := strings.ToUpper(strings.TrimSpace(c.Code))
 	if code == "" {
-		return fmt.Errorf("code is required")
+		return ports.Invalid("code is required")
 	}
 	c.Code = code
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.coupons[code]; exists {
-		return fmt.Errorf("coupon already exists")
+		return ports.Conflict("coupon already exists")
 	}
 	s.coupons[code] = c
 	return nil
@@ -56,7 +57,7 @@ func (s *CouponStore) Update(code string, discount *float64, description, expire
 	defer s.mu.Unlock()
 	c, exists := s.coupons[code]
 	if !exists {
-		return nil, fmt.Errorf("coupon not found")
+		return nil, fmt.Errorf("coupon %s: %w", code, ports.ErrNotFound)
 	}
 	if discount != nil {
 		c.Discount = *discount
@@ -79,7 +80,7 @@ func (s *CouponStore) Delete(code string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.coupons[code]; !exists {
-		return fmt.Errorf("coupon not found")
+		return fmt.Errorf("coupon %s: %w", code, ports.ErrNotFound)
 	}
 	delete(s.coupons, code)
 	return nil
