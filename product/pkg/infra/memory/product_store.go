@@ -14,6 +14,8 @@ type ProductStore struct {
 	Products []domain.Product
 	Variants []domain.Variant
 	Catalog  *CatalogStore
+	// views keys are guestID + "\x00" + productID for unique PDP views.
+	views map[string]struct{}
 }
 
 func NewProductStore() *ProductStore {
@@ -299,10 +301,38 @@ func (s *ProductStore) DeleteProduct(id string) error {
 				}
 			}
 			s.Variants = kept
+			prefix := "\x00" + id
+			for k := range s.views {
+				if strings.HasSuffix(k, prefix) {
+					delete(s.views, k)
+				}
+			}
 			return nil
 		}
 	}
 	return fmt.Errorf("product %s: %w", id, ports.ErrNotFound)
+}
+
+// RecordUniqueView implements ports.ProductViewStore.
+func (s *ProductStore) RecordUniqueView(guestID, productID string) (bool, error) {
+	if guestID == "" || productID == "" {
+		return false, fmt.Errorf("guest id and product id are required")
+	}
+	if s.views == nil {
+		s.views = make(map[string]struct{})
+	}
+	key := guestID + "\x00" + productID
+	if _, ok := s.views[key]; ok {
+		return false, nil
+	}
+	for i := range s.Products {
+		if s.Products[i].ID == productID {
+			s.views[key] = struct{}{}
+			s.Products[i].ViewCount++
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("product %s: %w", productID, ports.ErrNotFound)
 }
 
 func (s *ProductStore) nextVariantSKU(productID, brandCode, styleCode string, v *domain.Variant) (string, error) {

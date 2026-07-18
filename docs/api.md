@@ -419,14 +419,40 @@ Redeem a coupon code. No authentication required.
 
 Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Omits `cost`. Cart lines use each variant's `sku` (inventory key).
 
-**Planned:** unique view counting via `dupli1_guest` cookie and public `viewCount` — see [product-guest-views-plan.md](product-guest-views-plan.md).
+On success, the handler ensures a `dupli1_guest` cookie and records a unique view (one count per guest × product). Response includes public `viewCount`. View-store failures are logged and do not fail the PDP — see [product-guest-views-plan.md](product-guest-views-plan.md).
 
-**Response `200`** — parent product object with variants
+**Response `200`** — parent product object with variants (includes `viewCount`)
 
 **Errors**
 | Status | Meaning |
 |--------|---------|
 | `404` | Product not found or not active |
+
+---
+
+### `GET /api/v1/products/{id}/recommendations`
+
+Public related-product list for PDP. No authentication required. Returns ordered active **parent** cards (seed excluded). Algorithm: same-category content similarity + soft `view_count` boost — see [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
+
+**Query**
+| Param | Default | Notes |
+|-------|---------|-------|
+| `limit` | `8` | Clamped 1–24 |
+
+**Response `200`**
+
+```json
+{
+  "seedId": "BOT-001",
+  "items": [ /* parent list cards */ ]
+}
+```
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `404` | Seed product not found or not active |
+| `400` | Invalid `limit` |
 
 ---
 
