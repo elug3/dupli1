@@ -1,7 +1,7 @@
 # Plan: Guest Session Cookie + Unique Product View Counter
 
-**Status:** Planning (not implemented).  
-**Related:** [cart-service.md](cart-service.md) (guest cart phase 2), [current-state.md](current-state.md) (analytics not started), [api.md](api.md) (`GET /api/v1/products/{id}`), [product-views-recommendations-plan.md](product-views-recommendations-plan.md) (recommendations consume `view_count` / co-view).
+**Status:** Phase 1 implemented (guest cookie + unique PDP views).  
+**Related:** [cart-service.md](cart-service.md) (guest cart phase 2), [current-state.md](current-state.md), [api.md](api.md) (`GET /api/v1/products/{id}`), [product-views-recommendations-plan.md](product-views-recommendations-plan.md) (recommendations consume `view_count` / co-view).
 
 ## Goals
 
@@ -240,9 +240,9 @@ Unique views unlock popularity ranking and optional co-view boosts for PDP “Yo
 
 ## Acceptance criteria (phase 1)
 
-- [ ] First anonymous PDP load sets `dupli1_guest` and increments `viewCount` by 1
-- [ ] Reload / second GET with same cookie does not increment
-- [ ] Different cookie increments again
-- [ ] Product delete cascades view rows
-- [ ] View-store failure still returns product `200`
-- [ ] Compose + tests cover happy path without requiring Redis
+- [x] First anonymous PDP load sets `dupli1_guest` and increments `viewCount` by 1
+- [x] Reload / second GET with same cookie does not increment
+- [x] Different cookie increments again
+- [x] Product delete cascades view rows
+- [x] View-store failure still returns product `200`
+- [x] Compose + tests cover happy path without requiring Redis

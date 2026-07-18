@@ -44,8 +44,10 @@ type Product struct {
 	Status      string   `json:"status"` // "active" | "draft" | "archived"
 	Capacity    string   `json:"capacity,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
-	CreatedAt   string   `json:"createdAt"`
-	CreatedBy   string   `json:"createdBy,omitempty"`
+	// ViewCount is unique guest PDP views (denormalized). Public on PDP and recs.
+	ViewCount int64 `json:"viewCount"`
+	CreatedAt string `json:"createdAt"`
+	CreatedBy string `json:"createdBy,omitempty"`
 
 	// Summary fields derived from variants (not stored on parent).
 	// SellingPriceFrom is the official/display price for the cheapest active variant.

@@ -115,6 +115,33 @@ func (s *ProductSearchStore) migrate() error {
 	if err := s.migrateSKUMasters(ctx); err != nil {
 		return err
 	}
+	if err := s.migrateProductViews(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ProductSearchStore) migrateProductViews(ctx context.Context) error {
+	if _, err := s.pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS product_views (
+			guest_id      TEXT NOT NULL,
+			product_id    TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (guest_id, product_id)
+		)
+	`); err != nil {
+		return fmt.Errorf("migrate product_views: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx,
+		`CREATE INDEX IF NOT EXISTS product_views_product_id_idx ON product_views (product_id)`,
+	); err != nil {
+		return fmt.Errorf("migrate product_views index: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS view_count BIGINT NOT NULL DEFAULT 0`,
+	); err != nil {
+		return fmt.Errorf("migrate products.view_count: %w", err)
+	}
 	return nil
 }
 
@@ -281,7 +308,7 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, status, capacity, tags, created_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, status, capacity, tags, view_count, created_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -292,7 +319,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
 		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category, &p.Status,
-		&capacity, &tags, &createdAt, &p.CreatedBy,
+		&capacity, &tags, &p.ViewCount, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err

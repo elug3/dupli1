@@ -286,13 +286,11 @@ Response `200`:
 
 ### GET /api/v1/products/{id}
 
-Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. `cost` is omitted. Cart/checkout use each variant's `sku`.
+Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. `cost` is omitted. Cart/checkout use each variant's `sku`. Sets `dupli1_guest` when absent and increments unique `viewCount` — [product-guest-views-plan.md](product-guest-views-plan.md).
 
-**Planned:** unique `viewCount` via guest cookie — [product-guest-views-plan.md](product-guest-views-plan.md).
+### GET /api/v1/products/{id}/recommendations
 
-### GET /api/v1/products/{id}/recommendations (planned)
-
-Public related parents for PDP (`limit` default 8). Content similarity + `view_count` boost — [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
+Public related parents for PDP (`limit` default 8, max 24). Content similarity + `view_count` boost — [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
 
 ### GET /api/v1/variants/{sku}
 

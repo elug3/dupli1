@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
@@ -92,6 +93,44 @@ func (s *ProductSearchService) GetPublicProduct(id string) (*domain.Product, err
 		return nil, fmt.Errorf("store not initialized")
 	}
 	return s.store.GetActiveProduct(id)
+}
+
+const (
+	recommendDefaultLimit = 8
+	recommendMaxLimit     = 24
+	recommendCandidateCap = 200
+)
+
+// Recommend returns related active parent products for a public PDP seed.
+func (s *ProductSearchService) Recommend(seedID string, limit int) ([]domain.Product, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("store not initialized")
+	}
+	if limit <= 0 {
+		limit = recommendDefaultLimit
+	}
+	if limit > recommendMaxLimit {
+		limit = recommendMaxLimit
+	}
+	seed, err := s.store.GetActiveProduct(seedID)
+	if err != nil {
+		return nil, err
+	}
+	filter := map[string]string{
+		"status": "active",
+		"limit":  strconv.Itoa(recommendCandidateCap),
+	}
+	if seed.Category != "" {
+		filter["category"] = seed.Category
+	}
+	candidates, _, err := s.store.SearchProducts(filter)
+	if err != nil {
+		return nil, err
+	}
+	// Seed from GetActiveProduct includes variants; strip for fair scoring vs list cards.
+	seedCard := *seed
+	seedCard.Variants = nil
+	return domain.RankRecommendations(seedCard, candidates, limit), nil
 }
 
 func (s *ProductSearchService) GetPublicVariant(sku string) (*domain.Variant, error) {

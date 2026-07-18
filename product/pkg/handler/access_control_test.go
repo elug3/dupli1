@@ -45,7 +45,7 @@ func newAccessControlMux(store *memory.ProductStore) *http.ServeMux {
 	validator := authjwt.NewHMACValidator(accessControlSecret)
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	h := handler.NewHandler(svc, couponSvc, nil, service.NewCatalogService(store.Catalog))
+	h := handler.NewHandler(svc, couponSvc, nil, service.NewCatalogService(store.Catalog)).WithViewStore(store)
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)

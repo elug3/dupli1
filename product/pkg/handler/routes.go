@@ -29,14 +29,17 @@ const (
 	RouteInventoryReservationRelease = "/api/v1/inventory/reservations/{id}/release"
 
 	// Catalog master data (code → name dictionaries).
-	RouteCatalogBrands       = "/api/v1/catalog/brands"
-	RouteCatalogBrandByCode  = "/api/v1/catalog/brands/{code}"
-	RouteCatalogStyles       = "/api/v1/catalog/brands/{code}/styles"
-	RouteCatalogStyleByCode  = "/api/v1/catalog/brands/{code}/styles/{styleCode}"
-	RouteCatalogColors       = "/api/v1/catalog/colors"
-	RouteCatalogColorByCode  = "/api/v1/catalog/colors/{code}"
-	RouteCatalogSizes        = "/api/v1/catalog/sizes"
-	RouteCatalogSizeByCode   = "/api/v1/catalog/sizes/{code}"
-	RouteCatalogEditions     = "/api/v1/catalog/editions"
+	RouteCatalogBrands        = "/api/v1/catalog/brands"
+	RouteCatalogBrandByCode   = "/api/v1/catalog/brands/{code}"
+	RouteCatalogStyles        = "/api/v1/catalog/brands/{code}/styles"
+	RouteCatalogStyleByCode   = "/api/v1/catalog/brands/{code}/styles/{styleCode}"
+	RouteCatalogColors        = "/api/v1/catalog/colors"
+	RouteCatalogColorByCode   = "/api/v1/catalog/colors/{code}"
+	RouteCatalogSizes         = "/api/v1/catalog/sizes"
+	RouteCatalogSizeByCode    = "/api/v1/catalog/sizes/{code}"
+	RouteCatalogEditions      = "/api/v1/catalog/editions"
 	RouteCatalogEditionByCode = "/api/v1/catalog/editions/{code}"
+
+	// Public recommendations for PDP.
+	RouteProductRecommendations = "/api/v1/products/{id}/recommendations"
 )

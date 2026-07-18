@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/elug3/dupli1/product/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
@@ -20,6 +22,8 @@ type Handler struct {
 	couponSvc    *service.CouponService
 	inventorySvc *service.InventoryService
 	catalogSvc   *service.CatalogService
+	viewStore    ports.ProductViewStore
+	guestCookie  GuestCookieConfig
 	settings     settings.Response
 }
 
@@ -28,6 +32,11 @@ type SearchResponse struct {
 	Limit   int         `json:"limit"`
 	Offset  int         `json:"offset"`
 	Results interface{} `json:"results"`
+}
+
+type RecommendationsResponse struct {
+	SeedID string           `json:"seedId"`
+	Items  []domain.Product `json:"items"`
 }
 
 type ErrorResponse struct {
@@ -43,11 +52,12 @@ var searchFilters = []string{"category", "brand", "color", "size", "material", "
 
 func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
 	return &Handler{
-		svc:          svc,
-		couponSvc:    couponSvc,
+		svc:         svc,
+		couponSvc:   couponSvc,
 		inventorySvc: inventorySvc,
-		catalogSvc:   catalogSvc,
-		settings:     settings.NewResponse("product"),
+		catalogSvc:  catalogSvc,
+		guestCookie: defaultGuestCookieConfig(),
+		settings:    settings.NewResponse("product"),
 	}
 }
 
@@ -57,9 +67,22 @@ func (h *Handler) WithSettings(s settings.Response) *Handler {
 	return h
 }
 
+// WithViewStore enables unique guest PDP view recording.
+func (h *Handler) WithViewStore(store ports.ProductViewStore) *Handler {
+	h.viewStore = store
+	return h
+}
+
+// WithGuestCookie configures the anonymous guest cookie used for unique views.
+func (h *Handler) WithGuestCookie(cfg GuestCookieConfig) *Handler {
+	h.guestCookie = cfg
+	return h
+}
+
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+RouteHealth, h.Health)
 	mux.HandleFunc("GET "+RouteSettings, h.Settings)
+	mux.HandleFunc("GET "+RouteProductRecommendations, h.PublicGetRecommendations)
 	mux.HandleFunc("GET "+RoutePublicProduct, h.PublicGetProduct)
 	mux.HandleFunc("GET "+RoutePublicVariant, h.PublicGetVariant)
 	mux.HandleFunc("GET "+RoutePublicVariantBySkuID, h.PublicGetVariantBySkuID)
@@ -215,7 +238,56 @@ func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {
 		h.respondServiceError(w, err)
 		return
 	}
+	h.recordProductView(w, r, product)
 	h.respondJSON(w, http.StatusOK, product)
+}
+
+func (h *Handler) recordProductView(w http.ResponseWriter, r *http.Request, product *domain.Product) {
+	if product == nil || h.viewStore == nil || !h.guestCookie.Enabled {
+		return
+	}
+	guestID, minted := h.ensureGuestID(r)
+	if minted {
+		h.setGuestCookie(w, guestID)
+	}
+	inserted, err := h.viewStore.RecordUniqueView(guestID, product.ID)
+	if err != nil {
+		log.Printf("product view: record %s for guest: %v", product.ID, err)
+		return
+	}
+	if inserted {
+		product.ViewCount++
+	}
+}
+
+func (h *Handler) PublicGetRecommendations(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		h.respondError(w, http.StatusBadRequest, "missing product id")
+		return
+	}
+	limit := 8
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			h.respondError(w, http.StatusBadRequest, "invalid limit")
+			return
+		}
+		limit = n
+	}
+	items, err := h.svc.Recommend(id, limit)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Product{}
+	}
+	h.respondJSON(w, http.StatusOK, RecommendationsResponse{SeedID: id, Items: items})
 }
 
 func (h *Handler) PublicGetVariant(w http.ResponseWriter, r *http.Request) {

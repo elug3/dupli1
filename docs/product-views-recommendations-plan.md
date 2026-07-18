@@ -1,6 +1,6 @@
 # Plan: Product View Counter + Simple Recommendations
 
-**Status:** Planning (not implemented).  
+**Status:** Phase 0–1 implemented in `dupli1-product` (unique views + content/popularity recommendations). Phase 2 co-view boost not started.  
 **Depends on:** [product-guest-views-plan.md](product-guest-views-plan.md) (guest cookie + unique `viewCount`).  
 **Related:** [current-state.md](current-state.md), [api.md](api.md), [TODO.md](TODO.md).
 
@@ -305,16 +305,16 @@ Implement [product-guest-views-plan.md](product-guest-views-plan.md) phase 1:
 
 ### Views (from guest-views plan)
 
-- [ ] Unique `viewCount` on PDP; reload does not double-count
+- [x] Unique `viewCount` on PDP; reload does not double-count
 
 ### Recommendations phase 1
 
-- [ ] `GET /api/v1/products/{id}/recommendations` returns ordered active parents
-- [ ] Seed excluded; drafts excluded; same category only
-- [ ] Ranking matches documented weights on fixtures
-- [ ] Works with all-zero `view_count`
-- [ ] `limit` clamped; invalid seed → 404
-- [ ] No new infra (Postgres + existing product module only)
+- [x] `GET /api/v1/products/{id}/recommendations` returns ordered active parents
+- [x] Seed excluded; drafts excluded; same category only
+- [x] Ranking matches documented weights on fixtures
+- [x] Works with all-zero `view_count`
+- [x] `limit` clamped; invalid seed → 404
+- [x] No new infra (Postgres + existing product module only)
 
 ## Doc / TODO updates when implementing
 
