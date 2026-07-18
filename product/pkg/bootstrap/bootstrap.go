@@ -82,10 +82,11 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	catalogStore := pg.NewCatalogStore(store.Pool())
 	catalogSvc := service.NewCatalogService(catalogStore)
 
+	guestCookie := handler.GuestCookieConfigFromEnv()
 	h := handler.NewHandler(svc, couponSvc, inventorySvc, catalogSvc).
-		WithSettings(BuildSettings(cfg)).
+		WithSettings(BuildSettings(cfg, guestCookie.Enabled)).
 		WithViewStore(store).
-		WithGuestCookie(handler.GuestCookieConfigFromEnv())
+		WithGuestCookie(guestCookie)
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)

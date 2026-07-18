@@ -10,7 +10,7 @@ How PDP “You may also like” works in **`dupli1-product`**.
 
 Recommendations live **inside the product service** (no separate microservice, Neo4j, Redis, or ML). Given a seed parent product, the API returns other **active parents in the same category**, ranked by fixed weights on catalog attributes plus a soft `view_count` boost.
 
-Weights are **not stored in Postgres**. They are constants in Go (`product/pkg/domain/recommend.go`). Postgres holds the inputs: brand, material, category, tags, price summary, and `view_count`.
+Weights are **not stored in Postgres**. They are constants in Go (`product/pkg/domain/recommend.go`). Postgres holds the inputs: brand, material, category, tags, price summary, and `view_count`. Guest ids accepted for views are Crockford ULIDs only (invalid cookies are reminted).
 
 ## API
 

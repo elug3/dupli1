@@ -282,6 +282,7 @@ resource "aws_ecs_task_definition" "product" {
         { name = "S3_ENDPOINT", value = "https://s3.${var.aws_region}.amazonaws.com" },
         { name = "S3_PUBLIC_ENDPOINT", value = local.product_images_public_base },
         { name = "S3_BUCKET", value = aws_s3_bucket.product_images.id },
+        { name = "GUEST_COOKIE_SECURE", value = "true" },
       ]
       secrets = [
         {

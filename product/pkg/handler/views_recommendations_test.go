@@ -15,8 +15,8 @@ import (
 
 type failingViewStore struct{}
 
-func (failingViewStore) RecordUniqueView(guestID, productID string) (bool, error) {
-	return false, errors.New("view store down")
+func (failingViewStore) RecordUniqueView(guestID, productID string) (bool, int64, error) {
+	return false, 0, errors.New("view store down")
 }
 
 func TestPublicGetProductUniqueViewCookie(t *testing.T) {
@@ -77,6 +77,35 @@ func TestPublicGetProductUniqueViewCookie(t *testing.T) {
 	}
 	if p3.ViewCount != 2 {
 		t.Fatalf("different guest: want viewCount=2, got %d", p3.ViewCount)
+	}
+}
+
+func TestPublicGetProductInvalidGuestCookieReminted(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Mini Bag", Status: "active"},
+	}
+	store.Variants = []domain.Variant{
+		{SKU: "BOT-001", ProductID: "BOT-001", Price: 100, Status: "active"},
+	}
+	mux := newMux(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/BOT-001", nil)
+	req.AddCookie(&http.Cookie{Name: "dupli1_guest", Value: "not-a-ulid!!!!!!!!!"})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rec.Code)
+	}
+	var guest *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "dupli1_guest" {
+			guest = c
+			break
+		}
+	}
+	if guest == nil || !handler.ValidGuestID(guest.Value) {
+		t.Fatalf("expected reminted ULID guest cookie, got %#v", guest)
 	}
 }
 
