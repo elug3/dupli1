@@ -26,7 +26,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 | H1 | Order create: save succeeds, publish failure can orphan reservations on client retry | Open — outbox or compensate |
 | H2 | Order bootstrap fetches inventory service token once; never refreshes after expiry | Open |
 | H3 | NATS subscribers discard handler errors (`_ = handler(...)`) — at-most-once, silent loss | Open — queue group + retry/DLQ |
-| H4 | Internal `err.Error()` returned on many 500 responses (auth, product, order/cart/payment) | Open |
+| H4 | Internal `err.Error()` returned on many 500 responses (auth, product, order/cart/payment) | **Partial** — product sanitizes 500s via error wrapping; see [product-error-wrapping.md](product-error-wrapping.md). Other services still open |
 | H5 | Product PG migrations ignore some `Exec` errors during migrate/seed | Open |
 | H6 | Product stores use `context.Background()` on request-path queries | Open — plumb request context |
 | H7 | `requireAuth` no-ops when JWT validator is nil (order/cart/payment); product fails closed | Open |
@@ -104,6 +104,6 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 4. Product **filter indexes** + request-context plumbing; slim list DTOs
 5. Batch cart/product APIs (`?sku_ids=`); Redis cache for public catalog
 6. Consolidate `authjwt` + shared HTTP client helpers; fail-closed auth bootstrap
-7. Sanitize 500 responses; check migrate `Exec` errors
+7. Product: sanitize 500 responses (**done** — [product-error-wrapping.md](product-error-wrapping.md)); other services still need the same; check migrate `Exec` errors
 
 See also: [TODO.md](TODO.md), [current-state.md](current-state.md), [aws-cost-optimization.md](aws-cost-optimization.md).

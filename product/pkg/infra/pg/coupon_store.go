@@ -2,12 +2,11 @@ package pg
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
-	"github.com/jackc/pgx/v4"
+	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
@@ -56,7 +55,7 @@ func (s *CouponStore) List() ([]domain.Coupon, error) {
 		SELECT code, discount, description, expires, active FROM coupons ORDER BY code
 	`)
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("list coupons", err)
 	}
 	defer rows.Close()
 
@@ -64,17 +63,17 @@ func (s *CouponStore) List() ([]domain.Coupon, error) {
 	for rows.Next() {
 		var c domain.Coupon
 		if err := rows.Scan(&c.Code, &c.Discount, &c.Description, &c.Expires, &c.Active); err != nil {
-			return nil, err
+			return nil, wrapDB("list coupons", err)
 		}
 		coupons = append(coupons, c)
 	}
-	return coupons, rows.Err()
+	return coupons, wrapDB("list coupons", rows.Err())
 }
 
 func (s *CouponStore) Create(c domain.Coupon) error {
 	code := strings.ToUpper(strings.TrimSpace(c.Code))
 	if code == "" {
-		return fmt.Errorf("code is required")
+		return ports.Invalid("code is required")
 	}
 	c.Code = code
 	_, err := s.pool.Exec(context.Background(), `
@@ -82,10 +81,10 @@ func (s *CouponStore) Create(c domain.Coupon) error {
 		VALUES ($1, $2, $3, $4, $5)
 	`, c.Code, c.Discount, c.Description, c.Expires, c.Active)
 	if err != nil {
-		if strings.Contains(err.Error(), "duplicate key") {
-			return fmt.Errorf("coupon already exists")
+		if isUniqueViolation(err) {
+			return ports.Conflict("coupon already exists")
 		}
-		return err
+		return wrapDB("create coupon", err)
 	}
 	return nil
 }
@@ -112,7 +111,7 @@ func (s *CouponStore) Update(code string, discount *float64, description, expire
 		UPDATE coupons SET discount = $2, description = $3, expires = $4, active = $5 WHERE code = $1
 	`, current.Code, current.Discount, current.Description, current.Expires, current.Active)
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("update coupon", err)
 	}
 	return current, nil
 }
@@ -121,10 +120,10 @@ func (s *CouponStore) Delete(code string) error {
 	code = strings.ToUpper(strings.TrimSpace(code))
 	tag, err := s.pool.Exec(context.Background(), `DELETE FROM coupons WHERE code = $1`, code)
 	if err != nil {
-		return err
+		return wrapDB("delete coupon", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("coupon not found")
+		return fmt.Errorf("coupon %s: %w", code, ports.ErrNotFound)
 	}
 	return nil
 }
@@ -143,11 +142,8 @@ func (s *CouponStore) getCoupon(code string) (*domain.Coupon, error) {
 	err := s.pool.QueryRow(context.Background(), `
 		SELECT code, discount, description, expires, active FROM coupons WHERE code = $1
 	`, code).Scan(&c.Code, &c.Discount, &c.Description, &c.Expires, &c.Active)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("coupon not found")
-	}
 	if err != nil {
-		return nil, err
+		return nil, wrapDB("get coupon", err)
 	}
 	return &c, nil
 }

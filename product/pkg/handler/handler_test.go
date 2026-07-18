@@ -430,8 +430,8 @@ func TestUploadImageNoStore(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("want 500, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "image store not configured") {
-		t.Errorf("want 'image store not configured' in body, got: %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "internal error") {
+		t.Errorf("want sanitized 'internal error' in body, got: %s", rec.Body.String())
 	}
 }
 

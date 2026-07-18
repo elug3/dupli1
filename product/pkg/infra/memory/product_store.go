@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/ports"
 )
 
 // ProductStore is an in-memory implementation of ports.ProductStore, for use in tests.
@@ -179,7 +180,7 @@ func (s *ProductStore) GetProduct(id string) (*domain.Product, error) {
 			return &out, nil
 		}
 	}
-	return nil, fmt.Errorf("product not found: %s", id)
+	return nil, fmt.Errorf("product %s: %w", id, ports.ErrNotFound)
 }
 
 func (s *ProductStore) GetActiveProduct(id string) (*domain.Product, error) {
@@ -188,7 +189,7 @@ func (s *ProductStore) GetActiveProduct(id string) (*domain.Product, error) {
 		return nil, err
 	}
 	if p.Status != "active" {
-		return nil, fmt.Errorf("product not found: %s", id)
+		return nil, fmt.Errorf("product %s: %w", id, ports.ErrNotFound)
 	}
 	active := make([]domain.Variant, 0, len(p.Variants))
 	for _, v := range p.Variants {
@@ -284,7 +285,7 @@ func (s *ProductStore) UpdateProduct(p domain.Product) (*domain.Product, error) 
 			return s.GetProduct(p.ID)
 		}
 	}
-	return nil, fmt.Errorf("product not found: %s", p.ID)
+	return nil, fmt.Errorf("product %s: %w", p.ID, ports.ErrNotFound)
 }
 
 func (s *ProductStore) DeleteProduct(id string) error {
@@ -301,7 +302,7 @@ func (s *ProductStore) DeleteProduct(id string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("product not found: %s", id)
+	return fmt.Errorf("product %s: %w", id, ports.ErrNotFound)
 }
 
 func (s *ProductStore) nextVariantSKU(productID, brandCode, styleCode string, v *domain.Variant) (string, error) {
@@ -319,7 +320,7 @@ func (s *ProductStore) nextVariantSKU(productID, brandCode, styleCode string, v 
 			return candidate, nil
 		}
 		if brandCode != "" && styleCode != "" && v != nil && v.ColorCode != "" {
-			return "", fmt.Errorf("duplicate sku %s: same brand/style/color/edition/size already exists", base)
+			return "", ports.Conflict(fmt.Sprintf("duplicate sku %s: same brand/style/color/edition/size already exists", base))
 		}
 		candidate = fmt.Sprintf("%s-%d", base, i+1)
 	}
@@ -336,7 +337,7 @@ func (s *ProductStore) GetVariant(sku string) (*domain.Variant, error) {
 			return &out, nil
 		}
 	}
-	return nil, fmt.Errorf("variant not found: %s", sku)
+	return nil, fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 }
 
 func (s *ProductStore) GetVariantBySkuID(skuID string) (*domain.Variant, error) {
@@ -346,12 +347,12 @@ func (s *ProductStore) GetVariantBySkuID(skuID string) (*domain.Variant, error) 
 			return &out, nil
 		}
 	}
-	return nil, fmt.Errorf("variant not found: %s", skuID)
+	return nil, fmt.Errorf("variant %s: %w", skuID, ports.ErrNotFound)
 }
 
 func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) {
 	if v.ProductID == "" {
-		return nil, fmt.Errorf("productId is required")
+		return nil, ports.Invalid("productId is required")
 	}
 	var brandCode, styleCode string
 	found := false
@@ -363,7 +364,7 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 		}
 	}
 	if !found {
-		return nil, fmt.Errorf("product not found: %s", v.ProductID)
+		return nil, fmt.Errorf("product %s: %w", v.ProductID, ports.ErrNotFound)
 	}
 	if brandCode == "" || styleCode == "" {
 		return nil, fmt.Errorf("%w: parent product missing brandCode/styleCode", domain.ErrMissingSKUCodes)
@@ -408,13 +409,13 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 	}
 	for _, existing := range s.Variants {
 		if existing.SKU == v.SKU {
-			return nil, fmt.Errorf("variant already exists: %s", v.SKU)
+			return nil, ports.Conflict(fmt.Sprintf("variant already exists: %s", v.SKU))
 		}
 		if existing.SkuID == v.SkuID {
-			return nil, fmt.Errorf("variant already exists: %s", v.SkuID)
+			return nil, ports.Conflict(fmt.Sprintf("variant already exists: %s", v.SkuID))
 		}
 		if existing.ProductID == v.ProductID && existing.Color == v.Color && existing.Size == v.Size {
-			return nil, fmt.Errorf("variant option already exists")
+			return nil, ports.Conflict("variant option already exists")
 		}
 	}
 	s.Variants = append(s.Variants, v)
@@ -438,7 +439,7 @@ func (s *ProductStore) UpdateVariant(v domain.Variant) (*domain.Variant, error) 
 			return &v, nil
 		}
 	}
-	return nil, fmt.Errorf("variant not found: %s", v.SKU)
+	return nil, fmt.Errorf("variant %s: %w", v.SKU, ports.ErrNotFound)
 }
 
 func (s *ProductStore) DeleteVariant(sku string) error {
@@ -448,5 +449,5 @@ func (s *ProductStore) DeleteVariant(sku string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("variant not found: %s", sku)
+	return fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 }
