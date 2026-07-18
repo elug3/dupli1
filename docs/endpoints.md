@@ -288,6 +288,12 @@ Response `200`:
 
 Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. `cost` is omitted. Cart/checkout use each variant's `sku`.
 
+**Planned:** unique `viewCount` via guest cookie — [product-guest-views-plan.md](product-guest-views-plan.md).
+
+### GET /api/v1/products/{id}/recommendations (planned)
+
+Public related parents for PDP (`limit` default 8). Content similarity + `view_count` boost — [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
+
 ### GET /api/v1/variants/{sku}
 
 Public variant lookup by SKU. Returns `404` when the variant or parent product is not active. Used by the cart service for price validation.
