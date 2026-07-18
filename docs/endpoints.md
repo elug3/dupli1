@@ -290,7 +290,7 @@ Public PDP: parent plus `variants[]` (active only), `availableColors`, `availabl
 
 ### GET /api/v1/products/{id}/recommendations
 
-Public related parents for PDP (`limit` default 8, max 24). Content similarity + `view_count` boost — [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
+Public related parents for PDP (`limit` default 8, max 24). Content similarity + `view_count` boost — [product-recommendations.md](product-recommendations.md).
 
 ### GET /api/v1/variants/{sku}
 

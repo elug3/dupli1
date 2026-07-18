@@ -29,7 +29,7 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 - [x] **Parent + variants** — implemented; see [product-variants-plan.md](product-variants-plan.md). Remaining: inventory `inStock` enrichment on PDP, drop legacy parent `color`/`stock`/`imageUrls` columns, merge pre-existing duplicate color products.
 - [ ] **Auth-aware `GET /api/v1/products/{id}`** — managers should see drafts/cost on PDP without a separate `/manage` path (optional Bearer, same pattern as list search).
 - [x] **Guest session cookie + unique product view counter** — implemented; see [product-guest-views-plan.md](product-guest-views-plan.md). Browser `dupli1_guest` cookie; exact unique views per parent product on public PDP (`viewCount`).
-- [x] **Simple PDP recommendations** — implemented; see [product-views-recommendations-plan.md](product-views-recommendations-plan.md). `GET /api/v1/products/{id}/recommendations`; content similarity + `view_count` boost. Co-view phase 2 still open.
+- [x] **Simple PDP recommendations** — implemented; see [product-recommendations.md](product-recommendations.md). `GET /api/v1/products/{id}/recommendations`; content similarity + `view_count` boost. Co-view phase 2 still open ([product-views-recommendations-plan.md](product-views-recommendations-plan.md)).
 
 ### Found in review (2026-07-08, size/color variants)
 

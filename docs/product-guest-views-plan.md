@@ -1,7 +1,7 @@
 # Plan: Guest Session Cookie + Unique Product View Counter
 
 **Status:** Phase 1 implemented (guest cookie + unique PDP views).  
-**Related:** [cart-service.md](cart-service.md) (guest cart phase 2), [current-state.md](current-state.md), [api.md](api.md) (`GET /api/v1/products/{id}`), [product-views-recommendations-plan.md](product-views-recommendations-plan.md) (recommendations consume `view_count` / co-view).
+**Related:** [cart-service.md](cart-service.md) (guest cart phase 2), [current-state.md](current-state.md), [api.md](api.md) (`GET /api/v1/products/{id}`), [product-recommendations.md](product-recommendations.md) (recommendations consume `view_count` / co-view).
 
 ## Goals
 
@@ -217,7 +217,7 @@ Config flags (product `options`):
 
 ### Downstream — Recommendations
 
-Unique views unlock popularity ranking and optional co-view boosts for PDP “You may also like”. See [product-views-recommendations-plan.md](product-views-recommendations-plan.md) (phase 0 = this plan’s phase 1).
+Unique views unlock popularity ranking and optional co-view boosts for PDP “You may also like”. See [product-recommendations.md](product-recommendations.md) and [product-views-recommendations-plan.md](product-views-recommendations-plan.md) (phase 0 = this plan’s phase 1).
 
 ## Frontend notes (`dupli1-web`)
 

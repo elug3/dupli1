@@ -432,7 +432,7 @@ On success, the handler ensures a `dupli1_guest` cookie and records a unique vie
 
 ### `GET /api/v1/products/{id}/recommendations`
 
-Public related-product list for PDP. No authentication required. Returns ordered active **parent** cards (seed excluded). Algorithm: same-category content similarity + soft `view_count` boost — see [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
+Public related-product list for PDP. No authentication required. Returns ordered active **parent** cards (seed excluded). Algorithm: same-category content similarity + soft `view_count` boost — see [product-recommendations.md](product-recommendations.md).
 
 **Query**
 | Param | Default | Notes |
