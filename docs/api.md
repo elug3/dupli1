@@ -157,7 +157,9 @@ Authenticate and receive a refresh token.
 |--------|---------|
 | `400` | Missing or malformed body |
 | `401` | Invalid credentials |
-| `403` | Account locked or deactivated |
+| `403` | Account locked (customers/managers after 5 failed attempts) or deactivated |
+
+**Lockout:** after **5** consecutive failed logins, `customer` and manager-tier accounts set `locked_at` and further logins return `403`. **Admin** and **owner** accounts are never locked (failed attempts do not set `locked_at`; a stale lock is cleared on the next login attempt). See [permissions.md](permissions.md).
 
 ---
 

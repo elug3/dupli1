@@ -88,7 +88,7 @@ Response `200`:
 { "refresh_token": "<token>" }
 ```
 
-Errors: `400` bad request, `401` invalid credentials.
+Errors: `400` bad request, `401` invalid credentials, `403` locked (customers/managers after 5 failures) or deactivated. **Admin and owner are never locked.**
 
 ### POST /api/v1/auth/logout
 

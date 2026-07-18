@@ -36,12 +36,34 @@ func NewUser(id, email, password, accountType string, perms ...string) (*User, e
 }
 
 // IsLocked reports whether the account is currently locked.
+// Admin and owner accounts are never considered locked (see IsLockExempt).
 func (u *User) IsLocked() bool {
+	if u == nil || u.IsLockExempt() {
+		return false
+	}
 	return u.LockedAt != nil
 }
 
-// Lock sets LockedAt to now.
+// IsLockExempt reports whether failed-login lockout must not apply.
+// Owners (`*` permission) and admin-tier operators (account_type admin with
+// admin-level permissions) cannot be locked out of manage-web.
+func (u *User) IsLockExempt() bool {
+	if u == nil {
+		return false
+	}
+	switch UserClass(u) {
+	case ClassAdmin, ClassOwner:
+		return true
+	default:
+		return false
+	}
+}
+
+// Lock sets LockedAt to now. No-op for lock-exempt admin/owner accounts.
 func (u *User) Lock() {
+	if u == nil || u.IsLockExempt() {
+		return
+	}
 	now := time.Now()
 	u.LockedAt = &now
 }

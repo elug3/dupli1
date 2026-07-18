@@ -130,16 +130,24 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, er
 	}
 
 	if !u.ValidatePassword(password) {
-		u.FailedLoginAttempts++
-		if u.FailedLoginAttempts >= maxFailedAttempts {
-			u.Lock()
+		// Admin / owner accounts are never locked out (IsLockExempt).
+		if u.IsLockExempt() {
+			if u.LockedAt != nil {
+				u.LockedAt = nil
+				_ = s.userRepo.Save(ctx, u)
+			}
+		} else {
+			u.FailedLoginAttempts++
+			if u.FailedLoginAttempts >= maxFailedAttempts {
+				u.Lock()
+			}
+			_ = s.userRepo.Save(ctx, u)
 		}
-		_ = s.userRepo.Save(ctx, u)
 		return "", autherrors.ErrInvalidCredentials
 	}
 
-	if u.FailedLoginAttempts > 0 {
-		u.FailedLoginAttempts = 0
+	if u.FailedLoginAttempts > 0 || u.LockedAt != nil {
+		u.Unlock()
 		_ = s.userRepo.Save(ctx, u)
 	}
 
