@@ -678,6 +678,8 @@ Supported status transitions: `pending` → `confirmed` | `canceled`; `confirmed
 
 Stripe Checkout **redirect** — Dupli1 never handles card numbers, CVC, or card passwords.
 
+**Methods (planned):** create body will accept `method`: `credit_card` (default, live), `bypass` (order manager only), `bitcoin` (later). See [payment-methods-plan.md](payment-methods-plan.md).
+
 When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront callers may only pay for / read their own orders unless they hold `payment.create` or `payment.read.all`.
 
 | Method | Path | Permission / rule |

@@ -326,7 +326,7 @@ See [cart-service.md](cart-service.md) for architecture, boundaries with invento
 | `POST` | `/api/v1/payments/webhooks/stripe` | Stripe signature | Webhook handler |
 | `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (no Stripe key): mark payment succeeded |
 
-See [payment-service.md](payment-service.md) for Stripe redirect flow, 5-minute auto-cancel, and `payment.succeeded` → `paid`.
+See [payment-service.md](payment-service.md) for Stripe redirect flow, 5-minute auto-cancel, and `payment.succeeded` → `paid`. Planned methods (`credit_card` / `bypass` / `bitcoin`): [payment-methods-plan.md](payment-methods-plan.md).
 
 ---
 
