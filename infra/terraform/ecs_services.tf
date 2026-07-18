@@ -484,6 +484,20 @@ resource "aws_ecs_task_definition" "notification" {
       environment = [
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
       ]
+      secrets = [
+        {
+          name      = "TELEGRAM_BOT_TOKEN"
+          valueFrom = "${var.telegram_secret_arn}:TELEGRAM_BOT_TOKEN::"
+        },
+        {
+          name      = "TELEGRAM_ORDER_CHAT_ID"
+          valueFrom = "${var.telegram_secret_arn}:TELEGRAM_ORDER_CHAT_ID::"
+        },
+        {
+          name      = "TELEGRAM_PRODUCT_CHAT_ID"
+          valueFrom = "${var.telegram_secret_arn}:TELEGRAM_PRODUCT_CHAT_ID::"
+        },
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {

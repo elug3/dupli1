@@ -100,6 +100,12 @@ variable "jwt_secret_arn" {
   default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/jwt-secret-tTYcMy"
 }
 
+variable "telegram_secret_arn" {
+  description = "Secrets Manager ARN for Telegram bot JSON (TELEGRAM_BOT_TOKEN, TELEGRAM_ORDER_CHAT_ID, TELEGRAM_PRODUCT_CHAT_ID)."
+  type        = string
+  default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/telegram-G9Oskq"
+}
+
 variable "acm_certificate_arn" {
   description = "ACM certificate ARN for HTTPS on the ALB (dupli1.com)."
   type        = string

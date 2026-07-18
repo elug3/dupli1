@@ -14,7 +14,27 @@ Terraform provisions the production compute path on the existing VPC and RDS:
 | CloudWatch Logs | `/ecs/dupli1-*` log groups |
 | ECS services | auth, product, order, cart, payment, notification, proxy, web, manage-web, redis, nats |
 
-Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `production`, RDS `dupli1-production`, ECR repos, Cloud Map `dupli1.local`, Secrets Manager DB URLs / JWT.
+Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `production`, RDS `dupli1-production`, ECR repos, Cloud Map `dupli1.local`, Secrets Manager DB URLs / JWT / Telegram.
+
+## Telegram (notification)
+
+Secret: `dupli1/production/telegram` (JSON keys `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ORDER_CHAT_ID`, `TELEGRAM_PRODUCT_CHAT_ID`).
+
+Injected into `dupli1-notification` as ECS secrets. After creating a bot with [@BotFather](https://t.me/BotFather):
+
+1. Put the token in Secrets Manager (never commit it).
+2. Message the bot (or add it to a group), then set chat IDs:
+
+```bash
+aws secretsmanager put-secret-value --secret-id dupli1/production/telegram --secret-string '{
+  "TELEGRAM_BOT_TOKEN":"<token>",
+  "TELEGRAM_ORDER_CHAT_ID":"<chat-id>",
+  "TELEGRAM_PRODUCT_CHAT_ID":"<chat-id>"
+}'
+aws ecs update-service --cluster production --service dupli1-notification --force-new-deployment
+```
+
+Chat IDs: open a DM with the bot, send any message, then `getUpdates` on the Bot API, or use a group id (often negative).
 
 ## Monthly cost (dev-sized, us-east-1, 24/7)
 

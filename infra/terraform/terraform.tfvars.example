@@ -16,6 +16,9 @@ ecs_asg_max_size           = 4
 desired_count              = 1
 image_tag                  = "latest"
 
+# Secrets Manager ARNs (defaults match production; override if rotated)
+# telegram_secret_arn = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/telegram-XXXX"
+
 # Product images CDN (CloudFront + OAC). Requires ACM SAN or *.dupli1.com.
 # product_images_cdn_aliases = ["images.dupli1.com"]
 # product_images_cdn_aliases = []  # use *.cloudfront.net only

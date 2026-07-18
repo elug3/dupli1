@@ -34,6 +34,7 @@ data "aws_iam_policy_document" "ecs_execution_secrets" {
       var.cart_db_url_secret_arn,
       var.payment_db_url_secret_arn,
       var.jwt_secret_arn,
+      var.telegram_secret_arn,
       aws_secretsmanager_secret.product_s3.arn,
     ]
   }

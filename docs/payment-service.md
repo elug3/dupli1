@@ -225,8 +225,9 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
 | `STRIPE_CANCEL_URL` | payment | Checkout cancel redirect |
 | `DUPLI1_PAYMENT_ORDER_TTL` | order | `5m` pending payment window |
 | `NATS_URL` | all | Event bus |
-| `TELEGRAM_BOT_TOKEN` | notification | Bot token |
-| `TELEGRAM_ORDER_CHAT_ID` | notification | Ops chat |
+| `TELEGRAM_BOT_TOKEN` | notification | Bot token (prod: Secrets Manager `dupli1/production/telegram`) |
+| `TELEGRAM_ORDER_CHAT_ID` | notification | Ops chat (same secret) |
+| `TELEGRAM_PRODUCT_CHAT_ID` | notification | Product ops chat (same secret) |
 
 Local Postgres (payment): `postgres://dupli1:dupli1_dev@localhost:5437/payments?sslmode=disable`
 

@@ -27,7 +27,7 @@ Production uses **Amazon RDS PostgreSQL 16** (`dupli1-production`).
 | Component | Details |
 |-----------|---------|
 | Databases | `schick_db` (auth), `products`, `orders`, `cart`, `payments` |
-| Credentials | AWS Secrets Manager (`dupli1/production/*-db-url`, `jwt-secret`) |
+| Credentials | AWS Secrets Manager (`dupli1/production/*-db-url`, `jwt-secret`, `telegram`) |
 | Network | Private subnets; ECS tasks + ECS instances SG → port 5432 |
 | SSL | `sslmode=require` |
 
@@ -42,7 +42,7 @@ Create app DBs after RDS is up: `bash infra/scripts/create-rds-databases.sh`.
 | `dupli1-order` | Order / checkout API |
 | `dupli1-cart` | Shopping cart API |
 | `dupli1-payment` | Payments (Stripe / dev simulate) |
-| `dupli1-notification` | Notification consumer |
+| `dupli1-notification` | NATS → Telegram ops alerts (`TELEGRAM_*` from Secrets Manager `dupli1/production/telegram`) |
 | `dupli1-proxy` | nginx gateway (ALB `/api/*`, `/gateway/*`) |
 | `dupli1-web` | Public storefront (ALB default) |
 | `dupli1-manage-web` | Admin UI (`https://manage.dupli1.com`) |
