@@ -2,6 +2,8 @@
 
 All traffic is routed through the nginx gateway. Locally use **HTTP** at `http://localhost:8080` or `http://localhost` (port 80). Production terminates TLS at the load balancer or gateway.
 
+**Currency:** the storefront uses **KRW only**. Product `price` values and cart/order/payment `*_cents` fields are **whole Korean won** (Stripe minor units for `krw` — do not multiply by 100). Settings expose `limits.currency: "krw"`.
+
 ---
 
 ## Authentication

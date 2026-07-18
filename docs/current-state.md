@@ -10,6 +10,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 |------|--------|
 | Auth (login, JWT, fine-grained permissions) | Implemented |
 | Product catalog (bags, coupons, images, PDP) | Implemented |
+| Currency | **KRW only** — product prices and `*_cents` amounts are whole won ([payment-service.md](payment-service.md)) |
 | Inventory (stock, reservations) | Implemented (PostgreSQL, owned by product) |
 | Orders + checkout sessions | Implemented (PostgreSQL) |
 | Shopping cart | Implemented (PostgreSQL) |
@@ -100,7 +101,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Persistence:** PostgreSQL (`payments` on `postgres-payment`)
 - **Features:**
   - Stripe Checkout redirect at `POST /api/v1/payments` (see [payment-service.md](payment-service.md))
-  - Default payment currency: **`krw`**
+  - Default payment currency: **`krw` only** (whole won; `*_cents` fields are KRW minor units = won)
   - Dev mode without `STRIPE_SECRET_KEY`: simulate URL `GET /api/v1/payments/{id}/simulate-success`
   - Publishes **`payment.succeeded`** on NATS when payment completes
 - **Auth:** Bearer JWT on customer routes; ownership ABAC unless `payment.create` / `payment.read.all`. Stripe signature on webhook

@@ -83,7 +83,8 @@ sequenceDiagram
 |-------|--------|
 | PG UI | **Stripe Checkout redirect** |
 | Card data on Dupli1 | **Never** |
-| Default currency | **`krw`** |
+| Default currency | **`krw` only** (single currency; other codes rejected) |
+| Amount unit | Whole Korean won (`amount_cents` = Stripe minor units for KRW — **not** won×100) |
 | Unpaid `pending` TTL | **5 minutes** → auto-cancel + release stock |
 | Inventory plan | **B** — reserve on checkout complete; **commit on `in_transit`** |
 | Payment → order | **`payment.succeeded` event** (not HTTP confirm from payment) |

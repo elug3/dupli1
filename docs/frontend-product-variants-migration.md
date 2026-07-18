@@ -207,7 +207,7 @@ Order and checkout line items already use `sku`:
 Rules:
 
 - `sku` = **variant.sku**
-- `unit_price_cents` = `Math.round(variant.price * 100)` (or your pricing source of truth)
+- `unit_price_cents` = `Math.round(variant.price)` — product prices are already **KRW won**; do **not** multiply by 100 (KRW is a zero-decimal Stripe currency). JSON field name remains `*_cents` for historical reasons; the value is whole won.
 
 ### Storefront checklist
 

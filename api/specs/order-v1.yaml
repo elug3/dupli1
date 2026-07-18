@@ -494,8 +494,9 @@ components:
         unit_price_cents:
           type: integer
           format: int64
+          description: Unit price in whole KRW won (Stripe minor units for krw; do not multiply product.price by 100)
           minimum: 0
-          example: 250000
+          example: 2890000
 
     Order:
       type: object

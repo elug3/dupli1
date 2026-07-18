@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,8 +50,8 @@ func TestDispatcherOrderCreated(t *testing.T) {
 	if notifier.chatID != "-100123" {
 		t.Fatalf("chat id = %q, want -100123", notifier.chatID)
 	}
-	if notifier.message == "" {
-		t.Fatal("expected telegram message")
+	if !strings.Contains(notifier.message, "₩25,000") {
+		t.Fatalf("expected KRW formatting in message, got %q", notifier.message)
 	}
 }
 
@@ -61,13 +62,13 @@ func TestDispatcherProductCreated(t *testing.T) {
 	})
 
 	payload, err := json.Marshal(map[string]any{
-		"event_type": "product.created",
-		"product_id": "BOT-003",
-		"name":       "Tote",
-		"brand":      "Bottega Veneta",
-		"category":   "bags",
-		"status":     "active",
-		"price":      2500.0,
+		"event_type":  "product.created",
+		"product_id":  "BOT-003",
+		"name":        "Tote",
+		"brand":       "Bottega Veneta",
+		"category":    "bags",
+		"status":      "active",
+		"price":       2890000.0,
 		"occurred_at": time.Now().UTC(),
 	})
 	if err != nil {
@@ -80,7 +81,7 @@ func TestDispatcherProductCreated(t *testing.T) {
 	if notifier.chatID != "-100456" {
 		t.Fatalf("chat id = %q, want -100456", notifier.chatID)
 	}
-	if notifier.message == "" {
-		t.Fatal("expected telegram message")
+	if !strings.Contains(notifier.message, "₩2,890,000") {
+		t.Fatalf("expected KRW product price, got %q", notifier.message)
 	}
 }

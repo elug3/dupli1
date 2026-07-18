@@ -15,7 +15,7 @@ type VariantInfo struct {
 	SKU            string
 	ProductID      string
 	Color          string
-	UnitPriceCents int64
+	UnitPriceCents int64 // whole KRW won (from product.price; not ×100)
 	ImageURL       string
 }
 

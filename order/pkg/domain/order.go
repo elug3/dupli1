@@ -28,7 +28,7 @@ type OrderItem struct {
 	SkuID          string `json:"sku_id,omitempty"`
 	SKU            string `json:"sku"`
 	Quantity       int    `json:"quantity"`
-	UnitPriceCents int64  `json:"unit_price_cents"`
+	UnitPriceCents int64  `json:"unit_price_cents"` // whole KRW won
 }
 
 type Order struct {

@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"strings"
 
 	"github.com/elug3/dupli1/cart/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/money"
 )
 
 type Client struct {
@@ -74,11 +74,12 @@ func (c *Client) fetchVariant(ctx context.Context, path string) (*ports.VariantI
 	}
 
 	return &ports.VariantInfo{
-		SkuID:          body.SkuID,
-		SKU:            strings.ToUpper(strings.TrimSpace(body.SKU)),
-		ProductID:      body.ProductID,
-		Color:          body.Color,
-		UnitPriceCents: int64(math.Round(body.Price * 100)),
+		SkuID:     body.SkuID,
+		SKU:       strings.ToUpper(strings.TrimSpace(body.SKU)),
+		ProductID: body.ProductID,
+		Color:     body.Color,
+		// Product prices are KRW won; unit_price_cents stores whole won (Stripe minor units for krw).
+		UnitPriceCents: money.FromProductPrice(body.Price),
 		ImageURL:       imageURL,
 	}, nil
 }
