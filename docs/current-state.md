@@ -108,7 +108,8 @@ See [service-layout.md](service-layout.md) for details.
 ### dupli1-notification
 
 - **Host port:** 8084
-- **Features:** NATS subscriber; Telegram alerts on `order.paid` (when `TELEGRAM_*` configured)
+- **Features:** NATS subscriber; Telegram alerts on order/product events when `TELEGRAM_*` is set
+- **Production:** bot token + chat IDs from Secrets Manager `dupli1/production/telegram` (see [deployment-aws.md](deployment-aws.md) / Terraform README)
 - **Status:** Health + event dispatch (no outbound email/SMS yet)
 
 ### dupli1-proxy
