@@ -15,7 +15,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Shopping cart | Implemented (PostgreSQL) |
 | Payments (Stripe Checkout) | Implemented — see [payment-service.md](payment-service.md) |
 | Notifications | Stub (health only) |
-| User profiles, chat, analytics | Guest cookie + unique PDP views + simple recommendations implemented in product — see [product-guest-views-plan.md](product-guest-views-plan.md), [product-views-recommendations-plan.md](product-views-recommendations-plan.md); broader analytics still not started |
+| User profiles, chat, analytics | Guest cookie + unique PDP views + simple recommendations implemented in product — see [product-guest-views-plan.md](product-guest-views-plan.md), [product-recommendations.md](product-recommendations.md); broader analytics still not started |
 | Manager settings (mutable store policy) | Sketch — see [manager-settings-api.md](manager-settings-api.md) |
 
 ## Repository layout
@@ -61,7 +61,7 @@ See [service-layout.md](service-layout.md) for details.
   - Parent (style) + variant (SKU) model: search returns parents only (no color duplicates)
   - Dual SKU identity + master dictionaries: [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`; human `sku`; `/api/v1/catalog/…`; Phase C enforces existing master codes on create)
   - Error wrapping: store-boundary sentinels + sanitized 500s — [product-error-wrapping.md](product-error-wrapping.md)
-  - Public: `GET /api/v1/products` (optional `product.read` widens view; query filters `category`, `brand`, `color`, `size`, `material`, `tags`), `GET /api/v1/products/{id}` (parent + variants; unique guest `viewCount` via `dupli1_guest` cookie), `GET /api/v1/products/{id}/recommendations` (content + popularity), coupon redeem
+  - Public: `GET /api/v1/products` (optional `product.read` widens view; query filters `category`, `brand`, `color`, `size`, `material`, `tags`), `GET /api/v1/products/{id}` (parent + variants; unique guest `viewCount` via `dupli1_guest` cookie), `GET /api/v1/products/{id}/recommendations` (content + popularity — [product-recommendations.md](product-recommendations.md)), coupon redeem
   - Admin: per-route permissions (`product.create`, `coupon.read`, …) — see [permissions.md](permissions.md); parent CRUD, variant CRUD at `/api/v1/products/{id}/variants`, images on variant or default variant
   - Stock and reservations at `/api/v1/inventory/*` (merged in from the former standalone `inventory` service), keyed by a canonical ULID `SkuID` with `sku` and `by-sku-id/{skuId}` lookups both supported; reads are public, writes require `inventory.stock.write` or `inventory.reservation.manage`
   - Protected routes validate RS256 via `AUTH_JWKS_URL`; authorization from `permissions` claim
