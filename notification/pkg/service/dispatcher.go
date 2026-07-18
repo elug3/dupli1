@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/elug3/dupli1/notification/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/money"
 )
 
 const (
@@ -178,7 +179,7 @@ func formatOrderMessage(subject string, event orderEvent) string {
 }
 
 func formatProductMessage(subject string, event productEvent) string {
-	price := fmt.Sprintf("€%.2f", event.Price)
+	price := money.FormatKRW(money.FromProductPrice(event.Price))
 	name := escapeHTML(event.Name)
 	brand := escapeHTML(event.Brand)
 	id := escapeHTML(event.ProductID)
@@ -200,13 +201,8 @@ func formatProductMessage(subject string, event productEvent) string {
 	}
 }
 
-func formatMoney(cents int64) string {
-	sign := ""
-	if cents < 0 {
-		sign = "-"
-		cents = -cents
-	}
-	return fmt.Sprintf("%s€%d.%02d", sign, cents/100, cents%100)
+func formatMoney(won int64) string {
+	return money.FormatKRW(won)
 }
 
 func escapeHTML(value string) string {

@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"github.com/elug3/dupli1/shared/pkg/money"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
@@ -17,8 +18,11 @@ func BuildSettings(cfg Config, productViewsEnabled bool) settings.Response {
 		"product_views":    productViewsEnabled,
 		"recommendations":  true,
 	}
+	resp.Limits = map[string]any{
+		"currency": money.Currency, // single storefront currency: KRW won
+	}
 	if cfg.S3Bucket != "" {
-		resp.Limits = map[string]any{"s3_bucket": cfg.S3Bucket}
+		resp.Limits["s3_bucket"] = cfg.S3Bucket
 	}
 	resp.Dependencies = map[string]settings.Dependency{
 		"s3":   {Configured: cfg.S3Endpoint != ""},

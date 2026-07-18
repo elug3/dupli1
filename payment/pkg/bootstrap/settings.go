@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"github.com/elug3/dupli1/shared/pkg/money"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
@@ -15,14 +16,14 @@ func BuildSettings(cfg Config) settings.Response {
 		checkoutProvider = "stripe"
 	}
 	resp.Features = map[string]bool{
-		"nats_events":               cfg.NATSURL != "",
-		"stripe_checkout":           cfg.StripeSecretKey != "",
-		"stripe_webhook":            cfg.StripeWebhookSecret != "",
-		"dev_simulate_success":      cfg.StripeSecretKey == "",
+		"nats_events":          cfg.NATSURL != "",
+		"stripe_checkout":      cfg.StripeSecretKey != "",
+		"stripe_webhook":       cfg.StripeWebhookSecret != "",
+		"dev_simulate_success": cfg.StripeSecretKey == "",
 	}
-	// Expose provider as a dependency-style flag via features; also mirror in limits for clarity.
 	resp.Limits = map[string]any{
 		"checkout_provider": checkoutProvider,
+		"currency":          money.Currency, // only KRW; amount_cents is whole won
 	}
 	if cfg.PublicBaseURL != "" {
 		resp.Limits["public_base_url"] = cfg.PublicBaseURL

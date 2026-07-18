@@ -622,7 +622,7 @@ components:
         price:
           type: number
           format: double
-          description: Real sale price used for discount calculation (legacy mirror of cheapest active variant)
+          description: Real sale price in KRW won (whole won; single storefront currency)
         brand:
           type: string
         brandCode:

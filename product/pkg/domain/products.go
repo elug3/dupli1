@@ -22,9 +22,9 @@ type Variant struct {
 	ColorCode   string `json:"colorCode,omitempty"`
 	EditionCode string `json:"editionCode,omitempty"` // optional VariantCode segment
 	SizeCode    string `json:"sizeCode,omitempty"`
-	// SellingPrice is the official/display price (strikethrough / "was" price).
+	// SellingPrice is the official/display price in KRW won (strikethrough / "was" price).
 	SellingPrice float64 `json:"sellingPrice,omitempty"`
-	// Price is the real sale price used for discount calculation.
+	// Price is the real sale price in KRW won (whole won; single currency).
 	Price     float64  `json:"price"`
 	Status    string   `json:"status"` // "active" | "draft" | "archived"
 	ImageURLs []string `json:"imageUrls,omitempty"`
