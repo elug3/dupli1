@@ -47,6 +47,7 @@ See [service-layout.md](service-layout.md) for details.
   - Register requires `user.create` (not public); auth ABAC hierarchy governs who may manage whom
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `admin`)
+  - Login lockout after 5 failed attempts for customers/managers; **admin and owner are never locked**
   - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`)
   - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage` (`DUPLI1_ORDER_SERVICE_*`)
   - Login/refresh rate-limited per IP via Redis

@@ -246,6 +246,63 @@ func TestLogin_LocksAccountAfterMaxFailedAttempts(t *testing.T) {
 	}
 }
 
+func TestLogin_DoesNotLockAdminOrOwner(t *testing.T) {
+	cases := []struct {
+		name string
+		user *domain.User
+	}{
+		{
+			name: "owner",
+			user: mustUser(t, "owner@dupli1.com", "correct-pass", domain.AccountTypeAdmin, permissions.All),
+		},
+		{
+			name: "admin",
+			user: mustUser(t, "admin@dupli1.com", "correct-pass", domain.AccountTypeAdmin, permissions.AdminAll),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Stale lock from before the policy change must not block login.
+			now := time.Now()
+			tc.user.LockedAt = &now
+			tc.user.FailedLoginAttempts = maxFailedAttempts
+			repo := &mutableUserRepository{user: tc.user}
+			svc := NewService(repo, fakeTokenGenerator{})
+
+			for i := 0; i < maxFailedAttempts+2; i++ {
+				_, err := svc.Login(context.Background(), tc.user.Email, "wrong")
+				if !errors.Is(err, autherrors.ErrInvalidCredentials) {
+					t.Fatalf("attempt %d: got %v, want ErrInvalidCredentials", i+1, err)
+				}
+			}
+			if repo.user.IsLocked() || repo.user.LockedAt != nil {
+				t.Fatal("admin/owner must not be locked after failed attempts")
+			}
+
+			token, err := svc.Login(context.Background(), tc.user.Email, "correct-pass")
+			if err != nil {
+				t.Fatalf("correct password: %v", err)
+			}
+			if token == "" {
+				t.Fatal("expected refresh token")
+			}
+			if repo.user.LockedAt != nil || repo.user.FailedLoginAttempts != 0 {
+				t.Fatalf("successful login should clear lock state: locked_at=%v attempts=%d",
+					repo.user.LockedAt, repo.user.FailedLoginAttempts)
+			}
+		})
+	}
+}
+
+func mustUser(t *testing.T, email, password, accountType string, perms ...string) *domain.User {
+	t.Helper()
+	u, err := domain.NewUser("u-"+email, email, password, accountType, perms...)
+	if err != nil {
+		t.Fatalf("NewUser: %v", err)
+	}
+	return u
+}
+
 func TestLogin_RejectsDeactivatedAccount(t *testing.T) {
 	user, _ := domain.NewUser("u-off", "off@example.com", "pass", domain.AccountTypeCustomer)
 	user.SetActive(false)
