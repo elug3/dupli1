@@ -21,8 +21,12 @@ import (
 )
 
 type Config struct {
-	ProductURL string
-	// InventoryURL is a deprecated alias for ProductURL (stock lives in product).
+	// GatewayURL is the internal API gateway (nginx). Preferred base for product
+	// stock/coupon HTTP calls so order does not hard-code product service DNS.
+	GatewayURL string
+
+	// ProductURL / InventoryURL are deprecated direct overrides.
+	ProductURL   string
 	InventoryURL string
 
 	AuthURL              string
@@ -76,10 +80,10 @@ func Bootstrap(cfg Config) (*App, error) {
 		return nil, err
 	}
 
-	productURL := resolveProductURL(cfg)
-	if productURL == "" {
+	apiBase, err := resolveAPIBaseURL(cfg)
+	if err != nil {
 		closeFn()
-		return nil, fmt.Errorf("ProductURL is required (stock + coupons are served by product)")
+		return nil, err
 	}
 
 	stockTokenSource, err := resolveStockTokenSource(context.Background(), cfg)
@@ -87,10 +91,8 @@ func Bootstrap(cfg Config) (*App, error) {
 		closeFn()
 		return nil, err
 	}
-	stock := httpstock.NewClient(productURL, cfg.HTTPClient, stockTokenSource)
-
-	var couponClient ports.CouponClient
-	couponClient = httpcoupon.NewClient(productURL, cfg.HTTPClient)
+	stock := httpstock.NewClient(apiBase, cfg.HTTPClient, stockTokenSource)
+	couponClient := httpcoupon.NewClient(apiBase, cfg.HTTPClient)
 
 	var eventPublisher ports.EventPublisher
 	var natsPublisher *natsinfra.Publisher
@@ -164,24 +166,38 @@ func openRepository(connString string) (ports.Repository, func() error, error) {
 	}, nil
 }
 
-func resolveProductURL(cfg Config) string {
-	if u := strings.TrimSpace(cfg.ProductURL); u != "" {
-		return u
+// resolveAPIBaseURL prefers the internal gateway so stock/coupon calls use the
+// same path routing as external clients (/api/v1/inventory, /api/v1/coupons).
+// Direct ProductURL / InventoryURL remain as escape hatches.
+func resolveAPIBaseURL(cfg Config) (string, error) {
+	if u := strings.TrimSpace(cfg.GatewayURL); u != "" {
+		return strings.TrimRight(u, "/"), nil
 	}
-	// Deprecated: DUPLI1_INVENTORY_URL used to point at a standalone inventory service;
-	// it now aliases product (stock/reservations live there).
-	return strings.TrimSpace(cfg.InventoryURL)
+	if u := strings.TrimSpace(cfg.ProductURL); u != "" {
+		return strings.TrimRight(u, "/"), nil
+	}
+	if u := strings.TrimSpace(cfg.InventoryURL); u != "" {
+		return strings.TrimRight(u, "/"), nil
+	}
+	return "", fmt.Errorf("DUPLI1_GATEWAY_URL is required (or deprecated DUPLI1_PRODUCT_URL)")
 }
 
 func resolveStockTokenSource(ctx context.Context, cfg Config) (httpauth.TokenSource, error) {
 	if cfg.StockBearerToken != "" {
 		return httpauth.StaticToken(cfg.StockBearerToken), nil
 	}
-	if cfg.AuthURL == "" || cfg.OrderServiceEmail == "" || cfg.OrderServicePassword == "" {
+	authBase := strings.TrimSpace(cfg.AuthURL)
+	if authBase == "" {
+		// Fall back to gateway for login/refresh when AuthURL is unset.
+		authBase = strings.TrimSpace(cfg.GatewayURL)
+	}
+	if authBase == "" || cfg.OrderServiceEmail == "" || cfg.OrderServicePassword == "" {
 		return nil, nil
 	}
-	src := httpauth.NewServiceAccountTokenSource(cfg.AuthURL, cfg.OrderServiceEmail, cfg.OrderServicePassword, cfg.HTTPClient)
+	src := httpauth.NewServiceAccountTokenSource(authBase, cfg.OrderServiceEmail, cfg.OrderServicePassword, cfg.HTTPClient)
 	// Prime the cache at startup so misconfigured credentials fail fast.
+	// Prefer a direct AuthURL in Compose so bootstrap does not depend on the
+	// proxy (proxy itself waits for order health).
 	if _, err := src.Token(ctx); err != nil {
 		return nil, fmt.Errorf("order service account token for product stock: %w", err)
 	}
