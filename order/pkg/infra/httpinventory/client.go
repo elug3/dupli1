@@ -8,24 +8,34 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
 	"github.com/elug3/dupli1/order/pkg/ports"
 )
 
 type Client struct {
 	baseURL     string
 	httpClient  *http.Client
-	bearerToken string
+	tokenSource httpauth.TokenSource
 }
 
-func NewClient(baseURL string, httpClient *http.Client, bearerToken string) *Client {
+func NewClient(baseURL string, httpClient *http.Client, tokenSource httpauth.TokenSource) *Client {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
 	return &Client{
 		baseURL:     strings.TrimRight(baseURL, "/"),
 		httpClient:  httpClient,
-		bearerToken: bearerToken,
+		tokenSource: tokenSource,
 	}
+}
+
+// NewClientWithBearer builds a client with a fixed bearer token (tests / static override).
+func NewClientWithBearer(baseURL string, httpClient *http.Client, bearerToken string) *Client {
+	var src httpauth.TokenSource
+	if bearerToken != "" {
+		src = httpauth.StaticToken(bearerToken)
+	}
+	return NewClient(baseURL, httpClient, src)
 }
 
 func (c *Client) Reserve(ctx context.Context, orderID string, items []ports.InventoryItem) (string, error) {
@@ -54,6 +64,21 @@ func (c *Client) ReleaseReservation(ctx context.Context, reservationID string) e
 }
 
 func (c *Client) doJSON(ctx context.Context, method, path string, body any, target any) error {
+	err := c.doJSONOnce(ctx, method, path, body, target)
+	if err == nil {
+		return nil
+	}
+	if !isUnauthorized(err) {
+		return err
+	}
+	// Stale access token — invalidate and retry once with a fresh token.
+	if inv, ok := c.tokenSource.(interface{ Invalidate() }); ok {
+		inv.Invalidate()
+	}
+	return c.doJSONOnce(ctx, method, path, body, target)
+}
+
+func (c *Client) doJSONOnce(ctx context.Context, method, path string, body any, target any) error {
 	var payload bytes.Buffer
 	if body != nil {
 		if err := json.NewEncoder(&payload).Encode(body); err != nil {
@@ -68,8 +93,14 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, targ
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.bearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+c.bearerToken)
+	if c.tokenSource != nil {
+		token, err := c.tokenSource.Token(ctx)
+		if err != nil {
+			return fmt.Errorf("inventory auth token: %w", err)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -86,6 +117,9 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, targ
 		if errBody.Error == "" {
 			errBody.Error = resp.Status
 		}
+		if resp.StatusCode == http.StatusUnauthorized {
+			return fmt.Errorf("inventory request failed: unauthorized: %s", errBody.Error)
+		}
 		return fmt.Errorf("inventory request failed: %s", errBody.Error)
 	}
 
@@ -93,4 +127,11 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, targ
 		return json.NewDecoder(resp.Body).Decode(target)
 	}
 	return nil
+}
+
+func isUnauthorized(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "unauthorized")
 }
