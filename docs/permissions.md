@@ -316,7 +316,7 @@ One-time mapping applied to `users.permissions` during database migration (`auth
 | Legacy role | Expanded permissions |
 |-------------|---------------------|
 | `owner` | `*` |
-| `admin` | `admin.*`, `user.*`, `product.*`, `coupon.*`, `inventory.stock.write`, `inventory.reservation.manage`, `order.ship`, `order.status.update`, `order.read.all`, `cart.read` |
+| `admin` | `admin.*`, `user.*`, `product.*`, `coupon.*`, `inventory.stock.write`, `inventory.reservation.manage`, `order.ship`, `order.status.update`, `order.read.all`, `cart.read`, `payment.bypass` |
 | `user_manager` | `user.password.update`, `user.status.update` |
 | `customer_registrar` | `user.create` |
 | `product_manager` | `product.*`, `coupon.*` |
