@@ -17,7 +17,7 @@ type TokenSource interface {
 	Token(ctx context.Context) (string, error)
 }
 
-// StaticToken returns a fixed bearer token (e.g. DUPLI1_INVENTORY_BEARER_TOKEN).
+// StaticToken returns a fixed bearer token (e.g. DUPLI1_ORDER_STOCK_BEARER_TOKEN (or deprecated DUPLI1_INVENTORY_BEARER_TOKEN)).
 type StaticToken string
 
 func (s StaticToken) Token(context.Context) (string, error) {

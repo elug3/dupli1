@@ -30,8 +30,8 @@ func (f *fakeCouponClient) Redeem(ctx context.Context, code string) (*ports.Coup
 func TestCheckoutSessionLifecycle(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.NewRepository()
-	inventory := &fakeInventory{reservationID: "res-checkout"}
-	svc := service.NewWithCheckout(repo, inventory, &fakeCouponClient{
+	stock := &fakeStock{reservationID: "res-checkout"}
+	svc := service.NewWithCheckout(repo , stock, &fakeCouponClient{
 		code:     "SUMMER30",
 		discount: 0.30,
 	}, 0)
@@ -80,8 +80,8 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	if result.Order.CouponCode != "SUMMER30" {
 		t.Fatalf("order coupon = %q, want SUMMER30", result.Order.CouponCode)
 	}
-	if inventory.reservationID != "res-checkout" {
-		t.Fatalf("inventory reservation = %q, want res-checkout", inventory.reservationID)
+	if stock.reservationID != "res-checkout" {
+		t.Fatalf("stock reservation = %q, want res-checkout", stock.reservationID)
 	}
 
 	_, err = svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
@@ -95,7 +95,7 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 func TestCompleteCheckoutRequiresItems(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.NewRepository()
-	svc := service.NewWithCheckout(repo, &fakeInventory{}, nil, 0)
+	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0)
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",
@@ -113,7 +113,7 @@ func TestCompleteCheckoutRequiresItems(t *testing.T) {
 func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.NewRepository()
-	svc := service.NewWithCheckout(repo, &fakeInventory{}, nil, 0)
+	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0)
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",

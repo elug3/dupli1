@@ -43,18 +43,18 @@ func makeToken(t *testing.T, userID string, perms []string) string {
 // bearerHeader returns an Authorization header value.
 func bearerHeader(token string) string { return "Bearer " + token }
 
-type fakeInventory struct{}
+type fakeStock struct{}
 
-func (f *fakeInventory) Reserve(_ context.Context, _ string, _ []ports.InventoryItem) (string, error) {
+func (f *fakeStock) Reserve(_ context.Context, _ string, _ []ports.StockItem) (string, error) {
 	return "res-001", nil
 }
-func (f *fakeInventory) CommitReservation(_ context.Context, _ string) error  { return nil }
-func (f *fakeInventory) ReleaseReservation(_ context.Context, _ string) error { return nil }
+func (f *fakeStock) CommitReservation(_ context.Context, _ string) error  { return nil }
+func (f *fakeStock) ReleaseReservation(_ context.Context, _ string) error { return nil }
 
 func newTestHandler(t *testing.T) (*handler.Handler, *service.Service) {
 	t.Helper()
 	repo := memory.NewRepository()
-	svc := service.New(repo, &fakeInventory{})
+	svc := service.New(repo, &fakeStock{})
 	validator := authjwt.NewHMACValidator(testSecret)
 	return handler.New(svc, validator), svc
 }

@@ -22,10 +22,10 @@ Options:
       Server port number
   -addr string
       Server listen address (overrides host/port)
-  -inventory-url string
-      Inventory service base URL
   -product-url string
-      Product service base URL for coupon redemption
+      Product service base URL (coupons + stock/reservations)
+  -inventory-url string
+      Deprecated alias for -product-url
   -help
       Show this help message
 `

@@ -33,8 +33,8 @@ sequenceDiagram
 ```
 
 Stock and reservations are owned by the product service (merged in from the
-former standalone inventory service) — `DUPLI1_INVENTORY_URL` points at
-`dupli1-product`.
+former standalone inventory service) — order calls them via `DUPLI1_PRODUCT_URL`
+(legacy `DUPLI1_INVENTORY_URL` still accepted as an alias).
 
 ## Session states
 
@@ -176,7 +176,8 @@ After completion, the order is **`pending`** with inventory reserved. The custom
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DUPLI1_ORDER_ADDR` | `:8083` | Listen address |
-| `DUPLI1_INVENTORY_URL` | `http://localhost:8081` | Inventory reservation API (product service — stock/reservations were merged in) |
+| `DUPLI1_PRODUCT_URL` | `http://localhost:8081` | Product service (coupons + stock/reservations) |
+| `DUPLI1_INVENTORY_URL` | — | **Deprecated** alias for `DUPLI1_PRODUCT_URL` |
 | `DUPLI1_PRODUCT_URL` | `http://localhost:8081` | Coupon redemption API |
 
 ## Errors

@@ -24,7 +24,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 | # | Finding | Status |
 |---|---------|--------|
 | H1 | Order create: save succeeds, publish failure can orphan reservations on client retry | Open — outbox or compensate |
-| H2 | Order bootstrap fetches inventory service token once; never refreshes after expiry | **Fixed** — `ServiceAccountTokenSource` caches/refreshes access tokens; inventory client retries once on 401 |
+| H2 | Order bootstrap fetches inventory service token once; never refreshes after expiry | **Fixed** — `ServiceAccountTokenSource` + `httpstock` client (product stock API); retries once on 401 |
 | H3 | NATS subscribers discard handler errors (`_ = handler(...)`) — at-most-once, silent loss | Open — queue group + retry/DLQ |
 | H4 | Internal `err.Error()` returned on many 500 responses (auth, product, order/cart/payment) | **Partial** — product sanitizes 500s via error wrapping; see [product-error-wrapping.md](product-error-wrapping.md). Other services still open |
 | H5 | Product PG migrations ignore some `Exec` errors during migrate/seed | Open |
