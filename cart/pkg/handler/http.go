@@ -46,6 +46,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/cart", h.requireAuth(h.cart))
 	mux.HandleFunc("/api/v1/cart/items", h.requireAuth(h.cartItems))
 	mux.HandleFunc("/api/v1/cart/items/", h.requireAuth(h.cartItem))
+	// Canonical admin cart under the cart service prefix.
+	mux.HandleFunc("/api/v1/cart/customers/", h.requireAuth(h.adminCart))
+	// Legacy alias.
 	mux.HandleFunc("/api/v1/carts/", h.requireAuth(h.adminCart))
 }
 
@@ -203,7 +206,7 @@ func (h *Handler) adminCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/v1/carts/"))
+	parts := adminCartPathParts(r.URL.Path)
 	if len(parts) != 1 || parts[0] == "" {
 		respondError(w, http.StatusNotFound, "not found")
 		return
@@ -236,6 +239,18 @@ func splitPath(path string) []string {
 		return nil
 	}
 	return strings.Split(path, "/")
+}
+
+func adminCartPathParts(path string) []string {
+	for _, prefix := range []string{
+		"/api/v1/cart/customers/",
+		"/api/v1/carts/",
+	} {
+		if strings.HasPrefix(path, prefix) {
+			return splitPath(strings.TrimPrefix(path, prefix))
+		}
+	}
+	return nil
 }
 
 func decodeJSON(r *http.Request, target any) error {

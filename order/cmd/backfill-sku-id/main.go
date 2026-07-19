@@ -107,7 +107,7 @@ func distinctUnresolvedSKUs(ctx context.Context, conn *pgx.Conn) ([]string, erro
 }
 
 func lookupSkuID(ctx context.Context, httpClient *http.Client, baseURL, sku string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/api/v1/variants/"+sku, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/api/v1/products/variants/by-sku/"+sku, nil)
 	if err != nil {
 		return "", err
 	}

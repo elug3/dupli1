@@ -172,10 +172,18 @@ func TestAdminCartAllowed(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/cart/customers/customer-1", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin get cart (canonical) status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/carts/customer-1", nil)
 	req.Header.Set("Authorization", "Bearer "+adminToken)
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("admin get cart status = %d, body = %s", rec.Code, rec.Body.String())
+		t.Fatalf("admin get cart (legacy) status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }
