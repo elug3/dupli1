@@ -294,7 +294,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/variants:
+  /api/v1/products/variants:
     get:
       tags: [Products]
       summary: Batch public variants by skuId

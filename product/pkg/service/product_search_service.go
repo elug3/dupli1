@@ -156,7 +156,7 @@ func (s *ProductSearchService) GetPublicVariantBySkuID(skuID string) (*domain.Va
 	return s.checkPublicVariant(v)
 }
 
-// MaxBatchSkuIDs caps GET /api/v1/variants?sku_ids= batch size.
+// MaxBatchSkuIDs caps GET /api/v1/products/variants?sku_ids= batch size.
 const MaxBatchSkuIDs = 50
 
 // GetPublicVariantsBySkuIDs returns active variants whose parent products are

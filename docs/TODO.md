@@ -20,7 +20,7 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 - [x] Inventory service token refresh in order bootstrap
 - [ ] NATS handler errors / outbox for payment→order events
 - [x] Batch cart/product APIs (`?sku_ids=`); Redis catalog cache
-  - [x] `GET /api/v1/variants?sku_ids=` batch public variant lookup (max 50)
+  - [x] `GET /api/v1/products/variants?sku_ids=` batch public variant lookup (max 50)
   - [ ] Redis catalog cache
   - [ ] Cart client switch from N GETs to batch (optional follow-up)
 - [ ] Plumb request `context` through product PG stores
