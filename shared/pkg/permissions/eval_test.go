@@ -110,3 +110,21 @@ func TestBypassesPaymentABAC(t *testing.T) {
 		t.Fatal("payment.read.all should bypass ABAC")
 	}
 }
+
+func TestCanBypassPayment(t *testing.T) {
+	if CanBypassPayment(nil) {
+		t.Fatal("empty should not allow method bypass")
+	}
+	if CanBypassPayment([]string{PaymentCreate}) {
+		t.Fatal("payment.create alone should not allow method bypass")
+	}
+	if !CanBypassPayment([]string{PaymentBypass}) {
+		t.Fatal("payment.bypass should allow method bypass")
+	}
+	if !CanBypassPayment([]string{All}) {
+		t.Fatal("* should allow method bypass")
+	}
+	if !CanBypassPayment([]string{AdminAll}) {
+		t.Fatal("admin.* should allow method bypass")
+	}
+}

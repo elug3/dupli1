@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -51,6 +52,9 @@ func TestCreatePayment_DevCheckout(t *testing.T) {
 	if payment.Status != domain.StatusRequiresPayment {
 		t.Fatalf("status = %s", payment.Status)
 	}
+	if payment.Method != domain.MethodCreditCard {
+		t.Fatalf("method = %s, want %s", payment.Method, domain.MethodCreditCard)
+	}
 	if payment.CheckoutURL == "" {
 		t.Fatal("expected checkout URL")
 	}
@@ -59,6 +63,119 @@ func TestCreatePayment_DevCheckout(t *testing.T) {
 	}
 	if domain.DefaultCurrency != "krw" {
 		t.Fatalf("DefaultCurrency = %q, want krw", domain.DefaultCurrency)
+	}
+}
+
+func TestCreatePayment_BypassSucceedsAndPublishes(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+	}}
+	pub := &recordingPublisher{}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), pub)
+
+	payment, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID:           "ord_1",
+		CustomerID:        "manager_1",
+		BearerToken:       "token",
+		Method:            domain.MethodBypass,
+		Note:              "Cash at showroom",
+		CreatedBy:         "manager_1",
+		AllowMethodBypass: true,
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment bypass: %v", err)
+	}
+	if payment.Status != domain.StatusSucceeded {
+		t.Fatalf("status = %s, want succeeded", payment.Status)
+	}
+	if payment.Method != domain.MethodBypass {
+		t.Fatalf("method = %s", payment.Method)
+	}
+	if payment.Provider != domain.ProviderBypass {
+		t.Fatalf("provider = %s", payment.Provider)
+	}
+	if payment.CheckoutURL != "" {
+		t.Fatalf("checkout_url should be empty, got %q", payment.CheckoutURL)
+	}
+	if payment.CreatedBy != "manager_1" || payment.Note != "Cash at showroom" {
+		t.Fatalf("audit fields: created_by=%q note=%q", payment.CreatedBy, payment.Note)
+	}
+	if payment.AmountCents != 70000 {
+		t.Fatalf("amount = %d", payment.AmountCents)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("events = %d, want 1", len(pub.events))
+	}
+	if pub.events[0].OrderID != "ord_1" || pub.events[0].AmountCents != 70000 {
+		t.Fatalf("unexpected event: %+v", pub.events[0])
+	}
+}
+
+func TestCreatePayment_BypassForbiddenWithoutPermission(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+	}}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+
+	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", Method: domain.MethodBypass,
+	})
+	if !errors.Is(err, ports.ErrPaymentForbidden) {
+		t.Fatalf("err = %v, want ErrPaymentForbidden", err)
+	}
+}
+
+func TestCreatePayment_BitcoinUnavailable(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+	}}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+
+	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", Method: domain.MethodBitcoin,
+	})
+	if !errors.Is(err, ports.ErrMethodUnavailable) {
+		t.Fatalf("err = %v, want ErrMethodUnavailable", err)
+	}
+}
+
+func TestCreatePayment_UnknownMethod(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+	}}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+
+	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", Method: "venmo",
+	})
+	if !errors.Is(err, domain.ErrInvalidPayment) {
+		t.Fatalf("err = %v, want ErrInvalidPayment", err)
+	}
+}
+
+func TestCreatePayment_BypassSkipsCustomerABAC(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+	}}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+
+	payment, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID:           "ord_1",
+		CustomerID:        "manager_other",
+		Method:            domain.MethodBypass,
+		AllowMethodBypass: true,
+		CreatedBy:         "manager_other",
+	})
+	if err != nil {
+		t.Fatalf("bypass for other customer order: %v", err)
+	}
+	if payment.CustomerID != "cust_1" {
+		t.Fatalf("payment customer_id = %s, want cust_1", payment.CustomerID)
 	}
 }
 

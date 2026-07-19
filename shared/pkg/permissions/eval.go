@@ -111,3 +111,9 @@ func BypassesPaymentReadABAC(held []string) bool {
 func BypassesPaymentABAC(held []string) bool {
 	return BypassesPaymentReadABAC(held)
 }
+
+// CanBypassPayment reports whether held may mark a pending order paid without a PG
+// (payment method "bypass"). Distinct from BypassesPaymentCreateABAC.
+func CanBypassPayment(held []string) bool {
+	return HasAny(held, All, AdminAll, PaymentBypass)
+}

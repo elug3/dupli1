@@ -321,12 +321,12 @@ See [cart-service.md](cart-service.md) for architecture, boundaries with invento
 |---|---|---|---|
 | `GET` | `/api/v1/payments/health` | — | Health check |
 | `GET` | `/api/v1/payments/settings` | — | Non-secret service settings |
-| `POST` | `/api/v1/payments` | ABAC / `payment.create` | Start Stripe Checkout for a pending order |
+| `POST` | `/api/v1/payments` | ABAC / `payment.create`; Bypass needs `payment.bypass` | Start payment for a pending order (`method`: `credit_card` default, or `bypass`) |
 | `GET` | `/api/v1/payments/{id}` | ABAC / `payment.read.all` | Payment status |
 | `POST` | `/api/v1/payments/webhooks/stripe` | Stripe signature | Webhook handler |
 | `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (no Stripe key): mark payment succeeded |
 
-See [payment-service.md](payment-service.md) for Stripe redirect flow, 5-minute auto-cancel, and `payment.succeeded` → `paid`. Planned methods (`credit_card` / `bypass` / `bitcoin`): [payment-methods-plan.md](payment-methods-plan.md).
+See [payment-service.md](payment-service.md) for Stripe redirect flow, 5-minute auto-cancel, and `payment.succeeded` → `paid`. Methods (`credit_card` / `bypass` / `bitcoin` planned): [payment-methods-plan.md](payment-methods-plan.md).
 
 ---
 

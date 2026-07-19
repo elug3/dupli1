@@ -162,14 +162,17 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
 
 **Create payment**
 ```json
-{ "order_id": "ord_000001" }
+{ "order_id": "ord_000001", "method": "credit_card" }
 ```
+
+Omit `method` (or send `credit_card`) for Stripe Checkout. Managers with `payment.bypass` may send `method: "bypass"` (+ optional `note`) to mark paid without a PG.
 
 **Response**
 ```json
 {
   "id": "pay_000001",
   "order_id": "ord_000001",
+  "method": "credit_card",
   "amount_cents": 70000,
   "currency": "krw",
   "status": "requires_payment",

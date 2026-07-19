@@ -32,6 +32,7 @@ var bundles = map[string][]string{
 		InventoryStockWrite,
 		InventoryReservationManage,
 		CartRead,
+		PaymentBypass,
 	},
 	BundleUserAdmin: {
 		UserCreate,

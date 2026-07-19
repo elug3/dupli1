@@ -102,6 +102,8 @@ func (h *Handler) payments(w http.ResponseWriter, r *http.Request) {
 	claims, _ := authjwt.FromContext(r.Context())
 	var req struct {
 		OrderID string `json:"order_id"`
+		Method  string `json:"method"`
+		Note    string `json:"note"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
@@ -112,11 +114,15 @@ func (h *Handler) payments(w http.ResponseWriter, r *http.Request) {
 		bearerToken = auth[7:]
 	}
 	payment, err := h.svc.CreatePayment(r.Context(), service.CreatePaymentInput{
-		OrderID:        req.OrderID,
-		CustomerID:     claims.UserID,
-		BearerToken:    bearerToken,
-		IdempotencyKey: r.Header.Get("Idempotency-Key"),
-		BypassABAC:     h.jwtValidator != nil && permissions.BypassesPaymentCreateABAC(claims.Permissions),
+		OrderID:           req.OrderID,
+		CustomerID:        claims.UserID,
+		BearerToken:       bearerToken,
+		IdempotencyKey:    r.Header.Get("Idempotency-Key"),
+		Method:            req.Method,
+		Note:              req.Note,
+		CreatedBy:         claims.UserID,
+		BypassABAC:        h.jwtValidator != nil && permissions.BypassesPaymentCreateABAC(claims.Permissions),
+		AllowMethodBypass: h.jwtValidator == nil || permissions.CanBypassPayment(claims.Permissions),
 	})
 	if err != nil {
 		respondServiceError(w, err)
@@ -222,8 +228,10 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ports.ErrNotFound), errors.Is(err, ports.ErrOrderNotFound):
 		respondError(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, ports.ErrOrderForbidden):
+	case errors.Is(err, ports.ErrOrderForbidden), errors.Is(err, ports.ErrPaymentForbidden):
 		respondError(w, http.StatusForbidden, err.Error())
+	case errors.Is(err, ports.ErrMethodUnavailable):
+		respondError(w, http.StatusNotImplemented, err.Error())
 	case errors.Is(err, ports.ErrOrderNotPending), errors.Is(err, domain.ErrInvalidPayment):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:

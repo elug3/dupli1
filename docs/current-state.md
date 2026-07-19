@@ -15,7 +15,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Orders + checkout sessions | Implemented (PostgreSQL) |
 | Shopping cart | Implemented (PostgreSQL) |
 | Payments (Stripe Checkout) | Implemented — see [payment-service.md](payment-service.md) |
-| Payment methods | Credit card live; Bypass + Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
+| Payment methods | Credit card + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
 | Notifications | Stub (health only) |
 | User profiles, chat, analytics | Guest cookie + unique PDP views + simple recommendations implemented in product — see [product-guest-views-plan.md](product-guest-views-plan.md), [product-recommendations.md](product-recommendations.md); broader analytics still not started |
 | Manager settings (mutable store policy) | Sketch — see [manager-settings-api.md](manager-settings-api.md) |
@@ -105,8 +105,8 @@ See [service-layout.md](service-layout.md) for details.
   - Default payment currency: **`krw` only** (whole won; `*_cents` fields are KRW minor units = won)
   - Dev mode without `STRIPE_SECRET_KEY`: simulate URL `GET /api/v1/payments/{id}/simulate-success`
   - Publishes **`payment.succeeded`** on NATS when payment completes
-  - **Methods (planned):** explicit `method` on create — `credit_card` (current), `bypass` (order manager), `bitcoin` (later; not implemented). See [payment-methods-plan.md](payment-methods-plan.md)
-- **Auth:** Bearer JWT on customer routes; ownership ABAC unless `payment.create` / `payment.read.all`. Stripe signature on webhook
+  - **Methods:** `method` on create — `credit_card` (default), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)
+- **Auth:** Bearer JWT on customer routes; ownership ABAC unless `payment.create` / `payment.read.all`. Bypass requires `payment.bypass`. Stripe signature on webhook
 - **Tests:** `cd payment && go test ./...`
 
 ### dupli1-notification

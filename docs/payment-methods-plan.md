@@ -1,6 +1,6 @@
 # Plan: Payment Methods
 
-**Status:** Design only — no Bitcoin implementation in this plan. Credit card is already live via Stripe Checkout; Bypass is the next implementable method; Bitcoin is documented for a later phase.
+**Status:** Design + Bypass implemented. Credit card remains Stripe Checkout; Bitcoin is still spec-only (do not implement yet).
 
 **Related:** [payment-service.md](payment-service.md), [permissions.md](permissions.md), [checkout-session.md](checkout-session.md), [current-state.md](current-state.md).
 
@@ -11,7 +11,7 @@ Offer three payment methods for pending orders, with a single confirmation path 
 | Method | Who can use it | Status |
 |--------|----------------|--------|
 | **Credit card** | Customer (own order) or `payment.create` | **Implemented** — Stripe Checkout redirect |
-| **Bypass** | Order manager only (`payment.bypass`) | **Planned — next to implement** |
+| **Bypass** | Order manager only (`payment.bypass`) | **Implemented** — mark paid without a PG |
 | **Bitcoin** | Customer (own order) | **Planned — do not implement yet** |
 
 All successful methods must end the same way: payment record → **`succeeded`** → NATS **`payment.succeeded`** → order **`pending` → `paid`**. Order managers still ship via `POST /orders/{id}/ship`.
@@ -106,7 +106,7 @@ No change to Stripe webhook path or event payload beyond optional `method` on th
 
 ### 2. Bypass (`bypass`) — order manager only
 
-**Status:** Planned; implement after the `method` field lands.
+**Status:** Implemented.
 
 Staff mark a pending order as paid **without** collecting money through a PG. Use cases: cash / bank transfer recorded offline, VIP / comps, ops corrections. This is **not** a storefront option and **not** the same as `BypassABAC` / `payment.create`.
 
@@ -303,12 +303,12 @@ Bypass should **not** go through Stripe or the `simulate-success` URL. It calls 
 - Echo `method` on responses and settings
 - No behavior change for existing clients that omit `method`
 
-### Phase 2 — Bypass (order manager)
+### Phase 2 — Bypass (order manager) — **done**
 
 - Add `payment.bypass` permission + bundle updates
 - Implement Bypass create path (succeed + publish)
 - Persist `created_by` / `note`
-- manage-web: “Mark paid (bypass)” on pending orders
+- manage-web: “Mark paid (bypass)” on pending orders (client follow-up)
 - Tests: permission matrix, happy path → order `paid`, forbidden for customers
 
 ### Phase 3 — Bitcoin (later PR only)

@@ -20,10 +20,18 @@ func BuildSettings(cfg Config) settings.Response {
 		"stripe_checkout":      cfg.StripeSecretKey != "",
 		"stripe_webhook":       cfg.StripeWebhookSecret != "",
 		"dev_simulate_success": cfg.StripeSecretKey == "",
+		"method_credit_card":   true,
+		"method_bypass":        true,
+		"method_bitcoin":       false,
 	}
 	resp.Limits = map[string]any{
 		"checkout_provider": checkoutProvider,
 		"currency":          money.Currency, // only KRW; amount_cents is whole won
+		"methods": map[string]bool{
+			"credit_card": true,
+			"bypass":      true, // requires payment.bypass; storefront must hide
+			"bitcoin":     false,
+		},
 	}
 	if cfg.PublicBaseURL != "" {
 		resp.Limits["public_base_url"] = cfg.PublicBaseURL

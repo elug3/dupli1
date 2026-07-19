@@ -22,7 +22,7 @@ func TestExpandLegacyRoles_productManager(t *testing.T) {
 
 func TestExpandLegacyRoles_orderManager(t *testing.T) {
 	got := ExpandLegacyRoles([]string{RoleOrderManager})
-	for _, p := range []string{OrderShip, OrderStatusUpdate, OrderReadAll, InventoryStockWrite, InventoryReservationManage, CartRead} {
+	for _, p := range []string{OrderShip, OrderStatusUpdate, OrderReadAll, InventoryStockWrite, InventoryReservationManage, CartRead, PaymentBypass} {
 		if !slices.Contains(got, p) {
 			t.Fatalf("order_manager missing %s in %v", p, got)
 		}
