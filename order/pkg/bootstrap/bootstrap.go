@@ -70,12 +70,12 @@ func Bootstrap(cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	inventoryToken, err := resolveInventoryToken(context.Background(), cfg)
+	inventoryTokenSource, err := resolveInventoryTokenSource(context.Background(), cfg)
 	if err != nil {
 		closeFn()
 		return nil, err
 	}
-	inventory := httpinventory.NewClient(cfg.InventoryURL, cfg.HTTPClient, inventoryToken)
+	inventory := httpinventory.NewClient(cfg.InventoryURL, cfg.HTTPClient, inventoryTokenSource)
 
 	var couponClient ports.CouponClient
 	if cfg.ProductURL != "" {
@@ -154,14 +154,19 @@ func openRepository(connString string) (ports.Repository, func() error, error) {
 	}, nil
 }
 
-func resolveInventoryToken(ctx context.Context, cfg Config) (string, error) {
+func resolveInventoryTokenSource(ctx context.Context, cfg Config) (httpauth.TokenSource, error) {
 	if cfg.InventoryBearerToken != "" {
-		return cfg.InventoryBearerToken, nil
+		return httpauth.StaticToken(cfg.InventoryBearerToken), nil
 	}
 	if cfg.AuthURL == "" || cfg.InventoryServiceEmail == "" || cfg.InventoryServicePassword == "" {
-		return "", nil
+		return nil, nil
 	}
-	return httpauth.FetchAccessToken(ctx, cfg.AuthURL, cfg.InventoryServiceEmail, cfg.InventoryServicePassword, cfg.HTTPClient)
+	src := httpauth.NewServiceAccountTokenSource(cfg.AuthURL, cfg.InventoryServiceEmail, cfg.InventoryServicePassword, cfg.HTTPClient)
+	// Prime the cache at startup so misconfigured credentials fail fast.
+	if _, err := src.Token(ctx); err != nil {
+		return nil, fmt.Errorf("inventory service account token: %w", err)
+	}
+	return src, nil
 }
 
 func DefaultHTTPClient() *http.Client {
