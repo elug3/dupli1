@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/elug3/dupli1/order/pkg/bootstrap"
@@ -21,22 +22,26 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	if opts.Addr == "" {
 		return nil, fmt.Errorf("Addr is required")
 	}
-	if opts.InventoryURL == "" {
-		return nil, fmt.Errorf("InventoryURL is required")
+	productURL := strings.TrimSpace(opts.ProductURL)
+	if productURL == "" {
+		productURL = strings.TrimSpace(opts.InventoryURL)
+	}
+	if productURL == "" {
+		return nil, fmt.Errorf("ProductURL is required")
 	}
 
 	app, err := bootstrap.Bootstrap(bootstrap.Config{
-		InventoryURL:             opts.InventoryURL,
-		ProductURL:               opts.ProductURL,
-		AuthURL:                  opts.AuthURL,
-		InventoryServiceEmail:    opts.InventoryServiceEmail,
-		InventoryServicePassword: opts.InventoryServicePassword,
-		InventoryBearerToken:     opts.InventoryBearerToken,
-		DatabaseConnString:       opts.DatabaseConnString,
-		JWTSecret:                opts.JWTSecret,
-		JWKSURL:                  opts.JWKSURL,
-		NATSURL:                  opts.NATSURL,
-		HTTPClient:               bootstrap.DefaultHTTPClient(),
+		ProductURL:           productURL,
+		InventoryURL:         opts.InventoryURL,
+		AuthURL:              opts.AuthURL,
+		OrderServiceEmail:    opts.OrderServiceEmail,
+		OrderServicePassword: opts.OrderServicePassword,
+		StockBearerToken:     opts.StockBearerToken,
+		DatabaseConnString:   opts.DatabaseConnString,
+		JWTSecret:            opts.JWTSecret,
+		JWKSURL:              opts.JWKSURL,
+		NATSURL:              opts.NATSURL,
+		HTTPClient:           bootstrap.DefaultHTTPClient(),
 	})
 	if err != nil {
 		return nil, err

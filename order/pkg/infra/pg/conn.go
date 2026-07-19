@@ -25,7 +25,7 @@ func isLocalPostgresHost(connURL string) bool {
 	}
 
 	switch host {
-	case "localhost", "127.0.0.1", "postgres-auth", "postgres-product", "postgres-inventory", "postgres-order", "postgres":
+	case "localhost", "127.0.0.1", "postgres-auth", "postgres-product", "postgres-order", "postgres":
 		return true
 	}
 

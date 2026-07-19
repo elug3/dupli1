@@ -221,8 +221,7 @@ services:
       - "8083:8080"
     environment:
       DUPLI1_ORDER_ADDR: :8080
-      # Inventory (stock/reservations) is served by product now.
-      DUPLI1_INVENTORY_URL: http://dupli1-product:8080
+      # Stock/reservations + coupons are served by product (no standalone inventory).
       DUPLI1_PRODUCT_URL: http://dupli1-product:8080
       DUPLI1_AUTH_URL: http://dupli1-auth:8080
       DUPLI1_ORDER_SERVICE_EMAIL: dupli1-order@order.dupli1.com

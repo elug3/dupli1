@@ -1,9 +1,10 @@
-package httpinventory
+package httpstock
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -12,6 +13,10 @@ import (
 	"github.com/elug3/dupli1/order/pkg/ports"
 )
 
+// ErrUnauthorized is returned when product rejects the service-account Bearer token.
+var ErrUnauthorized = errors.New("unauthorized")
+
+// Client calls product stock/reservation APIs.
 type Client struct {
 	baseURL     string
 	httpClient  *http.Client
@@ -38,10 +43,11 @@ func NewClientWithBearer(baseURL string, httpClient *http.Client, bearerToken st
 	return NewClient(baseURL, httpClient, src)
 }
 
-func (c *Client) Reserve(ctx context.Context, orderID string, items []ports.InventoryItem) (string, error) {
+func (c *Client) Reserve(ctx context.Context, orderID string, items []ports.StockItem) (string, error) {
 	var response struct {
 		ReservationID string `json:"reservation_id"`
 	}
+	// Product still serves stock under /api/v1/inventory/* (legacy path prefix).
 	err := c.doJSON(ctx, http.MethodPost, "/api/v1/inventory/reservations", map[string]any{
 		"order_id": orderID,
 		"items":    items,
@@ -50,7 +56,7 @@ func (c *Client) Reserve(ctx context.Context, orderID string, items []ports.Inve
 		return "", err
 	}
 	if response.ReservationID == "" {
-		return "", fmt.Errorf("inventory response missing reservation_id")
+		return "", fmt.Errorf("stock response missing reservation_id")
 	}
 	return response.ReservationID, nil
 }
@@ -68,7 +74,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, targ
 	if err == nil {
 		return nil
 	}
-	if !isUnauthorized(err) {
+	if !errors.Is(err, ErrUnauthorized) {
 		return err
 	}
 	// Stale access token — invalidate and retry once with a fresh token.
@@ -96,11 +102,14 @@ func (c *Client) doJSONOnce(ctx context.Context, method, path string, body any, 
 	if c.tokenSource != nil {
 		token, err := c.tokenSource.Token(ctx)
 		if err != nil {
-			return fmt.Errorf("inventory auth token: %w", err)
+			return fmt.Errorf("product stock auth token: %w", err)
 		}
 		if token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
+	} else if req.Header.Get("Authorization") == "" {
+		// No token source configured — product reservation routes require auth.
+		return fmt.Errorf("product stock request failed: %w (no service-account token configured; set DUPLI1_ORDER_SERVICE_EMAIL/PASSWORD and DUPLI1_AUTH_URL)", ErrUnauthorized)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -114,24 +123,21 @@ func (c *Client) doJSONOnce(ctx context.Context, method, path string, body any, 
 			Error string `json:"error"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&errBody)
-		if errBody.Error == "" {
-			errBody.Error = resp.Status
+		msg := strings.TrimSpace(errBody.Error)
+		if msg == "" {
+			msg = resp.Status
 		}
 		if resp.StatusCode == http.StatusUnauthorized {
-			return fmt.Errorf("inventory request failed: unauthorized: %s", errBody.Error)
+			if msg == "" || strings.EqualFold(msg, "unauthorized") {
+				return fmt.Errorf("product stock request failed: %w", ErrUnauthorized)
+			}
+			return fmt.Errorf("product stock request failed: %w (%s)", ErrUnauthorized, msg)
 		}
-		return fmt.Errorf("inventory request failed: %s", errBody.Error)
+		return fmt.Errorf("product stock request failed: %s", msg)
 	}
 
 	if target != nil {
 		return json.NewDecoder(resp.Body).Decode(target)
 	}
 	return nil
-}
-
-func isUnauthorized(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(err.Error(), "unauthorized")
 }

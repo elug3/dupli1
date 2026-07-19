@@ -3,27 +3,30 @@ package order
 import "time"
 
 type ServerOptions struct {
-	Addr               string
-	InventoryURL             string
-	ProductURL               string
-	AuthURL                  string
-	InventoryServiceEmail    string
-	InventoryServicePassword string
-	InventoryBearerToken     string
-	DatabaseConnString       string
+	Addr string
+
+	ProductURL string
+	// InventoryURL is deprecated; prefer ProductURL (stock is served by product).
+	InventoryURL string
+
+	AuthURL              string
+	OrderServiceEmail    string
+	OrderServicePassword string
+	StockBearerToken     string
+
+	DatabaseConnString string
 	JWTSecret          string
 	JWKSURL            string
 	NATSURL            string
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
-	ShutdownTimeout time.Duration
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
+	ShutdownTimeout    time.Duration
 }
 
 func NewServerOptions() *ServerOptions {
 	return &ServerOptions{
 		Addr:            ":8083",
-		InventoryURL:    "http://localhost:8082",
 		ProductURL:      "http://localhost:8081",
 		ReadTimeout:     5 * time.Second,
 		WriteTimeout:    10 * time.Second,

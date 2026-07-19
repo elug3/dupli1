@@ -18,7 +18,7 @@ const (
 
 type Service struct {
 	repo           ports.Repository
-	inventory      ports.InventoryClient
+	stock          ports.StockClient
 	eventPublisher ports.EventPublisher
 	couponClient   ports.CouponClient
 	checkoutTTL    time.Duration
@@ -51,20 +51,20 @@ type orderEvent struct {
 	Occurred      time.Time          `json:"occurred_at"`
 }
 
-func New(repo ports.Repository, inventory ports.InventoryClient, eventPublisher ...ports.EventPublisher) *Service {
-	return NewWithCheckout(repo, inventory, nil, 0, eventPublisher...)
+func New(repo ports.Repository, stock ports.StockClient, eventPublisher ...ports.EventPublisher) *Service {
+	return NewWithCheckout(repo, stock, nil, 0, eventPublisher...)
 }
 
 func NewWithCheckout(
 	repo ports.Repository,
-	inventory ports.InventoryClient,
+	stock ports.StockClient,
 	couponClient ports.CouponClient,
 	checkoutTTL time.Duration,
 	eventPublisher ...ports.EventPublisher,
 ) *Service {
 	s := &Service{
 		repo:         repo,
-		inventory:    inventory,
+		stock:        stock,
 		couponClient: couponClient,
 		checkoutTTL:  checkoutTTL,
 		now: func() time.Time {
@@ -86,27 +86,27 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		return nil, err
 	}
 
-	inventoryItems := make([]ports.InventoryItem, len(input.Items))
+	stockItems := make([]ports.StockItem, len(input.Items))
 	for i, item := range input.Items {
-		inventoryItems[i] = ports.InventoryItem{
+		stockItems[i] = ports.StockItem{
 			SkuID:    item.SkuID,
 			SKU:      item.SKU,
 			Quantity: item.Quantity,
 		}
 	}
 
-	reservationID, err := s.inventory.Reserve(ctx, orderID, inventoryItems)
+	reservationID, err := s.stock.Reserve(ctx, orderID, stockItems)
 	if err != nil {
 		return nil, err
 	}
 
 	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, input.Items, input.CouponCode, input.DiscountCents, s.now())
 	if err != nil {
-		_ = s.inventory.ReleaseReservation(ctx, reservationID)
+		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
 	if err := s.repo.Save(ctx, order); err != nil {
-		_ = s.inventory.ReleaseReservation(ctx, reservationID)
+		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
 	if err := s.publish(ctx, orderCreatedSubject, order); err != nil {
@@ -159,7 +159,7 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string) (*do
 	if err != nil {
 		return nil, err
 	}
-	if err := s.inventory.CommitReservation(ctx, order.ReservationID); err != nil {
+	if err := s.stock.CommitReservation(ctx, order.ReservationID); err != nil {
 		return nil, err
 	}
 	if err := order.Ship(shippedBy, s.now()); err != nil {
@@ -176,7 +176,7 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if order.Status != domain.StatusPending && order.Status != domain.StatusPaid {
 		return nil, domain.ErrInvalidTransition
 	}
-	if err := s.inventory.ReleaseReservation(ctx, order.ReservationID); err != nil {
+	if err := s.stock.ReleaseReservation(ctx, order.ReservationID); err != nil {
 		return nil, err
 	}
 	if err := order.Cancel(s.now()); err != nil {

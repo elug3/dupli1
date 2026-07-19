@@ -5,44 +5,49 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
-	natsinfra "github.com/elug3/dupli1/order/pkg/infra/nats"
 	"github.com/elug3/dupli1/order/pkg/authjwt"
 	"github.com/elug3/dupli1/order/pkg/handler"
 	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
 	"github.com/elug3/dupli1/order/pkg/infra/httpcoupon"
-	"github.com/elug3/dupli1/order/pkg/infra/httpinventory"
+	"github.com/elug3/dupli1/order/pkg/infra/httpstock"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
+	natsinfra "github.com/elug3/dupli1/order/pkg/infra/nats"
 	"github.com/elug3/dupli1/order/pkg/infra/pg"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
 )
 
 type Config struct {
-	InventoryURL             string
-	ProductURL               string
-	AuthURL                  string
-	InventoryServiceEmail    string
-	InventoryServicePassword string
-	InventoryBearerToken     string
-	DatabaseConnString       string
-	JWTSecret                string
-	JWKSURL                  string
-	NATSURL                  string
-	HTTPClient               *http.Client
+	ProductURL string
+	// InventoryURL is a deprecated alias for ProductURL (stock lives in product).
+	InventoryURL string
+
+	AuthURL              string
+	OrderServiceEmail    string
+	OrderServicePassword string
+	// StockBearerToken overrides the service-account login (static token).
+	StockBearerToken string
+
+	DatabaseConnString string
+	JWTSecret          string
+	JWKSURL            string
+	NATSURL            string
+	HTTPClient         *http.Client
 }
 
 type App struct {
-	Router        *http.ServeMux
-	Handler       *handler.Handler
-	Service       *service.Service
-	Repo          ports.Repository
-	Inventory     ports.InventoryClient
-	natsPublisher *natsinfra.Publisher
+	Router         *http.ServeMux
+	Handler        *handler.Handler
+	Service        *service.Service
+	Repo           ports.Repository
+	Stock          ports.StockClient
+	natsPublisher  *natsinfra.Publisher
 	natsSubscriber *natsinfra.Subscriber
-	expiryCancel    context.CancelFunc
-	close         func() error
+	expiryCancel   context.CancelFunc
+	close          func() error
 }
 
 func (a *App) Close() error {
@@ -70,17 +75,22 @@ func Bootstrap(cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	inventoryTokenSource, err := resolveInventoryTokenSource(context.Background(), cfg)
+
+	productURL := resolveProductURL(cfg)
+	if productURL == "" {
+		closeFn()
+		return nil, fmt.Errorf("ProductURL is required (stock + coupons are served by product)")
+	}
+
+	stockTokenSource, err := resolveStockTokenSource(context.Background(), cfg)
 	if err != nil {
 		closeFn()
 		return nil, err
 	}
-	inventory := httpinventory.NewClient(cfg.InventoryURL, cfg.HTTPClient, inventoryTokenSource)
+	stock := httpstock.NewClient(productURL, cfg.HTTPClient, stockTokenSource)
 
 	var couponClient ports.CouponClient
-	if cfg.ProductURL != "" {
-		couponClient = httpcoupon.NewClient(cfg.ProductURL, cfg.HTTPClient)
-	}
+	couponClient = httpcoupon.NewClient(productURL, cfg.HTTPClient)
 
 	var eventPublisher ports.EventPublisher
 	var natsPublisher *natsinfra.Publisher
@@ -100,7 +110,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		}
 	}
 
-	svc := service.NewWithCheckout(repo, inventory, couponClient, 0, eventPublisher)
+	svc := service.NewWithCheckout(repo, stock, couponClient, 0, eventPublisher)
 
 	if natsSubscriber != nil {
 		if err := svc.RegisterPaymentConsumer(context.Background(), natsSubscriber); err != nil {
@@ -131,7 +141,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		Handler:        h,
 		Service:        svc,
 		Repo:           repo,
-		Inventory:      inventory,
+		Stock:          stock,
 		natsPublisher:  natsPublisher,
 		natsSubscriber: natsSubscriber,
 		expiryCancel:   expiryCancel,
@@ -154,17 +164,26 @@ func openRepository(connString string) (ports.Repository, func() error, error) {
 	}, nil
 }
 
-func resolveInventoryTokenSource(ctx context.Context, cfg Config) (httpauth.TokenSource, error) {
-	if cfg.InventoryBearerToken != "" {
-		return httpauth.StaticToken(cfg.InventoryBearerToken), nil
+func resolveProductURL(cfg Config) string {
+	if u := strings.TrimSpace(cfg.ProductURL); u != "" {
+		return u
 	}
-	if cfg.AuthURL == "" || cfg.InventoryServiceEmail == "" || cfg.InventoryServicePassword == "" {
+	// Deprecated: DUPLI1_INVENTORY_URL used to point at a standalone inventory service;
+	// it now aliases product (stock/reservations live there).
+	return strings.TrimSpace(cfg.InventoryURL)
+}
+
+func resolveStockTokenSource(ctx context.Context, cfg Config) (httpauth.TokenSource, error) {
+	if cfg.StockBearerToken != "" {
+		return httpauth.StaticToken(cfg.StockBearerToken), nil
+	}
+	if cfg.AuthURL == "" || cfg.OrderServiceEmail == "" || cfg.OrderServicePassword == "" {
 		return nil, nil
 	}
-	src := httpauth.NewServiceAccountTokenSource(cfg.AuthURL, cfg.InventoryServiceEmail, cfg.InventoryServicePassword, cfg.HTTPClient)
+	src := httpauth.NewServiceAccountTokenSource(cfg.AuthURL, cfg.OrderServiceEmail, cfg.OrderServicePassword, cfg.HTTPClient)
 	// Prime the cache at startup so misconfigured credentials fail fast.
 	if _, err := src.Token(ctx); err != nil {
-		return nil, fmt.Errorf("inventory service account token: %w", err)
+		return nil, fmt.Errorf("order service account token for product stock: %w", err)
 	}
 	return src, nil
 }

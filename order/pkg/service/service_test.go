@@ -12,27 +12,27 @@ import (
 	"github.com/elug3/dupli1/order/pkg/service"
 )
 
-type fakeInventory struct {
-	reservedItems []ports.InventoryItem
+type fakeStock struct {
+	reservedItems []ports.StockItem
 	reservationID string
 	committed     string
 	released      string
 }
 
-func (f *fakeInventory) Reserve(ctx context.Context, orderID string, items []ports.InventoryItem) (string, error) {
-	f.reservedItems = append([]ports.InventoryItem(nil), items...)
+func (f *fakeStock) Reserve(ctx context.Context, orderID string, items []ports.StockItem) (string, error) {
+	f.reservedItems = append([]ports.StockItem(nil), items...)
 	if f.reservationID == "" {
 		f.reservationID = "res-1"
 	}
 	return f.reservationID, nil
 }
 
-func (f *fakeInventory) CommitReservation(ctx context.Context, reservationID string) error {
+func (f *fakeStock) CommitReservation(ctx context.Context, reservationID string) error {
 	f.committed = reservationID
 	return nil
 }
 
-func (f *fakeInventory) ReleaseReservation(ctx context.Context, reservationID string) error {
+func (f *fakeStock) ReleaseReservation(ctx context.Context, reservationID string) error {
 	f.released = reservationID
 	return nil
 }
@@ -48,11 +48,11 @@ func (p *recordedPublisher) Publish(ctx context.Context, subject string, event a
 	return nil
 }
 
-func TestCreateOrderReservesInventoryAndPublishesEvent(t *testing.T) {
+func TestCreateOrderReservesStockAndPublishesEvent(t *testing.T) {
 	ctx := context.Background()
-	inventory := &fakeInventory{reservationID: "res-123"}
+	stock := &fakeStock{reservationID: "res-123"}
 	publisher := &recordedPublisher{}
-	svc := service.New(memory.NewRepository(), inventory, publisher)
+	svc := service.New(memory.NewRepository() , stock, publisher)
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -75,10 +75,10 @@ func TestCreateOrderReservesInventoryAndPublishesEvent(t *testing.T) {
 	}
 }
 
-func TestMarkOrderPaidThenShipCommitsInventory(t *testing.T) {
+func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 	ctx := context.Background()
-	inventory := &fakeInventory{reservationID: "res-123"}
-	svc := service.New(memory.NewRepository(), inventory)
+	stock := &fakeStock{reservationID: "res-123"}
+	svc := service.New(memory.NewRepository(), stock)
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -95,8 +95,8 @@ func TestMarkOrderPaidThenShipCommitsInventory(t *testing.T) {
 	if order.Status != domain.StatusPaid {
 		t.Fatalf("order status = %q, want paid", order.Status)
 	}
-	if inventory.committed != "" {
-		t.Fatal("inventory should not commit on paid")
+	if stock.committed != "" {
+		t.Fatal("stock should not commit on paid")
 	}
 
 	order, err = svc.ShipOrder(ctx, order.ID, "manager-1")
@@ -106,15 +106,15 @@ func TestMarkOrderPaidThenShipCommitsInventory(t *testing.T) {
 	if order.Status != domain.StatusInTransit {
 		t.Fatalf("order status = %q, want in_transit", order.Status)
 	}
-	if inventory.committed != "res-123" {
-		t.Fatalf("committed reservation = %q, want res-123", inventory.committed)
+	if stock.committed != "res-123" {
+		t.Fatalf("committed reservation = %q, want res-123", stock.committed)
 	}
 }
 
-func TestCancelPaidOrderReleasesInventory(t *testing.T) {
+func TestCancelPaidOrderReleasesStock(t *testing.T) {
 	ctx := context.Background()
-	inventory := &fakeInventory{reservationID: "res-123"}
-	svc := service.New(memory.NewRepository(), inventory)
+	stock := &fakeStock{reservationID: "res-123"}
+	svc := service.New(memory.NewRepository(), stock)
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -131,15 +131,15 @@ func TestCancelPaidOrderReleasesInventory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CancelOrder returned error: %v", err)
 	}
-	if inventory.released != "res-123" {
-		t.Fatalf("released reservation = %q, want res-123", inventory.released)
+	if stock.released != "res-123" {
+		t.Fatalf("released reservation = %q, want res-123", stock.released)
 	}
 }
 
 func TestCancelInTransitOrderFails(t *testing.T) {
 	ctx := context.Background()
-	inventory := &fakeInventory{reservationID: "res-123"}
-	svc := service.New(memory.NewRepository(), inventory)
+	stock := &fakeStock{reservationID: "res-123"}
+	svc := service.New(memory.NewRepository(), stock)
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -161,10 +161,10 @@ func TestCancelInTransitOrderFails(t *testing.T) {
 	}
 }
 
-func TestCreateOrderReservesInventoryWithSkuID(t *testing.T) {
+func TestCreateOrderReservesStockWithSkuID(t *testing.T) {
 	ctx := context.Background()
-	inventory := &fakeInventory{reservationID: "res-999"}
-	svc := service.New(memory.NewRepository(), inventory)
+	stock := &fakeStock{reservationID: "res-999"}
+	svc := service.New(memory.NewRepository(), stock)
 
 	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -175,16 +175,16 @@ func TestCreateOrderReservesInventoryWithSkuID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if len(inventory.reservedItems) != 1 || inventory.reservedItems[0].SkuID != "SKUID-1" {
-		t.Fatalf("reserved items = %+v, want SkuID SKUID-1 forwarded", inventory.reservedItems)
+	if len(stock.reservedItems) != 1 || stock.reservedItems[0].SkuID != "SKUID-1" {
+		t.Fatalf("reserved items = %+v, want SkuID SKUID-1 forwarded", stock.reservedItems)
 	}
 }
 
 func TestCreateOrderEventCarriesSkuID(t *testing.T) {
 	ctx := context.Background()
-	inventory := &fakeInventory{reservationID: "res-1"}
+	stock := &fakeStock{reservationID: "res-1"}
 	publisher := &recordedPublisher{}
-	svc := service.New(memory.NewRepository(), inventory, publisher)
+	svc := service.New(memory.NewRepository() , stock, publisher)
 
 	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",

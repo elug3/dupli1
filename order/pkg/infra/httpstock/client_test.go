@@ -1,15 +1,16 @@
-package httpinventory_test
+package httpstock_test
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 
 	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
-	"github.com/elug3/dupli1/order/pkg/infra/httpinventory"
+	"github.com/elug3/dupli1/order/pkg/infra/httpstock"
 	"github.com/elug3/dupli1/order/pkg/ports"
 )
 
@@ -40,7 +41,7 @@ func TestClient_RetriesOnceOnUnauthorized(t *testing.T) {
 				t.Errorf("first auth = %q, want Bearer stale", auth)
 			}
 			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid token"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
 			return
 		}
 		if auth != "Bearer fresh" {
@@ -51,9 +52,9 @@ func TestClient_RetriesOnceOnUnauthorized(t *testing.T) {
 	defer srv.Close()
 
 	src := &flakyTokenSource{tokens: []string{"stale", "fresh"}}
-	client := httpinventory.NewClient(srv.URL, srv.Client(), src)
+	client := httpstock.NewClient(srv.URL, srv.Client(), src)
 
-	id, err := client.Reserve(context.Background(), "ord-1", []ports.InventoryItem{
+	id, err := client.Reserve(context.Background(), "ord-1", []ports.StockItem{
 		{SKU: "SKU-1", Quantity: 1},
 	})
 	if err != nil {
@@ -67,6 +68,23 @@ func TestClient_RetriesOnceOnUnauthorized(t *testing.T) {
 	}
 }
 
+func TestClient_UnauthorizedErrorIsClear(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+	}))
+	defer srv.Close()
+
+	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "bad")
+	err := client.CommitReservation(context.Background(), "res-1")
+	if !errors.Is(err, httpstock.ErrUnauthorized) {
+		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	}
+	if got := err.Error(); got != "product stock request failed: unauthorized" {
+		t.Fatalf("err text = %q", got)
+	}
+}
+
 func TestClient_StaticBearer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer fixed" {
@@ -77,7 +95,7 @@ func TestClient_StaticBearer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := httpinventory.NewClientWithBearer(srv.URL, srv.Client(), "fixed")
+	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "fixed")
 	if err := client.CommitReservation(context.Background(), "res-1"); err != nil {
 		t.Fatal(err)
 	}
@@ -94,8 +112,16 @@ func TestClient_UsesTokenSource(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := httpinventory.NewClient(srv.URL, srv.Client(), httpauth.StaticToken("from-source"))
+	client := httpstock.NewClient(srv.URL, srv.Client(), httpauth.StaticToken("from-source"))
 	if err := client.ReleaseReservation(context.Background(), "res-1"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestClient_NoTokenSource(t *testing.T) {
+	client := httpstock.NewClient("http://example.invalid", nil, nil)
+	_, err := client.Reserve(context.Background(), "ord-1", []ports.StockItem{{SKU: "S", Quantity: 1}})
+	if !errors.Is(err, httpstock.ErrUnauthorized) {
+		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
 }

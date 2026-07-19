@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/elug3/dupli1/order/pkg"
+	order "github.com/elug3/dupli1/order/pkg"
 )
 
 type Options = order.ServerOptions
@@ -23,8 +23,8 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 
 	var (
 		addr               string
-		inventoryURL       = opts.InventoryURL
 		productURL         = opts.ProductURL
+		inventoryURL       = opts.InventoryURL // deprecated alias
 		natsURL            = opts.NATSURL
 		readTimeoutSec     = int(opts.ReadTimeout / time.Second)
 		writeTimeoutSec    = int(opts.WriteTimeout / time.Second)
@@ -35,8 +35,8 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	fs.StringVar(&host, "host", host, "Server host address")
 	fs.IntVar(&port, "port", port, "Server port number")
 	fs.StringVar(&addr, "addr", "", "Server listen address (overrides host/port)")
-	fs.StringVar(&inventoryURL, "inventory-url", inventoryURL, "Inventory service base URL")
-	fs.StringVar(&productURL, "product-url", productURL, "Product service base URL for coupon redemption")
+	fs.StringVar(&productURL, "product-url", productURL, "Product service base URL (coupons + stock/reservations)")
+	fs.StringVar(&inventoryURL, "inventory-url", inventoryURL, "Deprecated alias for -product-url")
 	fs.StringVar(&natsURL, "nats-url", natsURL, "NATS server URL for order events")
 	fs.IntVar(&readTimeoutSec, "read-timeout", readTimeoutSec, "Read timeout in seconds")
 	fs.IntVar(&writeTimeoutSec, "write-timeout", writeTimeoutSec, "Write timeout in seconds")
@@ -52,8 +52,8 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	} else {
 		opts.Addr = net.JoinHostPort(host, strconv.Itoa(port))
 	}
-	opts.InventoryURL = inventoryURL
 	opts.ProductURL = productURL
+	opts.InventoryURL = inventoryURL
 	opts.NATSURL = natsURL
 	opts.ReadTimeout = time.Duration(readTimeoutSec) * time.Second
 	opts.WriteTimeout = time.Duration(writeTimeoutSec) * time.Second
@@ -67,23 +67,30 @@ func applyEnv(opts *order.ServerOptions) {
 	if v := os.Getenv("DUPLI1_ORDER_ADDR"); v != "" {
 		opts.Addr = v
 	}
-	if v := os.Getenv("DUPLI1_INVENTORY_URL"); v != "" {
-		opts.InventoryURL = v
-	}
 	if v := os.Getenv("DUPLI1_PRODUCT_URL"); v != "" {
 		opts.ProductURL = v
+	}
+	// Deprecated: formerly pointed at a standalone inventory service.
+	if v := os.Getenv("DUPLI1_INVENTORY_URL"); v != "" {
+		opts.InventoryURL = v
+		if opts.ProductURL == "" {
+			opts.ProductURL = v
+		}
 	}
 	if v := os.Getenv("DUPLI1_AUTH_URL"); v != "" {
 		opts.AuthURL = v
 	}
 	if v := os.Getenv("DUPLI1_ORDER_SERVICE_EMAIL"); v != "" {
-		opts.InventoryServiceEmail = v
+		opts.OrderServiceEmail = v
 	}
 	if v := os.Getenv("DUPLI1_ORDER_SERVICE_PASSWORD"); v != "" {
-		opts.InventoryServicePassword = v
+		opts.OrderServicePassword = v
 	}
-	if v := os.Getenv("DUPLI1_INVENTORY_BEARER_TOKEN"); v != "" {
-		opts.InventoryBearerToken = v
+	if v := os.Getenv("DUPLI1_ORDER_STOCK_BEARER_TOKEN"); v != "" {
+		opts.StockBearerToken = v
+	} else if v := os.Getenv("DUPLI1_INVENTORY_BEARER_TOKEN"); v != "" {
+		// Deprecated alias.
+		opts.StockBearerToken = v
 	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.JWTSecret = v
