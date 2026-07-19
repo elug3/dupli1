@@ -20,4 +20,22 @@ func TestNewPaymentRejectsNonKRW(t *testing.T) {
 	if p.Currency != domain.DefaultCurrency {
 		t.Fatalf("currency=%q, want %q", p.Currency, domain.DefaultCurrency)
 	}
+	if p.Method != domain.MethodCreditCard {
+		t.Fatalf("method=%q, want %q", p.Method, domain.MethodCreditCard)
+	}
+}
+
+func TestNormalizeMethod(t *testing.T) {
+	got, err := domain.NormalizeMethod("")
+	if err != nil || got != domain.MethodCreditCard {
+		t.Fatalf("empty: got=%q err=%v", got, err)
+	}
+	got, err = domain.NormalizeMethod("BYPASS")
+	if err != nil || got != domain.MethodBypass {
+		t.Fatalf("bypass: got=%q err=%v", got, err)
+	}
+	_, err = domain.NormalizeMethod("paypal")
+	if err != domain.ErrInvalidPayment {
+		t.Fatalf("unknown: err=%v", err)
+	}
 }

@@ -37,6 +37,7 @@ func adminPermissions() []string {
 		OrderStatusUpdate,
 		OrderReadAll,
 		CartRead,
+		PaymentBypass,
 	}
 }
 
@@ -48,6 +49,7 @@ func orderManagerPermissions() []string {
 		InventoryStockWrite,
 		InventoryReservationManage,
 		CartRead,
+		PaymentBypass,
 	}
 }
 

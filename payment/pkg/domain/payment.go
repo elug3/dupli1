@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/elug3/dupli1/shared/pkg/money"
@@ -19,6 +20,20 @@ const (
 	StatusExpired         PaymentStatus = "expired"
 )
 
+// Payment method identifiers (API `method` field).
+const (
+	MethodCreditCard = "credit_card"
+	MethodBypass     = "bypass"
+	MethodBitcoin    = "bitcoin"
+)
+
+// Provider identifiers stored on the payment row.
+const (
+	ProviderStripe = "stripe"
+	ProviderDev    = "dev"
+	ProviderBypass = "bypass"
+)
+
 const DefaultPaymentTTL = 5 * time.Minute
 
 // DefaultCurrency is the only storefront / payment currency (KRW).
@@ -31,9 +46,12 @@ type Payment struct {
 	AmountCents    int64         `json:"amount_cents"` // whole KRW won (Stripe minor units for krw)
 	Currency       string        `json:"currency"`
 	Status         PaymentStatus `json:"status"`
+	Method         string        `json:"method"`
 	Provider       string        `json:"provider"`
 	ProviderRef    string        `json:"provider_ref"`
 	CheckoutURL    string        `json:"checkout_url,omitempty"`
+	CreatedBy      string        `json:"created_by,omitempty"`
+	Note           string        `json:"note,omitempty"`
 	IdempotencyKey string        `json:"-"`
 	ExpiresAt      time.Time     `json:"expires_at"`
 	CreatedAt      time.Time     `json:"created_at"`
@@ -55,6 +73,7 @@ func NewPayment(id, orderID, customerID string, amountCents int64, currency, pro
 		AmountCents: amountCents,
 		Currency:    normalized,
 		Status:      StatusRequiresPayment,
+		Method:      MethodCreditCard,
 		Provider:    provider,
 		ProviderRef: providerRef,
 		CheckoutURL: checkoutURL,
@@ -62,6 +81,21 @@ func NewPayment(id, orderID, customerID string, amountCents int64, currency, pro
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}, nil
+}
+
+// NormalizeMethod returns a canonical method or ErrInvalidPayment.
+// Empty method defaults to credit_card.
+func NormalizeMethod(method string) (string, error) {
+	m := strings.TrimSpace(strings.ToLower(method))
+	if m == "" {
+		return MethodCreditCard, nil
+	}
+	switch m {
+	case MethodCreditCard, MethodBypass, MethodBitcoin:
+		return m, nil
+	default:
+		return "", ErrInvalidPayment
+	}
 }
 
 func (p *Payment) MarkSucceeded(now time.Time) {

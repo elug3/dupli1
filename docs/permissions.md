@@ -183,7 +183,7 @@ Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
 |------------|-------------|
 | `payment.create` | Start checkout for any user's order (service accounts) |
 | `payment.read.all` | Read any payment by ID (bypass ownership check in service layer) |
-| `payment.bypass` | **Planned** — mark a pending order paid without a PG (`method=bypass`). Order-manager only; not the same as ABAC bypass. See [payment-methods-plan.md](payment-methods-plan.md) |
+| `payment.bypass` | Mark a pending order paid without a PG (`method=bypass`). Order-manager / fulfillment; not the same as ABAC bypass. See [payment-methods-plan.md](payment-methods-plan.md) |
 
 **Default storefront:** authenticated user with empty `permissions` may create/read **only their own** payments (ownership enforced in service).
 
@@ -286,7 +286,7 @@ paths below are unchanged. Each route also has a `by-sku-id/{skuId}` sibling.
 
 | Method | Path | Permission / rule |
 |--------|------|-------------------|
-| `POST` | `/api/v1/payments` | ABAC or `payment.create` |
+| `POST` | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | `GET` | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
 | `POST` | `/api/v1/payments/webhooks/stripe` | — (Stripe signature) |
 | `GET` | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
@@ -301,7 +301,7 @@ Code-defined sets for common job functions. Assigning a bundle expands to explic
 |--------|-------------|
 | `catalog_editor` | `product.create`, `product.update`, `product.read`, `product.variant.create`, `product.variant.update`, `product.image.upload`, `product.master.read`, `product.master.write` |
 | `catalog_admin` | `product.*`, `coupon.*` |
-| `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read` |
+| `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass` |
 | `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update` |
 | `customer_registrar` | `user.create` |
 
@@ -316,11 +316,11 @@ One-time mapping applied to `users.permissions` during database migration (`auth
 | Legacy role | Expanded permissions |
 |-------------|---------------------|
 | `owner` | `*` |
-| `admin` | `admin.*`, `user.*`, `product.*`, `coupon.*`, `inventory.stock.write`, `inventory.reservation.manage`, `order.ship`, `order.status.update`, `order.read.all`, `cart.read` |
+| `admin` | `admin.*`, `user.*`, `product.*`, `coupon.*`, `inventory.stock.write`, `inventory.reservation.manage`, `order.ship`, `order.status.update`, `order.read.all`, `cart.read`, `payment.bypass` |
 | `user_manager` | `user.password.update`, `user.status.update` |
 | `customer_registrar` | `user.create` |
 | `product_manager` | `product.*`, `coupon.*` |
-| `order_manager` | `order.ship`, `order.status.update`, `order.read.all`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read` |
+| `order_manager` | `order.ship`, `order.status.update`, `order.read.all`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass` |
 | `customer` | _(empty — storefront ABAC only)_ |
 
 Users with multiple legacy roles receive the **union** of expanded permissions (deduplicated).

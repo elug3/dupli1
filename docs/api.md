@@ -676,18 +676,29 @@ Supported status transitions: `pending` → `confirmed` | `canceled`; `confirmed
 
 ## Payment Service — `/api/v1/payments`
 
-Stripe Checkout **redirect** — Dupli1 never handles card numbers, CVC, or card passwords.
+Stripe Checkout **redirect** for credit cards — Dupli1 never handles card numbers, CVC, or card passwords.
 
-**Methods (planned):** create body will accept `method`: `credit_card` (default, live), `bypass` (order manager only), `bitcoin` (later). See [payment-methods-plan.md](payment-methods-plan.md).
+**Methods:** create body accepts `method`: `credit_card` (default), `bypass` (order manager / `payment.bypass`), `bitcoin` (501 until implemented). See [payment-methods-plan.md](payment-methods-plan.md).
 
 When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront callers may only pay for / read their own orders unless they hold `payment.create` or `payment.read.all`.
 
 | Method | Path | Permission / rule |
 |--------|------|-------------------|
-| POST | `/api/v1/payments` | ABAC or `payment.create` |
+| POST | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | GET | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
 | POST | `/api/v1/payments/webhooks/stripe` | — (Stripe signature) |
 | GET | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
+
+**Create payment**
+```json
+{ "order_id": "ord_000001", "method": "credit_card" }
+```
+
+**Bypass (manage-web / order manager)**
+```json
+{ "order_id": "ord_000001", "method": "bypass", "note": "Cash received" }
+```
+Returns `status: "succeeded"` immediately and publishes `payment.succeeded` (no `checkout_url`).
 
 Unpaid `pending` orders auto-cancel after **5 minutes**. Full design: [payment-service.md](payment-service.md).
 

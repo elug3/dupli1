@@ -23,7 +23,7 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 - [ ] Plumb request `context` through product PG stores
 - [x] Sanitize product 500 responses (error wrapping) — see [product-error-wrapping.md](product-error-wrapping.md); auth/order/cart/payment still leak `err.Error()` on some 500s
 - [ ] Consolidate duplicated `authjwt` into `shared/`
-- [ ] **Payment methods** — plan in [payment-methods-plan.md](payment-methods-plan.md): Phase 1 `method` field + credit card naming; Phase 2 Bypass (`payment.bypass`, order manager); Phase 3 Bitcoin (spec only — do not implement yet)
+- [x] **Payment methods** — [payment-methods-plan.md](payment-methods-plan.md): `method` field + Bypass (`payment.bypass`) implemented; Bitcoin still planned (do not implement yet)
 
 ## Product API
 

@@ -66,8 +66,9 @@ const (
 
 // Payment permissions (payment service).
 const (
-	PaymentCreate   = "payment.create"
-	PaymentReadAll  = "payment.read.all"
+	PaymentCreate  = "payment.create"
+	PaymentReadAll = "payment.read.all"
+	PaymentBypass  = "payment.bypass"
 )
 
 // All lists every concrete (non-wildcard) permission in the catalog.
@@ -101,6 +102,7 @@ var Catalog = []string{
 	CartRead,
 	PaymentCreate,
 	PaymentReadAll,
+	PaymentBypass,
 }
 
 // known is the set of concrete permissions for O(1) lookup.
