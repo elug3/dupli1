@@ -19,7 +19,10 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 - [ ] **Server-side order/checkout pricing** — ignore client `unit_price_cents`; resolve from product
 - [x] Inventory service token refresh in order bootstrap
 - [ ] NATS handler errors / outbox for payment→order events
-- [ ] Batch cart/product APIs (`?sku_ids=`); Redis catalog cache
+- [x] Batch cart/product APIs (`?sku_ids=`); Redis catalog cache
+  - [x] `GET /api/v1/variants?sku_ids=` batch public variant lookup (max 50)
+  - [ ] Redis catalog cache
+  - [ ] Cart client switch from N GETs to batch (optional follow-up)
 - [ ] Plumb request `context` through product PG stores
 - [x] Sanitize product 500 responses (error wrapping) — see [product-error-wrapping.md](product-error-wrapping.md); auth/order/cart/payment still leak `err.Error()` on some 500s
 - [ ] Consolidate duplicated `authjwt` into `shared/`

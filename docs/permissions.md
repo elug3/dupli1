@@ -212,7 +212,9 @@ Login, refresh, logout, health, settings, JWKS — public.
 |--------|------|------------|
 | `GET` | `/api/v1/products` | optional: `product.read` widens response |
 | `GET` | `/api/v1/products/{id}` | — (public) |
+| `GET` | `/api/v1/variants` | — (public; `?sku_ids=` batch) |
 | `GET` | `/api/v1/variants/{sku}` | — (public) |
+| `GET` | `/api/v1/variants/by-sku-id/{skuId}` | — (public) |
 | `POST` | `/api/v1/products` | `product.create` |
 | `PUT` | `/api/v1/products/{id}` | `product.update` |
 | `DELETE` | `/api/v1/products/{id}` | `product.delete` |

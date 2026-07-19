@@ -102,7 +102,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 2. ~~Inventory service **token refresh** in order bootstrap~~ **done**
 3. **Transactional outbox** (or JetStream) for `payment.succeeded` / order events; stop swallowing NATS handler errors
 4. Product **filter indexes** + request-context plumbing; slim list DTOs
-5. Batch cart/product APIs (`?sku_ids=`); Redis cache for public catalog
+5. Batch cart/product APIs (`?sku_ids=` — product batch done; cart client switch + Redis cache still open)
 6. Consolidate `authjwt` + shared HTTP client helpers; fail-closed auth bootstrap
 7. Product: sanitize 500 responses (**done** — [product-error-wrapping.md](product-error-wrapping.md)); other services still need the same; check migrate `Exec` errors
 

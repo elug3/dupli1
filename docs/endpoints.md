@@ -207,6 +207,9 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | `GET` | `/api/v1/products/settings` | — | Non-secret service settings |
 | `GET` | `/api/v1/products` | optional `product.read` | Search **parent styles**; public active-only; `product.read` adds drafts/cost |
 | `GET` | `/api/v1/products/{id}` | — | Parent PDP with `variants[]`, `availableColors`, `availableSizes` |
+| `GET` | `/api/v1/variants` | — | Batch public variants (`?sku_ids=id1,id2`, max 50) |
+| `GET` | `/api/v1/variants/{sku}` | — | Public active variant by human SKU |
+| `GET` | `/api/v1/variants/by-sku-id/{skuId}` | — | Public active variant by canonical ULID |
 | `POST` | `/api/v1/coupons/redeem` | — | Redeem a coupon code |
 | `POST` | `/api/v1/products` | `product.create` | Create parent (ULID `id`; requires existing `brandCode`+`styleCode`) |
 | `PUT` | `/api/v1/products/{id}` | `product.update` | Update parent |
@@ -295,6 +298,10 @@ Public related parents for PDP (`limit` default 8, max 24). Content similarity +
 ### GET /api/v1/variants/{sku}
 
 Public variant lookup by SKU. Returns `404` when the variant or parent product is not active. Used by the cart service for price validation.
+
+### GET /api/v1/variants?sku_ids=
+
+Batch public variant lookup by canonical ULID `skuId`. Comma-separated `sku_ids` (max 50, deduped). Returns `{ "items": [...], "missing": [...] }` — `items` are active variants with active parents (same visibility as single lookup); `missing` lists unknown, draft/archived, or inactive-parent ids. Used by cart/order enrichment to avoid N single GETs.
 
 ---
 

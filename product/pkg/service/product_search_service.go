@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
@@ -153,6 +154,74 @@ func (s *ProductSearchService) GetPublicVariantBySkuID(skuID string) (*domain.Va
 		return nil, err
 	}
 	return s.checkPublicVariant(v)
+}
+
+// MaxBatchSkuIDs caps GET /api/v1/variants?sku_ids= batch size.
+const MaxBatchSkuIDs = 50
+
+// GetPublicVariantsBySkuIDs returns active variants whose parent products are
+// also active. Missing or non-public sku_ids are listed in missing (same
+// visibility rule as the single-variant public lookups).
+func (s *ProductSearchService) GetPublicVariantsBySkuIDs(skuIDs []string) (items []domain.Variant, missing []string, err error) {
+	if s.store == nil {
+		return nil, nil, fmt.Errorf("store not initialized")
+	}
+	ids := normalizeSkuIDs(skuIDs)
+	if len(ids) == 0 {
+		return nil, nil, ports.Invalid("sku_ids is required")
+	}
+	if len(ids) > MaxBatchSkuIDs {
+		return nil, nil, ports.Invalid(fmt.Sprintf("sku_ids exceeds max of %d", MaxBatchSkuIDs))
+	}
+
+	found, err := s.store.GetVariantsBySkuIDs(ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	byID := make(map[string]domain.Variant, len(found))
+	for _, v := range found {
+		byID[v.SkuID] = v
+	}
+
+	activeParent := make(map[string]bool)
+	items = make([]domain.Variant, 0, len(ids))
+	missing = make([]string, 0)
+	for _, id := range ids {
+		v, ok := byID[id]
+		if !ok || v.Status != "active" {
+			missing = append(missing, id)
+			continue
+		}
+		active, seen := activeParent[v.ProductID]
+		if !seen {
+			_, err := s.store.GetActiveProduct(v.ProductID)
+			active = err == nil
+			activeParent[v.ProductID] = active
+		}
+		if !active {
+			missing = append(missing, id)
+			continue
+		}
+		items = append(items, v)
+	}
+	return items, missing, nil
+}
+
+func normalizeSkuIDs(skuIDs []string) []string {
+	seen := make(map[string]struct{}, len(skuIDs))
+	out := make([]string, 0, len(skuIDs))
+	for _, raw := range skuIDs {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 func (s *ProductSearchService) checkPublicVariant(v *domain.Variant) (*domain.Variant, error) {

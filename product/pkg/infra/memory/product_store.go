@@ -381,6 +381,24 @@ func (s *ProductStore) GetVariantBySkuID(skuID string) (*domain.Variant, error) 
 	return nil, fmt.Errorf("variant %s: %w", skuID, ports.ErrNotFound)
 }
 
+func (s *ProductStore) GetVariantsBySkuIDs(skuIDs []string) ([]domain.Variant, error) {
+	if len(skuIDs) == 0 {
+		return nil, nil
+	}
+	want := make(map[string]struct{}, len(skuIDs))
+	for _, id := range skuIDs {
+		want[id] = struct{}{}
+	}
+	var results []domain.Variant
+	for _, v := range s.Variants {
+		if _, ok := want[v.SkuID]; ok {
+			out := v
+			results = append(results, out)
+		}
+	}
+	return results, nil
+}
+
 func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) {
 	if v.ProductID == "" {
 		return nil, ports.Invalid("productId is required")

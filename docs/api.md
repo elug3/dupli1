@@ -617,7 +617,9 @@ See [cart-service.md](cart-service.md) for architecture, service boundaries, and
 
 | Method | Path | Description |
 |--------|------|-------------|
+| GET | `/api/v1/variants?sku_ids=` | Batch public active variants by canonical `skuId` (comma-separated, max 50). Response `{items, missing}`. |
 | GET | `/api/v1/variants/{sku}` | Public active variant by SKU |
+| GET | `/api/v1/variants/by-sku-id/{skuId}` | Public active variant by canonical ULID |
 
 ---
 
