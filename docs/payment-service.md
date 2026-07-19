@@ -6,7 +6,7 @@ The **payment service** (`dupli1-payment`) collects money for **pending** orders
 
 On PG success, payment publishes **`payment.succeeded`**. The **order service** consumes it, verifies amount, and moves the order to **`paid`**. The **notification service** sends a Telegram alert to ops. An **order manager** ships the order (`paid` → **`in_transit`**), which **commits** inventory (plan B).
 
-See also: [cart-service.md](cart-service.md), [checkout-session.md](checkout-session.md).
+See also: [cart-service.md](cart-service.md), [checkout-session.md](checkout-session.md), [payment-methods-plan.md](payment-methods-plan.md) (credit card / Bypass / Bitcoin methods).
 
 ---
 
@@ -262,6 +262,7 @@ payment/
 
 ## Related documentation
 
+- [payment-methods-plan.md](payment-methods-plan.md) — credit card (live), Bypass (order manager), Bitcoin (planned)
 - [cart-service.md](cart-service.md)
 - [checkout-session.md](checkout-session.md)
 - [endpoints.md](endpoints.md)

@@ -183,6 +183,7 @@ Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
 |------------|-------------|
 | `payment.create` | Start checkout for any user's order (service accounts) |
 | `payment.read.all` | Read any payment by ID (bypass ownership check in service layer) |
+| `payment.bypass` | **Planned** — mark a pending order paid without a PG (`method=bypass`). Order-manager only; not the same as ABAC bypass. See [payment-methods-plan.md](payment-methods-plan.md) |
 
 **Default storefront:** authenticated user with empty `permissions` may create/read **only their own** payments (ownership enforced in service).
 
