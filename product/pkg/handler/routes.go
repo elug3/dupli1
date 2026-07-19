@@ -11,6 +11,8 @@ const (
 	RouteVariants             = "/api/v1/products/{id}/variants"
 	RouteVariantBySKU         = "/api/v1/products/{id}/variants/{sku}"
 	RouteVariantImages        = "/api/v1/products/{id}/variants/{sku}/images"
+	// Batch public variant lookup under the product service prefix.
+	RoutePublicVariants       = "/api/v1/products/variants"
 	RoutePublicVariant        = "/api/v1/variants/{sku}"
 	RoutePublicVariantBySkuID = "/api/v1/variants/by-sku-id/{skuId}"
 	RouteRedeemCoupon         = "/api/v1/coupons/redeem"

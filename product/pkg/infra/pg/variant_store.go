@@ -78,6 +78,30 @@ func (s *ProductSearchStore) GetVariantBySkuID(skuID string) (*domain.Variant, e
 	return &v, nil
 }
 
+func (s *ProductSearchStore) GetVariantsBySkuIDs(skuIDs []string) ([]domain.Variant, error) {
+	if len(skuIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := s.pool.Query(context.Background(),
+		`SELECT `+variantSelectCols+` FROM product_variants WHERE sku_id = ANY($1)`,
+		toTextArray(skuIDs),
+	)
+	if err != nil {
+		return nil, wrapDB("get variants by sku ids", err)
+	}
+	defer rows.Close()
+
+	var results []domain.Variant
+	for rows.Next() {
+		v, err := scanVariant(rows.Scan)
+		if err != nil {
+			return nil, wrapDB("get variants by sku ids", err)
+		}
+		results = append(results, v)
+	}
+	return results, wrapDB("get variants by sku ids", rows.Err())
+}
+
 func (s *ProductSearchStore) parentSKUCodes(ctx context.Context, productID string) (brandCode, styleCode string, err error) {
 	var bc, sc *string
 	err = s.pool.QueryRow(ctx,

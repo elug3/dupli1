@@ -39,6 +39,11 @@ type RecommendationsResponse struct {
 	Items  []domain.Product `json:"items"`
 }
 
+type BatchVariantsResponse struct {
+	Items   []domain.Variant `json:"items"`
+	Missing []string         `json:"missing"`
+}
+
 type ErrorResponse struct {
 	Error string `json:"error"`
 	Code  int    `json:"code"`
@@ -83,6 +88,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+RouteHealth, h.Health)
 	mux.HandleFunc("GET "+RouteSettings, h.Settings)
 	mux.HandleFunc("GET "+RouteProductRecommendations, h.PublicGetRecommendations)
+	mux.HandleFunc("GET "+RoutePublicVariants, h.PublicListVariants)
 	mux.HandleFunc("GET "+RoutePublicProduct, h.PublicGetProduct)
 	mux.HandleFunc("GET "+RoutePublicVariant, h.PublicGetVariant)
 	mux.HandleFunc("GET "+RoutePublicVariantBySkuID, h.PublicGetVariantBySkuID)
@@ -287,6 +293,30 @@ func (h *Handler) PublicGetRecommendations(w http.ResponseWriter, r *http.Reques
 		items = []domain.Product{}
 	}
 	h.respondJSON(w, http.StatusOK, RecommendationsResponse{SeedID: id, Items: items})
+}
+
+func (h *Handler) PublicListVariants(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	raw := r.URL.Query().Get("sku_ids")
+	if strings.TrimSpace(raw) == "" {
+		h.respondError(w, http.StatusBadRequest, "sku_ids is required")
+		return
+	}
+	items, missing, err := h.svc.GetPublicVariantsBySkuIDs(strings.Split(raw, ","))
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	if items == nil {
+		items = []domain.Variant{}
+	}
+	if missing == nil {
+		missing = []string{}
+	}
+	h.respondJSON(w, http.StatusOK, BatchVariantsResponse{Items: items, Missing: missing})
 }
 
 func (h *Handler) PublicGetVariant(w http.ResponseWriter, r *http.Request) {

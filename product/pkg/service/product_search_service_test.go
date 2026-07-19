@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
@@ -105,5 +106,48 @@ func TestUpdateVariant_PartialBodyDoesNotClearOtherFields(t *testing.T) {
 	// (i.e. GetPublicVariant correctly still rejects it as non-active).
 	if _, err := svc.GetPublicVariant("BOT-001-GRN"); err == nil {
 		t.Fatal("draft variant should not be publicly visible")
+	}
+}
+
+func TestGetPublicVariantsBySkuIDs(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", Status: "active"},
+		{ID: "BOT-002", Name: "Draft Bag", Status: "draft"},
+	}
+	store.Variants = []domain.Variant{
+		{SkuID: "ID-A", SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Price: 2500, Status: "active"},
+		{SkuID: "ID-B", SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Price: 2500, Status: "draft"},
+		{SkuID: "ID-C", SKU: "BOT-002-BLK", ProductID: "BOT-002", Color: "Black", Price: 3000, Status: "active"},
+	}
+	svc := service.NewProductSearchService(store, nil)
+
+	items, missing, err := svc.GetPublicVariantsBySkuIDs([]string{"ID-A", "ID-B", "ID-C", "ID-MISSING", "ID-A", "  "})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].SkuID != "ID-A" {
+		t.Fatalf("items = %+v, want only ID-A", items)
+	}
+	wantMissing := []string{"ID-B", "ID-C", "ID-MISSING"}
+	if len(missing) != len(wantMissing) {
+		t.Fatalf("missing = %v, want %v", missing, wantMissing)
+	}
+	for i, id := range wantMissing {
+		if missing[i] != id {
+			t.Fatalf("missing[%d] = %q, want %q", i, missing[i], id)
+		}
+	}
+
+	if _, _, err := svc.GetPublicVariantsBySkuIDs(nil); err == nil {
+		t.Fatal("empty sku_ids should be invalid")
+	}
+
+	tooMany := make([]string, service.MaxBatchSkuIDs+1)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("ID-%d", i)
+	}
+	if _, _, err := svc.GetPublicVariantsBySkuIDs(tooMany); err == nil {
+		t.Fatal("oversized batch should be invalid")
 	}
 }

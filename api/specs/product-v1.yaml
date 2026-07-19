@@ -294,6 +294,92 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/products/variants:
+    get:
+      tags: [Products]
+      summary: Batch public variants by skuId
+      operationId: productListVariantsBySkuIDs
+      description: |
+        Public batch lookup by canonical ULID `skuId`. Comma-separated `sku_ids` (max 50, deduped).
+        Returns active variants whose parent products are also active. Unknown, draft/archived,
+        or inactive-parent ids appear in `missing` (same visibility as single-variant lookups).
+      parameters:
+        - name: sku_ids
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Comma-separated canonical skuId values (max 50)
+          example: "01HXYZ...,01HABC..."
+      responses:
+        '200':
+          description: Batch result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, missing]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Variant'
+                  missing:
+                    type: array
+                    items:
+                      type: string
+                    description: Requested skuIds that were not publicly visible
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/variants/{sku}:
+    get:
+      tags: [Products]
+      summary: Public variant by human SKU
+      operationId: productGetVariantBySKU
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Active variant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Variant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/variants/by-sku-id/{skuId}:
+    get:
+      tags: [Products]
+      summary: Public variant by canonical skuId
+      operationId: productGetVariantBySkuID
+      parameters:
+        - name: skuId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Active variant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Variant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/products/{id}/variants:
     post:
       tags: [Products]

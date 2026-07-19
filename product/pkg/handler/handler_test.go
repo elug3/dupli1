@@ -489,3 +489,44 @@ func TestSearchProductsPagination(t *testing.T) {
 		t.Fatalf("page len = %d, want 2", len(products))
 	}
 }
+
+func TestPublicListVariantsBySkuIDs(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", Status: "active"},
+	}
+	store.Variants = []domain.Variant{
+		{SkuID: "ID-A", SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Price: 2500, Status: "active"},
+		{SkuID: "ID-B", SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Price: 2500, Status: "draft"},
+	}
+	mux := newMux(store)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RoutePublicVariants+"?sku_ids=ID-A,ID-B,ID-MISSING", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp handler.BatchVariantsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Items) != 1 || resp.Items[0].SkuID != "ID-A" {
+		t.Fatalf("items = %+v, want ID-A", resp.Items)
+	}
+	if len(resp.Missing) != 2 {
+		t.Fatalf("missing = %v, want ID-B and ID-MISSING", resp.Missing)
+	}
+
+	// Single-sku path must still work alongside the batch route.
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/variants/BOT-001-BLK", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET by sku: want 200, got %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RoutePublicVariants, nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing sku_ids: want 400, got %d", rec.Code)
+	}
+}
