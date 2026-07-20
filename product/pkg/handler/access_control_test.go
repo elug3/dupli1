@@ -59,10 +59,10 @@ func newAccessControlMux(store *memory.ProductStore) *http.ServeMux {
 	mux.Handle("PUT "+handler.RouteProductByID, requirePerm(permissions.ProductUpdate, h.SingleProductHandler()))
 	mux.Handle("DELETE "+handler.RouteProductByID, requirePerm(permissions.ProductDelete, h.SingleProductHandler()))
 	mux.Handle("POST "+handler.RouteProductImages, requirePerm(permissions.ProductImageUpload, h.UploadImageHandler()))
-	mux.Handle("GET "+handler.RouteCoupons, requirePerm(permissions.CouponRead, http.HandlerFunc(h.ListCoupons)))
-	mux.Handle("POST "+handler.RouteCoupons, requirePerm(permissions.CouponCreate, http.HandlerFunc(h.CreateCoupon)))
-	mux.Handle("PUT "+handler.RouteCouponByCode, requirePerm(permissions.CouponUpdate, http.HandlerFunc(h.UpdateCoupon)))
-	mux.Handle("DELETE "+handler.RouteCouponByCode, requirePerm(permissions.CouponDelete, http.HandlerFunc(h.DeleteCoupon)))
+	handler.Mount(mux, "GET", handler.RouteCoupons, requirePerm(permissions.CouponRead, http.HandlerFunc(h.ListCoupons)), handler.LegacyRouteCoupons)
+	handler.Mount(mux, "POST", handler.RouteCoupons, requirePerm(permissions.CouponCreate, http.HandlerFunc(h.CreateCoupon)), handler.LegacyRouteCoupons)
+	handler.Mount(mux, "PUT", handler.RouteCouponByCode, requirePerm(permissions.CouponUpdate, http.HandlerFunc(h.UpdateCoupon)), handler.LegacyRouteCouponByCode)
+	handler.Mount(mux, "DELETE", handler.RouteCouponByCode, requirePerm(permissions.CouponDelete, http.HandlerFunc(h.DeleteCoupon)), handler.LegacyRouteCouponByCode)
 
 	return mux
 }

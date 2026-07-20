@@ -16,10 +16,25 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 
 ### Still open (priority)
 
-Implement in the order in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) (C1 → H7 → H1/H3 → H4/H5 → H6 → H8+H9).
-
-- [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md)). Code path for private images via CloudFront OAC landed (#96); Terraform apply / host rewrite still open.
-- [ ] **Server-side order/checkout pricing (C1)** — ignore client `unit_price_cents`; resolve from product like cart ([quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)#1-c1--server-side-pricing-critical)
+- [ ] **API path convention** — `/api/v1/{service_name}/...` only. Canonical paths added; legacy top-level aliases kept until clients migrate, then remove.
+  - [x] New canonical paths registered (product / order / cart) with legacy aliases
+  - [x] Internal clients (cart/order) switched to canonical paths
+  - [ ] Frontends / external callers migrate off legacy prefixes
+  - [ ] Remove legacy aliases + nginx locations for `variants`, `coupons`, `catalog`, `inventory`, `checkout`, `carts`
+  - Mapping:
+    | Legacy | Canonical |
+    |--------|-----------|
+    | `/api/v1/variants/{sku}` | `/api/v1/products/variants/by-sku/{sku}` |
+    | `/api/v1/variants/by-sku-id/{skuId}` | `/api/v1/products/variants/by-sku-id/{skuId}` |
+    | `/api/v1/coupons` | `/api/v1/products/coupons` |
+    | `/api/v1/coupons/{code}` | `/api/v1/products/coupons/by-code/{code}` |
+    | `/api/v1/catalog/*` | `/api/v1/products/catalog/*` |
+    | `/api/v1/inventory/{sku}` | `/api/v1/products/inventory/items/{sku}` |
+    | `/api/v1/inventory/reservations/*` | `/api/v1/products/inventory/reservations/*` |
+    | `/api/v1/checkout/*` | `/api/v1/orders/checkout/*` |
+    | `/api/v1/carts/{id}` | `/api/v1/cart/customers/{id}` |
+- [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md))
+- [ ] **Server-side order/checkout pricing** — ignore client `unit_price_cents`; resolve from product
 - [x] Inventory service token refresh in order bootstrap
 - [ ] NATS handler errors / outbox for payment→order events (**H1** + **H3**)
 - [ ] Batch cart/product APIs (`?sku_ids=`); Redis catalog cache

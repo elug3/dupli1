@@ -47,8 +47,8 @@ func (c *Client) Reserve(ctx context.Context, orderID string, items []ports.Stoc
 	var response struct {
 		ReservationID string `json:"reservation_id"`
 	}
-	// Product still serves stock under /api/v1/inventory/* (legacy path prefix).
-	err := c.doJSON(ctx, http.MethodPost, "/api/v1/inventory/reservations", map[string]any{
+	// Product stock APIs under /api/v1/products/inventory/* (legacy /api/v1/inventory/* still aliased).
+	err := c.doJSON(ctx, http.MethodPost, "/api/v1/products/inventory/reservations", map[string]any{
 		"order_id": orderID,
 		"items":    items,
 	}, &response)
@@ -62,11 +62,11 @@ func (c *Client) Reserve(ctx context.Context, orderID string, items []ports.Stoc
 }
 
 func (c *Client) CommitReservation(ctx context.Context, reservationID string) error {
-	return c.doJSON(ctx, http.MethodPost, "/api/v1/inventory/reservations/"+reservationID+"/commit", nil, nil)
+	return c.doJSON(ctx, http.MethodPost, "/api/v1/products/inventory/reservations/"+reservationID+"/commit", nil, nil)
 }
 
 func (c *Client) ReleaseReservation(ctx context.Context, reservationID string) error {
-	return c.doJSON(ctx, http.MethodPost, "/api/v1/inventory/reservations/"+reservationID+"/release", nil, nil)
+	return c.doJSON(ctx, http.MethodPost, "/api/v1/products/inventory/reservations/"+reservationID+"/release", nil, nil)
 }
 
 func (c *Client) doJSON(ctx context.Context, method, path string, body any, target any) error {

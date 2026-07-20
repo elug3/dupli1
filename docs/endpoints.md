@@ -2,17 +2,21 @@
 
 All services listen on port `8080` inside Docker. The nginx gateway proxies by path prefix with no stripping, so gateway paths match service paths.
 
+**Path convention:** `/api/v1/{service_name}/...` (`auth`, `products`, `orders`, `cart`, `payments`, `notification`). Legacy top-level aliases (`variants`, `coupons`, `catalog`, `inventory`, `checkout`, `carts`) still work until clients migrate — see [TODO.md](TODO.md).
+
 | Gateway prefix | Upstream service |
 |---|---|
 | `/gateway/health` | nginx (static) |
 | `/api/v1/auth/` | `dupli1-auth:8080` |
 | `/api/v1/products` | `dupli1-product:8080` |
-| `/api/v1/coupons` | `dupli1-product:8080` |
-| `/api/v1/inventory/` | `dupli1-product:8080` |
+| `/api/v1/coupons` | `dupli1-product:8080` (legacy alias) |
+| `/api/v1/catalog` | `dupli1-product:8080` (legacy alias) |
+| `/api/v1/variants` | `dupli1-product:8080` (legacy alias) |
+| `/api/v1/inventory/` | `dupli1-product:8080` (legacy alias) |
 | `/api/v1/orders` | `dupli1-order:8080` |
-| `/api/v1/checkout` | `dupli1-order:8080` |
+| `/api/v1/checkout` | `dupli1-order:8080` (legacy alias) |
 | `/api/v1/cart` | `dupli1-cart:8080` |
-| `/api/v1/carts/` | `dupli1-cart:8080` |
+| `/api/v1/carts/` | `dupli1-cart:8080` (legacy alias) |
 | `/api/v1/payments` | `dupli1-payment:8080` |
 | `/api/v1/payments/` | `dupli1-payment:8080` |
 
@@ -208,9 +212,9 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | `GET` | `/api/v1/products` | optional `product.read` | Search **parent styles**; public active-only; `product.read` adds drafts/cost |
 | `GET` | `/api/v1/products/{id}` | — | Parent PDP with `variants[]`, `availableColors`, `availableSizes` |
 | `GET` | `/api/v1/products/variants` | — | Batch public variants (`?sku_ids=id1,id2`, max 50) |
-| `GET` | `/api/v1/variants/{sku}` | — | Public active variant by human SKU |
-| `GET` | `/api/v1/variants/by-sku-id/{skuId}` | — | Public active variant by canonical ULID |
-| `POST` | `/api/v1/coupons/redeem` | — | Redeem a coupon code |
+| `GET` | `/api/v1/products/variants/by-sku/{sku}` | — | Public active variant by human SKU (legacy: `/api/v1/variants/{sku}`) |
+| `GET` | `/api/v1/products/variants/by-sku-id/{skuId}` | — | Public active variant by ULID (legacy: `/api/v1/variants/by-sku-id/{skuId}`) |
+| `POST` | `/api/v1/products/coupons/redeem` | — | Redeem a coupon code (legacy: `/api/v1/coupons/redeem`) |
 | `POST` | `/api/v1/products` | `product.create` | Create parent (ULID `id`; requires existing `brandCode`+`styleCode`) |
 | `PUT` | `/api/v1/products/{id}` | `product.update` | Update parent |
 | `DELETE` | `/api/v1/products/{id}` | `product.delete` | Delete parent (cascades variants) |
@@ -219,30 +223,30 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` | Update variant |
 | `DELETE` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` | Delete variant |
 | `POST` | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | Upload image for variant |
-| `GET` | `/api/v1/catalog/brands` | `product.master.read` | List brand codes |
-| `POST` | `/api/v1/catalog/brands` | `product.master.write` | Create brand `{code,name}` |
-| `PATCH` | `/api/v1/catalog/brands/{code}` | `product.master.write` | Rename brand |
-| `DELETE` | `/api/v1/catalog/brands/{code}` | `product.master.write` | Delete brand (409 if in use) |
-| `GET` | `/api/v1/catalog/brands/{code}/styles` | `product.master.read` | List styles for brand |
-| `POST` | `/api/v1/catalog/brands/{code}/styles` | `product.master.write` | Create style |
-| `PATCH` | `/api/v1/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` | Rename style |
-| `DELETE` | `/api/v1/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` | Delete style (409 if in use) |
-| `GET` | `/api/v1/catalog/colors` | `product.master.read` | List colors |
-| `POST` | `/api/v1/catalog/colors` | `product.master.write` | Create color |
-| `PATCH` | `/api/v1/catalog/colors/{code}` | `product.master.write` | Rename color |
-| `DELETE` | `/api/v1/catalog/colors/{code}` | `product.master.write` | Delete color (409 if in use) |
-| `GET` | `/api/v1/catalog/sizes` | `product.master.read` | List sizes |
-| `POST` | `/api/v1/catalog/sizes` | `product.master.write` | Create size |
-| `PATCH` | `/api/v1/catalog/sizes/{code}` | `product.master.write` | Rename size |
-| `DELETE` | `/api/v1/catalog/sizes/{code}` | `product.master.write` | Delete size (409 if in use) |
-| `GET` | `/api/v1/catalog/editions` | `product.master.read` | List editions (VariantCode) |
-| `POST` | `/api/v1/catalog/editions` | `product.master.write` | Create edition |
-| `PATCH` | `/api/v1/catalog/editions/{code}` | `product.master.write` | Rename edition |
-| `DELETE` | `/api/v1/catalog/editions/{code}` | `product.master.write` | Delete edition (409 if in use) |
-| `GET` | `/api/v1/coupons` | `coupon.read` | List coupons |
-| `POST` | `/api/v1/coupons` | `coupon.create` | Create coupon |
-| `PUT` | `/api/v1/coupons/{code}` | `coupon.update` | Update coupon |
-| `DELETE` | `/api/v1/coupons/{code}` | `coupon.delete` | Delete coupon |
+| `GET` | `/api/v1/products/catalog/brands` | `product.master.read` | List brand codes (legacy: `/api/v1/catalog/...`) |
+| `POST` | `/api/v1/products/catalog/brands` | `product.master.write` | Create brand `{code,name}` |
+| `PATCH` | `/api/v1/products/catalog/brands/{code}` | `product.master.write` | Rename brand |
+| `DELETE` | `/api/v1/products/catalog/brands/{code}` | `product.master.write` | Delete brand (409 if in use) |
+| `GET` | `/api/v1/products/catalog/brands/{code}/styles` | `product.master.read` | List styles for brand |
+| `POST` | `/api/v1/products/catalog/brands/{code}/styles` | `product.master.write` | Create style |
+| `PATCH` | `/api/v1/products/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` | Rename style |
+| `DELETE` | `/api/v1/products/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` | Delete style (409 if in use) |
+| `GET` | `/api/v1/products/catalog/colors` | `product.master.read` | List colors |
+| `POST` | `/api/v1/products/catalog/colors` | `product.master.write` | Create color |
+| `PATCH` | `/api/v1/products/catalog/colors/{code}` | `product.master.write` | Rename color |
+| `DELETE` | `/api/v1/products/catalog/colors/{code}` | `product.master.write` | Delete color (409 if in use) |
+| `GET` | `/api/v1/products/catalog/sizes` | `product.master.read` | List sizes |
+| `POST` | `/api/v1/products/catalog/sizes` | `product.master.write` | Create size |
+| `PATCH` | `/api/v1/products/catalog/sizes/{code}` | `product.master.write` | Rename size |
+| `DELETE` | `/api/v1/products/catalog/sizes/{code}` | `product.master.write` | Delete size (409 if in use) |
+| `GET` | `/api/v1/products/catalog/editions` | `product.master.read` | List editions (VariantCode) |
+| `POST` | `/api/v1/products/catalog/editions` | `product.master.write` | Create edition |
+| `PATCH` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` | Rename edition |
+| `DELETE` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` | Delete edition (409 if in use) |
+| `GET` | `/api/v1/products/coupons` | `coupon.read` | List coupons (legacy: `/api/v1/coupons`) |
+| `POST` | `/api/v1/products/coupons` | `coupon.create` | Create coupon |
+| `PUT` | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` | Update coupon (legacy: `/api/v1/coupons/{code}`) |
+| `DELETE` | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` | Delete coupon |
 
 Public search defaults to `status = active` on the **parent**. Query filters: `category`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** (human `sku` or canonical `skuId`) with inventory. Identity + masters: [product-sku-system.md](product-sku-system.md). See also [product-variants-plan.md](product-variants-plan.md).
 
@@ -297,7 +301,7 @@ Public related parents for PDP (`limit` default 8, max 24). Content similarity +
 
 ### GET /api/v1/variants/{sku}
 
-Public variant lookup by SKU. Returns `404` when the variant or parent product is not active. Used by the cart service for price validation.
+Deprecated alias of `GET /api/v1/products/variants/{sku}`. Public variant lookup by SKU. Returns `404` when the variant or parent product is not active. Used by the cart service for price validation.
 
 ### GET /api/v1/products/variants?sku_ids=
 
@@ -316,7 +320,7 @@ Batch public variant lookup by canonical ULID `skuId`. Comma-separated `sku_ids`
 | `PUT` | `/api/v1/cart/items` | Bearer | Replace all cart items |
 | `POST` | `/api/v1/cart/items` | Bearer | Add or update one item |
 | `DELETE` | `/api/v1/cart/items/{sku}` | Bearer | Remove one item |
-| `GET` | `/api/v1/carts/{customer_id}` | `cart.read` | Get a customer's cart |
+| `GET` | `/api/v1/cart/customers/{customer_id}` | `cart.read` | Get a customer's cart (legacy: `/api/v1/carts/{customer_id}`) |
 
 See [cart-service.md](cart-service.md) for architecture, boundaries with inventory/order, and checkout handoff.
 
@@ -345,14 +349,14 @@ variant's canonical ULID `skuId` (e.g. `GET /api/v1/inventory/by-sku-id/{skuId}`
 
 | Method | Path | Permission | Description |
 |---|---|---|---|
-| `GET` | `/api/v1/inventory/health` | — | Health check |
-| `GET` | `/api/v1/inventory/settings` | — | Non-secret product-service settings |
-| `GET` | `/api/v1/inventory/{sku}` | — | Get a stock item by SKU |
-| `PUT` | `/api/v1/inventory/{sku}` | `inventory.stock.write` | Create or overwrite stock quantity |
-| `POST` | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` | Add or subtract stock (delta) |
-| `POST` | `/api/v1/inventory/reservations` | `inventory.reservation.manage` | Create a reservation |
-| `POST` | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` | Commit a reservation |
-| `POST` | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` | Release a reservation |
+| `GET` | `/api/v1/products/inventory/health` | — | Health check (legacy: `/api/v1/inventory/health`) |
+| `GET` | `/api/v1/products/inventory/settings` | — | Non-secret product-service settings |
+| `GET` | `/api/v1/products/inventory/items/{sku}` | — | Get a stock item by SKU |
+| `PUT` | `/api/v1/products/inventory/items/{sku}` | `inventory.stock.write` | Create or overwrite stock quantity |
+| `POST` | `/api/v1/products/inventory/items/{sku}/adjust` | `inventory.stock.write` | Add or subtract stock (delta) |
+| `POST` | `/api/v1/products/inventory/reservations` | `inventory.reservation.manage` | Create a reservation |
+| `POST` | `/api/v1/products/inventory/reservations/{id}/commit` | `inventory.reservation.manage` | Commit a reservation |
+| `POST` | `/api/v1/products/inventory/reservations/{id}/release` | `inventory.reservation.manage` | Release a reservation |
 
 ### GET /api/v1/inventory/health
 
@@ -434,13 +438,13 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 |---|---|---|---|
 | `GET` | `/api/v1/orders/health` | — | Health check |
 | `GET` | `/api/v1/orders/settings` | — | Non-secret service settings |
-| `POST` | `/api/v1/checkout/sessions` | ABAC / `order.create` | Create checkout session |
-| `GET` | `/api/v1/checkout/sessions/{id}` | ABAC / `order.read.all` | Get session |
-| `PUT` | `/api/v1/checkout/sessions/{id}/items` | ABAC / `order.create` | Replace all items |
-| `POST` | `/api/v1/checkout/sessions/{id}/items` | ABAC / `order.create` | Add or update one item |
-| `DELETE` | `/api/v1/checkout/sessions/{id}/items/{sku}` | ABAC / `order.create` | Remove item |
-| `POST` | `/api/v1/checkout/sessions/{id}/coupon` | ABAC / `order.create` | Apply coupon |
-| `POST` | `/api/v1/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout |
+| `POST` | `/api/v1/orders/checkout/sessions` | ABAC / `order.create` | Create checkout session (legacy: `/api/v1/checkout/sessions`) |
+| `GET` | `/api/v1/orders/checkout/sessions/{id}` | ABAC / `order.read.all` | Get session |
+| `PUT` | `/api/v1/orders/checkout/sessions/{id}/items` | ABAC / `order.create` | Replace all items |
+| `POST` | `/api/v1/orders/checkout/sessions/{id}/items` | ABAC / `order.create` | Add or update one item |
+| `DELETE` | `/api/v1/orders/checkout/sessions/{id}/items/{sku}` | ABAC / `order.create` | Remove item |
+| `POST` | `/api/v1/orders/checkout/sessions/{id}/coupon` | ABAC / `order.create` | Apply coupon |
+| `POST` | `/api/v1/orders/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout |
 | `POST` | `/api/v1/orders` | ABAC / `order.create` | Create a new order |
 | `GET` | `/api/v1/orders?customer_id={id}` | ABAC / `order.read.all` | List orders for a customer |
 | `GET` | `/api/v1/orders/{id}` | ABAC / `order.read.all` | Get a single order |

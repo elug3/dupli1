@@ -29,11 +29,11 @@ type stockResponse struct {
 }
 
 func (c *Client) GetAvailableQty(ctx context.Context, sku string) (int, error) {
-	return c.fetchAvailableQty(ctx, "/api/v1/inventory/"+sku)
+	return c.fetchAvailableQty(ctx, "/api/v1/products/inventory/items/"+sku)
 }
 
 func (c *Client) GetAvailableQtyBySkuID(ctx context.Context, skuID string) (int, error) {
-	return c.fetchAvailableQty(ctx, "/api/v1/inventory/by-sku-id/"+skuID)
+	return c.fetchAvailableQty(ctx, "/api/v1/products/inventory/items/by-sku-id/"+skuID)
 }
 
 func (c *Client) fetchAvailableQty(ctx context.Context, path string) (int, error) {

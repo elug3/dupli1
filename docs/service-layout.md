@@ -133,16 +133,16 @@ Stripe Checkout redirect; publishes `payment.succeeded` on NATS. See [payment-se
 |-------------|---------|
 | `/gateway/health` | nginx (static `ok`) |
 | `/api/v1/auth/` | dupli1-auth |
-| `/api/v1/products` | dupli1-product |
-| `/api/v1/coupons` | dupli1-product |
-| `/api/v1/inventory/` | dupli1-product |
-| `/api/v1/orders` | dupli1-order |
-| `/api/v1/checkout` | dupli1-order |
-| `/api/v1/cart` | dupli1-cart |
-| `/api/v1/carts/` | dupli1-cart |
-| `/api/v1/variants` | dupli1-product |
+| `/api/v1/products` | dupli1-product (canonical; also covers `/products/variants`, `/products/coupons`, `/products/catalog`, `/products/inventory`) |
+| `/api/v1/coupons` | dupli1-product (legacy alias) |
+| `/api/v1/inventory/` | dupli1-product (legacy alias) |
+| `/api/v1/orders` | dupli1-order (canonical; also covers `/orders/checkout`) |
+| `/api/v1/checkout` | dupli1-order (legacy alias) |
+| `/api/v1/cart` | dupli1-cart (canonical; also covers `/cart/customers`) |
+| `/api/v1/carts/` | dupli1-cart (legacy alias) |
+| `/api/v1/variants` | dupli1-product (legacy alias) |
 
-Checkout sessions are served by order (`/api/v1/checkout/sessions`). Cart routes are served by cart.
+Checkout sessions: canonical `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions`). Cart admin: canonical `/api/v1/cart/customers/{id}` (legacy `/api/v1/carts/{id}`). Path migration checklist: [TODO.md](TODO.md).
 
 Direct host ports (bypass gateway): auth **18080**, product **8081**, order **8083**, cart **8086**, notification **8084**.
 
