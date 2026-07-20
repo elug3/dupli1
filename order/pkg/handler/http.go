@@ -67,11 +67,11 @@ func (h *Handler) settingsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // requireAuth extracts and validates the Bearer token, stores claims in context.
-// If no validator is configured (e.g. in tests), the request passes through.
+// Fails closed when no validator is configured (misconfigured deploy).
 func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.jwtValidator == nil {
-			next(w, r)
+			respondError(w, http.StatusServiceUnavailable, "auth not configured")
 			return
 		}
 
@@ -106,8 +106,12 @@ func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 	claims, _ := authjwt.FromContext(r.Context())
 
 	var req struct {
-		CustomerID string             `json:"customer_id"`
-		Items      []domain.OrderItem `json:"items"`
+		CustomerID string `json:"customer_id"`
+		Items      []struct {
+			SkuID    string `json:"sku_id"`
+			SKU      string `json:"sku"`
+			Quantity int    `json:"quantity"`
+		} `json:"items"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
@@ -122,9 +126,14 @@ func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	items := make([]domain.OrderItem, len(req.Items))
+	for i, item := range req.Items {
+		items[i] = domain.OrderItem{SkuID: item.SkuID, SKU: item.SKU, Quantity: item.Quantity}
+	}
+
 	order, err := h.svc.CreateOrder(r.Context(), service.CreateOrderInput{
 		CustomerID: req.CustomerID,
-		Items:      req.Items,
+		Items:      items,
 	})
 	if err != nil {
 		respondServiceError(w, err)
@@ -262,7 +271,12 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ports.ErrNotFound):
 		respondError(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, domain.ErrPaymentAmountMismatch):
+	case errors.Is(err, ports.ErrVariantNotFound):
+		respondError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ports.ErrProductUnavailable), errors.Is(err, ports.ErrCouponUnavailable):
+		respondError(w, http.StatusBadGateway, err.Error())
+	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, domain.ErrPaymentAmountMismatch),
+		errors.Is(err, domain.ErrInvalidCheckoutSession), errors.Is(err, domain.ErrEmptyCheckout):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:
 		respondError(w, http.StatusInternalServerError, err.Error())

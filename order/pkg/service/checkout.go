@@ -51,7 +51,11 @@ func (s *Service) SetCheckoutItems(ctx context.Context, sessionID string, items 
 	if err != nil {
 		return nil, err
 	}
-	if err := session.SetItems(items, s.now()); err != nil {
+	priced, err := s.priceItems(ctx, items)
+	if err != nil {
+		return nil, err
+	}
+	if err := session.SetItems(priced, s.now()); err != nil {
 		return nil, err
 	}
 	return s.saveCheckoutSession(ctx, session)
@@ -62,7 +66,11 @@ func (s *Service) UpsertCheckoutItem(ctx context.Context, sessionID string, item
 	if err != nil {
 		return nil, err
 	}
-	if err := session.UpsertItem(item, s.now()); err != nil {
+	priced, err := s.priceItems(ctx, []domain.OrderItem{item})
+	if err != nil {
+		return nil, err
+	}
+	if err := session.UpsertItem(priced[0], s.now()); err != nil {
 		return nil, err
 	}
 	return s.saveCheckoutSession(ctx, session)

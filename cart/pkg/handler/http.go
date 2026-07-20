@@ -68,7 +68,7 @@ func (h *Handler) settingsHandler(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.jwtValidator == nil {
-			next(w, r)
+			respondError(w, http.StatusServiceUnavailable, "auth not configured")
 			return
 		}
 

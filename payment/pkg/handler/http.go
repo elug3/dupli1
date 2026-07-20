@@ -77,7 +77,7 @@ func (h *Handler) settingsHandler(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.jwtValidator == nil {
-			next(w, r)
+			respondError(w, http.StatusServiceUnavailable, "auth not configured")
 			return
 		}
 		authHeader := r.Header.Get("Authorization")
@@ -121,8 +121,8 @@ func (h *Handler) payments(w http.ResponseWriter, r *http.Request) {
 		Method:            req.Method,
 		Note:              req.Note,
 		CreatedBy:         claims.UserID,
-		BypassABAC:        h.jwtValidator != nil && permissions.BypassesPaymentCreateABAC(claims.Permissions),
-		AllowMethodBypass: h.jwtValidator == nil || permissions.CanBypassPayment(claims.Permissions),
+		BypassABAC:        permissions.BypassesPaymentCreateABAC(claims.Permissions),
+		AllowMethodBypass: permissions.CanBypassPayment(claims.Permissions),
 	})
 	if err != nil {
 		respondServiceError(w, err)

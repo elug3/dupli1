@@ -100,6 +100,22 @@ func TestSimulateSuccess_EnabledInDev(t *testing.T) {
 	}
 }
 
+func TestRequireAuthFailsClosedWithoutValidator(t *testing.T) {
+	repo := memory.NewRepository()
+	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
+	h := handler.New(svc, nil, "")
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/payments", bytes.NewReader([]byte(`{"order_id":"ord-1"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestCreatePayment_BypassRequiresPermission(t *testing.T) {
 	const secret = "test-secret"
 	repo := memory.NewRepository()

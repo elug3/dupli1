@@ -31,10 +31,10 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.NewRepository()
 	stock := &fakeStock{reservationID: "res-checkout"}
-	svc := service.NewWithCheckout(repo , stock, &fakeCouponClient{
+	svc := service.NewWithCheckout(repo, stock, &fakeCouponClient{
 		code:     "SUMMER30",
 		discount: 0.30,
-	}, 0)
+	}, 0).WithProduct(&fakeProduct{defaultCents: 5000})
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",
@@ -47,7 +47,7 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	}
 
 	session, err = svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
-		SKU: "bag-1", Quantity: 2, UnitPriceCents: 5000,
+		SKU: "bag-1", Quantity: 2, UnitPriceCents: 1, // client price ignored
 	})
 	if err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
@@ -95,7 +95,7 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 func TestCompleteCheckoutRequiresItems(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.NewRepository()
-	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0)
+	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{})
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",
@@ -113,7 +113,7 @@ func TestCompleteCheckoutRequiresItems(t *testing.T) {
 func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.NewRepository()
-	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0)
+	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultCents: 1000})
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",
@@ -122,7 +122,7 @@ func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
 		t.Fatalf("CreateCheckoutSession returned error: %v", err)
 	}
 	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
-		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1000,
+		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1,
 	}); err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}

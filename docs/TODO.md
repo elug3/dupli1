@@ -16,7 +16,7 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 ### Still open (priority)
 
 - [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md)). Code path for private images via CloudFront OAC landed (#96); Terraform apply / host rewrite still open.
-- [ ] **Server-side order/checkout pricing** — ignore client `unit_price_cents`; resolve from product (**Critical** money-path)
+- [x] **Server-side order/checkout pricing** — ignore client `unit_price_cents`; resolve from product (**Critical** money-path)
 - [x] Inventory service token refresh in order bootstrap
 - [ ] NATS handler errors / outbox for payment→order events
 - [ ] Batch cart/product APIs (`?sku_ids=`); Redis catalog cache
@@ -27,7 +27,7 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 - [x] Sanitize product 500 responses (error wrapping) — see [product-error-wrapping.md](product-error-wrapping.md)
 - [ ] Sanitize auth/order/cart/payment 500 responses — stop returning raw `err.Error()` to clients
 - [ ] Consolidate duplicated `authjwt` into `shared/`
-- [ ] **Fail closed without JWT** — order/cart/payment `requireAuth` (and payment Bypass) must not no-op / allow when `jwtValidator` is nil outside tests
+- [x] **Fail closed without JWT** — order/cart/payment `requireAuth` (and payment Bypass) must not no-op / allow when `jwtValidator` is nil outside tests
 - [x] **Payment methods** — [payment-methods-plan.md](payment-methods-plan.md): `method` field + Bypass (`payment.bypass`) implemented; Bitcoin still planned (do not implement yet)
 
 ## Weekly review follow-ups (2026-07-20)
@@ -46,8 +46,8 @@ From the Jul 13–19 progress / quality / security check.
 
 ### Security / quality (from weekly check)
 
-- [ ] **Server-side pricing** — same Critical as above; top remaining money-path risk
-- [ ] **Fail closed without JWT** — same as quality section; prod must always wire JWKS
+- [x] **Server-side pricing** — same Critical as above; top remaining money-path risk
+- [x] **Fail closed without JWT** — same as quality section; prod must always wire JWKS
 - [ ] **Admin/owner lockout exemption** — keep intentional; ensure compensating controls (auth rate limits, strong passwords, no public admin email enum)
 - [ ] **Bitcoin payment method** — planned only; do not implement yet ([payment-methods-plan.md](payment-methods-plan.md))
 

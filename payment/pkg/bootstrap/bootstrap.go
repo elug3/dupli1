@@ -82,17 +82,13 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	svc := service.New(repo, orders, checkoutProvider, eventPublisher)
 
-	var jwtValidator handler.AccessTokenValidator
-	if cfg.JWKSURL != "" || cfg.JWTSecret != "" {
-		validator, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
-		if err != nil {
-			if natsPublisher != nil {
-				natsPublisher.Close()
-			}
-			closeFn()
-			return nil, fmt.Errorf("auth validator: %w", err)
+	jwtValidator, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
+	if err != nil {
+		if natsPublisher != nil {
+			natsPublisher.Close()
 		}
-		jwtValidator = validator
+		closeFn()
+		return nil, fmt.Errorf("auth validator: %w", err)
 	}
 
 	h := handler.New(svc, jwtValidator, cfg.StripeWebhookSecret).

@@ -12,6 +12,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/handler"
 	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
 	"github.com/elug3/dupli1/order/pkg/infra/httpcoupon"
+	"github.com/elug3/dupli1/order/pkg/infra/httpproduct"
 	"github.com/elug3/dupli1/order/pkg/infra/httpstock"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
 	natsinfra "github.com/elug3/dupli1/order/pkg/infra/nats"
@@ -88,6 +89,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		return nil, err
 	}
 	stock := httpstock.NewClient(productURL, cfg.HTTPClient, stockTokenSource)
+	product := httpproduct.NewClient(productURL, cfg.HTTPClient)
 
 	var couponClient ports.CouponClient
 	couponClient = httpcoupon.NewClient(productURL, cfg.HTTPClient)
@@ -110,7 +112,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		}
 	}
 
-	svc := service.NewWithCheckout(repo, stock, couponClient, 0, eventPublisher)
+	svc := service.NewWithCheckout(repo, stock, couponClient, 0, eventPublisher).WithProduct(product)
 
 	if natsSubscriber != nil {
 		if err := svc.RegisterPaymentConsumer(context.Background(), natsSubscriber); err != nil {
@@ -123,13 +125,17 @@ func Bootstrap(cfg Config) (*App, error) {
 	expiryCtx, expiryCancel := context.WithCancel(context.Background())
 	svc.StartPendingExpiryWorker(expiryCtx, 30*time.Second)
 
-	var jwtValidator handler.AccessTokenValidator
-	if cfg.JWKSURL != "" || cfg.JWTSecret != "" {
-		validator, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
-		if err != nil {
-			return nil, fmt.Errorf("auth validator: %w", err)
+	jwtValidator, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
+	if err != nil {
+		expiryCancel()
+		if natsSubscriber != nil {
+			natsSubscriber.Close()
 		}
-		jwtValidator = validator
+		if natsPublisher != nil {
+			natsPublisher.Close()
+		}
+		closeFn()
+		return nil, fmt.Errorf("auth validator: %w", err)
 	}
 
 	h := handler.New(svc, jwtValidator).WithSettings(BuildSettings(cfg))
