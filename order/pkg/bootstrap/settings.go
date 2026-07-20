@@ -19,10 +19,15 @@ func BuildSettings(cfg Config) settings.Response {
 	resp.Limits = map[string]any{
 		"currency": money.Currency, // *_cents amounts are whole KRW won
 	}
-	productURL := resolveProductURL(cfg)
+	apiBase, _ := resolveAPIBaseURL(cfg)
+	authBase := cfg.AuthURL
+	if authBase == "" {
+		authBase = cfg.GatewayURL
+	}
 	resp.Dependencies = map[string]settings.Dependency{
-		"product": settings.Dep(productURL), // catalog, coupons, and stock/reservations
-		"auth":    settings.Dep(cfg.AuthURL),
+		"gateway": settings.Dep(cfg.GatewayURL),
+		"product": settings.Dep(apiBase), // via gateway (or deprecated direct URL)
+		"auth":    settings.Dep(authBase),
 		"nats":    {Configured: cfg.NATSURL != ""},
 	}
 	return resp

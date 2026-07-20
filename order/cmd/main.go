@@ -22,8 +22,10 @@ Options:
       Server port number
   -addr string
       Server listen address (overrides host/port)
+  -gateway-url string
+      Internal API gateway base URL (stock + coupons via /api/v1/...)
   -product-url string
-      Product service base URL (coupons + stock/reservations)
+      Deprecated direct product URL; prefer -gateway-url
   -inventory-url string
       Deprecated alias for -product-url
   -help

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 
 	"github.com/elug3/dupli1/order/pkg/bootstrap"
@@ -22,16 +21,10 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	if opts.Addr == "" {
 		return nil, fmt.Errorf("Addr is required")
 	}
-	productURL := strings.TrimSpace(opts.ProductURL)
-	if productURL == "" {
-		productURL = strings.TrimSpace(opts.InventoryURL)
-	}
-	if productURL == "" {
-		return nil, fmt.Errorf("ProductURL is required")
-	}
 
 	app, err := bootstrap.Bootstrap(bootstrap.Config{
-		ProductURL:           productURL,
+		GatewayURL:           opts.GatewayURL,
+		ProductURL:           opts.ProductURL,
 		InventoryURL:         opts.InventoryURL,
 		AuthURL:              opts.AuthURL,
 		OrderServiceEmail:    opts.OrderServiceEmail,
