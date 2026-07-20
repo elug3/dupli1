@@ -15,8 +15,8 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 
 ### Still open (priority)
 
-- [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md))
-- [ ] **Server-side order/checkout pricing** — ignore client `unit_price_cents`; resolve from product
+- [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md)). Code path for private images via CloudFront OAC landed (#96); Terraform apply / host rewrite still open.
+- [ ] **Server-side order/checkout pricing** — ignore client `unit_price_cents`; resolve from product (**Critical** money-path)
 - [x] Inventory service token refresh in order bootstrap
 - [ ] NATS handler errors / outbox for payment→order events
 - [x] Batch cart/product APIs (`?sku_ids=`); Redis catalog cache
@@ -24,16 +24,40 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
   - [ ] Redis catalog cache
   - [ ] Cart client switch from N GETs to batch (optional follow-up)
 - [ ] Plumb request `context` through product PG stores
-- [x] Sanitize product 500 responses (error wrapping) — see [product-error-wrapping.md](product-error-wrapping.md); auth/order/cart/payment still leak `err.Error()` on some 500s
+- [x] Sanitize product 500 responses (error wrapping) — see [product-error-wrapping.md](product-error-wrapping.md)
+- [ ] Sanitize auth/order/cart/payment 500 responses — stop returning raw `err.Error()` to clients
 - [ ] Consolidate duplicated `authjwt` into `shared/`
+- [ ] **Fail closed without JWT** — order/cart/payment `requireAuth` (and payment Bypass) must not no-op / allow when `jwtValidator` is nil outside tests
 - [x] **Payment methods** — [payment-methods-plan.md](payment-methods-plan.md): `method` field + Bypass (`payment.bypass`) implemented; Bitcoin still planned (do not implement yet)
+
+## Weekly review follow-ups (2026-07-20)
+
+From the Jul 13–19 progress / quality / security check.
+
+### Merge when ready (CI green)
+
+- [ ] **[#111](https://github.com/elug3/dupli1/pull/111)** — order calls product stock/coupons via internal gateway (`DUPLI1_GATEWAY_URL`)
+- [ ] **[#113](https://github.com/elug3/dupli1/pull/113)** — service-prefixed API paths with legacy aliases
+
+### After #113 merges
+
+- [ ] **API path convention** — migrate storefront / manage-web / external callers off legacy prefixes (`/variants`, `/coupons`, `/catalog`, `/inventory`, `/checkout`, `/carts`)
+- [ ] **Remove legacy aliases** — drop dual routes + matching nginx locations once callers are migrated
+
+### Security / quality (from weekly check)
+
+- [ ] **Server-side pricing** — same Critical as above; top remaining money-path risk
+- [ ] **Fail closed without JWT** — same as quality section; prod must always wire JWKS
+- [ ] **Admin/owner lockout exemption** — keep intentional; ensure compensating controls (auth rate limits, strong passwords, no public admin email enum)
+- [ ] **Bitcoin payment method** — planned only; do not implement yet ([payment-methods-plan.md](payment-methods-plan.md))
 
 ## Product API
 
 - [x] **Parent + variants** — implemented; see [product-variants-plan.md](product-variants-plan.md). Remaining: inventory `inStock` enrichment on PDP, drop legacy parent `color`/`stock`/`imageUrls` columns, merge pre-existing duplicate color products.
 - [ ] **Auth-aware `GET /api/v1/products/{id}`** — managers should see drafts/cost on PDP without a separate `/manage` path (optional Bearer, same pattern as list search).
 - [x] **Guest session cookie + unique product view counter** — implemented; see [product-guest-views-plan.md](product-guest-views-plan.md). Browser `dupli1_guest` cookie; exact unique views per parent product on public PDP (`viewCount`).
-- [x] **Simple PDP recommendations** — implemented; see [product-recommendations.md](product-recommendations.md). `GET /api/v1/products/{id}/recommendations`; content similarity + `view_count` boost. Co-view phase 2 still open ([product-views-recommendations-plan.md](product-views-recommendations-plan.md)).
+- [x] **Simple PDP recommendations** — implemented; see [product-recommendations.md](product-recommendations.md). `GET /api/v1/products/{id}/recommendations`; content similarity + `view_count` boost.
+- [ ] **Co-view recommendations (phase 2)** — still open; see [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
 
 ### Found in review (2026-07-08, size/color variants)
 
@@ -41,7 +65,8 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 - [x] **`UpdateVariant` silently clears omitted fields** — fixed with merge-on-update semantics: `domain.Variant.MergeUpdate` (`product/pkg/domain/enrich.go`) applies only the non-zero-value fields from the request onto the existing row, and `ProductSearchService.UpdateVariant` fetches the existing variant and merges before writing. A price-only `PUT` now keeps `color`/`size`/`status`/`imageUrls` untouched instead of blanking them; status specifically keeps its current value rather than resetting to `"active"`, so an update can't accidentally reactivate a deliberately-archived variant. The store layer (`infra/pg/variant_store.go`, `infra/memory/product_store.go`) is unchanged — it still writes whatever full struct it's given, which is now always the merged one.
 - [x] **Variant SKU auto-naming (`optionCode`) differs between stores** — fixed by extracting `domain.OptionCode`/`domain.BuildVariantSKUBase` as shared helpers (`product/pkg/domain/skuid.go`) used by both `infra/pg/variant_store.go` and `infra/memory/product_store.go`; no longer possible to diverge.
 - [x] **Luxury SKU naming system** — `Brand_Style_Color[_Edition]_Size` with master tables (`brands`, `colors`, `sizes`, `sku_editions`); see [product-sku-system.md](product-sku-system.md).
-- [x] **SKU master-data runtime CRUD** — Phase A+B+C: styles table, FKs, catalog APIs (`/api/v1/catalog/...`), `product.master.read|write`, ULID product `id`, strict master codes on product/variant create, read-name enrichment; see [product-sku-master-data-plan.md](product-sku-master-data-plan.md). Phase D (admin UI) remains.
+- [x] **SKU master-data runtime CRUD** — Phase A+B+C: styles table, FKs, catalog APIs (`/api/v1/catalog/...`), `product.master.read|write`, ULID product `id`, strict master codes on product/variant create, read-name enrichment; see [product-sku-master-data-plan.md](product-sku-master-data-plan.md).
+- [ ] **SKU master-data Phase D (admin UI)** — manage brands/styles/colors/sizes/editions in manage-web.
 
 ### Found while implementing SkuID + inventory merge (2026-07-10)
 
