@@ -98,12 +98,13 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 
 ## Recommended priority (remaining)
 
-1. **Server-side pricing** at order/checkout create (ignore client `unit_price_cents`)
+1. **Server-side pricing** at order/checkout create (ignore client `unit_price_cents`) — see [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)
 2. ~~Inventory service **token refresh** in order bootstrap~~ **done**
-3. **Transactional outbox** (or JetStream) for `payment.succeeded` / order events; stop swallowing NATS handler errors
-4. Product **filter indexes** + request-context plumbing; slim list DTOs
-5. Batch cart/product APIs (`?sku_ids=` — product batch done; cart client switch + Redis cache still open)
-6. Consolidate `authjwt` + shared HTTP client helpers; fail-closed auth bootstrap
-7. Product: sanitize 500 responses (**done** — [product-error-wrapping.md](product-error-wrapping.md)); other services still need the same; check migrate `Exec` errors
+3. **Fail closed without JWT** in order/cart/payment (and Bypass) — see fix plan H7
+4. **Transactional outbox** (or JetStream) for `payment.succeeded` / order events; stop swallowing NATS handler errors
+5. Product **filter indexes** + request-context plumbing; slim list DTOs
+6. Batch cart/product APIs (`?sku_ids=` — product batch done; cart client switch + Redis cache still open)
+7. Consolidate `authjwt` + shared HTTP client helpers + JWKS `singleflight`; fail-closed auth bootstrap
+8. Product: sanitize 500 responses (**done** — [product-error-wrapping.md](product-error-wrapping.md)); other services still need the same; check migrate `Exec` errors
 
-See also: [TODO.md](TODO.md), [current-state.md](current-state.md), [aws-cost-optimization.md](aws-cost-optimization.md).
+See also: [TODO.md](TODO.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [current-state.md](current-state.md), [aws-cost-optimization.md](aws-cost-optimization.md).
