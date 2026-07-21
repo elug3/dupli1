@@ -12,13 +12,8 @@ Concrete solutions for open findings from [quality-performance-review.md](qualit
 |------|-----|-----|------------|
 | 1 | **C1** | Server-side order/checkout pricing | Med |
 | 2 | **H7** | Fail closed without JWT (+ Bypass hole) | Low–med |
-<<<<<<< HEAD
-| 3 | **H1** | Order create publish failure / orphan reservations | Med |
-| 4 | **H3** | NATS handler errors / redelivery | **Done** — payment outbox + order queue/log |
-=======
 | 3 | **H1** | Order create publish failure / orphan reservations | **Done** — idempotency + outbox |
-| 4 | **H3** | NATS handler errors / redelivery | Med–high |
->>>>>>> origin/main
+| 4 | **H3** | NATS handler errors / redelivery | **Done** — payment outbox + order queue/log |
 | 5 | **H4** | Sanitize auth/order/cart/payment 500s | Low |
 | 6 | **H5** | Product migrate `Exec` error checks | Low |
 | 7 | **H6** | Plumb request `context` through product stores | Med |
