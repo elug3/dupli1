@@ -313,6 +313,14 @@ paths:
             enum: [asc, desc]
           description: >
             Sort direction. Default desc for newest/views/sold/wishlist/price; asc for name.
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+          description: >
+            Only parents created within this window (from request time).
+            Aliases: 7d / past_week → week; 1d → day; 30d / past_month → month.
         - name: limit
           in: query
           schema:
@@ -1074,6 +1082,10 @@ components:
         order:
           type: string
           enum: [asc, desc]
+        period:
+          type: string
+          description: Effective created-at window when requested (day|week|month)
+          enum: [day, week, month]
         results:
           type: array
           items:

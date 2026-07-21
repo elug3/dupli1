@@ -370,10 +370,11 @@ Search **parent styles** (one row per style; colors are not duplicated). No auth
 | `status` | exact (`product.read` or wildcard required) |
 | `sort` | `newest` (default), `views` (`popular`), `sold`, `wishlist`, `price`, `name` |
 | `order` | `asc` \| `desc` (default `desc`; `name` defaults to `asc`) |
+| `period` | `day` \| `week` \| `month` — created within that window (`past_week` / `7d` aliases) |
 | `limit` | page size (default `50`, max `100`) |
 | `offset` | rows to skip (default `0`) |
 
-Example: `GET /api/v1/products?category=bags&sort=views&order=desc&limit=20`
+Example: `GET /api/v1/products?category=bags&sort=views&order=desc&period=week&limit=20`
 
 See [product-rich-search.md](product-rich-search.md).
 
@@ -385,6 +386,7 @@ See [product-rich-search.md](product-rich-search.md).
   "offset": 0,
   "sort": "newest",
   "order": "desc",
+  "period": "week",
   "results": [
     {
       "id": "BOT-001",

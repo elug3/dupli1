@@ -10,12 +10,15 @@
 | `q` | string | — | Case-insensitive match on name, brand, or description |
 | `sort` | `newest`, `views`, `sold`, `wishlist`, `price`, `name` | `newest` | Aliases: `popular`→`views` |
 | `order` | `asc`, `desc` | `desc` (`asc` for `name`) | Invalid → `400` |
+| `period` | `day`, `week`, `month` | — | Created within that window (`7d`/`past_week`→`week`) |
 | Existing filters | `category`, `brand`, `color`, `size`, `material`, `tags`, `status` | — | Unchanged |
 | Pagination | `limit`, `offset` | `50` / `0` | Max limit `100` |
 
-Response echoes effective `sort` and `order` alongside `total` / `limit` / `offset` / `results`.
+Response echoes effective `sort`, `order`, and `period` (when set) alongside `total` / `limit` / `offset` / `results`.
 
 Sort keys use denormalized parent counters (`view_count`, `sold_count`, `wishlist_count`) or `created_at` / `name` / min active variant price.
+
+`period=week` keeps only parents with `created_at` in the last 7 days (from request time).
 
 ## Wishlist
 
@@ -31,7 +34,9 @@ Schema: `product_wishlists (owner_key, product_id)` + `products.wishlist_count`.
 
 ## Checklist
 
-- [x] `sort` / `order` / `q` on product search
+- [x] `sort` / `order` / `q` / `period` on product search
 - [x] Sort by views, newest, sold, wishlist, price, name
+- [x] Past-week (and day/month) created_at window filter
 - [x] Wishlist add/remove/list + public `wishlistCount`
 - [x] OpenAPI + docs
+

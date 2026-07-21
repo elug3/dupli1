@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/domain"
@@ -34,6 +35,7 @@ type SearchResponse struct {
 	Offset  int         `json:"offset"`
 	Sort    string      `json:"sort"`
 	Order   string      `json:"order"`
+	Period  string      `json:"period,omitempty"`
 	Results interface{} `json:"results"`
 }
 
@@ -186,6 +188,7 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 // Pagination: limit (default 50, max 100) and offset (default 0).
 // Sort: newest (default), views, sold, wishlist, price, name.
 // Order: desc (default except name→asc) or asc.
+// Period: day | week | month — only products created within that window.
 func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -201,12 +204,17 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 
 	rawSort := r.URL.Query().Get("sort")
 	rawOrder := r.URL.Query().Get("order")
+	rawPeriod := r.URL.Query().Get("period")
 	if !domain.ValidSearchSort(rawSort) {
 		h.respondError(w, http.StatusBadRequest, "invalid sort")
 		return
 	}
 	if !domain.ValidSearchOrder(rawOrder) {
 		h.respondError(w, http.StatusBadRequest, "invalid order")
+		return
+	}
+	if !domain.ValidSearchPeriod(rawPeriod) {
+		h.respondError(w, http.StatusBadRequest, "invalid period")
 		return
 	}
 	sortKey := domain.NormalizeSearchSort(rawSort)
@@ -216,6 +224,13 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	order := domain.NormalizeSearchOrder(rawOrder, sortKey)
 	filter["sort"] = sortKey
 	filter["order"] = order
+	period := domain.NormalizeSearchPeriod(rawPeriod)
+	if period != "" {
+		filter["period"] = period
+		if cutoff, ok := domain.SearchPeriodCutoff(period, time.Now().UTC()); ok {
+			filter["created_after"] = cutoff.Format(time.RFC3339)
+		}
+	}
 
 	limit, offset := parseSearchPagination(r)
 	filter["limit"] = strconv.Itoa(limit)
@@ -235,6 +250,7 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 		Offset:  offset,
 		Sort:    sortKey,
 		Order:   order,
+		Period:  period,
 		Results: results,
 	})
 }

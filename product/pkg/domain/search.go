@@ -1,6 +1,9 @@
 package domain
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // Allowed product list sort keys (query ?sort=).
 const (
@@ -16,6 +19,13 @@ const (
 const (
 	OrderAsc  = "asc"
 	OrderDesc = "desc"
+)
+
+// Allowed created-at window filters (query ?period=).
+const (
+	PeriodDay   = "day"
+	PeriodWeek  = "week"
+	PeriodMonth = "month"
 )
 
 // NormalizeSearchSort maps aliases and defaults to a canonical sort key.
@@ -71,4 +81,53 @@ func ValidSearchOrder(raw string) bool {
 		return true
 	}
 	return NormalizeSearchOrder(raw, SortNewest) != ""
+}
+
+// NormalizeSearchPeriod maps aliases to a canonical period key.
+// Empty means no window filter; unknown returns "".
+func NormalizeSearchPeriod(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		return ""
+	case PeriodDay, "1d", "today", "past_day", "last_day":
+		return PeriodDay
+	case PeriodWeek, "7d", "past_week", "last_week", "pastweek":
+		return PeriodWeek
+	case PeriodMonth, "30d", "past_month", "last_month", "pastmonth":
+		return PeriodMonth
+	default:
+		return ""
+	}
+}
+
+// ValidSearchPeriod reports whether raw is empty (no filter) or a known period.
+func ValidSearchPeriod(raw string) bool {
+	if strings.TrimSpace(raw) == "" {
+		return true
+	}
+	return NormalizeSearchPeriod(raw) != ""
+}
+
+// SearchPeriodDuration returns how far back a period reaches from "now".
+func SearchPeriodDuration(period string) time.Duration {
+	switch NormalizeSearchPeriod(period) {
+	case PeriodDay:
+		return 24 * time.Hour
+	case PeriodWeek:
+		return 7 * 24 * time.Hour
+	case PeriodMonth:
+		return 30 * 24 * time.Hour
+	default:
+		return 0
+	}
+}
+
+// SearchPeriodCutoff returns the inclusive lower bound for created_at, or ok=false
+// when period is empty/unknown.
+func SearchPeriodCutoff(period string, now time.Time) (time.Time, bool) {
+	d := SearchPeriodDuration(period)
+	if d == 0 {
+		return time.Time{}, false
+	}
+	return now.UTC().Add(-d), true
 }
