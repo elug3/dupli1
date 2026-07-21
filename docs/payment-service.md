@@ -4,7 +4,7 @@
 
 The **payment service** (`dupli1-payment`) collects money for **pending** orders via **Stripe Checkout** (hosted redirect). Dupli1 **never** handles card numbers, CVC, or card passwords.
 
-On PG success, payment publishes **`payment.succeeded`**. The **order service** consumes it, verifies amount, and moves the order to **`paid`**. The **notification service** sends a Telegram alert to ops. An **order manager** ships the order (`paid` → **`in_transit`**), which **commits** inventory (plan B).
+On PG success, payment enqueues **`payment.succeeded`** in a transactional outbox (soft-success even if NATS is briefly down). The **order service** consumes it (queue group + logged handler errors), verifies amount, and moves the order to **`paid`**. A payment reconcile worker re-publishes recent succeeded payments so lost Core NATS deliveries still land (`MarkOrderPaid` is idempotent). The **notification service** sends a Telegram alert to ops. An **order manager** ships the order (`paid` → **`in_transit`**), which **commits** inventory (plan B).
 
 See also: [cart-service.md](cart-service.md), [checkout-session.md](checkout-session.md), [payment-methods-plan.md](payment-methods-plan.md) (credit card / Bypass / Bitcoin methods).
 
@@ -103,7 +103,7 @@ sequenceDiagram
 
 - Payment records and Stripe Checkout Session creation
 - Stripe webhooks (signature verification, idempotency)
-- Publishing **`payment.succeeded`**
+- Publishing **`payment.succeeded`** (transactional outbox + drain/reconcile workers)
 - Dev/simulate endpoints when Stripe is not configured (local only)
 
 ### Order service owns

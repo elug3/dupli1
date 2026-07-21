@@ -4,22 +4,31 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/elug3/dupli1/payment/pkg/domain"
 	"github.com/elug3/dupli1/payment/pkg/ports"
 )
 
+type outboxEntry struct {
+	msg       ports.OutboxMessage
+	published bool
+}
+
 type Repository struct {
-	mu       sync.RWMutex
-	payments map[string]*domain.Payment
-	byKey    map[string]string
-	nextID   int
+	mu           sync.RWMutex
+	payments     map[string]*domain.Payment
+	byKey        map[string]string
+	outbox       map[int64]*outboxEntry
+	nextID       int
+	nextOutboxID int64
 }
 
 func NewRepository() *Repository {
 	return &Repository{
 		payments: make(map[string]*domain.Payment),
 		byKey:    make(map[string]string),
+		outbox:   make(map[int64]*outboxEntry),
 	}
 }
 
@@ -34,6 +43,10 @@ func (r *Repository) NextPaymentID(ctx context.Context) (string, error) {
 }
 
 func (r *Repository) Save(ctx context.Context, payment *domain.Payment) error {
+	return r.SaveWithOutbox(ctx, payment, nil)
+}
+
+func (r *Repository) SaveWithOutbox(ctx context.Context, payment *domain.Payment, events []ports.OutboxEvent) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -43,6 +56,20 @@ func (r *Repository) Save(ctx context.Context, payment *domain.Payment) error {
 	r.payments[payment.ID] = &copied
 	if payment.IdempotencyKey != "" {
 		r.byKey[payment.IdempotencyKey] = payment.ID
+	}
+	now := time.Now().UTC()
+	for _, ev := range events {
+		r.nextOutboxID++
+		id := r.nextOutboxID
+		r.outbox[id] = &outboxEntry{
+			msg: ports.OutboxMessage{
+				ID:          id,
+				AggregateID: ev.AggregateID,
+				Subject:     ev.Subject,
+				Payload:     append([]byte(nil), ev.Payload...),
+				CreatedAt:   now,
+			},
+		}
 	}
 	return nil
 }
@@ -88,4 +115,83 @@ func (r *Repository) FindByIdempotencyKey(ctx context.Context, key string) (*dom
 	}
 	copied := *r.payments[id]
 	return &copied, nil
+}
+
+func (r *Repository) ListSucceededSince(ctx context.Context, since time.Time, limit int) ([]domain.Payment, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]domain.Payment, 0, limit)
+	for _, p := range r.payments {
+		if p.Status != domain.StatusSucceeded {
+			continue
+		}
+		if p.UpdatedAt.Before(since) {
+			continue
+		}
+		out = append(out, *p)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (r *Repository) ListPendingOutbox(ctx context.Context, limit int) ([]ports.OutboxMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]ports.OutboxMessage, 0, limit)
+	for _, e := range r.outbox {
+		if e.published {
+			continue
+		}
+		msg := e.msg
+		msg.Payload = append([]byte(nil), e.msg.Payload...)
+		out = append(out, msg)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (r *Repository) MarkOutboxPublished(ctx context.Context, id int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.outbox[id]
+	if !ok {
+		return ports.ErrNotFound
+	}
+	e.published = true
+	e.msg.LastError = ""
+	return nil
+}
+
+func (r *Repository) RecordOutboxAttempt(ctx context.Context, id int64, errMsg string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.outbox[id]
+	if !ok {
+		return ports.ErrNotFound
+	}
+	e.msg.Attempts++
+	e.msg.LastError = errMsg
+	return nil
 }

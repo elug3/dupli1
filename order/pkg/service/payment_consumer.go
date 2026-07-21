@@ -32,7 +32,7 @@ func (s *Service) handlePaymentSucceeded(ctx context.Context, _ string, payload 
 	}
 	_, err := s.MarkOrderPaid(ctx, event.OrderID, event.PaymentID, event.AmountCents)
 	if err != nil {
-		return fmt.Errorf("mark order paid %s: %w", event.OrderID, err)
+		return fmt.Errorf("mark order paid order_id=%s payment_id=%s: %w", event.OrderID, event.PaymentID, err)
 	}
 	return nil
 }

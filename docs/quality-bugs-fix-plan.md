@@ -13,7 +13,7 @@ Concrete solutions for open findings from [quality-performance-review.md](qualit
 | 1 | **C1** | Server-side order/checkout pricing | Med |
 | 2 | **H7** | Fail closed without JWT (+ Bypass hole) | Low–med |
 | 3 | **H1** | Order create publish failure / orphan reservations | **Done** — idempotency + outbox |
-| 4 | **H3** | NATS handler errors / redelivery | Med–high |
+| 4 | **H3** | NATS handler errors / redelivery | **Done** — payment outbox + order queue/log |
 | 5 | **H4** | Sanitize auth/order/cart/payment 500s | Low |
 | 6 | **H5** | Product migrate `Exec` error checks | Low |
 | 7 | **H6** | Plumb request `context` through product stores | Med |
@@ -90,16 +90,18 @@ Publish blip does not leak a second reservation; clients can safely retry create
 
 Core NATS `Subscribe` does `_ = handler(...)`. Failures (e.g. `MarkOrderPaid`) are silent; no redelivery.
 
-### Solution
+### Solution (implemented)
 
-1. **Immediate:** log subject + order/payment id on handler error.
-2. Use `QueueSubscribe` when running multiple replicas.
-3. Prefer **JetStream** (ack/nak, limited redelivery, DLQ) **or** transactional **outbox** on the publish side (align with H1 / payment `payment.succeeded`).
-4. Keep `MarkOrderPaid` idempotent (already is for same payment id).
+1. **Order consumer:** `QueueSubscribe` with queue group `order-workers`; log subject + error on handler failure (include order/payment ids in error text).
+2. **Payment publish outbox:** `payment.succeeded` enqueued in the same TX as `succeeded` save; soft-success complete; outbox drain worker.
+3. **Reconcile:** periodic republish of recent succeeded payments (`MarkOrderPaid` is idempotent) covers Core NATS lost-after-publish gaps.
+4. JetStream / DLQ remains a follow-up if broker-level ack/nak is required.
 
 ### Done when
 
 Transient consumer failures are visible and retried; poison messages land in a DLQ / dead letter path.
+
+**Done** for visibility + at-least-once publish/reconcile. Full DLQ still optional via JetStream later.
 
 ---
 
