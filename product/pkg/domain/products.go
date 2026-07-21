@@ -46,6 +46,9 @@ type Product struct {
 	Tags        []string `json:"tags,omitempty"`
 	// ViewCount is unique guest PDP views (denormalized). Public on PDP and recs.
 	ViewCount int64 `json:"viewCount"`
+	// SoldCount is units committed from inventory reservations (denormalized).
+	// Incremented when a reservation is committed (order ship → in_transit), not on payment.
+	SoldCount int64 `json:"soldCount"`
 	CreatedAt string `json:"createdAt"`
 	CreatedBy string `json:"createdBy,omitempty"`
 

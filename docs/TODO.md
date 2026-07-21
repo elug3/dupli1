@@ -80,6 +80,7 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 - [x] **Parent + variants** — implemented; see [product-variants-plan.md](product-variants-plan.md). Remaining: inventory `inStock` enrichment on PDP, drop legacy parent `color`/`stock`/`imageUrls` columns, merge pre-existing duplicate color products.
 - [ ] **Auth-aware `GET /api/v1/products/{id}`** — managers should see drafts/cost on PDP without a separate `/manage` path (optional Bearer, same pattern as list search).
 - [x] **Guest session cookie + unique product view counter** — implemented; see [product-guest-views-plan.md](product-guest-views-plan.md). Browser `dupli1_guest` cookie; exact unique views per parent product on public PDP (`viewCount`).
+- [x] **Product sold count** — implemented; see [product-sold-count.md](product-sold-count.md). Parent `soldCount` increments on inventory reservation commit (order ship).
 - [x] **Simple PDP recommendations** — implemented; see [product-recommendations.md](product-recommendations.md). `GET /api/v1/products/{id}/recommendations`; content similarity + `view_count` boost.
 - [ ] **Co-view recommendations (phase 2)** — still open; see [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
 
