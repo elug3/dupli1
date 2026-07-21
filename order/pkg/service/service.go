@@ -2,7 +2,13 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -28,10 +34,11 @@ type Service struct {
 }
 
 type CreateOrderInput struct {
-	CustomerID    string
-	Items         []domain.OrderItem
-	CouponCode    string
-	DiscountCents int64
+	CustomerID     string
+	Items          []domain.OrderItem
+	CouponCode     string
+	DiscountCents  int64
+	IdempotencyKey string
 }
 
 type orderItemEvent struct {
@@ -51,6 +58,17 @@ type orderEvent struct {
 	TotalCents    int64              `json:"total_cents"`
 	Items         []orderItemEvent   `json:"items"`
 	Occurred      time.Time          `json:"occurred_at"`
+}
+
+type idempotencyFingerprint struct {
+	CustomerID    string `json:"customer_id"`
+	CouponCode    string `json:"coupon_code,omitempty"`
+	DiscountCents int64  `json:"discount_cents,omitempty"`
+	Items         []struct {
+		SkuID    string `json:"sku_id,omitempty"`
+		SKU      string `json:"sku,omitempty"`
+		Quantity int    `json:"quantity"`
+	} `json:"items"`
 }
 
 func New(repo ports.Repository, stock ports.StockClient, eventPublisher ...ports.EventPublisher) *Service {
@@ -89,6 +107,17 @@ func (s *Service) WithProduct(product ports.ProductClient) *Service {
 }
 
 func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*domain.Order, error) {
+	idemKey := strings.TrimSpace(input.IdempotencyKey)
+	reqHash := hashCreateOrderInput(input)
+
+	if idemKey != "" {
+		if existing, err := s.loadIdempotentOrder(ctx, input.CustomerID, idemKey, reqHash); err == nil {
+			return existing, nil
+		} else if !errors.Is(err, ports.ErrNotFound) {
+			return nil, err
+		}
+	}
+
 	pricedItems, err := s.priceItems(ctx, input.Items)
 	if err != nil {
 		return nil, err
@@ -118,13 +147,36 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
-	if err := s.repo.Save(ctx, order); err != nil {
+
+	var idem *ports.IdempotencyRecord
+	if idemKey != "" {
+		idem = &ports.IdempotencyRecord{
+			Key:         idemKey,
+			CustomerID:  input.CustomerID,
+			OrderID:     order.ID,
+			RequestHash: reqHash,
+		}
+	}
+	events, err := s.outboxEvents(order, orderCreatedSubject)
+	if err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
-	if err := s.publish(ctx, orderCreatedSubject, order); err != nil {
+
+	if err := s.repo.SaveWithOutbox(ctx, order, idem, events); err != nil {
+		_ = s.stock.ReleaseReservation(ctx, reservationID)
+		if idemKey != "" {
+			if existing, replayErr := s.loadIdempotentOrder(ctx, input.CustomerID, idemKey, reqHash); replayErr == nil {
+				return existing, nil
+			} else if errors.Is(replayErr, ports.ErrIdempotencyConflict) {
+				return nil, replayErr
+			}
+		}
 		return nil, err
 	}
+
+	// Soft-success: order is source of truth; outbox worker retries publish.
+	s.tryDrainOutbox(ctx)
 	return cloneOrder(order), nil
 }
 
@@ -155,15 +207,14 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 	if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {
 		return nil, err
 	}
-	if err := s.repo.Save(ctx, order); err != nil {
+	events, err := s.outboxEvents(order, orderPaidSubject, orderUpdatedSubject)
+	if err != nil {
 		return nil, err
 	}
-	if err := s.publish(ctx, orderPaidSubject, order); err != nil {
+	if err := s.repo.SaveWithOutbox(ctx, order, nil, events); err != nil {
 		return nil, err
 	}
-	if err := s.publish(ctx, orderUpdatedSubject, order); err != nil {
-		return nil, err
-	}
+	s.tryDrainOutbox(ctx)
 	return cloneOrder(order), nil
 }
 
@@ -210,19 +261,82 @@ func (s *Service) FulfillOrder(ctx context.Context, id string) (*domain.Order, e
 }
 
 func (s *Service) saveStatusChange(ctx context.Context, order *domain.Order) (*domain.Order, error) {
-	if err := s.repo.Save(ctx, order); err != nil {
+	events, err := s.outboxEvents(order, orderUpdatedSubject)
+	if err != nil {
 		return nil, err
 	}
-	if err := s.publish(ctx, orderUpdatedSubject, order); err != nil {
+	if err := s.repo.SaveWithOutbox(ctx, order, nil, events); err != nil {
+		return nil, err
+	}
+	s.tryDrainOutbox(ctx)
+	return cloneOrder(order), nil
+}
+
+func (s *Service) loadIdempotentOrder(ctx context.Context, customerID, key, reqHash string) (*domain.Order, error) {
+	rec, err := s.repo.FindByIdempotencyKey(ctx, customerID, key)
+	if err != nil {
+		return nil, err
+	}
+	if rec.RequestHash != reqHash {
+		return nil, ports.ErrIdempotencyConflict
+	}
+	order, err := s.repo.Get(ctx, rec.OrderID)
+	if err != nil {
 		return nil, err
 	}
 	return cloneOrder(order), nil
 }
 
-func (s *Service) publish(ctx context.Context, subject string, order *domain.Order) error {
-	if s.eventPublisher == nil {
-		return nil
+func hashCreateOrderInput(input CreateOrderInput) string {
+	fp := idempotencyFingerprint{
+		CustomerID:    strings.TrimSpace(input.CustomerID),
+		CouponCode:    strings.TrimSpace(input.CouponCode),
+		DiscountCents: input.DiscountCents,
 	}
+	fp.Items = make([]struct {
+		SkuID    string `json:"sku_id,omitempty"`
+		SKU      string `json:"sku,omitempty"`
+		Quantity int    `json:"quantity"`
+	}, len(input.Items))
+	for i, item := range input.Items {
+		fp.Items[i].SkuID = strings.TrimSpace(item.SkuID)
+		fp.Items[i].SKU = strings.TrimSpace(item.SKU)
+		fp.Items[i].Quantity = item.Quantity
+	}
+	sort.Slice(fp.Items, func(i, j int) bool {
+		if fp.Items[i].SkuID != fp.Items[j].SkuID {
+			return fp.Items[i].SkuID < fp.Items[j].SkuID
+		}
+		if fp.Items[i].SKU != fp.Items[j].SKU {
+			return fp.Items[i].SKU < fp.Items[j].SKU
+		}
+		return fp.Items[i].Quantity < fp.Items[j].Quantity
+	})
+	raw, err := json.Marshal(fp)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+func (s *Service) outboxEvents(order *domain.Order, subjects ...string) ([]ports.OutboxEvent, error) {
+	events := make([]ports.OutboxEvent, 0, len(subjects))
+	for _, subject := range subjects {
+		payload, err := s.marshalOrderEvent(subject, order)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, ports.OutboxEvent{
+			AggregateID: order.ID,
+			Subject:     subject,
+			Payload:     payload,
+		})
+	}
+	return events, nil
+}
+
+func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte, error) {
 	items := make([]orderItemEvent, len(order.Items))
 	for i, item := range order.Items {
 		items[i] = orderItemEvent{
@@ -232,7 +346,7 @@ func (s *Service) publish(ctx context.Context, subject string, order *domain.Ord
 			UnitPriceCents: item.UnitPriceCents,
 		}
 	}
-	return s.eventPublisher.Publish(ctx, subject, orderEvent{
+	payload, err := json.Marshal(orderEvent{
 		EventType:     subject,
 		OrderID:       order.ID,
 		CustomerID:    order.CustomerID,
@@ -243,6 +357,75 @@ func (s *Service) publish(ctx context.Context, subject string, order *domain.Ord
 		Items:         items,
 		Occurred:      s.now(),
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal %s event: %w", subject, err)
+	}
+	return payload, nil
+}
+
+// StartOutboxWorker periodically publishes pending outbox rows.
+func (s *Service) StartOutboxWorker(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := s.DrainOutbox(ctx); err != nil {
+					log.Printf("order outbox drain: %v", err)
+				}
+			}
+		}
+	}()
+}
+
+func (s *Service) tryDrainOutbox(ctx context.Context) {
+	if err := s.DrainOutbox(ctx); err != nil {
+		log.Printf("order outbox drain: %v", err)
+	}
+}
+
+// DrainOutbox publishes pending outbox messages. Failures are recorded and retried later.
+func (s *Service) DrainOutbox(ctx context.Context) error {
+	if s.eventPublisher == nil {
+		// No broker configured: mark pending rows published so they do not accumulate in tests.
+		msgs, err := s.repo.ListPendingOutbox(ctx, 100)
+		if err != nil {
+			return err
+		}
+		for _, msg := range msgs {
+			if err := s.repo.MarkOutboxPublished(ctx, msg.ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	msgs, err := s.repo.ListPendingOutbox(ctx, 50)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, msg := range msgs {
+		if err := s.eventPublisher.Publish(ctx, msg.Subject, json.RawMessage(msg.Payload)); err != nil {
+			_ = s.repo.RecordOutboxAttempt(ctx, msg.ID, err.Error())
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if err := s.repo.MarkOutboxPublished(ctx, msg.ID); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
 }
 
 // priceItems resolves each line from the product catalog and ignores any client unit_price_cents.

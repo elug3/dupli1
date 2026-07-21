@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
@@ -87,6 +88,26 @@ func (r *Repository) migrate() error {
 			unit_price_cents BIGINT NOT NULL,
 			PRIMARY KEY (session_id, sku)
 		)`,
+		`CREATE TABLE IF NOT EXISTS order_idempotency_keys (
+			customer_id TEXT NOT NULL,
+			idempotency_key TEXT NOT NULL,
+			order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+			request_hash TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (customer_id, idempotency_key)
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_order_idempotency_order_id ON order_idempotency_keys(order_id)`,
+		`CREATE TABLE IF NOT EXISTS order_outbox (
+			id BIGSERIAL PRIMARY KEY,
+			aggregate_id TEXT NOT NULL,
+			subject TEXT NOT NULL,
+			payload JSONB NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			published_at TIMESTAMPTZ,
+			attempts INT NOT NULL DEFAULT 0,
+			last_error TEXT NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_order_outbox_pending ON order_outbox (created_at) WHERE published_at IS NULL`,
 	}
 	for _, stmt := range stmts {
 		if _, err := r.pool.Exec(ctx, stmt); err != nil {
@@ -199,6 +220,10 @@ func (r *Repository) nextID(ctx context.Context, name, prefix string) (string, e
 }
 
 func (r *Repository) Save(ctx context.Context, order *domain.Order) error {
+	return r.SaveWithOutbox(ctx, order, nil, nil)
+}
+
+func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, idem *ports.IdempotencyRecord, events []ports.OutboxEvent) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -249,7 +274,102 @@ func (r *Repository) Save(ctx context.Context, order *domain.Order) error {
 			return err
 		}
 	}
+
+	if idem != nil && idem.Key != "" {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO order_idempotency_keys (customer_id, idempotency_key, order_id, request_hash)
+			VALUES ($1, $2, $3, $4)
+		`, idem.CustomerID, idem.Key, idem.OrderID, idem.RequestHash); err != nil {
+			return fmt.Errorf("save idempotency key: %w", err)
+		}
+	}
+
+	for _, ev := range events {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO order_outbox (aggregate_id, subject, payload)
+			VALUES ($1, $2, $3)
+		`, ev.AggregateID, ev.Subject, ev.Payload); err != nil {
+			return fmt.Errorf("enqueue outbox: %w", err)
+		}
+	}
+
 	return tx.Commit(ctx)
+}
+
+func (r *Repository) FindByIdempotencyKey(ctx context.Context, customerID, key string) (*ports.IdempotencyRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	customerID = strings.TrimSpace(customerID)
+	key = strings.TrimSpace(key)
+	if customerID == "" || key == "" {
+		return nil, ports.ErrNotFound
+	}
+	var rec ports.IdempotencyRecord
+	err := r.pool.QueryRow(ctx, `
+		SELECT customer_id, idempotency_key, order_id, request_hash
+		FROM order_idempotency_keys
+		WHERE customer_id = $1 AND idempotency_key = $2
+	`, customerID, key).Scan(&rec.CustomerID, &rec.Key, &rec.OrderID, &rec.RequestHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ports.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &rec, nil
+}
+
+func (r *Repository) ListPendingOutbox(ctx context.Context, limit int) ([]ports.OutboxMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, aggregate_id, subject, payload, created_at, attempts, last_error
+		FROM order_outbox
+		WHERE published_at IS NULL
+		ORDER BY id
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ports.OutboxMessage
+	for rows.Next() {
+		var m ports.OutboxMessage
+		if err := rows.Scan(&m.ID, &m.AggregateID, &m.Subject, &m.Payload, &m.CreatedAt, &m.Attempts, &m.LastError); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) MarkOutboxPublished(ctx context.Context, id int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	_, err := r.pool.Exec(ctx, `
+		UPDATE order_outbox SET published_at = NOW(), last_error = '' WHERE id = $1
+	`, id)
+	return err
+}
+
+func (r *Repository) RecordOutboxAttempt(ctx context.Context, id int64, errMsg string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	_, err := r.pool.Exec(ctx, `
+		UPDATE order_outbox
+		SET attempts = attempts + 1, last_error = $2
+		WHERE id = $1
+	`, id, errMsg)
+	return err
 }
 
 func nullIfEmpty(s string) *string {

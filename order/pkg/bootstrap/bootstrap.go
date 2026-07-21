@@ -126,6 +126,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 	expiryCtx, expiryCancel := context.WithCancel(context.Background())
 	svc.StartPendingExpiryWorker(expiryCtx, 30*time.Second)
+	svc.StartOutboxWorker(expiryCtx, 2*time.Second)
 
 	jwtValidator, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
 	if err != nil {
