@@ -1,6 +1,6 @@
 # Dupli1 shared libraries
 
-Reusable Go modules consumed by Dupli1 microservices. Each package is intentionally small and dependency-free so services can import only what they need.
+Reusable Go modules consumed by Dupli1 microservices. Prefer small packages with minimal dependencies so services can import only what they need (`permissions` / `settings` / `money` stay dependency-free; `authjwt` pulls JWT + `singleflight`).
 
 ## Module
 
@@ -9,6 +9,18 @@ github.com/elug3/dupli1/shared
 ```
 
 ## Packages
+
+### `pkg/authjwt`
+
+Shared access-token validation (JWKS RS256 or HMAC HS256), claims helpers, and request-context plumbing. JWKS refresh uses `singleflight` so concurrent unknown-`kid` / cold-cache requests share one fetch.
+
+```go
+import "github.com/elug3/dupli1/shared/pkg/authjwt"
+
+validator, err := authjwt.NewAccessTokenValidator(jwksURL, hmacSecret)
+claims, err := validator.ValidateAccessToken(token)
+ctx = authjwt.WithClaims(ctx, claims)
+```
 
 ### `pkg/permissions`
 

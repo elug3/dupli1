@@ -48,7 +48,7 @@ Implement in the order in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) (
 - [x] Sanitize product 500 responses (error wrapping) — see [product-error-wrapping.md](product-error-wrapping.md)
 - [x] Sanitize auth/order/cart/payment 500 responses (**H4**) — stop returning raw `err.Error()` to clients
 - [x] Product migrate: check ignored `Exec` errors (**H5**)
-- [ ] Consolidate duplicated `authjwt` into `shared/` + JWKS `singleflight` (**H8** + **H9**)
+- [x] Consolidate duplicated `authjwt` into `shared/` + JWKS `singleflight` (**H8** + **H9**)
 - [x] **Fail closed without JWT (H7)** — order/cart/payment `requireAuth` (and payment Bypass) must not no-op / allow when `jwtValidator` is nil outside tests
 - [x] **Payment methods** — [payment-methods-plan.md](payment-methods-plan.md): `method` field + Bypass (`payment.bypass`) implemented; Bitcoin still planned (do not implement yet)
 

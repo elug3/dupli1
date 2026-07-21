@@ -14,6 +14,7 @@ import (
 
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/sync/singleflight"
 )
 
 type contextKey struct{}
@@ -40,6 +41,11 @@ func FromContext(ctx context.Context) (Claims, bool) {
 	return c, ok
 }
 
+// AccessTokenValidator validates Bearer access tokens.
+type AccessTokenValidator interface {
+	ValidateAccessToken(token string) (Claims, error)
+}
+
 type jwk struct {
 	Kty string `json:"kty"`
 	Use string `json:"use"`
@@ -59,6 +65,7 @@ type JWKSValidator struct {
 	client *http.Client
 	mu     sync.RWMutex
 	keys   map[string]*rsa.PublicKey
+	sf     singleflight.Group
 }
 
 // NewJWKSValidator creates a validator that loads signing keys from url.
@@ -98,31 +105,42 @@ func (v *JWKSValidator) ValidateAccessToken(tokenString string) (Claims, error) 
 }
 
 func (v *JWKSValidator) publicKey(kid string) (*rsa.PublicKey, error) {
-	v.mu.RLock()
-	if key, ok := v.keys[kid]; ok && key != nil {
-		v.mu.RUnlock()
+	if key, ok := v.cachedKey(kid); ok {
 		return key, nil
 	}
-	v.mu.RUnlock()
 
 	if err := v.refreshKeys(); err != nil {
 		return nil, err
 	}
 
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-	if kid == "" && len(v.keys) == 1 {
-		for _, key := range v.keys {
-			return key, nil
-		}
-	}
-	if key, ok := v.keys[kid]; ok && key != nil {
+	if key, ok := v.cachedKey(kid); ok {
 		return key, nil
 	}
 	return nil, fmt.Errorf("signing key %q not found", kid)
 }
 
+func (v *JWKSValidator) cachedKey(kid string) (*rsa.PublicKey, bool) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	if key, ok := v.keys[kid]; ok && key != nil {
+		return key, true
+	}
+	if kid == "" && len(v.keys) == 1 {
+		for _, key := range v.keys {
+			return key, true
+		}
+	}
+	return nil, false
+}
+
 func (v *JWKSValidator) refreshKeys() error {
+	_, err, _ := v.sf.Do(v.url, func() (any, error) {
+		return nil, v.fetchAndStoreKeys()
+	})
+	return err
+}
+
+func (v *JWKSValidator) fetchAndStoreKeys() error {
 	req, err := http.NewRequest(http.MethodGet, v.url, nil)
 	if err != nil {
 		return err
@@ -265,9 +283,7 @@ func extractStringSlice(claims jwt.MapClaims, key string) []string {
 }
 
 // NewAccessTokenValidator returns JWKS validation when url is set, otherwise HMAC.
-func NewAccessTokenValidator(jwksURL, hmacSecret string) (interface {
-	ValidateAccessToken(string) (Claims, error)
-}, error) {
+func NewAccessTokenValidator(jwksURL, hmacSecret string) (AccessTokenValidator, error) {
 	if jwksURL != "" {
 		return NewJWKSValidator(jwksURL), nil
 	}

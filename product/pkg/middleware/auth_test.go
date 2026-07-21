@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elug3/dupli1/product/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/middleware"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elug3/dupli1/product/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 )
 
 // AccessTokenValidator validates Bearer access tokens and returns claims.

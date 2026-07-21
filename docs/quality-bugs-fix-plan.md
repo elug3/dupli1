@@ -17,7 +17,7 @@ Concrete solutions for open findings from [quality-performance-review.md](qualit
 | 5 | **H4** | Sanitize auth/order/cart/payment 500s | Low |
 | 6 | **H5** | Product migrate `Exec` error checks | Low |
 | 7 | **H6** | Plumb request `context` through product stores | Med |
-| 8 | **H8+H9** | Shared `authjwt` + JWKS `singleflight` | Med |
+| 8 | **H8+H9** | Shared `authjwt` + JWKS `singleflight` | **Done** |
 
 Do **C1** and **H7** first — active money/auth risk. **H1** outbox landed; reuse for **H3** / payment publish side. Bundle **H8** with **H9**.
 
@@ -163,16 +163,15 @@ Cancelled request contexts cancel in-flight product store queries.
 
 Four identical `*/pkg/authjwt` packages. On unknown `kid` / cold cache, every request can hit JWKS in parallel (no `singleflight`).
 
-### Solution
+### Solution (implemented)
 
-1. Move to `shared/pkg/authjwt` (Claims, JWKS/HMAC validators, `NewAccessTokenValidator`, context helpers).
-2. Add `golang.org/x/sync/singleflight.Group` around `refreshKeys`.
-3. Point order/cart/payment/product at shared; delete local copies.
-4. Optional: background TTL refresh.
+1. Moved to `shared/pkg/authjwt` (Claims, JWKS/HMAC validators, `NewAccessTokenValidator`, context helpers).
+2. Added `golang.org/x/sync/singleflight.Group` around JWKS refresh.
+3. order/cart/payment/product import shared; local copies deleted.
 
 ### Done when
 
-One shared package; concurrent unknown-`kid` requests share a single JWKS fetch.
+One shared package; concurrent unknown-`kid` requests share a single JWKS fetch. **Done.**
 
 ---
 

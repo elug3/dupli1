@@ -301,7 +301,7 @@ Local Postgres: `postgres://dupli1:dupli1_dev@localhost:5436/cart?sslmode=disabl
 | `cart/pkg/infra/httpproduct/` | Product variant client |
 | `cart/pkg/infra/httpinventory/` | Inventory read client |
 | `cart/pkg/handler/http.go` | HTTP routes |
-| `cart/pkg/authjwt/` | JWT validation (same pattern as order) |
+| `shared/pkg/authjwt` | JWT validation (shared with order/cart/payment/product) |
 
 ---
 

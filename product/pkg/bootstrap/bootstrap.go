@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/elug3/dupli1/product/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/handler"
 	natsinfra "github.com/elug3/dupli1/product/pkg/infra/nats"
 	"github.com/elug3/dupli1/product/pkg/infra/pg"
