@@ -80,6 +80,8 @@ See [service-layout.md](service-layout.md) for details.
   - Checkout sessions at `/api/v1/checkout/sessions` (see [checkout-session.md](checkout-session.md))
   - Order lifecycle at `/api/v1/orders` — statuses: `pending`, `paid`, `in_transit`, `fulfilled`, `canceled`
   - Consumes **`payment.succeeded`** (NATS) → `paid`; 5-minute unpaid `pending` expiry worker
+  - Publishes order events via transactional **outbox** (`order.created` / status updates); outbox drain worker
+  - Optional `Idempotency-Key` on `POST /api/v1/orders` (replay-safe create)
   - `POST /api/v1/orders/{id}/ship` → `in_transit` + commit inventory (plan B)
   - Calls product to reserve stock and redeem coupons
 - **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS; HS256 fallback in dev). Storefront ABAC on `customer_id`; `order.create` / `order.read.all` bypass ABAC. Ship requires `order.ship`; status changes require `order.status.update`

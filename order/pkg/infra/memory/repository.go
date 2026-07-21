@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,18 +11,37 @@ import (
 	"github.com/elug3/dupli1/order/pkg/ports"
 )
 
+type idempotencyEntry struct {
+	orderID     string
+	requestHash string
+}
+
+type outboxEntry struct {
+	msg       ports.OutboxMessage
+	published bool
+}
+
 type Repository struct {
-	mu       sync.RWMutex
-	orders   map[string]*domain.Order
-	sessions map[string]*domain.CheckoutSession
-	nextID   int
+	mu           sync.RWMutex
+	orders       map[string]*domain.Order
+	sessions     map[string]*domain.CheckoutSession
+	idempotency  map[string]idempotencyEntry // key: customerID+"\x00"+idemKey
+	outbox       map[int64]*outboxEntry
+	nextID       int
+	nextOutboxID int64
 }
 
 func NewRepository() *Repository {
 	return &Repository{
-		orders:   make(map[string]*domain.Order),
-		sessions: make(map[string]*domain.CheckoutSession),
+		orders:      make(map[string]*domain.Order),
+		sessions:    make(map[string]*domain.CheckoutSession),
+		idempotency: make(map[string]idempotencyEntry),
+		outbox:      make(map[int64]*outboxEntry),
 	}
+}
+
+func idemKey(customerID, key string) string {
+	return customerID + "\x00" + key
 }
 
 func (r *Repository) NextOrderID(ctx context.Context) (string, error) {
@@ -49,14 +69,127 @@ func (r *Repository) NextCheckoutSessionID(ctx context.Context) (string, error) 
 }
 
 func (r *Repository) Save(ctx context.Context, order *domain.Order) error {
+	return r.SaveWithOutbox(ctx, order, nil, nil)
+}
+
+func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, idem *ports.IdempotencyRecord, events []ports.OutboxEvent) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if idem != nil && idem.Key != "" {
+		k := idemKey(idem.CustomerID, idem.Key)
+		if existing, ok := r.idempotency[k]; ok {
+			if existing.requestHash != idem.RequestHash {
+				return ports.ErrIdempotencyConflict
+			}
+			if existing.orderID != order.ID {
+				// Same key already claimed by another order (concurrent create).
+				return ports.ErrIdempotencyConflict
+			}
+		} else {
+			r.idempotency[k] = idempotencyEntry{orderID: order.ID, requestHash: idem.RequestHash}
+		}
+	}
+
 	r.orders[order.ID] = cloneOrder(order)
+	now := time.Now().UTC()
+	for _, ev := range events {
+		r.nextOutboxID++
+		id := r.nextOutboxID
+		payload := append([]byte(nil), ev.Payload...)
+		r.outbox[id] = &outboxEntry{
+			msg: ports.OutboxMessage{
+				ID:          id,
+				AggregateID: ev.AggregateID,
+				Subject:     ev.Subject,
+				Payload:     payload,
+				CreatedAt:   now,
+			},
+		}
+	}
+	return nil
+}
+
+func (r *Repository) FindByIdempotencyKey(ctx context.Context, customerID, key string) (*ports.IdempotencyRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	customerID = strings.TrimSpace(customerID)
+	key = strings.TrimSpace(key)
+	if customerID == "" || key == "" {
+		return nil, ports.ErrNotFound
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	entry, ok := r.idempotency[idemKey(customerID, key)]
+	if !ok {
+		return nil, ports.ErrNotFound
+	}
+	return &ports.IdempotencyRecord{
+		Key:         key,
+		CustomerID:  customerID,
+		OrderID:     entry.orderID,
+		RequestHash: entry.requestHash,
+	}, nil
+}
+
+func (r *Repository) ListPendingOutbox(ctx context.Context, limit int) ([]ports.OutboxMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	out := make([]ports.OutboxMessage, 0, limit)
+	for _, e := range r.outbox {
+		if e.published {
+			continue
+		}
+		msg := e.msg
+		msg.Payload = append([]byte(nil), e.msg.Payload...)
+		out = append(out, msg)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (r *Repository) MarkOutboxPublished(ctx context.Context, id int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.outbox[id]
+	if !ok {
+		return ports.ErrNotFound
+	}
+	e.published = true
+	e.msg.LastError = ""
+	return nil
+}
+
+func (r *Repository) RecordOutboxAttempt(ctx context.Context, id int64, errMsg string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.outbox[id]
+	if !ok {
+		return ports.ErrNotFound
+	}
+	e.msg.Attempts++
+	e.msg.LastError = errMsg
 	return nil
 }
 

@@ -49,6 +49,25 @@ func (p *recordedPublisher) Publish(ctx context.Context, subject string, event a
 	return nil
 }
 
+type failingPublisher struct {
+	calls int
+}
+
+func (p *failingPublisher) Publish(ctx context.Context, subject string, event any) error {
+	p.calls++
+	return errors.New("nats unavailable")
+}
+
+type countingStock struct {
+	fakeStock
+	reserveCalls int
+}
+
+func (f *countingStock) Reserve(ctx context.Context, orderID string, items []ports.StockItem) (string, error) {
+	f.reserveCalls++
+	return f.fakeStock.Reserve(ctx, orderID, items)
+}
+
 // fakeProduct resolves catalog prices; client UnitPriceCents is ignored by the service.
 type fakeProduct struct {
 	defaultCents int64
@@ -285,5 +304,114 @@ func TestCreateOrderEventCarriesSkuID(t *testing.T) {
 	}
 	if len(decoded.Items) != 1 || decoded.Items[0].SkuID != "SKUID-2" || decoded.Items[0].SKU != "BAG-2" {
 		t.Fatalf("published event items = %+v, want sku_id SKUID-2 / sku BAG-2", decoded.Items)
+	}
+}
+
+func TestCreateOrderIdempotencyKeyReplaysWithoutSecondReserve(t *testing.T) {
+	ctx := context.Background()
+	stock := &countingStock{fakeStock: fakeStock{reservationID: "res-1"}}
+	publisher := &recordedPublisher{}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 1000}, publisher)
+
+	input := service.CreateOrderInput{
+		CustomerID:     "customer-1",
+		IdempotencyKey: "idem-abc",
+		Items:          []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	}
+	first, err := svc.CreateOrder(ctx, input)
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	second, err := svc.CreateOrder(ctx, input)
+	if err != nil {
+		t.Fatalf("CreateOrder replay: %v", err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("replay order id = %q, want %q", second.ID, first.ID)
+	}
+	if stock.reserveCalls != 1 {
+		t.Fatalf("reserve calls = %d, want 1", stock.reserveCalls)
+	}
+}
+
+func TestCreateOrderIdempotencyKeyConflict(t *testing.T) {
+	ctx := context.Background()
+	svc := newSvc(&fakeStock{reservationID: "res-1"}, &fakeProduct{defaultCents: 1000})
+
+	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID:     "customer-1",
+		IdempotencyKey: "idem-conflict",
+		Items:          []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	_, err = svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID:     "customer-1",
+		IdempotencyKey: "idem-conflict",
+		Items:          []domain.OrderItem{{SKU: "bag-2", Quantity: 1}},
+	})
+	if !errors.Is(err, ports.ErrIdempotencyConflict) {
+		t.Fatalf("error = %v, want ErrIdempotencyConflict", err)
+	}
+}
+
+func TestCreateOrderSucceedsWhenPublishFails(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-1"}
+	publisher := &failingPublisher{}
+	repo := memory.NewRepository()
+	svc := service.New(repo, stock, publisher).WithProduct(&fakeProduct{defaultCents: 1000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder should soft-succeed: %v", err)
+	}
+	if order.ID == "" {
+		t.Fatal("expected order id")
+	}
+	if publisher.calls < 1 {
+		t.Fatal("expected publish attempt")
+	}
+	pending, err := repo.ListPendingOutbox(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListPendingOutbox: %v", err)
+	}
+	if len(pending) != 1 || pending[0].Subject != "order.created" {
+		t.Fatalf("pending outbox = %+v, want one order.created", pending)
+	}
+}
+
+func TestDrainOutboxPublishesPending(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-1"}
+	failPub := &failingPublisher{}
+	repo := memory.NewRepository()
+	svc := service.New(repo, stock, failPub).WithProduct(&fakeProduct{defaultCents: 1000})
+
+	if _, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	}); err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+
+	okPub := &recordedPublisher{}
+	svcOK := service.New(repo, stock, okPub).WithProduct(&fakeProduct{defaultCents: 1000})
+	if err := svcOK.DrainOutbox(ctx); err != nil {
+		t.Fatalf("DrainOutbox: %v", err)
+	}
+	if len(okPub.subjects) != 1 || okPub.subjects[0] != "order.created" {
+		t.Fatalf("subjects = %v, want [order.created]", okPub.subjects)
+	}
+	pending, err := repo.ListPendingOutbox(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListPendingOutbox: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending = %d, want 0", len(pending))
 	}
 }

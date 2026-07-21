@@ -136,8 +136,9 @@ func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	order, err := h.svc.CreateOrder(r.Context(), service.CreateOrderInput{
-		CustomerID: req.CustomerID,
-		Items:      items,
+		CustomerID:     req.CustomerID,
+		Items:          items,
+		IdempotencyKey: strings.TrimSpace(r.Header.Get("Idempotency-Key")),
 	})
 	if err != nil {
 		respondServiceError(w, err)
@@ -275,6 +276,8 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ports.ErrNotFound):
 		respondError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, ports.ErrIdempotencyConflict):
+		respondError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ports.ErrVariantNotFound):
 		respondError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, ports.ErrProductUnavailable), errors.Is(err, ports.ErrCouponUnavailable):

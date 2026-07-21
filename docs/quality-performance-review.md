@@ -23,7 +23,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 
 | # | Finding | Status |
 |---|---------|--------|
-| H1 | Order create: save succeeds, publish failure can orphan reservations on client retry | Open — outbox or compensate |
+| H1 | Order create: save succeeds, publish failure can orphan reservations on client retry | **Fixed** — `Idempotency-Key` + transactional outbox; create soft-succeeds; worker drains pending events |
 | H2 | Order bootstrap fetches inventory service token once; never refreshes after expiry | **Fixed** — `ServiceAccountTokenSource` + `httpstock` client (product stock API); retries once on 401 |
 | H3 | NATS subscribers discard handler errors (`_ = handler(...)`) — at-most-once, silent loss | **Fixed** — payment outbox + soft-success + reconcile republish; order logs handler errors and uses queue group |
 | H4 | Internal `err.Error()` returned on many 500 responses (auth, product, order/cart/payment) | **Fixed** — all services return `"internal error"` on unclassified 500s; see [product-error-wrapping.md](product-error-wrapping.md) |

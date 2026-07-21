@@ -12,14 +12,19 @@ Concrete solutions for open findings from [quality-performance-review.md](qualit
 |------|-----|-----|------------|
 | 1 | **C1** | Server-side order/checkout pricing | Med |
 | 2 | **H7** | Fail closed without JWT (+ Bypass hole) | Low–med |
+<<<<<<< HEAD
 | 3 | **H1** | Order create publish failure / orphan reservations | Med |
 | 4 | **H3** | NATS handler errors / redelivery | **Done** — payment outbox + order queue/log |
+=======
+| 3 | **H1** | Order create publish failure / orphan reservations | **Done** — idempotency + outbox |
+| 4 | **H3** | NATS handler errors / redelivery | Med–high |
+>>>>>>> origin/main
 | 5 | **H4** | Sanitize auth/order/cart/payment 500s | Low |
 | 6 | **H5** | Product migrate `Exec` error checks | Low |
 | 7 | **H6** | Plumb request `context` through product stores | Med |
 | 8 | **H8+H9** | Shared `authjwt` + JWKS `singleflight` | Med |
 
-Do **C1** and **H7** first — active money/auth risk. Bundle **H1** with **H3** if building an outbox. Bundle **H8** with **H9**.
+Do **C1** and **H7** first — active money/auth risk. **H1** outbox landed; reuse for **H3** / payment publish side. Bundle **H8** with **H9**.
 
 ---
 
@@ -70,19 +75,17 @@ Misconfigured deploy cannot serve unauthenticated order/cart/payment or Bypass; 
 
 `CreateOrder`: Reserve → Save → `publish(order.created)`. Publish failure returns error **without** releasing stock. Client retry reserves again; stock held until pending expiry (~5 min).
 
-### Solution (prefer A, then C)
+### Solution (implemented)
 
-| Option | Approach |
-|--------|----------|
-| **A (pragmatic)** | After successful Save, treat publish failure as soft: log, return **201** with order. Order is source of truth; add republish worker or outbox. |
-| **B (compensate)** | On publish fail: release reservation + delete order → 503. Safe but loses the order. |
-| **C (outbox)** | Same DB transaction as Save: insert outbox row; worker publishes. Best long-term; shares infra with H3 / payment events. |
+**C (outbox) + A (soft-success) + Idempotency-Key:**
 
-Also add create idempotency (`Idempotency-Key` or stable client key) so retries do not double-reserve.
+- `SaveWithOutbox` persists order + optional `order_idempotency_keys` row + `order_outbox` events in one transaction.
+- Create returns **201** after save; publish is best-effort via immediate drain + background outbox worker.
+- `Idempotency-Key` on `POST /api/v1/orders`: same key + body returns the existing order (no second reserve); different body → **409**.
 
 ### Done when
 
-Publish blip does not leak a second reservation; clients can safely retry create.
+Publish blip does not leak a second reservation; clients can safely retry create. **Done.**
 
 ---
 
