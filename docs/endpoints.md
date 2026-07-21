@@ -460,17 +460,21 @@ Response `200`:
 
 ### POST /api/v1/orders
 
+Optional header: `Idempotency-Key` — retries with the same key and body return the original order (no second stock reservation). A reused key with a different body returns `409`.
+
+Unit prices are resolved server-side from the product catalog; client `unit_price_cents` is ignored if sent.
+
 Request:
 ```json
 {
   "customer_id": "cust-123",
   "items": [
-    { "sku": "SHOE-001", "quantity": 1, "unit_price_cents": 9900 }
+    { "sku": "SHOE-001", "quantity": 1 }
   ]
 }
 ```
 
-Response `201`: order object.
+Response `201`: order object. Events (`order.created`) are written to a transactional outbox and published asynchronously (create succeeds even if NATS is briefly unavailable).
 
 ### GET /api/v1/orders?customer_id=cust-123
 
