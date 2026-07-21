@@ -45,8 +45,8 @@ Implement in the order in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) (
   - [ ] Cart client switch from N GETs to batch (optional follow-up)
 - [ ] Plumb request `context` through product PG stores (**H6**)
 - [x] Sanitize product 500 responses (error wrapping) — see [product-error-wrapping.md](product-error-wrapping.md)
-- [ ] Sanitize auth/order/cart/payment 500 responses (**H4**) — stop returning raw `err.Error()` to clients
-- [ ] Product migrate: check ignored `Exec` errors (**H5**)
+- [x] Sanitize auth/order/cart/payment 500 responses (**H4**) — stop returning raw `err.Error()` to clients
+- [x] Product migrate: check ignored `Exec` errors (**H5**)
 - [ ] Consolidate duplicated `authjwt` into `shared/` + JWKS `singleflight` (**H8** + **H9**)
 - [x] **Fail closed without JWT (H7)** — order/cart/payment `requireAuth` (and payment Bypass) must not no-op / allow when `jwtValidator` is nil outside tests
 - [x] **Payment methods** — [payment-methods-plan.md](payment-methods-plan.md): `method` field + Bypass (`payment.bypass`) implemented; Bitcoin still planned (do not implement yet)

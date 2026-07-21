@@ -58,6 +58,8 @@ FK insert) check and return **before** `wrapDB`.
 
 Do not return `err.Error()` on 500s from product handlers.
 
+The same default applies in **auth**, **order**, **cart**, and **payment** handlers (`"internal error"` + log).
+
 ## Adding a new store method
 
 1. On validation failure: `return ports.Invalid("…")`.

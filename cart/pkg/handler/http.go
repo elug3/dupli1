@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -229,7 +230,8 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrInvalidCart), errors.Is(err, domain.ErrInvalidCartItem):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:
-		respondError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("cart: internal error: %v", err)
+		respondError(w, http.StatusInternalServerError, "internal error")
 	}
 }
 

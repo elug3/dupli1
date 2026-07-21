@@ -64,14 +64,18 @@ func (s *ProductSearchStore) migrate() error {
 		{"tags", "TEXT[] NOT NULL DEFAULT '{}'"},
 		{"created_by", "TEXT NOT NULL DEFAULT ''"},
 	} {
-		s.pool.Exec(ctx, fmt.Sprintf(
+		if _, err := s.pool.Exec(ctx, fmt.Sprintf(
 			"ALTER TABLE products ADD COLUMN IF NOT EXISTS %s %s", col.name, col.def,
-		))
+		)); err != nil {
+			return fmt.Errorf("migrate products add column %s: %w", col.name, err)
+		}
 	}
 
-	s.pool.Exec(ctx,
+	if _, err := s.pool.Exec(ctx,
 		`UPDATE products SET image_urls = ARRAY[image_url] WHERE image_url != '' AND image_urls = '{}'`,
-	)
+	); err != nil {
+		return fmt.Errorf("migrate products backfill image_urls: %w", err)
+	}
 
 	_, err = s.pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS product_variants (
@@ -91,17 +95,27 @@ func (s *ProductSearchStore) migrate() error {
 		return fmt.Errorf("migrate product_variants: %w", err)
 	}
 
-	s.pool.Exec(ctx,
+	if _, err := s.pool.Exec(ctx,
 		`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS selling_price NUMERIC(10,2) NOT NULL DEFAULT 0`,
-	)
-	s.pool.Exec(ctx, `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS sku_id TEXT`)
+	); err != nil {
+		return fmt.Errorf("migrate product_variants add selling_price: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx, `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS sku_id TEXT`); err != nil {
+		return fmt.Errorf("migrate product_variants add sku_id: %w", err)
+	}
 
-	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)`)
-	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_products_status_created_at ON products(status, created_at DESC)`)
-	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)`)
-	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_products_tags ON products USING GIN (tags)`)
-	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_product_variants_product_status_color ON product_variants(product_id, status, color)`)
-	s.pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_product_variants_product_status_size ON product_variants(product_id, status, size)`)
+	for _, idx := range []struct{ name, sql string }{
+		{"idx_product_variants_product_id", `CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)`},
+		{"idx_products_status_created_at", `CREATE INDEX IF NOT EXISTS idx_products_status_created_at ON products(status, created_at DESC)`},
+		{"idx_products_category", `CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)`},
+		{"idx_products_tags", `CREATE INDEX IF NOT EXISTS idx_products_tags ON products USING GIN (tags)`},
+		{"idx_product_variants_product_status_color", `CREATE INDEX IF NOT EXISTS idx_product_variants_product_status_color ON product_variants(product_id, status, color)`},
+		{"idx_product_variants_product_status_size", `CREATE INDEX IF NOT EXISTS idx_product_variants_product_status_size ON product_variants(product_id, status, size)`},
+	} {
+		if _, err := s.pool.Exec(ctx, idx.sql); err != nil {
+			return fmt.Errorf("migrate create index %s: %w", idx.name, err)
+		}
+	}
 
 	if err := s.backfillVariants(ctx); err != nil {
 		return err
