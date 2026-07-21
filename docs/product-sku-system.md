@@ -162,9 +162,9 @@ No silent invent-on-create. Reads enrich blank `brand` / `color` / `size` displa
 Lookup:
 
 - `GET /api/v1/products/variants?sku_ids=` (batch by canonical ULID; max 50)
-- `GET /api/v1/variants/{sku}`
-- `GET /api/v1/variants/by-sku-id/{skuId}`
-- Inventory: `/api/v1/inventory/{sku}` and `/api/v1/inventory/by-sku-id/{skuId}`
+- `GET /api/v1/products/variants/by-sku/{sku}` (legacy: `/api/v1/variants/{sku}`)
+- `GET /api/v1/products/variants/by-sku-id/{skuId}` (legacy: `/api/v1/variants/by-sku-id/{skuId}`)
+- Inventory: `/api/v1/products/inventory/items/{sku}` (legacy: `/api/v1/inventory/{sku}`)
 
 ---
 

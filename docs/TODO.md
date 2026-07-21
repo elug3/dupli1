@@ -3,6 +3,7 @@
 ## Quality / performance (reviewed 2026-07-15)
 
 Full write-up: [quality-performance-review.md](quality-performance-review.md).
+**Fix plan (how to solve remaining bugs):** [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 
 ### Fixed in review PR
 
@@ -15,19 +16,39 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 
 ### Still open (priority)
 
+Implement in the order in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) (C1 → H7 → H1/H3 → H4/H5 → H6 → H8+H9).
+
+- [ ] **API path convention** — `/api/v1/{service_name}/...` only. Canonical paths added; legacy top-level aliases kept until clients migrate, then remove.
+  - [x] New canonical paths registered (product / order / cart) with legacy aliases
+  - [x] Internal clients (cart/order) switched to canonical paths
+  - [ ] Frontends / external callers migrate off legacy prefixes
+  - [ ] Remove legacy aliases + nginx locations for `variants`, `coupons`, `catalog`, `inventory`, `checkout`, `carts`
+  - Mapping:
+    | Legacy | Canonical |
+    |--------|-----------|
+    | `/api/v1/variants/{sku}` | `/api/v1/products/variants/by-sku/{sku}` |
+    | `/api/v1/variants/by-sku-id/{skuId}` | `/api/v1/products/variants/by-sku-id/{skuId}` |
+    | `/api/v1/coupons` | `/api/v1/products/coupons` |
+    | `/api/v1/coupons/{code}` | `/api/v1/products/coupons/by-code/{code}` |
+    | `/api/v1/catalog/*` | `/api/v1/products/catalog/*` |
+    | `/api/v1/inventory/{sku}` | `/api/v1/products/inventory/items/{sku}` |
+    | `/api/v1/inventory/reservations/*` | `/api/v1/products/inventory/reservations/*` |
+    | `/api/v1/checkout/*` | `/api/v1/orders/checkout/*` |
+    | `/api/v1/carts/{id}` | `/api/v1/cart/customers/{id}` |
 - [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md)). Code path for private images via CloudFront OAC landed (#96); Terraform apply / host rewrite still open.
-- [x] **Server-side order/checkout pricing** — ignore client `unit_price_cents`; resolve from product (**Critical** money-path)
+- [x] **Server-side order/checkout pricing (C1)** — ignore client `unit_price_cents`; resolve from product like cart ([quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)#1-c1--server-side-pricing-critical)
 - [x] Inventory service token refresh in order bootstrap
-- [ ] NATS handler errors / outbox for payment→order events
+- [ ] NATS handler errors / outbox for payment→order events (**H1** + **H3**)
 - [ ] Batch cart/product APIs (`?sku_ids=`); Redis catalog cache
   - [x] `GET /api/v1/products/variants?sku_ids=` batch public variant lookup (max 50)
   - [ ] Redis catalog cache
   - [ ] Cart client switch from N GETs to batch (optional follow-up)
-- [ ] Plumb request `context` through product PG stores
+- [ ] Plumb request `context` through product PG stores (**H6**)
 - [x] Sanitize product 500 responses (error wrapping) — see [product-error-wrapping.md](product-error-wrapping.md)
-- [ ] Sanitize auth/order/cart/payment 500 responses — stop returning raw `err.Error()` to clients
-- [ ] Consolidate duplicated `authjwt` into `shared/`
-- [x] **Fail closed without JWT** — order/cart/payment `requireAuth` (and payment Bypass) must not no-op / allow when `jwtValidator` is nil outside tests
+- [ ] Sanitize auth/order/cart/payment 500 responses (**H4**) — stop returning raw `err.Error()` to clients
+- [ ] Product migrate: check ignored `Exec` errors (**H5**)
+- [ ] Consolidate duplicated `authjwt` into `shared/` + JWKS `singleflight` (**H8** + **H9**)
+- [x] **Fail closed without JWT (H7)** — order/cart/payment `requireAuth` (and payment Bypass) must not no-op / allow when `jwtValidator` is nil outside tests
 - [x] **Payment methods** — [payment-methods-plan.md](payment-methods-plan.md): `method` field + Bypass (`payment.bypass`) implemented; Bitcoin still planned (do not implement yet)
 
 ## Weekly review follow-ups (2026-07-20)
@@ -36,8 +57,8 @@ From the Jul 13–19 progress / quality / security check.
 
 ### Merge when ready (CI green)
 
-- [ ] **[#111](https://github.com/elug3/dupli1/pull/111)** — order calls product stock/coupons via internal gateway (`DUPLI1_GATEWAY_URL`)
-- [ ] **[#113](https://github.com/elug3/dupli1/pull/113)** — service-prefixed API paths with legacy aliases
+- [x] **[#111](https://github.com/elug3/dupli1/pull/111)** — order calls product stock/coupons via internal gateway (`DUPLI1_GATEWAY_URL`)
+- [x] **[#113](https://github.com/elug3/dupli1/pull/113)** — service-prefixed API paths with legacy aliases
 
 ### After #113 merges
 
@@ -45,6 +66,8 @@ From the Jul 13–19 progress / quality / security check.
 - [ ] **Remove legacy aliases** — drop dual routes + matching nginx locations once callers are migrated
 
 ### Security / quality (from weekly check)
+
+See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 
 - [x] **Server-side pricing** — same Critical as above; top remaining money-path risk
 - [x] **Fail closed without JWT** — same as quality section; prod must always wire JWKS

@@ -46,7 +46,7 @@ func (h *Handler) checkoutSessions(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 	claims, _ := authjwt.FromContext(r.Context())
 
-	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/v1/checkout/sessions/"))
+	parts := checkoutSessionPathParts(r.URL.Path)
 	if len(parts) == 0 || parts[0] == "" {
 		respondError(w, http.StatusNotFound, "not found")
 		return
@@ -214,3 +214,15 @@ var errForbidden = &forbiddenError{}
 type forbiddenError struct{}
 
 func (e *forbiddenError) Error() string { return "forbidden" }
+
+func checkoutSessionPathParts(path string) []string {
+	for _, prefix := range []string{
+		"/api/v1/orders/checkout/sessions/",
+		"/api/v1/checkout/sessions/",
+	} {
+		if strings.HasPrefix(path, prefix) {
+			return splitPath(strings.TrimPrefix(path, prefix))
+		}
+	}
+	return nil
+}

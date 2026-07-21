@@ -49,18 +49,18 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	mux.Handle("PUT "+handler.RouteVariantBySKU, h.VariantBySKUHandler())
 	mux.Handle("DELETE "+handler.RouteVariantBySKU, h.VariantBySKUHandler())
 	mux.Handle("POST "+handler.RouteVariantImages, h.UploadVariantImageHandler())
-	mux.Handle("GET "+handler.RouteCatalogBrands, http.HandlerFunc(h.ListBrands))
-	mux.Handle("POST "+handler.RouteCatalogBrands, http.HandlerFunc(h.CreateBrand))
-	mux.Handle("PATCH "+handler.RouteCatalogBrandByCode, http.HandlerFunc(h.UpdateBrand))
-	mux.Handle("DELETE "+handler.RouteCatalogBrandByCode, http.HandlerFunc(h.DeleteBrand))
-	mux.Handle("GET "+handler.RouteCatalogStyles, http.HandlerFunc(h.ListStyles))
-	mux.Handle("POST "+handler.RouteCatalogStyles, http.HandlerFunc(h.CreateStyle))
-	mux.Handle("PATCH "+handler.RouteCatalogStyleByCode, http.HandlerFunc(h.UpdateStyle))
-	mux.Handle("DELETE "+handler.RouteCatalogStyleByCode, http.HandlerFunc(h.DeleteStyle))
-	mux.Handle("GET "+handler.RouteCatalogColors, http.HandlerFunc(h.ListColors))
-	mux.Handle("POST "+handler.RouteCatalogColors, http.HandlerFunc(h.CreateColor))
-	mux.Handle("PATCH "+handler.RouteCatalogColorByCode, http.HandlerFunc(h.UpdateColor))
-	mux.Handle("DELETE "+handler.RouteCatalogColorByCode, http.HandlerFunc(h.DeleteColor))
+	handler.Mount(mux, "GET", handler.RouteCatalogBrands, http.HandlerFunc(h.ListBrands), handler.LegacyRouteCatalogBrands)
+	handler.Mount(mux, "POST", handler.RouteCatalogBrands, http.HandlerFunc(h.CreateBrand), handler.LegacyRouteCatalogBrands)
+	handler.Mount(mux, "PATCH", handler.RouteCatalogBrandByCode, http.HandlerFunc(h.UpdateBrand), handler.LegacyRouteCatalogBrandByCode)
+	handler.Mount(mux, "DELETE", handler.RouteCatalogBrandByCode, http.HandlerFunc(h.DeleteBrand), handler.LegacyRouteCatalogBrandByCode)
+	handler.Mount(mux, "GET", handler.RouteCatalogStyles, http.HandlerFunc(h.ListStyles), handler.LegacyRouteCatalogStyles)
+	handler.Mount(mux, "POST", handler.RouteCatalogStyles, http.HandlerFunc(h.CreateStyle), handler.LegacyRouteCatalogStyles)
+	handler.Mount(mux, "PATCH", handler.RouteCatalogStyleByCode, http.HandlerFunc(h.UpdateStyle), handler.LegacyRouteCatalogStyleByCode)
+	handler.Mount(mux, "DELETE", handler.RouteCatalogStyleByCode, http.HandlerFunc(h.DeleteStyle), handler.LegacyRouteCatalogStyleByCode)
+	handler.Mount(mux, "GET", handler.RouteCatalogColors, http.HandlerFunc(h.ListColors), handler.LegacyRouteCatalogColors)
+	handler.Mount(mux, "POST", handler.RouteCatalogColors, http.HandlerFunc(h.CreateColor), handler.LegacyRouteCatalogColors)
+	handler.Mount(mux, "PATCH", handler.RouteCatalogColorByCode, http.HandlerFunc(h.UpdateColor), handler.LegacyRouteCatalogColorByCode)
+	handler.Mount(mux, "DELETE", handler.RouteCatalogColorByCode, http.HandlerFunc(h.DeleteColor), handler.LegacyRouteCatalogColorByCode)
 	return mux, h
 }
 
@@ -517,11 +517,16 @@ func TestPublicListVariantsBySkuIDs(t *testing.T) {
 		t.Fatalf("missing = %v, want ID-B and ID-MISSING", resp.Missing)
 	}
 
-	// Single-sku path must still work alongside the batch route.
+	// Single-sku path must still work alongside the batch route (canonical + legacy).
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/products/variants/by-sku/BOT-001-BLK", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET by sku (canonical): want 200, got %d", rec.Code)
+	}
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/variants/BOT-001-BLK", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET by sku: want 200, got %d", rec.Code)
+		t.Fatalf("GET by sku (legacy): want 200, got %d", rec.Code)
 	}
 
 	rec = httptest.NewRecorder()

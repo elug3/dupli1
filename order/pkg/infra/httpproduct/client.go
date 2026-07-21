@@ -35,11 +35,11 @@ type variantResponse struct {
 }
 
 func (c *Client) GetVariant(ctx context.Context, sku string) (*ports.VariantInfo, error) {
-	return c.fetchVariant(ctx, "/api/v1/variants/"+sku)
+	return c.fetchVariant(ctx, "/api/v1/products/variants/by-sku/"+sku)
 }
 
 func (c *Client) GetVariantBySkuID(ctx context.Context, skuID string) (*ports.VariantInfo, error) {
-	return c.fetchVariant(ctx, "/api/v1/variants/by-sku-id/"+skuID)
+	return c.fetchVariant(ctx, "/api/v1/products/variants/by-sku-id/"+skuID)
 }
 
 func (c *Client) fetchVariant(ctx context.Context, path string) (*ports.VariantInfo, error) {

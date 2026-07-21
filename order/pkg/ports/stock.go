@@ -10,7 +10,8 @@ type StockItem struct {
 }
 
 // StockClient reserves and finalizes stock via the product service
-// (routes under /api/v1/inventory/* — product owns stock after the inventory merge).
+// (routes under /api/v1/products/inventory/* — product owns stock after the inventory merge;
+// legacy /api/v1/inventory/* remains aliased).
 type StockClient interface {
 	Reserve(ctx context.Context, orderID string, items []StockItem) (string, error)
 	CommitReservation(ctx context.Context, reservationID string) error

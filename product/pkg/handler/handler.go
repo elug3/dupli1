@@ -90,14 +90,15 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+RouteProductRecommendations, h.PublicGetRecommendations)
 	mux.HandleFunc("GET "+RoutePublicVariants, h.PublicListVariants)
 	mux.HandleFunc("GET "+RoutePublicProduct, h.PublicGetProduct)
-	mux.HandleFunc("GET "+RoutePublicVariant, h.PublicGetVariant)
-	mux.HandleFunc("GET "+RoutePublicVariantBySkuID, h.PublicGetVariantBySkuID)
-	mux.HandleFunc("POST "+RouteRedeemCoupon, h.RedeemCoupon)
 
-	mux.HandleFunc("GET "+RouteInventoryHealth, h.Health)
-	mux.HandleFunc("GET "+RouteInventorySettings, h.Settings)
-	mux.HandleFunc("GET "+RouteInventoryItem, h.GetInventoryItem)
-	mux.HandleFunc("GET "+RouteInventoryItemBySkuID, h.GetInventoryItemBySkuID)
+	MountFunc(mux, "GET", RoutePublicVariant, h.PublicGetVariant, LegacyRoutePublicVariant)
+	MountFunc(mux, "GET", RoutePublicVariantBySkuID, h.PublicGetVariantBySkuID, LegacyRoutePublicVariantBySkuID)
+	MountFunc(mux, "POST", RouteRedeemCoupon, h.RedeemCoupon, LegacyRouteRedeemCoupon)
+
+	MountFunc(mux, "GET", RouteInventoryHealth, h.Health, LegacyRouteInventoryHealth)
+	MountFunc(mux, "GET", RouteInventorySettings, h.Settings, LegacyRouteInventorySettings)
+	MountFunc(mux, "GET", RouteInventoryItem, h.GetInventoryItem, LegacyRouteInventoryItem)
+	MountFunc(mux, "GET", RouteInventoryItemBySkuID, h.GetInventoryItemBySkuID, LegacyRouteInventoryItemBySkuID)
 }
 
 // SearchProductsHandler returns an http.Handler for GET /api/v1/products.

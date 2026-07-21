@@ -453,9 +453,9 @@ func TestCheckoutDeleteBySkuID_ForeignUserForbidden(t *testing.T) {
 
 	ownerToken := makeToken(t, "u-1", nil)
 	createBody := map[string]any{"customer_id": "u-1"}
-	w := do(t, mux, http.MethodPost, "/api/v1/checkout/sessions", ownerToken, createBody)
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/checkout/sessions", ownerToken, createBody)
 	if w.Code != http.StatusCreated {
-		t.Fatalf("create status = %d, want 201; body: %s", w.Code, w.Body.String())
+		t.Fatalf("canonical checkout create: status=%d body=%s", w.Code, w.Body.String())
 	}
 	var session domain.CheckoutSession
 	if err := json.NewDecoder(w.Body).Decode(&session); err != nil {
@@ -468,7 +468,7 @@ func TestCheckoutDeleteBySkuID_ForeignUserForbidden(t *testing.T) {
 	}
 
 	foreignToken := makeToken(t, "u-2", nil)
-	path := fmt.Sprintf("/api/v1/checkout/sessions/%s/items/by-sku-id/sku-abc", session.ID)
+	path := fmt.Sprintf("/api/v1/orders/checkout/sessions/%s/items/by-sku-id/sku-abc", session.ID)
 	w = do(t, mux, http.MethodDelete, path, foreignToken, nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body: %s", w.Code, w.Body.String())

@@ -334,7 +334,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/variants/{sku}:
+  /api/v1/products/variants/by-sku/{sku}:
     get:
       tags: [Products]
       summary: Public variant by human SKU
@@ -357,11 +357,59 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/variants/by-sku-id/{skuId}:
+  /api/v1/products/variants/by-sku-id/{skuId}:
     get:
       tags: [Products]
       summary: Public variant by canonical skuId
       operationId: productGetVariantBySkuID
+      parameters:
+        - name: skuId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Active variant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Variant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/variants/{sku}:
+    get:
+      tags: [Products]
+      summary: Public variant by human SKU (legacy alias)
+      deprecated: true
+      operationId: productGetVariantBySKULegacy
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Active variant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Variant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/variants/by-sku-id/{skuId}:
+    get:
+      tags: [Products]
+      summary: Public variant by canonical skuId (legacy alias)
+      deprecated: true
+      operationId: productGetVariantBySkuIDLegacy
       parameters:
         - name: skuId
           in: path

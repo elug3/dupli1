@@ -221,8 +221,10 @@ services:
       - "8083:8080"
     environment:
       DUPLI1_ORDER_ADDR: :8080
-      # Stock/reservations + coupons are served by product (no standalone inventory).
-      DUPLI1_PRODUCT_URL: http://dupli1-product:8080
+      # Stock/coupons go through the internal nginx gateway (not direct product DNS).
+      DUPLI1_GATEWAY_URL: http://dupli1-proxy
+      # Auth login stays direct so bootstrap does not wait on the proxy
+      # (proxy depends_on order health — would deadlock if auth went via gateway at startup).
       DUPLI1_AUTH_URL: http://dupli1-auth:8080
       DUPLI1_ORDER_SERVICE_EMAIL: dupli1-order@order.dupli1.com
       DUPLI1_ORDER_SERVICE_PASSWORD: dupli1-order-dev-secret
@@ -237,6 +239,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+    # Gateway is used at runtime for stock/coupons; do not depends_on dupli1-proxy
+    # (proxy already depends_on order — circular).
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 5s
