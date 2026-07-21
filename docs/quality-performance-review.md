@@ -30,8 +30,8 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 | H5 | Product PG migrations ignore some `Exec` errors during migrate/seed | **Fixed** — migrate checks ADD COLUMN / UPDATE / INDEX `Exec` errors |
 | H6 | Product stores use `context.Background()` on request-path queries | Open — plumb request context |
 | H7 | `requireAuth` no-ops when JWT validator is nil (order/cart/payment); product fails closed | **Fixed** — bootstrap requires JWKS/JWT; handlers return 503; Bypass only with `payment.bypass` |
-| H8 | Duplicated `authjwt` in four services — drift risk | Open — move to `shared/` |
-| H9 | JWKS refresh has no `singleflight` (thundering herd on cold start / key rotation) | Open |
+| H8 | Duplicated `authjwt` in four services — drift risk | **Fixed** — `shared/pkg/authjwt` |
+| H9 | JWKS refresh has no `singleflight` (thundering herd on cold start / key rotation) | **Fixed** — `singleflight` around JWKS refresh |
 
 ---
 
@@ -104,7 +104,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 4. **Transactional outbox** (or JetStream) for `payment.succeeded` / order events; stop swallowing NATS handler errors
 5. Product **filter indexes** + request-context plumbing; slim list DTOs
 6. Batch cart/product APIs (`?sku_ids=` — product batch done; cart client switch + Redis cache still open)
-7. Consolidate `authjwt` + shared HTTP client helpers + JWKS `singleflight`
+7. ~~Consolidate `authjwt` + JWKS `singleflight`~~ (**H8**/**H9** done); shared HTTP client helpers still optional
 8. ~~Product: sanitize 500 responses; other services; check migrate `Exec` errors~~ **done** (H4 + H5)
 
 See also: [TODO.md](TODO.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [current-state.md](current-state.md), [aws-cost-optimization.md](aws-cost-optimization.md).

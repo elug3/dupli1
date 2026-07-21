@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/elug3/dupli1/cart/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/cart/pkg/handler"
 	"github.com/elug3/dupli1/cart/pkg/infra/httpinventory"
 	"github.com/elug3/dupli1/cart/pkg/infra/httpproduct"

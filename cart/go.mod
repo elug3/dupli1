@@ -18,6 +18,7 @@ require (
 	github.com/jackc/pgtype v1.14.0 // indirect
 	github.com/jackc/puddle v1.3.0 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 )
 

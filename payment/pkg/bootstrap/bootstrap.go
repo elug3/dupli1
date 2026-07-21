@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/elug3/dupli1/payment/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/payment/pkg/handler"
 	"github.com/elug3/dupli1/payment/pkg/infra/checkout"
 	"github.com/elug3/dupli1/payment/pkg/infra/httporder"

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/elug3/dupli1/product/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elug3/dupli1/order/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/order/pkg/handler"
 	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
 	"github.com/elug3/dupli1/order/pkg/infra/httpcoupon"

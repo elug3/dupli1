@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elug3/dupli1/cart/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/cart/pkg/domain"
 	"github.com/elug3/dupli1/cart/pkg/ports"
 	"github.com/elug3/dupli1/cart/pkg/service"
