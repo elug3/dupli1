@@ -423,9 +423,9 @@ Redeem a coupon code. No authentication required.
 
 Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Omits `cost`. Cart lines use each variant's `sku` (inventory key).
 
-On success, the handler ensures a `dupli1_guest` cookie and records a unique view (one count per guest × product). Response includes public `viewCount`. View-store failures are logged and do not fail the PDP — see [product-guest-views-plan.md](product-guest-views-plan.md).
+On success, the handler ensures a `dupli1_guest` cookie and records a unique view (one count per guest × product). Response includes public `viewCount` and `soldCount` (units committed on ship — [product-sold-count.md](product-sold-count.md)). View-store failures are logged and do not fail the PDP — see [product-guest-views-plan.md](product-guest-views-plan.md).
 
-**Response `200`** — parent product object with variants (includes `viewCount`)
+**Response `200`** — parent product object with variants (includes `viewCount`, `soldCount`)
 
 **Errors**
 | Status | Meaning |

@@ -76,8 +76,8 @@ paths:
       description: |
         Returns an active parent style with variants, availableColors, and availableSizes.
         Ensures a `dupli1_guest` HttpOnly cookie and records a unique view (one count per
-        guest × product). Response includes public `viewCount`. View-store failures do not
-        fail the PDP.
+        guest × product). Response includes public `viewCount` and `soldCount`. View-store
+        failures do not fail the PDP.
       parameters:
         - $ref: '#/components/parameters/ProductId'
       responses:
@@ -790,6 +790,12 @@ components:
           type: integer
           format: int64
           description: Unique guest PDP views (denormalized). Public on PDP and recommendations.
+        soldCount:
+          type: integer
+          format: int64
+          description: >
+            Units sold for this parent style (denormalized). Incremented when an inventory
+            reservation is committed (order ship → in_transit), not on payment or reserve.
         createdAt:
           type: string
           format: date-time

@@ -293,7 +293,7 @@ Response `200`:
 
 ### GET /api/v1/products/{id}
 
-Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. `cost` is omitted. Cart/checkout use each variant's `sku`. Sets `dupli1_guest` when absent and increments unique `viewCount` — [product-guest-views-plan.md](product-guest-views-plan.md).
+Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. `cost` is omitted. Cart/checkout use each variant's `sku`. Sets `dupli1_guest` when absent and increments unique `viewCount` — [product-guest-views-plan.md](product-guest-views-plan.md). Includes `soldCount` (units committed on ship) — [product-sold-count.md](product-sold-count.md).
 
 ### GET /api/v1/products/{id}/recommendations
 

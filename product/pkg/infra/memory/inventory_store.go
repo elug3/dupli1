@@ -18,6 +18,9 @@ type InventoryStore struct {
 	items        map[string]*domain.StockItem
 	reservations map[string]*domain.Reservation
 	nextID       int
+	// products is optional; when set, commit increments parent SoldCount
+	// (mirrors pg FinalizeReservation joining product_variants → products).
+	products *ProductStore
 }
 
 func NewInventoryStore() *InventoryStore {
@@ -25,6 +28,12 @@ func NewInventoryStore() *InventoryStore {
 		items:        make(map[string]*domain.StockItem),
 		reservations: make(map[string]*domain.Reservation),
 	}
+}
+
+// WithProducts wires the catalog store so reservation commits bump SoldCount.
+func (s *InventoryStore) WithProducts(products *ProductStore) *InventoryStore {
+	s.products = products
+	return s
 }
 
 func (s *InventoryStore) GetItem(ctx context.Context, skuID string) (*domain.StockItem, error) {
@@ -162,10 +171,37 @@ func (s *InventoryStore) FinalizeReservation(ctx context.Context, id string, sta
 		item.UpdatedAt = now
 	}
 
+	if status == domain.ReservationCommitted {
+		s.addSoldCounts(sorted)
+	}
+
 	reservation.Status = status
 	reservation.UpdatedAt = now
 	s.reservations[id] = cloneReservation(reservation)
 	return cloneReservation(reservation), nil
+}
+
+func (s *InventoryStore) addSoldCounts(items []domain.ReservationItem) {
+	if s.products == nil {
+		return
+	}
+	deltas := make(map[string]int64, len(items))
+	for _, item := range items {
+		for _, v := range s.products.Variants {
+			if v.SkuID == item.SkuID {
+				deltas[v.ProductID] += int64(item.Quantity)
+				break
+			}
+		}
+	}
+	for productID, qty := range deltas {
+		for i := range s.products.Products {
+			if s.products.Products[i].ID == productID {
+				s.products.Products[i].SoldCount += qty
+				break
+			}
+		}
+	}
 }
 
 func cloneReservation(reservation *domain.Reservation) *domain.Reservation {

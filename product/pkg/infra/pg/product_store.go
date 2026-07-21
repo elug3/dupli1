@@ -156,6 +156,11 @@ func (s *ProductSearchStore) migrateProductViews(ctx context.Context) error {
 	); err != nil {
 		return fmt.Errorf("migrate products.view_count: %w", err)
 	}
+	if _, err := s.pool.Exec(ctx,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS sold_count BIGINT NOT NULL DEFAULT 0`,
+	); err != nil {
+		return fmt.Errorf("migrate products.sold_count: %w", err)
+	}
 	return nil
 }
 
@@ -322,7 +327,7 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, status, capacity, tags, view_count, created_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, status, capacity, tags, view_count, sold_count, created_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -333,7 +338,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
 		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category, &p.Status,
-		&capacity, &tags, &p.ViewCount, &createdAt, &p.CreatedBy,
+		&capacity, &tags, &p.ViewCount, &p.SoldCount, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err

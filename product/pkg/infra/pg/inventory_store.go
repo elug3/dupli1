@@ -335,6 +335,24 @@ func (s *InventoryStore) FinalizeReservation(ctx context.Context, id string, sta
 		}
 	}
 
+	// Denormalized parent sold_count: units committed on ship (same TX as stock).
+	if status == domain.ReservationCommitted {
+		if _, err := tx.Exec(ctx, `
+			UPDATE products AS p
+			SET sold_count = p.sold_count + sub.qty
+			FROM (
+				SELECT pv.product_id AS product_id, SUM(ri.quantity)::BIGINT AS qty
+				FROM reservation_items ri
+				JOIN product_variants pv ON pv.sku_id = ri.sku_id
+				WHERE ri.reservation_id = $1
+				GROUP BY pv.product_id
+			) AS sub
+			WHERE p.id = sub.product_id
+		`, id); err != nil {
+			return nil, err
+		}
+	}
+
 	reservation.Status = status
 	reservation.UpdatedAt = now
 	if _, err := tx.Exec(ctx, `
