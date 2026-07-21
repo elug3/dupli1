@@ -23,10 +23,16 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
 	catalogSvc := service.NewCatalogService(store.Catalog)
-	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc).WithViewStore(store)
+	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc).
+		WithViewStore(store).
+		WithWishlistStore(store)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
+	mux.HandleFunc("GET "+handler.RouteWishlist, h.ListWishlist)
+	mux.HandleFunc("PUT "+handler.RouteProductWishlist, h.AddWishlist)
+	mux.HandleFunc("POST "+handler.RouteProductWishlist, h.AddWishlist)
+	mux.HandleFunc("DELETE "+handler.RouteProductWishlist, h.RemoveWishlist)
 	return mux
 }
 
@@ -37,10 +43,16 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	svc := service.NewProductSearchService(store, nil)
 	couponSvc := service.NewCouponService(memory.NewCouponStore())
 	catalogSvc := service.NewCatalogService(store.Catalog)
-	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc).WithViewStore(store)
+	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc).
+		WithViewStore(store).
+		WithWishlistStore(store)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
+	mux.HandleFunc("GET "+handler.RouteWishlist, h.ListWishlist)
+	mux.HandleFunc("PUT "+handler.RouteProductWishlist, h.AddWishlist)
+	mux.HandleFunc("POST "+handler.RouteProductWishlist, h.AddWishlist)
+	mux.HandleFunc("DELETE "+handler.RouteProductWishlist, h.RemoveWishlist)
 	mux.Handle("POST "+handler.RouteProducts, h.CreateProductHandler())
 	mux.Handle("PUT "+handler.RouteProductByID, h.SingleProductHandler())
 	mux.Handle("DELETE "+handler.RouteProductByID, h.SingleProductHandler())

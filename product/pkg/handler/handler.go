@@ -18,19 +18,22 @@ import (
 )
 
 type Handler struct {
-	svc          *service.ProductSearchService
-	couponSvc    *service.CouponService
-	inventorySvc *service.InventoryService
-	catalogSvc   *service.CatalogService
-	viewStore    ports.ProductViewStore
-	guestCookie  GuestCookieConfig
-	settings     settings.Response
+	svc            *service.ProductSearchService
+	couponSvc      *service.CouponService
+	inventorySvc   *service.InventoryService
+	catalogSvc     *service.CatalogService
+	viewStore      ports.ProductViewStore
+	wishlistStore  ports.ProductWishlistStore
+	guestCookie    GuestCookieConfig
+	settings       settings.Response
 }
 
 type SearchResponse struct {
 	Total   int         `json:"total"`
 	Limit   int         `json:"limit"`
 	Offset  int         `json:"offset"`
+	Sort    string      `json:"sort"`
+	Order   string      `json:"order"`
 	Results interface{} `json:"results"`
 }
 
@@ -53,7 +56,7 @@ type HealthResponse struct {
 	Status string `json:"status"`
 }
 
-var searchFilters = []string{"category", "brand", "color", "size", "material", "status"}
+var searchFilters = []string{"category", "brand", "color", "size", "material", "status", "q"}
 
 func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
 	return &Handler{
@@ -75,6 +78,12 @@ func (h *Handler) WithSettings(s settings.Response) *Handler {
 // WithViewStore enables unique guest PDP view recording.
 func (h *Handler) WithViewStore(store ports.ProductViewStore) *Handler {
 	h.viewStore = store
+	return h
+}
+
+// WithWishlistStore enables wishlist add/remove and wishlistCount updates.
+func (h *Handler) WithWishlistStore(store ports.ProductWishlistStore) *Handler {
+	h.wishlistStore = store
 	return h
 }
 
@@ -175,6 +184,8 @@ func (h *Handler) Settings(w http.ResponseWriter, r *http.Request) {
 // Public callers see active products only.
 // Authenticated product managers see all statuses.
 // Pagination: limit (default 50, max 100) and offset (default 0).
+// Sort: newest (default), views, sold, wishlist, price, name.
+// Order: desc (default except name→asc) or asc.
 func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -187,6 +198,25 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	} else {
 		delete(filter, "status")
 	}
+
+	rawSort := r.URL.Query().Get("sort")
+	rawOrder := r.URL.Query().Get("order")
+	if !domain.ValidSearchSort(rawSort) {
+		h.respondError(w, http.StatusBadRequest, "invalid sort")
+		return
+	}
+	if !domain.ValidSearchOrder(rawOrder) {
+		h.respondError(w, http.StatusBadRequest, "invalid order")
+		return
+	}
+	sortKey := domain.NormalizeSearchSort(rawSort)
+	if sortKey == "" {
+		sortKey = domain.SortNewest
+	}
+	order := domain.NormalizeSearchOrder(rawOrder, sortKey)
+	filter["sort"] = sortKey
+	filter["order"] = order
+
 	limit, offset := parseSearchPagination(r)
 	filter["limit"] = strconv.Itoa(limit)
 	filter["offset"] = strconv.Itoa(offset)
@@ -203,6 +233,8 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 		Total:   total,
 		Limit:   limit,
 		Offset:  offset,
+		Sort:    sortKey,
+		Order:   order,
 		Results: results,
 	})
 }

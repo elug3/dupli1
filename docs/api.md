@@ -358,8 +358,9 @@ Product service liveness check.
 
 Search **parent styles** (one row per style; colors are not duplicated). No authentication required for the public catalog view (active parents only). With a valid Bearer token that includes `product.read` (or `product.*` / `*`), returns all statuses and includes cost.
 
-| Filter | Match type |
-|--------|-----------|
+| Filter / param | Match type |
+|----------------|-----------|
+| `q` | case-insensitive substring on name, brand, or description |
 | `category` | exact (e.g. `bags`) |
 | `brand` | case-insensitive substring |
 | `color` | parent has an active variant with this color |
@@ -367,10 +368,14 @@ Search **parent styles** (one row per style; colors are not duplicated). No auth
 | `material` | exact |
 | `tags` | parent must include all listed tags (comma-separated or repeated) |
 | `status` | exact (`product.read` or wildcard required) |
+| `sort` | `newest` (default), `views` (`popular`), `sold`, `wishlist`, `price`, `name` |
+| `order` | `asc` \| `desc` (default `desc`; `name` defaults to `asc`) |
 | `limit` | page size (default `50`, max `100`) |
 | `offset` | rows to skip (default `0`) |
 
-Example: `GET /api/v1/products?category=bags&color=Green&limit=20&offset=0`
+Example: `GET /api/v1/products?category=bags&sort=views&order=desc&limit=20`
+
+See [product-rich-search.md](product-rich-search.md).
 
 **Response `200`**
 ```json
@@ -378,6 +383,8 @@ Example: `GET /api/v1/products?category=bags&color=Green&limit=20&offset=0`
   "total": 1,
   "limit": 50,
   "offset": 0,
+  "sort": "newest",
+  "order": "desc",
   "results": [
     {
       "id": "BOT-001",
@@ -391,6 +398,9 @@ Example: `GET /api/v1/products?category=bags&color=Green&limit=20&offset=0`
       "category": "bags",
       "capacity": "Medium",
       "tags": ["hot"],
+      "viewCount": 12,
+      "soldCount": 3,
+      "wishlistCount": 1,
       "imageUrls": ["https://cdn.example/bot-001.jpg"]
     }
   ]
@@ -398,6 +408,14 @@ Example: `GET /api/v1/products?category=bags&color=Green&limit=20&offset=0`
 ```
 
 `total` is the full match count before pagination; `results` is the current page.
+
+### Wishlist
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `PUT` / `POST` | `/api/v1/products/{id}/wishlist` | Add; JWT `sub` or guest cookie |
+| `DELETE` | `/api/v1/products/{id}/wishlist` | Remove |
+| `GET` | `/api/v1/products/wishlist` | List current owner's items |
 
 ---
 

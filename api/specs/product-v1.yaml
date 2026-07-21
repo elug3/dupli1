@@ -176,6 +176,78 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/products/wishlist:
+    get:
+      tags: [Products]
+      summary: List wishlisted products for current owner
+      operationId: productWishlistList
+      description: |
+        Returns public parent cards wishlisted by the current owner (JWT `sub` when
+        authenticated, otherwise `dupli1_guest` cookie).
+      responses:
+        '200':
+          description: Wishlist items
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicProduct'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/products/{id}/wishlist:
+    put:
+      tags: [Products]
+      summary: Add product to wishlist
+      operationId: productWishlistAdd
+      description: |
+        Idempotent add. Owner is JWT `sub` or guest cookie. Increments public `wishlistCount`
+        only on first add for that owner × product.
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Wishlist state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WishlistMutationResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Products]
+      summary: Add product to wishlist (alias of PUT)
+      operationId: productWishlistAddPost
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Wishlist state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WishlistMutationResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Products]
+      summary: Remove product from wishlist
+      operationId: productWishlistRemove
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Wishlist state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WishlistMutationResponse'
+
   /api/v1/products:
     get:
       tags: [Products]
@@ -186,6 +258,11 @@ paths:
         Public callers receive active parents only.
         Authenticated managers (`product_manager`, `admin`, `owner`) receive all statuses.
       parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Case-insensitive substring match on name, brand, or description
         - name: category
           in: query
           schema:
@@ -221,6 +298,32 @@ paths:
           schema:
             type: string
           description: Exact match (managers only)
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [newest, views, sold, wishlist, price, name]
+            default: newest
+          description: >
+            Sort key. Aliases: popular→views. Default newest (created_at).
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+          description: >
+            Sort direction. Default desc for newest/views/sold/wishlist/price; asc for name.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
           description: Search results
@@ -228,6 +331,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductSearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
@@ -796,6 +901,10 @@ components:
           description: >
             Units sold for this parent style (denormalized). Incremented when an inventory
             reservation is committed (order ship → in_transit), not on payment or reserve.
+        wishlistCount:
+          type: integer
+          format: int64
+          description: Unique owners who wishlisted this parent (denormalized).
         createdAt:
           type: string
           format: date-time
@@ -951,14 +1060,36 @@ components:
 
     ProductSearchResponse:
       type: object
-      required: [total, results]
+      required: [total, limit, offset, sort, order, results]
       properties:
         total:
           type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        sort:
+          type: string
+          description: Effective sort key applied
+        order:
+          type: string
+          enum: [asc, desc]
         results:
           type: array
           items:
             $ref: '#/components/schemas/PublicProduct'
+
+    WishlistMutationResponse:
+      type: object
+      required: [productId, wishlisted, wishlistCount]
+      properties:
+        productId:
+          type: string
+        wishlisted:
+          type: boolean
+        wishlistCount:
+          type: integer
+          format: int64
 
     RecommendationsResponse:
       type: object

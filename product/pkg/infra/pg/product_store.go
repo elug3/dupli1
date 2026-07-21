@@ -132,6 +132,9 @@ func (s *ProductSearchStore) migrate() error {
 	if err := s.migrateProductViews(ctx); err != nil {
 		return err
 	}
+	if err := s.migrateProductWishlists(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -160,6 +163,47 @@ func (s *ProductSearchStore) migrateProductViews(ctx context.Context) error {
 		`ALTER TABLE products ADD COLUMN IF NOT EXISTS sold_count BIGINT NOT NULL DEFAULT 0`,
 	); err != nil {
 		return fmt.Errorf("migrate products.sold_count: %w", err)
+	}
+	return nil
+}
+
+func (s *ProductSearchStore) migrateProductWishlists(ctx context.Context) error {
+	if _, err := s.pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS product_wishlists (
+			owner_key   TEXT NOT NULL,
+			product_id  TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (owner_key, product_id)
+		)
+	`); err != nil {
+		return fmt.Errorf("migrate product_wishlists: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx,
+		`CREATE INDEX IF NOT EXISTS product_wishlists_product_id_idx ON product_wishlists (product_id)`,
+	); err != nil {
+		return fmt.Errorf("migrate product_wishlists product index: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx,
+		`CREATE INDEX IF NOT EXISTS product_wishlists_owner_created_idx ON product_wishlists (owner_key, created_at DESC)`,
+	); err != nil {
+		return fmt.Errorf("migrate product_wishlists owner index: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS wishlist_count BIGINT NOT NULL DEFAULT 0`,
+	); err != nil {
+		return fmt.Errorf("migrate products.wishlist_count: %w", err)
+	}
+	for _, idx := range []struct {
+		name string
+		sql  string
+	}{
+		{"idx_products_view_count", `CREATE INDEX IF NOT EXISTS idx_products_view_count ON products (view_count DESC)`},
+		{"idx_products_sold_count", `CREATE INDEX IF NOT EXISTS idx_products_sold_count ON products (sold_count DESC)`},
+		{"idx_products_wishlist_count", `CREATE INDEX IF NOT EXISTS idx_products_wishlist_count ON products (wishlist_count DESC)`},
+	} {
+		if _, err := s.pool.Exec(ctx, idx.sql); err != nil {
+			return fmt.Errorf("migrate %s: %w", idx.name, err)
+		}
 	}
 	return nil
 }
@@ -327,7 +371,7 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, status, capacity, tags, view_count, sold_count, created_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, status, capacity, tags, view_count, sold_count, wishlist_count, created_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -338,7 +382,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
 		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category, &p.Status,
-		&capacity, &tags, &p.ViewCount, &p.SoldCount, &createdAt, &p.CreatedBy,
+		&capacity, &tags, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err
@@ -404,7 +448,7 @@ func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.
 	}
 
 	query := "SELECT " + parentSelectCols + " FROM products p WHERE 1=1" + where
-	query += " ORDER BY p.created_at DESC"
+	query += buildProductSearchOrder(filter)
 
 	limit, hasLimit := atoiFilter(filter, "limit")
 	offset, _ := atoiFilter(filter, "offset")
@@ -439,6 +483,38 @@ func (s *ProductSearchStore) SearchProducts(filter map[string]string) ([]domain.
 	return results, total, nil
 }
 
+func buildProductSearchOrder(filter map[string]string) string {
+	sortKey := domain.NormalizeSearchSort(filter["sort"])
+	if sortKey == "" {
+		sortKey = domain.SortNewest
+	}
+	order := domain.NormalizeSearchOrder(filter["order"], sortKey)
+	if order == "" {
+		order = domain.OrderDesc
+	}
+	dir := "DESC"
+	if order == domain.OrderAsc {
+		dir = "ASC"
+	}
+	switch sortKey {
+	case domain.SortViews:
+		return fmt.Sprintf(" ORDER BY p.view_count %s, p.id ASC", dir)
+	case domain.SortSold:
+		return fmt.Sprintf(" ORDER BY p.sold_count %s, p.id ASC", dir)
+	case domain.SortWishlist:
+		return fmt.Sprintf(" ORDER BY p.wishlist_count %s, p.id ASC", dir)
+	case domain.SortPrice:
+		return fmt.Sprintf(` ORDER BY (
+			SELECT COALESCE(MIN(v.price), 0) FROM product_variants v
+			WHERE v.product_id = p.id AND v.status = 'active'
+		) %s, p.id ASC`, dir)
+	case domain.SortName:
+		return fmt.Sprintf(" ORDER BY LOWER(p.name) %s, p.id ASC", dir)
+	default:
+		return fmt.Sprintf(" ORDER BY p.created_at %s, p.id ASC", dir)
+	}
+}
+
 func buildProductSearchWhere(filter map[string]string) (string, []interface{}) {
 	query := ""
 	args := []interface{}{}
@@ -446,6 +522,13 @@ func buildProductSearchWhere(filter map[string]string) (string, []interface{}) {
 
 	for key, value := range filter {
 		switch key {
+		case "q":
+			query += fmt.Sprintf(
+				" AND (p.name ILIKE $%d OR p.brand ILIKE $%d OR COALESCE(p.description, '') ILIKE $%d)",
+				idx, idx, idx,
+			)
+			args = append(args, "%"+value+"%")
+			idx++
 		case "category":
 			query += fmt.Sprintf(" AND p.category = $%d", idx)
 			args = append(args, value)

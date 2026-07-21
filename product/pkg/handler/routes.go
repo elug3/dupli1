@@ -24,6 +24,8 @@ const (
 	RouteVariantBySKU           = "/api/v1/products/{id}/variants/{sku}"
 	RouteVariantImages          = "/api/v1/products/{id}/variants/{sku}/images"
 	RouteProductRecommendations = "/api/v1/products/{id}/recommendations"
+	RouteProductWishlist        = "/api/v1/products/{id}/wishlist"
+	RouteWishlist               = "/api/v1/products/wishlist"
 
 	// Public variant lookups (service-prefixed).
 	RoutePublicVariants       = "/api/v1/products/variants"
