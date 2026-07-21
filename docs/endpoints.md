@@ -267,33 +267,27 @@ Response `200` JSON with non-secret operational settings. Also available at `/ap
 
 ### GET /api/v1/products
 
-Returns **one row per parent style** (not per color). Query params: `category`, `brand` (partial), `material`, `tags`, `color`, `size`, and `status` (managers only).
+Returns **one row per parent style** (not per color). Query params: `q`, `category`, `brand` (partial), `material`, `tags`, `color`, `size`, `status` (managers only), `sort` (`newest`\|`views`\|`sold`\|`wishlist`\|`price`\|`name`), `order` (`asc`\|`desc`), `limit`, `offset` — [product-rich-search.md](product-rich-search.md).
 
-Example: `GET /api/v1/products?category=bags&color=Green`
+Example: `GET /api/v1/products?category=bags&sort=views&order=desc`
 
-Response `200`:
-```json
-{
-  "total": 1,
-  "results": [
-    {
-      "id": "BOT-001",
-      "name": "Cassette Bag",
-      "brand": "Bottega Veneta",
-      "category": "bags",
-      "status": "active",
-      "priceFrom": 2500,
-      "defaultImageUrl": "https://cdn.example/green-1.jpg",
-      "availableColors": ["Green", "Black"],
-      "availableSizes": []
-    }
-  ]
-}
-```
+Response `200` includes `total`, `limit`, `offset`, `sort`, `order`, `results`.
+
+### PUT|POST /api/v1/products/{id}/wishlist
+
+Add parent to the current owner's wishlist (JWT or guest cookie). Idempotent; bumps `wishlistCount`.
+
+### DELETE /api/v1/products/{id}/wishlist
+
+Remove from wishlist.
+
+### GET /api/v1/products/wishlist
+
+List current owner's wishlisted public parents.
 
 ### GET /api/v1/products/{id}
 
-Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. `cost` is omitted. Cart/checkout use each variant's `sku`. Sets `dupli1_guest` when absent and increments unique `viewCount` — [product-guest-views-plan.md](product-guest-views-plan.md). Includes `soldCount` (units committed on ship) — [product-sold-count.md](product-sold-count.md).
+Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. `cost` is omitted. Cart/checkout use each variant's `sku`. Sets `dupli1_guest` when absent and increments unique `viewCount` — [product-guest-views-plan.md](product-guest-views-plan.md). Includes `soldCount` (units committed on ship) — [product-sold-count.md](product-sold-count.md). Includes `wishlistCount`.
 
 ### GET /api/v1/products/{id}/recommendations
 

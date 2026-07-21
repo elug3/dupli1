@@ -86,6 +86,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	h := handler.NewHandler(svc, couponSvc, inventorySvc, catalogSvc).
 		WithSettings(BuildSettings(cfg, guestCookie.Enabled)).
 		WithViewStore(store).
+		WithWishlistStore(store).
 		WithGuestCookie(guestCookie)
 
 	mux := http.NewServeMux()
@@ -96,6 +97,10 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	}
 
 	mux.Handle("GET "+handler.RouteProducts, middleware.OptionalAuth(validator, h.SearchProductsHandler()))
+	mux.Handle("GET "+handler.RouteWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.ListWishlist)))
+	mux.Handle("PUT "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.AddWishlist)))
+	mux.Handle("POST "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.AddWishlist)))
+	mux.Handle("DELETE "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.RemoveWishlist)))
 	mux.Handle("POST "+handler.RouteProducts, requirePerm(permissions.ProductCreate, h.CreateProductHandler()))
 	mux.Handle("PUT "+handler.RouteProductByID, requirePerm(permissions.ProductUpdate, h.SingleProductHandler()))
 	mux.Handle("DELETE "+handler.RouteProductByID, requirePerm(permissions.ProductDelete, h.SingleProductHandler()))

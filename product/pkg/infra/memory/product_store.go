@@ -2,8 +2,10 @@ package memory
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
@@ -16,6 +18,8 @@ type ProductStore struct {
 	Catalog  *CatalogStore
 	// views keys are guestID + "\x00" + productID for unique PDP views.
 	views map[string]struct{}
+	// wishlists keys are ownerKey + "\x00" + productID; createdAt tracks insert order.
+	wishlists map[string]time.Time
 }
 
 func NewProductStore() *ProductStore {
@@ -73,7 +77,14 @@ func (s *ProductStore) enrich(products []domain.Product, includeVariants bool) {
 
 func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Product, int, error) {
 	var results []domain.Product
+	q := strings.ToLower(strings.TrimSpace(filter["q"]))
 	for _, p := range s.Products {
+		if q != "" {
+			hay := strings.ToLower(p.Name + " " + p.Brand + " " + p.Description)
+			if !strings.Contains(hay, q) {
+				continue
+			}
+		}
 		if category := filter["category"]; category != "" && p.Category != category {
 			continue
 		}
@@ -98,6 +109,11 @@ func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Produc
 		}
 		results = append(results, p)
 	}
+
+	// Enrich before sort so price_from is available for sort=price.
+	s.enrich(results, false)
+	sortProducts(results, filter)
+
 	total := len(results)
 	if limit, ok := atoiFilter(filter, "limit"); ok && limit > 0 {
 		offset, _ := atoiFilter(filter, "offset")
@@ -114,8 +130,62 @@ func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Produc
 			results = results[offset:end]
 		}
 	}
-	s.enrich(results, false)
 	return results, total, nil
+}
+
+func sortProducts(results []domain.Product, filter map[string]string) {
+	sortKey := domain.NormalizeSearchSort(filter["sort"])
+	if sortKey == "" {
+		sortKey = domain.SortNewest
+	}
+	order := domain.NormalizeSearchOrder(filter["order"], sortKey)
+	if order == "" {
+		order = domain.OrderDesc
+	}
+	asc := order == domain.OrderAsc
+
+	sort.SliceStable(results, func(i, j int) bool {
+		a, b := results[i], results[j]
+		var less bool
+		switch sortKey {
+		case domain.SortViews:
+			less = a.ViewCount < b.ViewCount
+		case domain.SortSold:
+			less = a.SoldCount < b.SoldCount
+		case domain.SortWishlist:
+			less = a.WishlistCount < b.WishlistCount
+		case domain.SortPrice:
+			less = a.PriceFrom < b.PriceFrom
+		case domain.SortName:
+			less = strings.ToLower(a.Name) < strings.ToLower(b.Name)
+		default:
+			less = a.CreatedAt < b.CreatedAt
+		}
+		if aEqual(sortKey, a, b) {
+			return a.ID < b.ID
+		}
+		if asc {
+			return less
+		}
+		return !less
+	})
+}
+
+func aEqual(sortKey string, a, b domain.Product) bool {
+	switch sortKey {
+	case domain.SortViews:
+		return a.ViewCount == b.ViewCount
+	case domain.SortSold:
+		return a.SoldCount == b.SoldCount
+	case domain.SortWishlist:
+		return a.WishlistCount == b.WishlistCount
+	case domain.SortPrice:
+		return a.PriceFrom == b.PriceFrom
+	case domain.SortName:
+		return strings.EqualFold(a.Name, b.Name)
+	default:
+		return a.CreatedAt == b.CreatedAt
+	}
 }
 
 func atoiFilter(filter map[string]string, key string) (int, bool) {
@@ -307,6 +377,11 @@ func (s *ProductStore) DeleteProduct(id string) error {
 					delete(s.views, k)
 				}
 			}
+			for k := range s.wishlists {
+				if strings.HasSuffix(k, prefix) {
+					delete(s.wishlists, k)
+				}
+			}
 			return nil
 		}
 	}
@@ -334,6 +409,80 @@ func (s *ProductStore) RecordUniqueView(guestID, productID string) (bool, int64,
 		return true, s.Products[i].ViewCount, nil
 	}
 	return false, 0, fmt.Errorf("product %s: %w", productID, ports.ErrNotFound)
+}
+
+// AddWishlist implements ports.ProductWishlistStore.
+func (s *ProductStore) AddWishlist(ownerKey, productID string) (bool, int64, error) {
+	if ownerKey == "" || productID == "" {
+		return false, 0, fmt.Errorf("owner key and product id are required")
+	}
+	if s.wishlists == nil {
+		s.wishlists = make(map[string]time.Time)
+	}
+	key := ownerKey + "\x00" + productID
+	for i := range s.Products {
+		if s.Products[i].ID != productID {
+			continue
+		}
+		if _, ok := s.wishlists[key]; ok {
+			return false, s.Products[i].WishlistCount, nil
+		}
+		s.wishlists[key] = time.Now().UTC()
+		s.Products[i].WishlistCount++
+		return true, s.Products[i].WishlistCount, nil
+	}
+	return false, 0, fmt.Errorf("product %s: %w", productID, ports.ErrNotFound)
+}
+
+// RemoveWishlist implements ports.ProductWishlistStore.
+func (s *ProductStore) RemoveWishlist(ownerKey, productID string) (bool, int64, error) {
+	if ownerKey == "" || productID == "" {
+		return false, 0, fmt.Errorf("owner key and product id are required")
+	}
+	if s.wishlists == nil {
+		s.wishlists = make(map[string]time.Time)
+	}
+	key := ownerKey + "\x00" + productID
+	for i := range s.Products {
+		if s.Products[i].ID != productID {
+			continue
+		}
+		if _, ok := s.wishlists[key]; !ok {
+			return false, s.Products[i].WishlistCount, nil
+		}
+		delete(s.wishlists, key)
+		if s.Products[i].WishlistCount > 0 {
+			s.Products[i].WishlistCount--
+		}
+		return true, s.Products[i].WishlistCount, nil
+	}
+	return false, 0, nil
+}
+
+// ListWishlistProductIDs implements ports.ProductWishlistStore.
+func (s *ProductStore) ListWishlistProductIDs(ownerKey string) ([]string, error) {
+	type entry struct {
+		id string
+		at time.Time
+	}
+	var entries []entry
+	prefix := ownerKey + "\x00"
+	for k, at := range s.wishlists {
+		if strings.HasPrefix(k, prefix) {
+			entries = append(entries, entry{id: strings.TrimPrefix(k, prefix), at: at})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if !entries[i].at.Equal(entries[j].at) {
+			return entries[i].at.After(entries[j].at)
+		}
+		return entries[i].id < entries[j].id
+	})
+	ids := make([]string, len(entries))
+	for i, e := range entries {
+		ids[i] = e.id
+	}
+	return ids, nil
 }
 
 func (s *ProductStore) nextVariantSKU(productID, brandCode, styleCode string, v *domain.Variant) (string, error) {

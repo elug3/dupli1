@@ -49,8 +49,10 @@ type Product struct {
 	// SoldCount is units committed from inventory reservations (denormalized).
 	// Incremented when a reservation is committed (order ship → in_transit), not on payment.
 	SoldCount int64 `json:"soldCount"`
-	CreatedAt string `json:"createdAt"`
-	CreatedBy string `json:"createdBy,omitempty"`
+	// WishlistCount is unique owners who wishlisted this parent (denormalized).
+	WishlistCount int64 `json:"wishlistCount"`
+	CreatedAt     string `json:"createdAt"`
+	CreatedBy     string `json:"createdBy,omitempty"`
 
 	// Summary fields derived from variants (not stored on parent).
 	// SellingPriceFrom is the official/display price for the cheapest active variant.
