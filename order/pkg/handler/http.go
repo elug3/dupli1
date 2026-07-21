@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -279,10 +280,12 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ports.ErrProductUnavailable), errors.Is(err, ports.ErrCouponUnavailable):
 		respondError(w, http.StatusBadGateway, err.Error())
 	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, domain.ErrPaymentAmountMismatch),
-		errors.Is(err, domain.ErrInvalidCheckoutSession), errors.Is(err, domain.ErrEmptyCheckout):
+		errors.Is(err, domain.ErrInvalidCheckoutSession), errors.Is(err, domain.ErrEmptyCheckout),
+		errors.Is(err, domain.ErrSessionNotOpen):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:
-		respondError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("order: internal error: %v", err)
+		respondError(w, http.StatusInternalServerError, "internal error")
 	}
 }
 

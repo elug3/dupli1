@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -235,7 +236,8 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ports.ErrOrderNotPending), errors.Is(err, domain.ErrInvalidPayment):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:
-		respondError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("payment: internal error: %v", err)
+		respondError(w, http.StatusInternalServerError, "internal error")
 	}
 }
 

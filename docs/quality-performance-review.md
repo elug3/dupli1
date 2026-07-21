@@ -26,8 +26,8 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 | H1 | Order create: save succeeds, publish failure can orphan reservations on client retry | Open — outbox or compensate |
 | H2 | Order bootstrap fetches inventory service token once; never refreshes after expiry | **Fixed** — `ServiceAccountTokenSource` + `httpstock` client (product stock API); retries once on 401 |
 | H3 | NATS subscribers discard handler errors (`_ = handler(...)`) — at-most-once, silent loss | Open — queue group + retry/DLQ |
-| H4 | Internal `err.Error()` returned on many 500 responses (auth, product, order/cart/payment) | **Partial** — product sanitizes 500s via error wrapping; see [product-error-wrapping.md](product-error-wrapping.md). Other services still open |
-| H5 | Product PG migrations ignore some `Exec` errors during migrate/seed | Open |
+| H4 | Internal `err.Error()` returned on many 500 responses (auth, product, order/cart/payment) | **Fixed** — all services return `"internal error"` on unclassified 500s; see [product-error-wrapping.md](product-error-wrapping.md) |
+| H5 | Product PG migrations ignore some `Exec` errors during migrate/seed | **Fixed** — migrate checks ADD COLUMN / UPDATE / INDEX `Exec` errors |
 | H6 | Product stores use `context.Background()` on request-path queries | Open — plumb request context |
 | H7 | `requireAuth` no-ops when JWT validator is nil (order/cart/payment); product fails closed | **Fixed** — bootstrap requires JWKS/JWT; handlers return 503; Bypass only with `payment.bypass` |
 | H8 | Duplicated `authjwt` in four services — drift risk | Open — move to `shared/` |
@@ -105,6 +105,6 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 5. Product **filter indexes** + request-context plumbing; slim list DTOs
 6. Batch cart/product APIs (`?sku_ids=` — product batch done; cart client switch + Redis cache still open)
 7. Consolidate `authjwt` + shared HTTP client helpers + JWKS `singleflight`
-8. Product: sanitize 500 responses (**done** — [product-error-wrapping.md](product-error-wrapping.md)); other services still need the same; check migrate `Exec` errors
+8. ~~Product: sanitize 500 responses; other services; check migrate `Exec` errors~~ **done** (H4 + H5)
 
 See also: [TODO.md](TODO.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [current-state.md](current-state.md), [aws-cost-optimization.md](aws-cost-optimization.md).

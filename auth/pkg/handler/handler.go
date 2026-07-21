@@ -52,6 +52,12 @@ func NewHandler(svc *service.Service, logger zerolog.Logger) *Handler {
 	return &Handler{svc: svc, logger: logger}
 }
 
+// respondInternalError logs the real error and returns a generic 500 body.
+func (h *Handler) respondInternalError(c *gin.Context, event string, err error) {
+	h.logger.Error().Str("event", event).Err(err).Msg("internal error")
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+}
+
 type loginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
@@ -104,7 +110,7 @@ func (h *Handler) Login(c *gin.Context) {
 				Str("ip", ip).
 				Err(err).
 				Msg("login failed: internal error")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("login: %w", err).Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		}
 		return
 	}
@@ -153,7 +159,7 @@ func (h *Handler) Register(c *gin.Context) {
 	if domain.ClassFromNewUser(accountType, nil) == domain.ClassOwner {
 		hasOwner, err := h.svc.HasOwner(c.Request.Context())
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "register: internal error"})
+			h.respondInternalError(c, "register_has_owner_error", err)
 			return
 		}
 		if hasOwner {
@@ -180,7 +186,7 @@ func (h *Handler) Register(c *gin.Context) {
 				Str("ip", ip).
 				Err(err).
 				Msg("register failed: internal error")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("register: %w", err).Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		}
 		return
 	}
@@ -212,7 +218,7 @@ func (h *Handler) Logout(c *gin.Context) {
 
 	if err := h.svc.Logout(c.Request.Context(), req.RefreshToken); err != nil {
 		h.logger.Error().Str("event", "logout_error").Str("ip", ip).Err(err).Msg("logout: internal error")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("logout: %w", err).Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -227,12 +233,9 @@ func (h *Handler) Me(c *gin.Context) {
 
 // ListUsers returns all users. Requires user.read permission.
 func (h *Handler) ListUsers(c *gin.Context) {
-	ip := c.ClientIP()
-
 	users, err := h.svc.ListUsers(c.Request.Context())
 	if err != nil {
-		h.logger.Error().Str("event", "list_users_error").Str("ip", ip).Err(err).Msg("list users: internal error")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("list users: %w", err).Error()})
+		h.respondInternalError(c, "list_users_error", err)
 		return
 	}
 
@@ -275,7 +278,7 @@ func (h *Handler) SetUserPermissions(c *gin.Context) {
 		if errors.Is(err, autherrors.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set permissions: %w", err).Error()})
+			h.respondInternalError(c, "set_permissions_lookup_error", err)
 		}
 		return
 	}
@@ -286,7 +289,7 @@ func (h *Handler) SetUserPermissions(c *gin.Context) {
 	if permissions.Has(perms, permissions.All) {
 		hasOwner, err := h.svc.HasOwner(c.Request.Context())
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "set permissions: internal error"})
+			h.respondInternalError(c, "set_permissions_has_owner_error", err)
 			return
 		}
 		if hasOwner && !permissions.Has(target.Permissions, permissions.All) {
@@ -304,8 +307,7 @@ func (h *Handler) SetUserPermissions(c *gin.Context) {
 		} else if errors.Is(err, autherrors.ErrInvalidPermission) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("set permissions: %w", err).Error()})
 		} else {
-			h.logger.Error().Str("event", "set_permissions_error").Str("user_id", userID).Err(err).Msg("set permissions failed")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set permissions: %w", err).Error()})
+			h.respondInternalError(c, "set_permissions_error", err)
 		}
 		return
 	}
@@ -328,7 +330,7 @@ func (h *Handler) UpdateUserPassword(c *gin.Context) {
 		if errors.Is(err, autherrors.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("update password: %w", err).Error()})
+			h.respondInternalError(c, "update_password_lookup_error", err)
 		}
 		return
 	}
@@ -342,8 +344,7 @@ func (h *Handler) UpdateUserPassword(c *gin.Context) {
 		} else if errors.Is(err, autherrors.ErrWeakPassword) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("update password: %w", err).Error()})
 		} else {
-			h.logger.Error().Str("event", "update_password_error").Str("user_id", userID).Err(err).Msg("update password failed")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("update password: %w", err).Error()})
+			h.respondInternalError(c, "update_password_error", err)
 		}
 		return
 	}
@@ -366,7 +367,7 @@ func (h *Handler) SetUserStatus(c *gin.Context) {
 		if errors.Is(err, autherrors.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set status: %w", err).Error()})
+			h.respondInternalError(c, "set_status_lookup_error", err)
 		}
 		return
 	}
@@ -379,8 +380,7 @@ func (h *Handler) SetUserStatus(c *gin.Context) {
 		if errors.Is(err, autherrors.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		} else {
-			h.logger.Error().Str("event", "set_status_error").Str("user_id", userID).Err(err).Msg("set status failed")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Errorf("set status: %w", err).Error()})
+			h.respondInternalError(c, "set_status_error", err)
 		}
 		return
 	}
