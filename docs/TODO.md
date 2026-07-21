@@ -38,7 +38,8 @@ Implement in the order in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) (
 - [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md)). Code path for private images via CloudFront OAC landed (#96); Terraform apply / host rewrite still open.
 - [x] **Server-side order/checkout pricing (C1)** — ignore client `unit_price_cents`; resolve from product like cart ([quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)#1-c1--server-side-pricing-critical)
 - [x] Inventory service token refresh in order bootstrap
-- [ ] NATS handler errors / outbox for payment→order events (**H1** + **H3**)
+- [ ] **H1** Order create `Idempotency-Key` + transactional outbox — see open PR / fix plan (stock orphan on publish fail)
+- [x] **H3** Payment `payment.succeeded` outbox + soft-success; order NATS queue group + handler error logging; reconcile republish
 - [ ] Batch cart/product APIs (`?sku_ids=`); Redis catalog cache
   - [x] `GET /api/v1/products/variants?sku_ids=` batch public variant lookup (max 50)
   - [ ] Redis catalog cache

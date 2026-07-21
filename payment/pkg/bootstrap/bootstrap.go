@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -18,28 +19,35 @@ import (
 )
 
 type Config struct {
-	OrderURL           string
-	DatabaseConnString string
-	JWTSecret          string
-	JWKSURL            string
-	NATSURL            string
-	StripeSecretKey    string
+	OrderURL            string
+	DatabaseConnString  string
+	JWTSecret           string
+	JWKSURL             string
+	NATSURL             string
+	StripeSecretKey     string
 	StripeWebhookSecret string
-	StripeSuccessURL   string
-	StripeCancelURL    string
-	PublicBaseURL      string
-	HTTPClient         *http.Client
+	StripeSuccessURL    string
+	StripeCancelURL     string
+	PublicBaseURL       string
+	HTTPClient          *http.Client
 }
 
 type App struct {
-	Router  *http.ServeMux
-	Handler *handler.Handler
-	Service *service.Service
-	close   func() error
+	Router       *http.ServeMux
+	Handler      *handler.Handler
+	Service      *service.Service
+	workerCancel context.CancelFunc
+	close        func() error
 }
 
 func (a *App) Close() error {
-	if a == nil || a.close == nil {
+	if a == nil {
+		return nil
+	}
+	if a.workerCancel != nil {
+		a.workerCancel()
+	}
+	if a.close == nil {
 		return nil
 	}
 	return a.close()
@@ -81,9 +89,13 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 
 	svc := service.New(repo, orders, checkoutProvider, eventPublisher)
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	svc.StartOutboxWorker(workerCtx, 2*time.Second)
+	svc.StartReconcileWorker(workerCtx, 1*time.Minute, 2*time.Hour)
 
 	jwtValidator, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
 	if err != nil {
+		workerCancel()
 		if natsPublisher != nil {
 			natsPublisher.Close()
 		}
@@ -107,10 +119,11 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 
 	return &App{
-		Router:  mux,
-		Handler: h,
-		Service: svc,
-		close:   closeAll,
+		Router:       mux,
+		Handler:      h,
+		Service:      svc,
+		workerCancel: workerCancel,
+		close:        closeAll,
 	}, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/elug3/dupli1/payment/pkg/domain"
 	"github.com/elug3/dupli1/payment/pkg/infra/checkout"
@@ -245,6 +246,84 @@ func (p *failOncePublisher) Publish(_ context.Context, subject string, event any
 	return nil
 }
 
+type failAlwaysPublisher struct {
+	calls int
+}
+
+func (p *failAlwaysPublisher) Publish(_ context.Context, subject string, event any) error {
+	p.calls++
+	return fmt.Errorf("nats unavailable")
+}
+
+func TestCompletePayment_SoftSucceedsWhenPublishFails(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+	}}
+	pub := &failAlwaysPublisher{}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), pub)
+
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	paid, err := svc.CompletePayment(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("CompletePayment should soft-succeed: %v", err)
+	}
+	if paid.Status != domain.StatusSucceeded {
+		t.Fatalf("status = %s, want succeeded", paid.Status)
+	}
+	if pub.calls < 1 {
+		t.Fatal("expected publish attempt")
+	}
+	pending, err := repo.ListPendingOutbox(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("ListPendingOutbox: %v", err)
+	}
+	if len(pending) != 1 || pending[0].Subject != ports.PaymentSucceededSubject {
+		t.Fatalf("pending = %+v, want one payment.succeeded", pending)
+	}
+}
+
+func TestCompletePayment_DrainOutboxAfterPublishFailure(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+	}}
+	failPub := &failAlwaysPublisher{}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), failPub)
+
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	if _, err := svc.CompletePayment(context.Background(), created.ID); err != nil {
+		t.Fatalf("CompletePayment: %v", err)
+	}
+
+	okPub := &recordingPublisher{}
+	svcOK := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), okPub)
+	if err := svcOK.DrainOutbox(context.Background()); err != nil {
+		t.Fatalf("DrainOutbox: %v", err)
+	}
+	if len(okPub.events) != 1 {
+		t.Fatalf("events = %d, want 1", len(okPub.events))
+	}
+	pending, err := repo.ListPendingOutbox(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("ListPendingOutbox: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending = %d, want 0", len(pending))
+	}
+}
+
 func TestCompletePayment_RepublishesAfterPriorPublishFailure(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
@@ -260,8 +339,9 @@ func TestCompletePayment_RepublishesAfterPriorPublishFailure(t *testing.T) {
 		t.Fatalf("CreatePayment: %v", err)
 	}
 
-	if _, err := svc.CompletePayment(context.Background(), created.ID); err == nil {
-		t.Fatal("expected first CompletePayment to fail on publish")
+	// Soft-success: first complete persists succeeded + outbox even when publish fails.
+	if _, err := svc.CompletePayment(context.Background(), created.ID); err != nil {
+		t.Fatalf("CompletePayment soft-success: %v", err)
 	}
 	paid, err := repo.Get(context.Background(), created.ID)
 	if err != nil {
@@ -274,7 +354,34 @@ func TestCompletePayment_RepublishesAfterPriorPublishFailure(t *testing.T) {
 	if _, err := svc.CompletePayment(context.Background(), created.ID); err != nil {
 		t.Fatalf("retry CompletePayment: %v", err)
 	}
-	if len(pub.events) != 1 {
-		t.Fatalf("events after retry = %d, want 1", len(pub.events))
+	if len(pub.events) < 1 {
+		t.Fatalf("events after retry = %d, want at least 1", len(pub.events))
+	}
+}
+
+func TestReconcileSucceededPaymentsRepublishes(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+	}}
+	pub := &recordingPublisher{}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), pub)
+
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	if _, err := svc.CompletePayment(context.Background(), created.ID); err != nil {
+		t.Fatalf("CompletePayment: %v", err)
+	}
+	pub.events = nil
+
+	if err := svc.ReconcileSucceededPayments(context.Background(), time.Hour); err != nil {
+		t.Fatalf("ReconcileSucceededPayments: %v", err)
+	}
+	if len(pub.events) != 1 || pub.events[0].PaymentID != created.ID {
+		t.Fatalf("reconcile events = %+v", pub.events)
 	}
 }

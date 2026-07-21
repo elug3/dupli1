@@ -25,7 +25,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 |---|---------|--------|
 | H1 | Order create: save succeeds, publish failure can orphan reservations on client retry | Open — outbox or compensate |
 | H2 | Order bootstrap fetches inventory service token once; never refreshes after expiry | **Fixed** — `ServiceAccountTokenSource` + `httpstock` client (product stock API); retries once on 401 |
-| H3 | NATS subscribers discard handler errors (`_ = handler(...)`) — at-most-once, silent loss | Open — queue group + retry/DLQ |
+| H3 | NATS subscribers discard handler errors (`_ = handler(...)`) — at-most-once, silent loss | **Fixed** — payment outbox + soft-success + reconcile republish; order logs handler errors and uses queue group |
 | H4 | Internal `err.Error()` returned on many 500 responses (auth, product, order/cart/payment) | **Fixed** — all services return `"internal error"` on unclassified 500s; see [product-error-wrapping.md](product-error-wrapping.md) |
 | H5 | Product PG migrations ignore some `Exec` errors during migrate/seed | **Fixed** — migrate checks ADD COLUMN / UPDATE / INDEX `Exec` errors |
 | H6 | Product stores use `context.Background()` on request-path queries | Open — plumb request context |
@@ -92,7 +92,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 | Cart GET/mutate | Per-item product + inventory HTTP | Parallel enrich (this PR); batch APIs next |
 | Checkout / create order | Client prices + HTTP reserve | Server-side price resolve (**done**) |
 | Order list / expiry | N+1 items + missing index | Batch load + partial index (this PR) |
-| Payment → order paid | Publish-after-save + swallowed NATS errors | Republish on retry (this PR); outbox next |
+| Payment → order paid | Outbox + soft-success + reconcile republish; order logs handler errors + queue group | **Fixed** (H3) |
 
 ---
 
