@@ -108,25 +108,41 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPut:
 			var req struct {
-				Items []domain.OrderItem `json:"items"`
+				Items []struct {
+					SkuID    string `json:"sku_id"`
+					SKU      string `json:"sku"`
+					Quantity int    `json:"quantity"`
+				} `json:"items"`
 			}
 			if err := decodeJSON(r, &req); err != nil {
 				respondError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			session, err := h.svc.SetCheckoutItems(r.Context(), sessionID, req.Items)
+			items := make([]domain.OrderItem, len(req.Items))
+			for i, item := range req.Items {
+				items[i] = domain.OrderItem{SkuID: item.SkuID, SKU: item.SKU, Quantity: item.Quantity}
+			}
+			session, err := h.svc.SetCheckoutItems(r.Context(), sessionID, items)
 			if err != nil {
 				respondServiceError(w, err)
 				return
 			}
 			respondJSON(w, http.StatusOK, session)
 		case http.MethodPost:
-			var item domain.OrderItem
-			if err := decodeJSON(r, &item); err != nil {
+			var req struct {
+				SkuID    string `json:"sku_id"`
+				SKU      string `json:"sku"`
+				Quantity int    `json:"quantity"`
+			}
+			if err := decodeJSON(r, &req); err != nil {
 				respondError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			session, err := h.svc.UpsertCheckoutItem(r.Context(), sessionID, item)
+			session, err := h.svc.UpsertCheckoutItem(r.Context(), sessionID, domain.OrderItem{
+				SkuID:    req.SkuID,
+				SKU:      req.SKU,
+				Quantity: req.Quantity,
+			})
 			if err != nil {
 				respondServiceError(w, err)
 				return
@@ -169,7 +185,7 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) mayAccessCheckoutSession(claims authjwt.Claims, sessionCustomerID string, requireCreateBypass bool) bool {
 	if h.jwtValidator == nil {
-		return true
+		return false
 	}
 	if requireCreateBypass && permissions.BypassesOrderCreateABAC(claims.Permissions) {
 		return true

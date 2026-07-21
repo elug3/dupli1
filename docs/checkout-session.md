@@ -89,28 +89,28 @@ Fetch the current session. Expired open sessions are marked `expired` on read.
 
 ### `PUT /api/v1/checkout/sessions/{id}/items`
 
-Replace all line items.
+Replace all line items. Server resolves prices from product (client `unit_price_cents` is ignored).
 
 **Request**
 ```json
 {
   "items": [
-    { "sku": "bag-1", "quantity": 2, "unit_price_cents": 5000 }
+    { "sku": "bag-1", "quantity": 2 }
   ]
 }
 ```
 
-**Response `200`** — updated session with recalculated `subtotal_cents` and `total_cents`.
+**Response `200`** — updated session with recalculated `subtotal_cents` and `total_cents` (catalog prices).
 
 ---
 
 ### `POST /api/v1/checkout/sessions/{id}/items`
 
-Add or update a single line item (matched by `sku`).
+Add or update a single line item (matched by `sku`). Server resolves price from product.
 
 **Request**
 ```json
-{ "sku": "bag-1", "quantity": 1, "unit_price_cents": 7500 }
+{ "sku": "bag-1", "quantity": 1 }
 ```
 
 **Response `200`** — updated session.

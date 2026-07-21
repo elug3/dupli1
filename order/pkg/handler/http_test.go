@@ -51,12 +51,66 @@ func (f *fakeStock) Reserve(_ context.Context, _ string, _ []ports.StockItem) (s
 func (f *fakeStock) CommitReservation(_ context.Context, _ string) error  { return nil }
 func (f *fakeStock) ReleaseReservation(_ context.Context, _ string) error { return nil }
 
+type fakeProduct struct {
+	price int64
+}
+
+func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantInfo, error) {
+	p := f.price
+	if p == 0 {
+		p = 1000
+	}
+	return &ports.VariantInfo{SkuID: "ID-" + sku, SKU: sku, UnitPriceCents: p}, nil
+}
+
+func (f *fakeProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports.VariantInfo, error) {
+	p := f.price
+	if p == 0 {
+		p = 1000
+	}
+	return &ports.VariantInfo{SkuID: skuID, SKU: "SKU-" + skuID, UnitPriceCents: p}, nil
+}
+
 func newTestHandler(t *testing.T) (*handler.Handler, *service.Service) {
 	t.Helper()
 	repo := memory.NewRepository()
-	svc := service.New(repo, &fakeStock{})
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000})
 	validator := authjwt.NewHMACValidator(testSecret)
 	return handler.New(svc, validator), svc
+}
+
+func TestRequireAuthFailsClosedWithoutValidator(t *testing.T) {
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000})
+	h := handler.New(svc, nil)
+	mux := newMux(h)
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders?customer_id=u-1", "", nil)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateOrderIgnoresClientUnitPrice(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+	token := makeToken(t, "u-1", nil)
+
+	body := map[string]any{
+		"customer_id": "u-1",
+		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_cents": 1}},
+	}
+	w := do(t, mux, http.MethodPost, "/api/v1/orders", token, body)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+	var order domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&order); err != nil {
+		t.Fatal(err)
+	}
+	if order.TotalCents != 1000 || order.Items[0].UnitPriceCents != 1000 {
+		t.Fatalf("order priced from client? total=%d item=%d, want catalog 1000", order.TotalCents, order.Items[0].UnitPriceCents)
+	}
 }
 
 func newMux(h *handler.Handler) *http.ServeMux {

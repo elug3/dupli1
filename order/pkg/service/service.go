@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ const (
 type Service struct {
 	repo           ports.Repository
 	stock          ports.StockClient
+	product        ports.ProductClient
 	eventPublisher ports.EventPublisher
 	couponClient   ports.CouponClient
 	checkoutTTL    time.Duration
@@ -80,14 +82,25 @@ func NewWithCheckout(
 	return s
 }
 
+// WithProduct sets the catalog client used to resolve server-side line prices.
+func (s *Service) WithProduct(product ports.ProductClient) *Service {
+	s.product = product
+	return s
+}
+
 func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*domain.Order, error) {
+	pricedItems, err := s.priceItems(ctx, input.Items)
+	if err != nil {
+		return nil, err
+	}
+
 	orderID, err := s.repo.NextOrderID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	stockItems := make([]ports.StockItem, len(input.Items))
-	for i, item := range input.Items {
+	stockItems := make([]ports.StockItem, len(pricedItems))
+	for i, item := range pricedItems {
 		stockItems[i] = ports.StockItem{
 			SkuID:    item.SkuID,
 			SKU:      item.SKU,
@@ -100,7 +113,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		return nil, err
 	}
 
-	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, input.Items, input.CouponCode, input.DiscountCents, s.now())
+	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountCents, s.now())
 	if err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
@@ -230,6 +243,57 @@ func (s *Service) publish(ctx context.Context, subject string, order *domain.Ord
 		Items:         items,
 		Occurred:      s.now(),
 	})
+}
+
+// priceItems resolves each line from the product catalog and ignores any client unit_price_cents.
+func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]domain.OrderItem, error) {
+	if s.product == nil {
+		return nil, ports.ErrProductUnavailable
+	}
+	if len(items) == 0 {
+		return nil, domain.ErrInvalidOrder
+	}
+	out := make([]domain.OrderItem, len(items))
+	for i, item := range items {
+		info, err := s.resolveVariant(ctx, item)
+		if err != nil {
+			return nil, err
+		}
+		if info.UnitPriceCents <= 0 {
+			return nil, domain.ErrInvalidOrder
+		}
+		out[i] = domain.OrderItem{
+			SkuID:          info.SkuID,
+			SKU:            info.SKU,
+			Quantity:       item.Quantity,
+			UnitPriceCents: info.UnitPriceCents,
+		}
+	}
+	return out, nil
+}
+
+func (s *Service) resolveVariant(ctx context.Context, item domain.OrderItem) (*ports.VariantInfo, error) {
+	skuID := strings.TrimSpace(item.SkuID)
+	sku := strings.TrimSpace(item.SKU)
+	var (
+		info *ports.VariantInfo
+		err  error
+	)
+	switch {
+	case skuID != "":
+		info, err = s.product.GetVariantBySkuID(ctx, skuID)
+	case sku != "":
+		info, err = s.product.GetVariant(ctx, sku)
+	default:
+		return nil, domain.ErrInvalidOrder
+	}
+	if err != nil {
+		if errors.Is(err, ports.ErrVariantNotFound) {
+			return nil, err
+		}
+		return nil, ports.ErrProductUnavailable
+	}
+	return info, nil
 }
 
 func cloneOrder(order *domain.Order) *domain.Order {

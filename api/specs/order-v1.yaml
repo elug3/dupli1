@@ -264,7 +264,7 @@ paths:
                 items:
                   type: array
                   items:
-                    $ref: '#/components/schemas/OrderItem'
+                    $ref: '#/components/schemas/OrderItemInput'
       responses:
         '200':
           description: Updated session
@@ -286,7 +286,7 @@ paths:
       operationId: checkoutUpsertItem
       security:
         - bearerAuth: []
-      description: Matches existing items by `sku`.
+      description: Matches existing items by `sku`. Server resolves `unit_price_cents` from product.
       parameters:
         - $ref: '#/components/parameters/SessionId'
       requestBody:
@@ -294,7 +294,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/OrderItem'
+              $ref: '#/components/schemas/OrderItemInput'
       responses:
         '200':
           description: Updated session
@@ -485,6 +485,9 @@ components:
       type: object
       required: [sku, quantity, unit_price_cents]
       properties:
+        sku_id:
+          type: string
+          description: Preferred stable variant id when known
         sku:
           type: string
           example: BOT-001
@@ -494,9 +497,29 @@ components:
         unit_price_cents:
           type: integer
           format: int64
-          description: Unit price in whole KRW won (Stripe minor units for krw; do not multiply product.price by 100)
+          description: |
+            Whole KRW won (Stripe minor units for krw). On **responses** this is the
+            catalog snapshot. On **create/checkout item requests** this field is ignored;
+            the server resolves price from product.
           minimum: 0
           example: 2890000
+
+    OrderItemInput:
+      type: object
+      description: Request body for creating/updating order or checkout lines (no client price).
+      required: [quantity]
+      properties:
+        sku_id:
+          type: string
+        sku:
+          type: string
+          example: BOT-001
+        quantity:
+          type: integer
+          minimum: 1
+      anyOf:
+        - required: [sku]
+        - required: [sku_id]
 
     Order:
       type: object
@@ -552,7 +575,7 @@ components:
           type: array
           minItems: 1
           items:
-            $ref: '#/components/schemas/OrderItem'
+            $ref: '#/components/schemas/OrderItemInput'
 
     OrderListResponse:
       type: object

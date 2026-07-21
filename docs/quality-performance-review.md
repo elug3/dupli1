@@ -12,7 +12,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 
 | # | Finding | Status |
 |---|---------|--------|
-| C1 | **Client-controlled order prices** — `POST /orders` and checkout item APIs accept `unit_price_cents` from the client; totals and Stripe amounts derive from that. | Open — resolve price from product at order/checkout time |
+| C1 | **Client-controlled order prices** — `POST /orders` and checkout item APIs accept `unit_price_cents` from the client; totals and Stripe amounts derive from that. | **Fixed** — order/checkout resolve prices from product (client `unit_price_cents` ignored) |
 | C2 | **Unauthenticated `simulate-success`** — `GET /api/v1/payments/{id}/simulate-success` completes payment and publishes `payment.succeeded` with no auth. | **Fixed** — route only registered when Stripe is unset (`allowDevSimulate`) |
 | C3 | **Checkout delete-by-skuId skips ownership check** — `DELETE …/items/by-sku-id/{id}` omitted `withCheckoutSessionAccess`. | **Fixed** |
 | C4 | **Payment succeeded + failed NATS publish = stuck order** — `CompletePayment` saves `succeeded` then publishes; on publish failure, retry returns early without republishing. | **Fixed** — already-succeeded payments republish the event (order `MarkOrderPaid` is idempotent) |
@@ -29,7 +29,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 | H4 | Internal `err.Error()` returned on many 500 responses (auth, product, order/cart/payment) | **Partial** — product sanitizes 500s via error wrapping; see [product-error-wrapping.md](product-error-wrapping.md). Other services still open |
 | H5 | Product PG migrations ignore some `Exec` errors during migrate/seed | Open |
 | H6 | Product stores use `context.Background()` on request-path queries | Open — plumb request context |
-| H7 | `requireAuth` no-ops when JWT validator is nil (order/cart/payment); product fails closed | Open |
+| H7 | `requireAuth` no-ops when JWT validator is nil (order/cart/payment); product fails closed | **Fixed** — bootstrap requires JWKS/JWT; handlers return 503; Bypass only with `payment.bypass` |
 | H8 | Duplicated `authjwt` in four services — drift risk | Open — move to `shared/` |
 | H9 | JWKS refresh has no `singleflight` (thundering herd on cold start / key rotation) | Open |
 
@@ -90,7 +90,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 |------|------------|------------|
 | Product search | Unbounded query + enrich | Pagination (this PR); add filter indexes next |
 | Cart GET/mutate | Per-item product + inventory HTTP | Parallel enrich (this PR); batch APIs next |
-| Checkout / create order | Client prices + HTTP reserve | Server-side price resolve (open) |
+| Checkout / create order | Client prices + HTTP reserve | Server-side price resolve (**done**) |
 | Order list / expiry | N+1 items + missing index | Batch load + partial index (this PR) |
 | Payment → order paid | Publish-after-save + swallowed NATS errors | Republish on retry (this PR); outbox next |
 
@@ -98,13 +98,13 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 
 ## Recommended priority (remaining)
 
-1. **Server-side pricing** at order/checkout create (ignore client `unit_price_cents`) — see [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)
+1. ~~**Server-side pricing** at order/checkout create (ignore client `unit_price_cents`)~~ **done** — see [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)
 2. ~~Inventory service **token refresh** in order bootstrap~~ **done**
-3. **Fail closed without JWT** in order/cart/payment (and Bypass) — see fix plan H7
+3. ~~**Fail closed without JWT** in order/cart/payment (and Bypass)~~ **done** — see fix plan H7
 4. **Transactional outbox** (or JetStream) for `payment.succeeded` / order events; stop swallowing NATS handler errors
 5. Product **filter indexes** + request-context plumbing; slim list DTOs
 6. Batch cart/product APIs (`?sku_ids=` — product batch done; cart client switch + Redis cache still open)
-7. Consolidate `authjwt` + shared HTTP client helpers + JWKS `singleflight`; fail-closed auth bootstrap
+7. Consolidate `authjwt` + shared HTTP client helpers + JWKS `singleflight`
 8. Product: sanitize 500 responses (**done** — [product-error-wrapping.md](product-error-wrapping.md)); other services still need the same; check migrate `Exec` errors
 
 See also: [TODO.md](TODO.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [current-state.md](current-state.md), [aws-cost-optimization.md](aws-cost-optimization.md).
