@@ -198,6 +198,16 @@ resource "aws_ecs_task_definition" "web" {
         { name = "HOST", value = "0.0.0.0" },
         { name = "DUPLI1_API_BASE_URL", value = "http://proxy.dupli1.local" },
       ]
+      secrets = [
+        {
+          name      = "DUPLI1_WEB_SERVICE_EMAIL"
+          valueFrom = "${aws_secretsmanager_secret.web_service.arn}:DUPLI1_WEB_SERVICE_EMAIL::"
+        },
+        {
+          name      = "DUPLI1_WEB_SERVICE_PASSWORD"
+          valueFrom = "${aws_secretsmanager_secret.web_service.arn}:DUPLI1_WEB_SERVICE_PASSWORD::"
+        },
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -273,6 +283,7 @@ resource "aws_ecs_service" "web" {
     aws_lb_listener.http,
     aws_lb_listener.https,
     aws_ecs_cluster_capacity_providers.production,
+    aws_iam_role_policy.ecs_execution_secrets,
   ]
 
   lifecycle {

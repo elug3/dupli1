@@ -1,0 +1,247 @@
+# Fix live customer registration by wiring the dupli1-web service account.
+#
+# Root cause: storefront BFF requires DUPLI1_WEB_SERVICE_EMAIL/PASSWORD (or a
+# short-lived TOKEN). The web deploy that added email/password support failed
+# when Actions secrets were empty (invalid environment-variables input), so
+# production still runs an old image that only checks TOKEN.
+#
+# This workflow:
+# 1. Ensures Secrets Manager secret dupli1/production/web-service-account exists
+# 2. Builds/pushes a fresh auth image (password sync on seed)
+# 3. Updates dupli1-auth task with WEB_SERVICE_* and redeploys (syncs DB user)
+# 4. Updates dupli1-web task to the email/password-capable image + same creds
+# 5. Smoke-tests POST /auth/session/register
+#
+# Triggered on push to the fix branch and via workflow_dispatch.
+
+name: Fix web registration
+
+on:
+  push:
+    branches: ["cursor/fix-web-registration-1a9c"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER || 'production' }}
+  WEB_SERVICE_EMAIL: dupli1-web@web.dupli1.com
+  SECRET_ID: dupli1/production/web-service-account
+  # Image pushed by failed dupli1-web deploy (has EMAIL/PASSWORD support).
+  WEB_IMAGE_TAG: afd8467b97dc1fcd997f06d88bfa8dd8d507e583
+
+jobs:
+  fix:
+    name: Wire service account and redeploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure web-service-account secret
+        id: secret
+        run: |
+          set -euo pipefail
+          if aws secretsmanager describe-secret --secret-id "$SECRET_ID" >/dev/null 2>&1; then
+            echo "Secret $SECRET_ID already exists"
+            RAW="$(aws secretsmanager get-secret-value --secret-id "$SECRET_ID" --query SecretString --output text)"
+            EMAIL="$(jq -r '.DUPLI1_WEB_SERVICE_EMAIL // empty' <<<"$RAW")"
+            PASSWORD="$(jq -r '.DUPLI1_WEB_SERVICE_PASSWORD // empty' <<<"$RAW")"
+            if [[ -z "$EMAIL" || -z "$PASSWORD" ]]; then
+              echo "::error::Secret $SECRET_ID is missing DUPLI1_WEB_SERVICE_EMAIL/PASSWORD keys"
+              exit 1
+            fi
+          else
+            PASSWORD="$(openssl rand -base64 32 | tr -d '=+/' | cut -c1-32)"
+            EMAIL="$WEB_SERVICE_EMAIL"
+            aws secretsmanager create-secret \
+              --name "$SECRET_ID" \
+              --description "dupli1-web service account for customer registration" \
+              --secret-string "$(jq -n --arg e "$EMAIL" --arg p "$PASSWORD" \
+                '{DUPLI1_WEB_SERVICE_EMAIL:$e,DUPLI1_WEB_SERVICE_PASSWORD:$p}')"
+            echo "Created secret $SECRET_ID"
+          fi
+          {
+            echo "email=$EMAIL"
+            echo "password=$PASSWORD"
+          } >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$PASSWORD"
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push auth image
+        id: auth-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          IMAGE="$ECR_REGISTRY/dupli1-auth:$IMAGE_TAG"
+          docker build -t "$IMAGE" --build-arg SERVICE=auth .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Update auth task definition
+        env:
+          AUTH_IMAGE: ${{ steps.auth-image.outputs.image }}
+          WEB_EMAIL: ${{ steps.secret.outputs.email }}
+          WEB_PASSWORD: ${{ steps.secret.outputs.password }}
+        run: |
+          set -euo pipefail
+          TASK_ARN="$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services dupli1-auth \
+            --query 'services[0].taskDefinition' \
+            --output text)"
+          TMP="$(mktemp)"
+          aws ecs describe-task-definition \
+            --task-definition "$TASK_ARN" \
+            --query taskDefinition \
+            --output json \
+          | jq --arg image "$AUTH_IMAGE" \
+               --arg email "$WEB_EMAIL" \
+               --arg password "$WEB_PASSWORD" '
+            .containerDefinitions |= map(
+              if .name == "auth" then
+                .image = $image
+                | .environment = (
+                    (.environment // [])
+                    | map(select(.name != "DUPLI1_WEB_SERVICE_EMAIL"
+                               and .name != "DUPLI1_WEB_SERVICE_PASSWORD"
+                               and .name != "DUPLI1_WEB_SERVICE_TOKEN"))
+                    + [
+                        {name: "DUPLI1_WEB_SERVICE_EMAIL", value: $email},
+                        {name: "DUPLI1_WEB_SERVICE_PASSWORD", value: $password}
+                      ]
+                  )
+              else . end
+            )
+            | {
+                family, networkMode, requiresCompatibilities, cpu, memory,
+                executionRoleArn, taskRoleArn, containerDefinitions,
+                volumes, placementConstraints, runtimePlatform
+              }
+            | with_entries(select(.value != null))
+          ' > "$TMP"
+          NEW_ARN="$(aws ecs register-task-definition \
+            --cli-input-json "file://${TMP}" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)"
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service dupli1-auth \
+            --task-definition "$NEW_ARN" \
+            --force-new-deployment \
+            --no-cli-pager >/dev/null
+          echo "Updated dupli1-auth -> $NEW_ARN"
+
+      - name: Update web task definition
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          WEB_EMAIL: ${{ steps.secret.outputs.email }}
+          WEB_PASSWORD: ${{ steps.secret.outputs.password }}
+        run: |
+          set -euo pipefail
+          WEB_IMAGE="$ECR_REGISTRY/web:$WEB_IMAGE_TAG"
+          # Confirm the image exists (pushed by the earlier failed web deploy).
+          aws ecr describe-images \
+            --repository-name web \
+            --image-ids imageTag="$WEB_IMAGE_TAG" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text >/dev/null
+
+          TASK_ARN="$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services dupli1-web \
+            --query 'services[0].taskDefinition' \
+            --output text)"
+          TMP="$(mktemp)"
+          aws ecs describe-task-definition \
+            --task-definition "$TASK_ARN" \
+            --query taskDefinition \
+            --output json \
+          | jq --arg image "$WEB_IMAGE" \
+               --arg email "$WEB_EMAIL" \
+               --arg password "$WEB_PASSWORD" '
+            .containerDefinitions |= map(
+              if .name == "web" then
+                .image = $image
+                | .environment = (
+                    (.environment // [])
+                    | map(select(.name != "DUPLI1_WEB_SERVICE_EMAIL"
+                               and .name != "DUPLI1_WEB_SERVICE_PASSWORD"
+                               and .name != "DUPLI1_WEB_SERVICE_TOKEN"))
+                    + [
+                        {name: "DUPLI1_WEB_SERVICE_EMAIL", value: $email},
+                        {name: "DUPLI1_WEB_SERVICE_PASSWORD", value: $password}
+                      ]
+                  )
+              else . end
+            )
+            | {
+                family, networkMode, requiresCompatibilities, cpu, memory,
+                executionRoleArn, taskRoleArn, containerDefinitions,
+                volumes, placementConstraints, runtimePlatform
+              }
+            | with_entries(select(.value != null))
+          ' > "$TMP"
+          NEW_ARN="$(aws ecs register-task-definition \
+            --cli-input-json "file://${TMP}" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)"
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service dupli1-web \
+            --task-definition "$NEW_ARN" \
+            --force-new-deployment \
+            --no-cli-pager >/dev/null
+          echo "Updated dupli1-web -> $NEW_ARN (image $WEB_IMAGE)"
+
+      - name: Wait for ECS stability
+        run: |
+          set -euo pipefail
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services dupli1-auth dupli1-web
+          echo "auth + web services stable"
+
+      - name: Smoke-test registration BFF
+        run: |
+          set -euo pipefail
+          # Give the ALB a moment after ECS reports stable.
+          sleep 15
+          EMAIL="reg-smoke-$(date +%s)@example.com"
+          CODE="$(curl -sS -o /tmp/reg-smoke.json -w '%{http_code}' \
+            -X POST 'https://dupli1.com/auth/session/register' \
+            -H 'content-type: application/json' \
+            -d "{\"email\":\"${EMAIL}\",\"password\":\"password12\"}")"
+          echo "HTTP $CODE body: $(cat /tmp/reg-smoke.json)"
+          if [[ "$CODE" == "503" ]] && grep -q 'DUPLI1_WEB_SERVICE_TOKEN' /tmp/reg-smoke.json; then
+            echo "::error::Registration still reports missing DUPLI1_WEB_SERVICE_TOKEN"
+            exit 1
+          fi
+          if [[ "$CODE" == "503" ]] && grep -qi 'unavailable' /tmp/reg-smoke.json; then
+            echo "::error::Registration still unavailable"
+            exit 1
+          fi
+          # 201 created, or 409 if somehow exists — both mean the service account path works.
+          if [[ "$CODE" != "201" && "$CODE" != "200" && "$CODE" != "409" ]]; then
+            # Service-account login failures also return 503 with a different message.
+            echo "::error::Unexpected registration status $CODE"
+            exit 1
+          fi
+          echo "Registration path OK"

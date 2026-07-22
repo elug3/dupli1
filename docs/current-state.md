@@ -50,7 +50,7 @@ See [service-layout.md](service-layout.md) for details.
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `admin`)
   - Login lockout after 5 failed attempts for customers/managers; **admin and owner are never locked**
-  - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`)
+  - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`); seeded/synced on auth boot; ECS injects the shared Secrets Manager secret into auth + web (see [infra/terraform/README.md](../infra/terraform/README.md))
   - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage` (`DUPLI1_ORDER_SERVICE_*`); order refreshes a Bearer access token and calls product stock/coupons via **`DUPLI1_GATEWAY_URL`** (`httpstock` / gateway paths)
   - Login/refresh rate-limited per IP via Redis
 - **Tests:** `cd auth && go test ./...`

@@ -86,6 +86,47 @@ func TestSeedWebServiceAccount_Idempotent(t *testing.T) {
 	}
 }
 
+func TestSeedWebServiceAccount_SyncsPasswordAndPermissions(t *testing.T) {
+	repo := newSeedFakeRepo()
+	cfg := Config{
+		WebServiceEmail:    "dupli1-web@internal.dupli1",
+		WebServicePassword: "service-secret",
+		Logger:             zerolog.Nop(),
+	}
+	if err := seedWebServiceAccount(context.Background(), cfg, repo); err != nil {
+		t.Fatalf("first seed: %v", err)
+	}
+
+	u := repo.byEmail["dupli1-web@internal.dupli1"]
+	u.SetPermissions(nil)
+	u.SetActive(false)
+	u.AccountType = domain.AccountTypeCustomer
+	_ = u.UpdatePassword("old-password")
+	repo.byEmail[u.Email] = u
+
+	cfg.WebServicePassword = "rotated-secret"
+	if err := seedWebServiceAccount(context.Background(), cfg, repo); err != nil {
+		t.Fatalf("sync seed: %v", err)
+	}
+
+	got := repo.byEmail["dupli1-web@internal.dupli1"]
+	if got.ID != u.ID {
+		t.Fatalf("sync changed user id: %s -> %s", u.ID, got.ID)
+	}
+	if !got.ValidatePassword("rotated-secret") {
+		t.Fatal("password was not rotated")
+	}
+	if !got.HasPermission(permissions.UserCreate) || len(got.Permissions) != 1 {
+		t.Fatalf("permissions = %v, want [%s]", got.Permissions, permissions.UserCreate)
+	}
+	if got.AccountType != domain.AccountTypeService {
+		t.Fatalf("account_type = %q, want %q", got.AccountType, domain.AccountTypeService)
+	}
+	if !got.IsActive {
+		t.Fatal("expected account to be reactivated")
+	}
+}
+
 func TestSeedWebServiceAccount_SkipsWhenEmailEmpty(t *testing.T) {
 	repo := newSeedFakeRepo()
 	cfg := Config{
