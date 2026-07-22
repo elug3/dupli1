@@ -107,6 +107,16 @@ func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Produc
 		if size := filter["size"]; size != "" && !hasActiveOption(variants, "size", size) {
 			continue
 		}
+		if after := filter["created_after"]; after != "" {
+			cutoff, err := time.Parse(time.RFC3339, after)
+			if err != nil {
+				continue
+			}
+			created, err := time.Parse(time.RFC3339, p.CreatedAt)
+			if err != nil || created.Before(cutoff) {
+				continue
+			}
+		}
 		results = append(results, p)
 	}
 

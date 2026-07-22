@@ -567,6 +567,10 @@ func buildProductSearchWhere(filter map[string]string) (string, []interface{}) {
 			)`, idx)
 			args = append(args, value)
 			idx++
+		case "created_after":
+			query += fmt.Sprintf(" AND p.created_at >= $%d::timestamptz", idx)
+			args = append(args, value)
+			idx++
 		}
 	}
 	return query, args

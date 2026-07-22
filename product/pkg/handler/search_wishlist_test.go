@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/handler"
@@ -63,6 +64,47 @@ func TestSearchProductsSortAndOrder(t *testing.T) {
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteProducts+"?sort=nope", nil))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid sort: want 400, got %d", rec.Code)
+	}
+}
+
+func TestSearchProductsPeriodWeek(t *testing.T) {
+	now := time.Now().UTC()
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "NEW", Name: "New", Category: "bags", Status: "active", CreatedAt: now.Add(-2 * 24 * time.Hour).Format(time.RFC3339)},
+		{ID: "OLD", Name: "Old", Category: "bags", Status: "active", CreatedAt: now.Add(-20 * 24 * time.Hour).Format(time.RFC3339)},
+	}
+	mux := newMux(store)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteProducts+"?period=week", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp handler.SearchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Period != "week" {
+		t.Fatalf("period=%q, want week", resp.Period)
+	}
+	raw, _ := json.Marshal(resp.Results)
+	var products []domain.Product
+	json.Unmarshal(raw, &products)
+	if len(products) != 1 || products[0].ID != "NEW" {
+		t.Fatalf("period=week results=%+v, want only NEW", products)
+	}
+
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteProducts+"?period=past_week", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("alias: want 200, got %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteProducts+"?period=nope", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid period: want 400, got %d", rec.Code)
 	}
 }
 

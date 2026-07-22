@@ -267,11 +267,11 @@ Response `200` JSON with non-secret operational settings. Also available at `/ap
 
 ### GET /api/v1/products
 
-Returns **one row per parent style** (not per color). Query params: `q`, `category`, `brand` (partial), `material`, `tags`, `color`, `size`, `status` (managers only), `sort` (`newest`\|`views`\|`sold`\|`wishlist`\|`price`\|`name`), `order` (`asc`\|`desc`), `limit`, `offset` — [product-rich-search.md](product-rich-search.md).
+Returns **one row per parent style** (not per color). Query params: `q`, `category`, `brand` (partial), `material`, `tags`, `color`, `size`, `status` (managers only), `sort` (`newest`\|`views`\|`sold`\|`wishlist`\|`price`\|`name`), `order` (`asc`\|`desc`), `period` (`day`\|`week`\|`month`), `limit`, `offset` — [product-rich-search.md](product-rich-search.md).
 
-Example: `GET /api/v1/products?category=bags&sort=views&order=desc`
+Example: `GET /api/v1/products?category=bags&sort=views&order=desc&period=week`
 
-Response `200` includes `total`, `limit`, `offset`, `sort`, `order`, `results`.
+Response `200` includes `total`, `limit`, `offset`, `sort`, `order`, optional `period`, `results`.
 
 ### PUT|POST /api/v1/products/{id}/wishlist
 
