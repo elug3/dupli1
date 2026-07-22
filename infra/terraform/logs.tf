@@ -36,6 +36,7 @@ data "aws_iam_policy_document" "ecs_execution_secrets" {
       var.jwt_secret_arn,
       var.telegram_secret_arn,
       aws_secretsmanager_secret.product_s3.arn,
+      aws_secretsmanager_secret.web_service.arn,
     ]
   }
 }

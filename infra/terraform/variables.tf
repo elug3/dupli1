@@ -183,3 +183,9 @@ variable "desired_count" {
   type        = number
   default     = 1
 }
+
+variable "web_service_email" {
+  description = "Email for the dupli1-web service account (customer registration)."
+  type        = string
+  default     = "dupli1-web@web.dupli1.com"
+}

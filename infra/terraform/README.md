@@ -36,6 +36,31 @@ aws ecs update-service --cluster production --service dupli1-notification --forc
 
 Chat IDs: open a DM with the bot, send any message, then `getUpdates` on the Bot API, or use a group id (often negative).
 
+## Web service account (customer registration)
+
+Secret: `dupli1/production/web-service-account` (JSON keys `DUPLI1_WEB_SERVICE_EMAIL`, `DUPLI1_WEB_SERVICE_PASSWORD`).
+
+Terraform creates this secret and injects it into:
+
+- `dupli1-auth` — seeds/syncs the machine user (`user.create`) on boot
+- `dupli1-web` — BFF logs in and calls `POST /api/v1/auth/register`
+
+Rotate the password with:
+
+```bash
+EMAIL=dupli1-web@web.dupli1.com
+PASSWORD="$(openssl rand -base64 24)"
+aws secretsmanager put-secret-value --secret-id dupli1/production/web-service-account --secret-string "$(jq -n \
+  --arg e "$EMAIL" --arg p "$PASSWORD" \
+  '{DUPLI1_WEB_SERVICE_EMAIL:$e,DUPLI1_WEB_SERVICE_PASSWORD:$p}')"
+aws ecs update-service --cluster production --service dupli1-auth --force-new-deployment
+aws ecs update-service --cluster production --service dupli1-web --force-new-deployment
+```
+
+Auth syncs the DB password from the secret on startup. Do not rely on `DUPLI1_WEB_SERVICE_TOKEN` in production (access JWTs expire in ~15 minutes).
+
+> **Note:** `dupli1-web` GitHub Actions deploy currently renders env from repo secrets. Prefer this Secrets Manager injection (Terraform task definition) so registration does not depend on short-lived tokens or empty Actions secrets. If the web deploy workflow passes an empty `environment-variables` multiline, it must omit the input entirely — a `::warning::` line breaks `amazon-ecs-render-task-definition`.
+
 ## Monthly cost (dev-sized, us-east-1, 24/7)
 
 | Service | Estimate |
