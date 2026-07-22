@@ -110,13 +110,15 @@ Phase 1 introduces `shared/pkg/permissions` (Go module `github.com/elug3/dupli1/
 
 Tiers are derived from permissions inside auth only. Other services continue to use fine-grained permissions without this hierarchy.
 
+**Account types vs tiers:** stored `account_type` values are `customer` | `manager` | `service` only. The ABAC labels `admin` / `manager` / `owner` above are **permission-derived tiers** (`ClassAdmin`, etc.), not `account_type` strings. A human operator uses `account_type: manager`; whether they are ClassAdmin vs ClassManager depends on permissions (`admin.*`, …). Legacy write `account_type: "admin"` is accepted briefly and persisted as `"manager"` — manage-web should stop mapping manager→admin on the wire.
+
 **ABAC (register):** callers with only `user.create` (and without `user.password.update`, `admin.*`, or `*`) may register **`account_type: customer`** only. Higher-privilege callers may set any valid `account_type` subject to the hierarchy above.
 
 ### Login lockout
 
 Failed password attempts increment `failed_login_attempts`. After **5** failures, the account sets `locked_at` and `POST /login` returns `403` until an operator unlocks it (or status tooling clears the lock).
 
-**Exempt:** **owner** (`*` permission) and **admin** tier (`account_type: admin` with admin-level permissions such as `admin.*`) are **never locked**. `User.Lock` / lock checks are no-ops for them, and a stale `locked_at` is cleared on the next login attempt so manage-web cannot lock out operators.
+**Exempt:** **owner** (`*` permission) and **admin** tier (`account_type: manager` with admin-level permissions such as `admin.*`) are **never locked**. `User.Lock` / lock checks are no-ops for them, and a stale `locked_at` is cleared on the next login attempt so manage-web cannot lock out operators.
 
 Manager-tier and `customer` / `service` accounts still use the normal lockout.
 

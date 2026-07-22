@@ -49,13 +49,13 @@ func TestUserClass_customerAndManager(t *testing.T) {
 		t.Fatalf("customer class = %v", UserClass(customer))
 	}
 
-	manager, _ := NewUser("m1", "m@example.com", "password12", AccountTypeAdmin,
+	manager, _ := NewUser("m1", "m@example.com", "password12", AccountTypeManager,
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
 	if UserClass(manager) != ClassManager {
 		t.Fatalf("manager class = %v", UserClass(manager))
 	}
 
-	admin, _ := NewUser("a1", "a@example.com", "password12", AccountTypeAdmin,
+	admin, _ := NewUser("a1", "a@example.com", "password12", AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
 	if UserClass(admin) != ClassAdmin {
 		t.Fatalf("admin class = %v", UserClass(admin))
@@ -67,15 +67,18 @@ func TestCanRegister_registrarOnlyCustomer(t *testing.T) {
 	if !CanRegister(registrar, AccountTypeCustomer, nil) {
 		t.Fatal("registrar should register customer")
 	}
-	if CanRegister(registrar, AccountTypeAdmin, nil) {
-		t.Fatal("registrar should not register admin account type")
+	if CanRegister(registrar, AccountTypeManager, nil) {
+		t.Fatal("registrar should not register manager account type")
+	}
+	if CanRegister(registrar, AccountTypeAdminLegacy, nil) {
+		t.Fatal("registrar should not register legacy admin (normalized to manager)")
 	}
 }
 
 func TestCanAssignPermissions_adminCannotPromoteToOwner(t *testing.T) {
-	admin, _ := NewUser("a1", "a@example.com", "password12", AccountTypeAdmin,
+	admin, _ := NewUser("a1", "a@example.com", "password12", AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
-	manager, _ := NewUser("m1", "m@example.com", "password12", AccountTypeAdmin,
+	manager, _ := NewUser("m1", "m@example.com", "password12", AccountTypeManager,
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
 
 	if !CanAssignPermissions(admin, manager, []string{permissions.UserPasswordUpdate, permissions.UserStatusUpdate}, "") {
@@ -87,9 +90,9 @@ func TestCanAssignPermissions_adminCannotPromoteToOwner(t *testing.T) {
 }
 
 func TestCanAssignPermissions_adminCannotPromoteToAdmin(t *testing.T) {
-	admin, _ := NewUser("a1", "a@example.com", "password12", AccountTypeAdmin,
+	admin, _ := NewUser("a1", "a@example.com", "password12", AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
-	manager, _ := NewUser("m1", "m@example.com", "password12", AccountTypeAdmin,
+	manager, _ := NewUser("m1", "m@example.com", "password12", AccountTypeManager,
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
 
 	adminPerms := permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})
@@ -99,7 +102,7 @@ func TestCanAssignPermissions_adminCannotPromoteToAdmin(t *testing.T) {
 }
 
 func TestCanManageUser_blocksSelf(t *testing.T) {
-	u, _ := NewUser("u1", "u@example.com", "password12", AccountTypeAdmin, permissions.All)
+	u, _ := NewUser("u1", "u@example.com", "password12", AccountTypeManager, permissions.All)
 	if CanManageUser(u, u) {
 		t.Fatal("user must not manage self")
 	}

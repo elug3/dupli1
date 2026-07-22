@@ -37,7 +37,8 @@ components:
           format: email
         account_type:
           type: string
-          enum: [customer, admin, service]
+          enum: [customer, manager, service]
+          description: Canonical account types (customer | manager | service). Legacy write value "admin" is accepted and stored as "manager".
         permissions:
           type: array
           items:
@@ -62,7 +63,8 @@ components:
             type: string
         account_type:
           type: string
-          enum: [customer, admin, service]
+          enum: [customer, manager, service]
+          description: Optional. Legacy "admin" is accepted and stored as "manager".
 
     Error:
       type: object
@@ -95,7 +97,8 @@ paths:
                   minLength: 8
                 account_type:
                   type: string
-                  enum: [customer, admin, service]
+                  enum: [customer, manager, service]
+                  description: Optional. Legacy "admin" is accepted and stored as "manager".
       responses:
         '201':
           description: User created

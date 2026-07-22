@@ -45,8 +45,8 @@ func (u *User) IsLocked() bool {
 }
 
 // IsLockExempt reports whether failed-login lockout must not apply.
-// Owners (`*` permission) and admin-tier operators (account_type admin with
-// admin-level permissions) cannot be locked out of manage-web.
+// Owners (`*` permission) and admin-tier operators (account_type manager with
+// admin-level permissions such as admin.*) cannot be locked out of manage-web.
 func (u *User) IsLockExempt() bool {
 	if u == nil {
 		return false

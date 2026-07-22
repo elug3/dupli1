@@ -29,7 +29,7 @@ func TestManagerCanManageCustomerPassword(t *testing.T) {
 	h := handler.NewHandler(svc, zerolog.Nop())
 	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
-	manager, _ := domain.NewUser(uuid.New().String(), "mgr@dupli1.com", "password", domain.AccountTypeAdmin,
+	manager, _ := domain.NewUser(uuid.New().String(), "mgr@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
 	customer, _ := domain.NewUser(uuid.New().String(), "cust@example.com", "password", domain.AccountTypeCustomer)
 	_ = repo.Save(context.Background(), manager)
@@ -56,9 +56,9 @@ func TestManagerCannotManageAdminPassword(t *testing.T) {
 	h := handler.NewHandler(svc, zerolog.Nop())
 	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
-	manager, _ := domain.NewUser(uuid.New().String(), "mgr@dupli1.com", "password", domain.AccountTypeAdmin,
+	manager, _ := domain.NewUser(uuid.New().String(), "mgr@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
-	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeAdmin,
+	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
 	_ = repo.Save(context.Background(), manager)
 	_ = repo.Save(context.Background(), admin)
@@ -84,9 +84,9 @@ func TestAdminCanManageManagerPassword(t *testing.T) {
 	h := handler.NewHandler(svc, zerolog.Nop())
 	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
-	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeAdmin,
+	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
-	manager, _ := domain.NewUser(uuid.New().String(), "mgr@dupli1.com", "password", domain.AccountTypeAdmin,
+	manager, _ := domain.NewUser(uuid.New().String(), "mgr@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
 	_ = repo.Save(context.Background(), admin)
 	_ = repo.Save(context.Background(), manager)
@@ -112,9 +112,9 @@ func TestAdminCannotManageOwnerPassword(t *testing.T) {
 	h := handler.NewHandler(svc, zerolog.Nop())
 	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
-	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeAdmin,
+	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
-	owner, _ := domain.NewUser(uuid.New().String(), "owner@dupli1.com", "password", domain.AccountTypeAdmin, permissions.All)
+	owner, _ := domain.NewUser(uuid.New().String(), "owner@dupli1.com", "password", domain.AccountTypeManager, permissions.All)
 	_ = repo.Save(context.Background(), admin)
 	_ = repo.Save(context.Background(), owner)
 
@@ -139,8 +139,8 @@ func TestOwnerCanManageAdminPassword(t *testing.T) {
 	h := handler.NewHandler(svc, zerolog.Nop())
 	r := newRouter(h, false, nil, nil, nil, settings.NewResponse("auth"))
 
-	owner, _ := domain.NewUser(uuid.New().String(), "owner@dupli1.com", "password", domain.AccountTypeAdmin, permissions.All)
-	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeAdmin,
+	owner, _ := domain.NewUser(uuid.New().String(), "owner@dupli1.com", "password", domain.AccountTypeManager, permissions.All)
+	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
 	_ = repo.Save(context.Background(), owner)
 	_ = repo.Save(context.Background(), admin)

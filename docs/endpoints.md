@@ -46,7 +46,7 @@ Each service also registers `/health` and `/settings` directly for internal/side
 
 **dupli1-web service account:** set `DUPLI1_WEB_SERVICE_EMAIL` and `DUPLI1_WEB_SERVICE_PASSWORD` on `dupli1-auth` to seed a machine user with `permissions: ["user.create"]` and `account_type` `service`. That account may register customers only (`account_type` `customer`).
 
-**Account types:** `customer`, `admin`, `service` — returned on user objects as `account_type`. Distinct from **permissions** (fine-grained authorization strings).
+**Account types:** `customer`, `manager`, `service` — returned on user objects as `account_type`. Distinct from **permissions** (fine-grained authorization strings). Legacy write value `admin` is accepted and stored as `manager`; manage-web should stop mapping manager→admin on the wire.
 
 See [permissions.md](permissions.md) for the full catalog, JWT claim shape, and auth ABAC hierarchy.
 
@@ -71,7 +71,7 @@ Request:
 }
 ```
 
-`account_type` is optional (`customer`, `admin`, or `service`); defaults to `customer`. Callers with only `user.create` may register `customer` accounts only.
+`account_type` is optional (`customer`, `manager`, or `service`); defaults to `customer`. Legacy `"admin"` is accepted and stored as `"manager"`. Callers with only `user.create` may register `customer` accounts only.
 
 Response `201`:
 ```json
@@ -167,7 +167,7 @@ Request:
 ```json
 {
   "permissions": ["user.password.update", "user.status.update"],
-  "account_type": "admin"
+  "account_type": "manager"
 }
 ```
 
