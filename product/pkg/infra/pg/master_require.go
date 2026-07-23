@@ -74,6 +74,51 @@ func (s *ProductSearchStore) requireEdition(ctx context.Context, code string) er
 	return nil
 }
 
+func (s *ProductSearchStore) requireSubcategory(ctx context.Context, code string) error {
+	code = domain.NormalizeCode(code)
+	if code == "" {
+		return nil
+	}
+	var ok bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM subcategories WHERE code = $1)`, code).Scan(&ok); err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: subcategory %s", domain.ErrMasterNotFound, code)
+	}
+	return nil
+}
+
+func (s *ProductSearchStore) requireOccasion(ctx context.Context, code string) error {
+	code = domain.NormalizeCode(code)
+	if code == "" {
+		return nil
+	}
+	var ok bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM occasions WHERE code = $1)`, code).Scan(&ok); err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: occasion %s", domain.ErrMasterNotFound, code)
+	}
+	return nil
+}
+
+func (s *ProductSearchStore) requireTarget(ctx context.Context, code string) error {
+	code = domain.NormalizeCode(code)
+	if code == "" {
+		return nil
+	}
+	var ok bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM targets WHERE code = $1)`, code).Scan(&ok); err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: target %s", domain.ErrMasterNotFound, code)
+	}
+	return nil
+}
+
 func (s *ProductSearchStore) brandName(ctx context.Context, code string) string {
 	var name string
 	_ = s.pool.QueryRow(ctx, `SELECT name FROM brands WHERE code = $1`, code).Scan(&name)

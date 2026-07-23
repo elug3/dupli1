@@ -73,6 +73,18 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	handler.Mount(mux, "POST", handler.RouteCatalogColors, http.HandlerFunc(h.CreateColor), handler.LegacyRouteCatalogColors)
 	handler.Mount(mux, "PATCH", handler.RouteCatalogColorByCode, http.HandlerFunc(h.UpdateColor), handler.LegacyRouteCatalogColorByCode)
 	handler.Mount(mux, "DELETE", handler.RouteCatalogColorByCode, http.HandlerFunc(h.DeleteColor), handler.LegacyRouteCatalogColorByCode)
+	handler.Mount(mux, "GET", handler.RouteCatalogSubcategories, http.HandlerFunc(h.ListSubcategories), handler.LegacyRouteCatalogSubcategories)
+	handler.Mount(mux, "POST", handler.RouteCatalogSubcategories, http.HandlerFunc(h.CreateSubcategory), handler.LegacyRouteCatalogSubcategories)
+	handler.Mount(mux, "PATCH", handler.RouteCatalogSubcategoryByCode, http.HandlerFunc(h.UpdateSubcategory), handler.LegacyRouteCatalogSubcategoryByCode)
+	handler.Mount(mux, "DELETE", handler.RouteCatalogSubcategoryByCode, http.HandlerFunc(h.DeleteSubcategory), handler.LegacyRouteCatalogSubcategoryByCode)
+	handler.Mount(mux, "GET", handler.RouteCatalogOccasions, http.HandlerFunc(h.ListOccasions), handler.LegacyRouteCatalogOccasions)
+	handler.Mount(mux, "POST", handler.RouteCatalogOccasions, http.HandlerFunc(h.CreateOccasion), handler.LegacyRouteCatalogOccasions)
+	handler.Mount(mux, "PATCH", handler.RouteCatalogOccasionByCode, http.HandlerFunc(h.UpdateOccasion), handler.LegacyRouteCatalogOccasionByCode)
+	handler.Mount(mux, "DELETE", handler.RouteCatalogOccasionByCode, http.HandlerFunc(h.DeleteOccasion), handler.LegacyRouteCatalogOccasionByCode)
+	handler.Mount(mux, "GET", handler.RouteCatalogTargets, http.HandlerFunc(h.ListTargets), handler.LegacyRouteCatalogTargets)
+	handler.Mount(mux, "POST", handler.RouteCatalogTargets, http.HandlerFunc(h.CreateTarget), handler.LegacyRouteCatalogTargets)
+	handler.Mount(mux, "PATCH", handler.RouteCatalogTargetByCode, http.HandlerFunc(h.UpdateTarget), handler.LegacyRouteCatalogTargetByCode)
+	handler.Mount(mux, "DELETE", handler.RouteCatalogTargetByCode, http.HandlerFunc(h.DeleteTarget), handler.LegacyRouteCatalogTargetByCode)
 	return mux, h
 }
 

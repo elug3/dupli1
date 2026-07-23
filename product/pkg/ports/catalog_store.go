@@ -33,4 +33,22 @@ type CatalogStore interface {
 	CreateEdition(e domain.Edition) (*domain.Edition, error)
 	UpdateEditionName(code, name string) (*domain.Edition, error)
 	DeleteEdition(code string) error
+
+	ListSubcategories() ([]domain.Subcategory, error)
+	GetSubcategory(code string) (*domain.Subcategory, error)
+	CreateSubcategory(s domain.Subcategory) (*domain.Subcategory, error)
+	UpdateSubcategoryName(code, name string) (*domain.Subcategory, error)
+	DeleteSubcategory(code string) error
+
+	ListOccasions() ([]domain.Occasion, error)
+	GetOccasion(code string) (*domain.Occasion, error)
+	CreateOccasion(o domain.Occasion) (*domain.Occasion, error)
+	UpdateOccasionName(code, name string) (*domain.Occasion, error)
+	DeleteOccasion(code string) error
+
+	ListTargets() ([]domain.Target, error)
+	GetTarget(code string) (*domain.Target, error)
+	CreateTarget(t domain.Target) (*domain.Target, error)
+	UpdateTargetName(code, name string) (*domain.Target, error)
+	DeleteTarget(code string) error
 }

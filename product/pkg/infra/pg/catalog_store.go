@@ -448,3 +448,252 @@ func (s *CatalogStore) DeleteEdition(code string) error {
 	}
 	return nil
 }
+
+func (s *CatalogStore) ListSubcategories() ([]domain.Subcategory, error) {
+	rows, err := s.pool.Query(context.Background(), `SELECT code, name FROM subcategories ORDER BY code`)
+	if err != nil {
+		return nil, wrapDB("list subcategories", err)
+	}
+	defer rows.Close()
+	var out []domain.Subcategory
+	for rows.Next() {
+		var item domain.Subcategory
+		if err := rows.Scan(&item.Code, &item.Name); err != nil {
+			return nil, wrapDB("list subcategories", err)
+		}
+		out = append(out, item)
+	}
+	return out, wrapDB("list subcategories", rows.Err())
+}
+
+func (s *CatalogStore) GetSubcategory(code string) (*domain.Subcategory, error) {
+	var item domain.Subcategory
+	err := s.pool.QueryRow(context.Background(),
+		`SELECT code, name FROM subcategories WHERE code = $1`, domain.NormalizeCode(code),
+	).Scan(&item.Code, &item.Name)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrMasterNotFound
+		}
+		return nil, wrapDB("get subcategory", err)
+	}
+	return &item, nil
+}
+
+func (s *CatalogStore) CreateSubcategory(item domain.Subcategory) (*domain.Subcategory, error) {
+	item.Code = domain.NormalizeCode(item.Code)
+	item.Name = strings.TrimSpace(item.Name)
+	if !domain.ValidSegmentCode(item.Code) {
+		return nil, ports.Invalid(fmt.Sprintf("invalid subcategory code %q", item.Code))
+	}
+	if item.Name == "" {
+		return nil, ports.Invalid("name is required")
+	}
+	_, err := s.pool.Exec(context.Background(),
+		`INSERT INTO subcategories (code, name) VALUES ($1, $2)`, item.Code, item.Name)
+	if isUniqueViolation(err) {
+		return nil, domain.ErrMasterExists
+	}
+	if err != nil {
+		return nil, wrapDB("create subcategory", err)
+	}
+	return &item, nil
+}
+
+func (s *CatalogStore) UpdateSubcategoryName(code, name string) (*domain.Subcategory, error) {
+	code = domain.NormalizeCode(code)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, ports.Invalid("name is required")
+	}
+	cmd, err := s.pool.Exec(context.Background(),
+		`UPDATE subcategories SET name = $2 WHERE code = $1`, code, name)
+	if err != nil {
+		return nil, wrapDB("update subcategory", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return nil, domain.ErrMasterNotFound
+	}
+	return &domain.Subcategory{Code: code, Name: name}, nil
+}
+
+func (s *CatalogStore) DeleteSubcategory(code string) error {
+	code = domain.NormalizeCode(code)
+	cmd, err := s.pool.Exec(context.Background(), `DELETE FROM subcategories WHERE code = $1`, code)
+	if isFKViolation(err) {
+		return domain.ErrMasterInUse
+	}
+	if err != nil {
+		return wrapDB("delete subcategory", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return domain.ErrMasterNotFound
+	}
+	return nil
+}
+
+func (s *CatalogStore) ListOccasions() ([]domain.Occasion, error) {
+	rows, err := s.pool.Query(context.Background(), `SELECT code, name FROM occasions ORDER BY code`)
+	if err != nil {
+		return nil, wrapDB("list occasions", err)
+	}
+	defer rows.Close()
+	var out []domain.Occasion
+	for rows.Next() {
+		var item domain.Occasion
+		if err := rows.Scan(&item.Code, &item.Name); err != nil {
+			return nil, wrapDB("list occasions", err)
+		}
+		out = append(out, item)
+	}
+	return out, wrapDB("list occasions", rows.Err())
+}
+
+func (s *CatalogStore) GetOccasion(code string) (*domain.Occasion, error) {
+	var item domain.Occasion
+	err := s.pool.QueryRow(context.Background(),
+		`SELECT code, name FROM occasions WHERE code = $1`, domain.NormalizeCode(code),
+	).Scan(&item.Code, &item.Name)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrMasterNotFound
+		}
+		return nil, wrapDB("get occasion", err)
+	}
+	return &item, nil
+}
+
+func (s *CatalogStore) CreateOccasion(item domain.Occasion) (*domain.Occasion, error) {
+	item.Code = domain.NormalizeCode(item.Code)
+	item.Name = strings.TrimSpace(item.Name)
+	if !domain.ValidSegmentCode(item.Code) {
+		return nil, ports.Invalid(fmt.Sprintf("invalid occasion code %q", item.Code))
+	}
+	if item.Name == "" {
+		return nil, ports.Invalid("name is required")
+	}
+	_, err := s.pool.Exec(context.Background(),
+		`INSERT INTO occasions (code, name) VALUES ($1, $2)`, item.Code, item.Name)
+	if isUniqueViolation(err) {
+		return nil, domain.ErrMasterExists
+	}
+	if err != nil {
+		return nil, wrapDB("create occasion", err)
+	}
+	return &item, nil
+}
+
+func (s *CatalogStore) UpdateOccasionName(code, name string) (*domain.Occasion, error) {
+	code = domain.NormalizeCode(code)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, ports.Invalid("name is required")
+	}
+	cmd, err := s.pool.Exec(context.Background(),
+		`UPDATE occasions SET name = $2 WHERE code = $1`, code, name)
+	if err != nil {
+		return nil, wrapDB("update occasion", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return nil, domain.ErrMasterNotFound
+	}
+	return &domain.Occasion{Code: code, Name: name}, nil
+}
+
+func (s *CatalogStore) DeleteOccasion(code string) error {
+	code = domain.NormalizeCode(code)
+	cmd, err := s.pool.Exec(context.Background(), `DELETE FROM occasions WHERE code = $1`, code)
+	if isFKViolation(err) {
+		return domain.ErrMasterInUse
+	}
+	if err != nil {
+		return wrapDB("delete occasion", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return domain.ErrMasterNotFound
+	}
+	return nil
+}
+
+func (s *CatalogStore) ListTargets() ([]domain.Target, error) {
+	rows, err := s.pool.Query(context.Background(), `SELECT code, name FROM targets ORDER BY code`)
+	if err != nil {
+		return nil, wrapDB("list targets", err)
+	}
+	defer rows.Close()
+	var out []domain.Target
+	for rows.Next() {
+		var item domain.Target
+		if err := rows.Scan(&item.Code, &item.Name); err != nil {
+			return nil, wrapDB("list targets", err)
+		}
+		out = append(out, item)
+	}
+	return out, wrapDB("list targets", rows.Err())
+}
+
+func (s *CatalogStore) GetTarget(code string) (*domain.Target, error) {
+	var item domain.Target
+	err := s.pool.QueryRow(context.Background(),
+		`SELECT code, name FROM targets WHERE code = $1`, domain.NormalizeCode(code),
+	).Scan(&item.Code, &item.Name)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrMasterNotFound
+		}
+		return nil, wrapDB("get target", err)
+	}
+	return &item, nil
+}
+
+func (s *CatalogStore) CreateTarget(item domain.Target) (*domain.Target, error) {
+	item.Code = domain.NormalizeCode(item.Code)
+	item.Name = strings.TrimSpace(item.Name)
+	if !domain.ValidSegmentCode(item.Code) {
+		return nil, ports.Invalid(fmt.Sprintf("invalid target code %q", item.Code))
+	}
+	if item.Name == "" {
+		return nil, ports.Invalid("name is required")
+	}
+	_, err := s.pool.Exec(context.Background(),
+		`INSERT INTO targets (code, name) VALUES ($1, $2)`, item.Code, item.Name)
+	if isUniqueViolation(err) {
+		return nil, domain.ErrMasterExists
+	}
+	if err != nil {
+		return nil, wrapDB("create target", err)
+	}
+	return &item, nil
+}
+
+func (s *CatalogStore) UpdateTargetName(code, name string) (*domain.Target, error) {
+	code = domain.NormalizeCode(code)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, ports.Invalid("name is required")
+	}
+	cmd, err := s.pool.Exec(context.Background(),
+		`UPDATE targets SET name = $2 WHERE code = $1`, code, name)
+	if err != nil {
+		return nil, wrapDB("update target", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return nil, domain.ErrMasterNotFound
+	}
+	return &domain.Target{Code: code, Name: name}, nil
+}
+
+func (s *CatalogStore) DeleteTarget(code string) error {
+	code = domain.NormalizeCode(code)
+	cmd, err := s.pool.Exec(context.Background(), `DELETE FROM targets WHERE code = $1`, code)
+	if isFKViolation(err) {
+		return domain.ErrMasterInUse
+	}
+	if err != nil {
+		return wrapDB("delete target", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return domain.ErrMasterNotFound
+	}
+	return nil
+}

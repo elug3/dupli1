@@ -59,6 +59,12 @@ const (
 	RouteCatalogSizeByCode    = "/api/v1/products/catalog/sizes/{code}"
 	RouteCatalogEditions      = "/api/v1/products/catalog/editions"
 	RouteCatalogEditionByCode = "/api/v1/products/catalog/editions/{code}"
+	RouteCatalogSubcategories      = "/api/v1/products/catalog/subcategories"
+	RouteCatalogSubcategoryByCode  = "/api/v1/products/catalog/subcategories/{code}"
+	RouteCatalogOccasions          = "/api/v1/products/catalog/occasions"
+	RouteCatalogOccasionByCode     = "/api/v1/products/catalog/occasions/{code}"
+	RouteCatalogTargets            = "/api/v1/products/catalog/targets"
+	RouteCatalogTargetByCode       = "/api/v1/products/catalog/targets/{code}"
 
 	// Legacy aliases — same handlers; remove after clients migrate.
 	LegacyRoutePublicVariant               = "/api/v1/variants/{sku}"
@@ -85,6 +91,12 @@ const (
 	LegacyRouteCatalogSizeByCode           = "/api/v1/catalog/sizes/{code}"
 	LegacyRouteCatalogEditions             = "/api/v1/catalog/editions"
 	LegacyRouteCatalogEditionByCode        = "/api/v1/catalog/editions/{code}"
+	LegacyRouteCatalogSubcategories        = "/api/v1/catalog/subcategories"
+	LegacyRouteCatalogSubcategoryByCode    = "/api/v1/catalog/subcategories/{code}"
+	LegacyRouteCatalogOccasions            = "/api/v1/catalog/occasions"
+	LegacyRouteCatalogOccasionByCode       = "/api/v1/catalog/occasions/{code}"
+	LegacyRouteCatalogTargets              = "/api/v1/catalog/targets"
+	LegacyRouteCatalogTargetByCode         = "/api/v1/catalog/targets/{code}"
 )
 
 // Mount registers method+path and optional legacy aliases onto the same handler.
