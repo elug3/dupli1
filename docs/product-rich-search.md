@@ -11,7 +11,7 @@
 | `sort` | `newest`, `views`, `sold`, `wishlist`, `price`, `name` | `newest` | Aliases: `popular`→`views` |
 | `order` | `asc`, `desc` | `desc` (`asc` for `name`) | Invalid → `400` |
 | `period` | `day`, `week`, `month` | — | Created within that window (`7d`/`past_week`→`week`) |
-| Existing filters | `category`, `brand`, `color`, `size`, `material`, `tags`, `status` | — | Unchanged |
+| Existing filters | `category`, `subcategory` (`subCategory`), `style`, `target`, `brand`, `color`, `size`, `material`, `tags`, `status` | — | Bag taxonomy: [product-master-catalog.md](product-master-catalog.md) |
 | Pagination | `limit`, `offset` | `50` / `0` | Max limit `100` |
 
 Response echoes effective `sort`, `order`, and `period` (when set) alongside `total` / `limit` / `offset` / `results`.

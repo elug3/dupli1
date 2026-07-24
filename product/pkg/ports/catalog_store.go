@@ -33,4 +33,9 @@ type CatalogStore interface {
 	CreateEdition(e domain.Edition) (*domain.Edition, error)
 	UpdateEditionName(code, name string) (*domain.Edition, error)
 	DeleteEdition(code string) error
+
+	// Bag merchandising taxonomy (storefront filters).
+	ListSubCategories() ([]domain.CatalogTerm, error)
+	ListBagStyles() ([]domain.CatalogTerm, error)
+	ListTargets() ([]domain.CatalogTerm, error)
 }

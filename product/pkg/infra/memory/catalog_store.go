@@ -11,11 +11,14 @@ import (
 
 // CatalogStore is an in-memory ports.CatalogStore for tests.
 type CatalogStore struct {
-	Brands   map[string]domain.Brand
-	Styles   map[string]domain.Style // key: brandCode+"|"+code
-	Colors   map[string]domain.Color
-	Sizes    map[string]domain.Size
-	Editions map[string]domain.Edition
+	Brands         map[string]domain.Brand
+	Styles         map[string]domain.Style // key: brandCode+"|"+code
+	Colors         map[string]domain.Color
+	Sizes          map[string]domain.Size
+	Editions       map[string]domain.Edition
+	SubCategories  map[string]domain.CatalogTerm
+	BagStyles      map[string]domain.CatalogTerm
+	Targets        map[string]domain.CatalogTerm
 
 	// Optional back-refs for delete-in-use checks (set by tests or product store).
 	ProductBrandStyles  map[string]string // productID -> brandCode+"|"+styleCode
@@ -31,6 +34,9 @@ func NewCatalogStore() *CatalogStore {
 		Colors:              map[string]domain.Color{},
 		Sizes:               map[string]domain.Size{},
 		Editions:            map[string]domain.Edition{},
+		SubCategories:       map[string]domain.CatalogTerm{},
+		BagStyles:           map[string]domain.CatalogTerm{},
+		Targets:             map[string]domain.CatalogTerm{},
 		ProductBrandStyles:  map[string]string{},
 		VariantColorCodes:   map[string]string{},
 		VariantSizeCodes:    map[string]string{},
@@ -47,6 +53,15 @@ func NewCatalogStore() *CatalogStore {
 	}
 	for _, e := range domain.SeedEditions {
 		s.Editions[e.Code] = e
+	}
+	for _, t := range domain.SeedSubCategories {
+		s.SubCategories[t.Code] = t
+	}
+	for _, t := range domain.SeedBagStyles {
+		s.BagStyles[t.Code] = t
+	}
+	for _, t := range domain.SeedTargets {
+		s.Targets[t.Code] = t
 	}
 	return s
 }
@@ -379,4 +394,35 @@ func (s *CatalogStore) DeleteEdition(code string) error {
 	}
 	delete(s.Editions, code)
 	return nil
+}
+
+func listTerms(m map[string]domain.CatalogTerm, seedOrder []domain.CatalogTerm) []domain.CatalogTerm {
+	out := make([]domain.CatalogTerm, 0, len(m))
+	seen := make(map[string]struct{}, len(m))
+	for _, t := range seedOrder {
+		if cur, ok := m[t.Code]; ok {
+			out = append(out, cur)
+			seen[t.Code] = struct{}{}
+		}
+	}
+	rest := make([]domain.CatalogTerm, 0)
+	for code, t := range m {
+		if _, ok := seen[code]; !ok {
+			rest = append(rest, t)
+		}
+	}
+	sort.Slice(rest, func(i, j int) bool { return rest[i].Code < rest[j].Code })
+	return append(out, rest...)
+}
+
+func (s *CatalogStore) ListSubCategories() ([]domain.CatalogTerm, error) {
+	return listTerms(s.SubCategories, domain.SeedSubCategories), nil
+}
+
+func (s *CatalogStore) ListBagStyles() ([]domain.CatalogTerm, error) {
+	return listTerms(s.BagStyles, domain.SeedBagStyles), nil
+}
+
+func (s *CatalogStore) ListTargets() ([]domain.CatalogTerm, error) {
+	return listTerms(s.Targets, domain.SeedTargets), nil
 }

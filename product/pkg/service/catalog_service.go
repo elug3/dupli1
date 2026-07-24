@@ -98,3 +98,45 @@ func (s *CatalogService) UpdateEditionName(code, name string) (*domain.Edition, 
 func (s *CatalogService) DeleteEdition(code string) error {
 	return s.store.DeleteEdition(code)
 }
+
+func (s *CatalogService) ListSubCategories() ([]domain.CatalogTerm, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("catalog store not initialized")
+	}
+	return s.store.ListSubCategories()
+}
+
+func (s *CatalogService) ListBagStyles() ([]domain.CatalogTerm, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("catalog store not initialized")
+	}
+	return s.store.ListBagStyles()
+}
+
+func (s *CatalogService) ListTargets() ([]domain.CatalogTerm, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("catalog store not initialized")
+	}
+	return s.store.ListTargets()
+}
+
+// MasterCatalog returns the bag merchandising taxonomy (subcategories, styles, targets).
+func (s *CatalogService) MasterCatalog() (*domain.MasterCatalog, error) {
+	subs, err := s.ListSubCategories()
+	if err != nil {
+		return nil, err
+	}
+	styles, err := s.ListBagStyles()
+	if err != nil {
+		return nil, err
+	}
+	targets, err := s.ListTargets()
+	if err != nil {
+		return nil, err
+	}
+	return &domain.MasterCatalog{
+		SubCategories: subs,
+		Styles:        styles,
+		Targets:       targets,
+	}, nil
+}

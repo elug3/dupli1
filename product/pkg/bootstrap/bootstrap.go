@@ -132,6 +132,12 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	handler.Mount(mux, "PATCH", handler.RouteCatalogEditionByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.UpdateEdition)), handler.LegacyRouteCatalogEditionByCode)
 	handler.Mount(mux, "DELETE", handler.RouteCatalogEditionByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.DeleteEdition)), handler.LegacyRouteCatalogEditionByCode)
 
+	// Bag merchandising taxonomy — public reads for storefront filter UIs.
+	handler.Mount(mux, "GET", handler.RouteCatalogMaster, http.HandlerFunc(h.GetMasterCatalog), handler.LegacyRouteCatalogMaster)
+	handler.Mount(mux, "GET", handler.RouteCatalogSubCategories, http.HandlerFunc(h.ListSubCategories), handler.LegacyRouteCatalogSubCategories)
+	handler.Mount(mux, "GET", handler.RouteCatalogBagStyles, http.HandlerFunc(h.ListBagStyles), handler.LegacyRouteCatalogBagStyles)
+	handler.Mount(mux, "GET", handler.RouteCatalogTargets, http.HandlerFunc(h.ListTargets), handler.LegacyRouteCatalogTargets)
+
 	handler.Mount(mux, "GET", handler.RouteCoupons, requirePerm(permissions.CouponRead, http.HandlerFunc(h.ListCoupons)), handler.LegacyRouteCoupons)
 	handler.Mount(mux, "POST", handler.RouteCoupons, requirePerm(permissions.CouponCreate, http.HandlerFunc(h.CreateCoupon)), handler.LegacyRouteCoupons)
 	handler.Mount(mux, "PUT", handler.RouteCouponByCode, requirePerm(permissions.CouponUpdate, http.HandlerFunc(h.UpdateCoupon)), handler.LegacyRouteCouponByCode)

@@ -448,3 +448,33 @@ func (s *CatalogStore) DeleteEdition(code string) error {
 	}
 	return nil
 }
+
+func (s *CatalogStore) listCatalogTerms(table string) ([]domain.CatalogTerm, error) {
+	rows, err := s.pool.Query(context.Background(),
+		fmt.Sprintf(`SELECT code, name FROM %s ORDER BY sort_order ASC, code ASC`, table))
+	if err != nil {
+		return nil, wrapDB("list "+table, err)
+	}
+	defer rows.Close()
+	var out []domain.CatalogTerm
+	for rows.Next() {
+		var t domain.CatalogTerm
+		if err := rows.Scan(&t.Code, &t.Name); err != nil {
+			return nil, wrapDB("list "+table, err)
+		}
+		out = append(out, t)
+	}
+	return out, wrapDB("list "+table, rows.Err())
+}
+
+func (s *CatalogStore) ListSubCategories() ([]domain.CatalogTerm, error) {
+	return s.listCatalogTerms("bag_subcategories")
+}
+
+func (s *CatalogStore) ListBagStyles() ([]domain.CatalogTerm, error) {
+	return s.listCatalogTerms("bag_styles")
+}
+
+func (s *CatalogStore) ListTargets() ([]domain.CatalogTerm, error) {
+	return s.listCatalogTerms("bag_targets")
+}

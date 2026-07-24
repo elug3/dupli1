@@ -238,6 +238,9 @@ func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product,
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
+	if err := domain.NormalizeProductTaxonomy(&p); err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
 	created, err := s.store.CreateProduct(p)
 	if err != nil {
 		return nil, err
@@ -251,6 +254,9 @@ func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product,
 func (s *ProductSearchService) UpdateProduct(p domain.Product) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
+	}
+	if err := domain.NormalizeProductTaxonomy(&p); err != nil {
+		return nil, ports.Invalid(err.Error())
 	}
 	updated, err := s.store.UpdateProduct(p)
 	if err != nil {
