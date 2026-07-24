@@ -60,6 +60,12 @@ const (
 	RouteCatalogEditions      = "/api/v1/products/catalog/editions"
 	RouteCatalogEditionByCode = "/api/v1/products/catalog/editions/{code}"
 
+	// Bag merchandising taxonomy (storefront filters; not SKU segment masters).
+	RouteCatalogMaster        = "/api/v1/products/catalog/master"
+	RouteCatalogSubCategories = "/api/v1/products/catalog/subcategories"
+	RouteCatalogBagStyles     = "/api/v1/products/catalog/bag-styles"
+	RouteCatalogTargets       = "/api/v1/products/catalog/targets"
+
 	// Legacy aliases — same handlers; remove after clients migrate.
 	LegacyRoutePublicVariant               = "/api/v1/variants/{sku}"
 	LegacyRoutePublicVariantBySkuID        = "/api/v1/variants/by-sku-id/{skuId}"
@@ -85,6 +91,10 @@ const (
 	LegacyRouteCatalogSizeByCode           = "/api/v1/catalog/sizes/{code}"
 	LegacyRouteCatalogEditions             = "/api/v1/catalog/editions"
 	LegacyRouteCatalogEditionByCode        = "/api/v1/catalog/editions/{code}"
+	LegacyRouteCatalogMaster               = "/api/v1/catalog/master"
+	LegacyRouteCatalogSubCategories        = "/api/v1/catalog/subcategories"
+	LegacyRouteCatalogBagStyles            = "/api/v1/catalog/bag-styles"
+	LegacyRouteCatalogTargets              = "/api/v1/catalog/targets"
 )
 
 // Mount registers method+path and optional legacy aliases onto the same handler.

@@ -161,6 +161,24 @@ paths:
           in: query
           schema:
             type: string
+        - name: subcategory
+          in: query
+          schema:
+            type: string
+            enum: [handbags, tote, shoulder, cross, mini]
+          description: Bag subcategory (alias subCategory)
+        - name: style
+          in: query
+          schema:
+            type: string
+            enum: [casual, evening, business, weekend, statement]
+          description: Bag occasion/look style (not SKU styleCode)
+        - name: target
+          in: query
+          schema:
+            type: string
+            enum: [men, women, kids]
+          description: Audience target
         - name: status
           in: query
           schema:
@@ -178,6 +196,14 @@ paths:
       responses:
         '201':
           description: Created
+
+  /api/v1/products/catalog/master:
+    get:
+      summary: Bag merchandising master catalog
+      tags: [Product]
+      responses:
+        '200':
+          description: subCategories, styles, and targets dictionaries
 
   /api/v1/orders/{id}/ship:
     post:

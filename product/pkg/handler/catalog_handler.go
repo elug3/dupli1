@@ -254,3 +254,41 @@ func (h *Handler) DeleteEdition(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// --- Bag merchandising taxonomy ---
+
+func (h *Handler) GetMasterCatalog(w http.ResponseWriter, r *http.Request) {
+	catalog, err := h.catalogSvc.MasterCatalog()
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	h.respondJSON(w, http.StatusOK, catalog)
+}
+
+func (h *Handler) ListSubCategories(w http.ResponseWriter, r *http.Request) {
+	list, err := h.catalogSvc.ListSubCategories()
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	h.respondJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) ListBagStyles(w http.ResponseWriter, r *http.Request) {
+	list, err := h.catalogSvc.ListBagStyles()
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	h.respondJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
+	list, err := h.catalogSvc.ListTargets()
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	h.respondJSON(w, http.StatusOK, list)
+}

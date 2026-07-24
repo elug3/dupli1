@@ -364,6 +364,9 @@ Search **parent styles** (one row per style; colors are not duplicated). No auth
 |----------------|-----------|
 | `q` | case-insensitive substring on name, brand, or description |
 | `category` | exact (e.g. `bags`) |
+| `subcategory` | exact bag type (`handbags`, `tote`, `shoulder`, `cross`, `mini`; alias `subCategory`) |
+| `style` | exact bag occasion (`casual`, `evening`, `business`, `weekend`, `statement`) — not SKU `styleCode` |
+| `target` | exact audience (`men`, `women`, `kids`) |
 | `brand` | case-insensitive substring |
 | `color` | parent has an active variant with this color |
 | `size` | parent has an active variant with this size |
@@ -376,9 +379,9 @@ Search **parent styles** (one row per style; colors are not duplicated). No auth
 | `limit` | page size (default `50`, max `100`) |
 | `offset` | rows to skip (default `0`) |
 
-Example: `GET /api/v1/products?category=bags&sort=views&order=desc&period=week&limit=20`
+Example: `GET /api/v1/products?category=bags&subcategory=tote&style=casual&target=women&sort=views&order=desc&limit=20`
 
-See [product-rich-search.md](product-rich-search.md).
+See [product-rich-search.md](product-rich-search.md) and [product-master-catalog.md](product-master-catalog.md).
 
 **Response `200`**
 ```json

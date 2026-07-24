@@ -129,6 +129,9 @@ func (s *ProductSearchStore) migrate() error {
 	if err := s.migrateSKUMasters(ctx); err != nil {
 		return err
 	}
+	if err := s.migrateProductTaxonomy(ctx); err != nil {
+		return err
+	}
 	if err := s.migrateProductViews(ctx); err != nil {
 		return err
 	}
@@ -371,7 +374,7 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, status, capacity, tags, view_count, sold_count, wishlist_count, created_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, status, capacity, tags, view_count, sold_count, wishlist_count, created_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -379,10 +382,12 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	var tags pgtype.TextArray
 	var capacity string
 	var brandCode, styleCode *string
+	var subCategory, bagStyle, target string
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
-		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category, &p.Status,
-		&capacity, &tags, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &p.CreatedBy,
+		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category,
+		&subCategory, &bagStyle, &target,
+		&p.Status, &capacity, &tags, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err
@@ -393,6 +398,9 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	if styleCode != nil {
 		p.StyleCode = *styleCode
 	}
+	p.SubCategory = subCategory
+	p.Style = bagStyle
+	p.Target = target
 	p.Capacity = capacity
 	p.Tags = scanTextArray(tags)
 	p.CreatedAt = createdAt.Format(time.RFC3339)
@@ -533,6 +541,18 @@ func buildProductSearchWhere(filter map[string]string) (string, []interface{}) {
 			query += fmt.Sprintf(" AND p.category = $%d", idx)
 			args = append(args, value)
 			idx++
+		case "subcategory":
+			query += fmt.Sprintf(" AND p.sub_category = $%d", idx)
+			args = append(args, value)
+			idx++
+		case "style":
+			query += fmt.Sprintf(" AND p.bag_style = $%d", idx)
+			args = append(args, value)
+			idx++
+		case "target":
+			query += fmt.Sprintf(" AND p.target = $%d", idx)
+			args = append(args, value)
+			idx++
 		case "brand":
 			query += fmt.Sprintf(" AND p.brand ILIKE $%d", idx)
 			args = append(args, "%"+value+"%")
@@ -670,11 +690,12 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO products (id, name, description, price, brand, brand_code, style_code, color, material, stock, category, status, image_urls, capacity, tags, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		`INSERT INTO products (id, name, description, price, brand, brand_code, style_code, color, material, stock, category, sub_category, bag_style, target, status, image_urls, capacity, tags, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description, p.Price,
-		p.Brand, nullEmpty(p.BrandCode), nullEmpty(p.StyleCode), p.Color, p.Material, p.Stock, p.Category, p.Status,
+		p.Brand, nullEmpty(p.BrandCode), nullEmpty(p.StyleCode), p.Color, p.Material, p.Stock, p.Category,
+		p.SubCategory, p.Style, p.Target, p.Status,
 		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), p.CreatedBy,
 	).Scan(&createdAt)
 	if err != nil {
@@ -714,11 +735,13 @@ func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, e
 	var createdAt time.Time
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE products
-		 SET name=$2, description=$3, brand=$4, material=$5, category=$6, status=$7, capacity=$8, tags=$9
+		 SET name=$2, description=$3, brand=$4, material=$5, category=$6,
+		     sub_category=$7, bag_style=$8, target=$9, status=$10, capacity=$11, tags=$12
 		 WHERE id=$1
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description,
-		p.Brand, p.Material, p.Category, p.Status,
+		p.Brand, p.Material, p.Category,
+		p.SubCategory, p.Style, p.Target, p.Status,
 		p.Capacity, toTextArray(p.Tags),
 	).Scan(&createdAt)
 	if err != nil {

@@ -58,7 +58,10 @@ type HealthResponse struct {
 	Status string `json:"status"`
 }
 
-var searchFilters = []string{"category", "brand", "color", "size", "material", "status", "q"}
+var searchFilters = []string{
+	"category", "subcategory", "subCategory", "style", "target",
+	"brand", "color", "size", "material", "status", "q",
+}
 
 func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
 	return &Handler{
@@ -669,6 +672,32 @@ func (h *Handler) extractFilters(r *http.Request) map[string]string {
 	for _, f := range searchFilters {
 		if value := r.URL.Query().Get(f); value != "" {
 			filter[f] = value
+		}
+	}
+	// Normalize camelCase alias onto the canonical filter key.
+	if v := filter["subCategory"]; v != "" {
+		filter["subcategory"] = v
+		delete(filter, "subCategory")
+	}
+	if v := filter["subcategory"]; v != "" {
+		if n, ok := domain.NormalizeSubCategory(v); ok {
+			filter["subcategory"] = n
+		} else {
+			filter["subcategory"] = domain.NormalizeTaxonomyCode(v)
+		}
+	}
+	if v := filter["style"]; v != "" {
+		if n, ok := domain.NormalizeBagStyle(v); ok {
+			filter["style"] = n
+		} else {
+			filter["style"] = domain.NormalizeTaxonomyCode(v)
+		}
+	}
+	if v := filter["target"]; v != "" {
+		if n, ok := domain.NormalizeTarget(v); ok {
+			filter["target"] = n
+		} else {
+			filter["target"] = domain.NormalizeTaxonomyCode(v)
 		}
 	}
 	if tags := collectTags(r); tags != "" {

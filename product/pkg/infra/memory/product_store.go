@@ -88,6 +88,15 @@ func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Produc
 		if category := filter["category"]; category != "" && p.Category != category {
 			continue
 		}
+		if subcategory := filter["subcategory"]; subcategory != "" && p.SubCategory != subcategory {
+			continue
+		}
+		if style := filter["style"]; style != "" && p.Style != style {
+			continue
+		}
+		if target := filter["target"]; target != "" && p.Target != target {
+			continue
+		}
 		if status := filter["status"]; status != "" && p.Status != status {
 			continue
 		}

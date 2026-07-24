@@ -41,9 +41,16 @@ type Product struct {
 	StyleCode   string   `json:"styleCode,omitempty"`
 	Material    string   `json:"material"`
 	Category    string   `json:"category"`
-	Status      string   `json:"status"` // "active" | "draft" | "archived"
-	Capacity    string   `json:"capacity,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
+	// SubCategory is a bag type under category (handbags, tote, shoulder, cross, mini).
+	SubCategory string `json:"subCategory,omitempty"`
+	// Style is bag occasion / look (casual, evening, business, weekend, statement).
+	// Distinct from StyleCode (SKU design-family master).
+	Style string `json:"style,omitempty"`
+	// Target is audience (men, women, kids).
+	Target   string   `json:"target,omitempty"`
+	Status   string   `json:"status"` // "active" | "draft" | "archived"
+	Capacity string   `json:"capacity,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
 	// ViewCount is unique guest PDP views (denormalized). Public on PDP and recs.
 	ViewCount int64 `json:"viewCount"`
 	// SoldCount is units committed from inventory reservations (denormalized).

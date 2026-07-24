@@ -243,16 +243,22 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | `POST` | `/api/v1/products/catalog/editions` | `product.master.write` | Create edition |
 | `PATCH` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` | Rename edition |
 | `DELETE` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` | Delete edition (409 if in use) |
+| `GET` | `/api/v1/products/catalog/master` | public | Bag merchandising taxonomy (`subCategories`, `styles`, `targets`) |
+| `GET` | `/api/v1/products/catalog/subcategories` | public | List bag subcategories |
+| `GET` | `/api/v1/products/catalog/bag-styles` | public | List bag styles (occasion) |
+| `GET` | `/api/v1/products/catalog/targets` | public | List targets (men/women/kids) |
 | `GET` | `/api/v1/products/coupons` | `coupon.read` | List coupons (legacy: `/api/v1/coupons`) |
 | `POST` | `/api/v1/products/coupons` | `coupon.create` | Create coupon |
 | `PUT` | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` | Update coupon (legacy: `/api/v1/coupons/{code}`) |
 | `DELETE` | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` | Delete coupon |
 
-Public search defaults to `status = active` on the **parent**. Query filters: `category`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** (human `sku` or canonical `skuId`) with inventory. Identity + masters: [product-sku-system.md](product-sku-system.md). See also [product-variants-plan.md](product-variants-plan.md).
+Public search defaults to `status = active` on the **parent**. Query filters: `category`, `subcategory`, `style`, `target`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** (human `sku` or canonical `skuId`) with inventory. Identity + masters: [product-sku-system.md](product-sku-system.md). Bag taxonomy: [product-master-catalog.md](product-master-catalog.md). See also [product-variants-plan.md](product-variants-plan.md).
 
 ### Catalog master data
 
 Code → name dictionaries for SKU segments. See [product-sku-system.md](product-sku-system.md). Permissions: `product.master.read` / `product.master.write`.
+
+Bag merchandising taxonomy (subcategory / style / target) is separate and publicly readable — [product-master-catalog.md](product-master-catalog.md).
 
 ### GET /api/v1/products/health
 
@@ -267,7 +273,7 @@ Response `200` JSON with non-secret operational settings. Also available at `/ap
 
 ### GET /api/v1/products
 
-Returns **one row per parent style** (not per color). Query params: `q`, `category`, `brand` (partial), `material`, `tags`, `color`, `size`, `status` (managers only), `sort` (`newest`\|`views`\|`sold`\|`wishlist`\|`price`\|`name`), `order` (`asc`\|`desc`), `period` (`day`\|`week`\|`month`), `limit`, `offset` — [product-rich-search.md](product-rich-search.md).
+Returns **one row per parent style** (not per color). Query params: `q`, `category`, `subcategory`, `style`, `target`, `brand` (partial), `material`, `tags`, `color`, `size`, `status` (managers only), `sort` (`newest`\|`views`\|`sold`\|`wishlist`\|`price`\|`name`), `order` (`asc`\|`desc`), `period` (`day`\|`week`\|`month`), `limit`, `offset` — [product-rich-search.md](product-rich-search.md), [product-master-catalog.md](product-master-catalog.md).
 
 Example: `GET /api/v1/products?category=bags&sort=views&order=desc&period=week`
 
