@@ -34,6 +34,26 @@ type Edition struct {
 	Name string `json:"name"`
 }
 
+// Subcategory is a bag type master (handbags, tote, shoulder, …).
+// Distinct from free-text Product.Category (usually "bags").
+type Subcategory struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// Occasion is a product look/style master (casual, evening, business, …).
+// Distinct from Style (brand-scoped SKU design family / styleCode segment).
+type Occasion struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// Target is an audience master (men, women, kids).
+type Target struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
 // Well-known brand seeds (code → display name).
 var SeedBrands = []Brand{
 	{Code: "PR", Name: "Prada"},
@@ -93,6 +113,31 @@ var SeedEditions = []Edition{
 	{Code: "V", Name: "Standard"},
 	{Code: "A", Name: "Alternate construction"},
 	{Code: "R", Name: "Limited / special edition"},
+}
+
+// Well-known bag subcategory seeds.
+var SeedSubcategories = []Subcategory{
+	{Code: "HBG", Name: "Handbags"},
+	{Code: "TOT", Name: "Tote"},
+	{Code: "SHD", Name: "Shoulder"},
+	{Code: "CRS", Name: "Cross"},
+	{Code: "MNI", Name: "Mini"},
+}
+
+// Well-known occasion / look-style seeds (product style, not SKU styleCode).
+var SeedOccasions = []Occasion{
+	{Code: "CAS", Name: "Casual"},
+	{Code: "EVE", Name: "Evening"},
+	{Code: "BUS", Name: "Business"},
+	{Code: "WKD", Name: "Weekend"},
+	{Code: "STM", Name: "Statement"},
+}
+
+// Well-known target audience seeds.
+var SeedTargets = []Target{
+	{Code: "MEN", Name: "Men"},
+	{Code: "WMN", Name: "Women"},
+	{Code: "KID", Name: "Kids"},
 }
 
 // BrandCodeFromName resolves a display brand name to a seeded code when possible.

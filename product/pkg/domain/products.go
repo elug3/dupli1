@@ -39,9 +39,15 @@ type Product struct {
 	Brand       string   `json:"brand"`
 	BrandCode   string   `json:"brandCode,omitempty"`
 	StyleCode   string   `json:"styleCode,omitempty"`
-	Material    string   `json:"material"`
-	Category    string   `json:"category"`
-	Status      string   `json:"status"` // "active" | "draft" | "archived"
+	// SubcategoryCode is a bag-type master code (see /catalog/subcategories).
+	SubcategoryCode string `json:"subcategoryCode,omitempty"`
+	// OccasionCode is a look/style master code (see /catalog/occasions); not SKU styleCode.
+	OccasionCode string `json:"occasionCode,omitempty"`
+	// TargetCode is an audience master code (see /catalog/targets).
+	TargetCode string   `json:"targetCode,omitempty"`
+	Material   string   `json:"material"`
+	Category   string   `json:"category"`
+	Status     string   `json:"status"` // "active" | "draft" | "archived"
 	Capacity    string   `json:"capacity,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	// ViewCount is unique guest PDP views (denormalized). Public on PDP and recs.
