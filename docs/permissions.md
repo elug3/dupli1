@@ -132,8 +132,8 @@ Manager-tier and `customer` / `service` accounts still use the normal lockout.
 | `product.variant.update` | Update variant |
 | `product.variant.delete` | Delete variant |
 | `product.image.upload` | Upload image on parent default variant or specific variant |
-| `product.master.read` | List master dictionaries (brands, styles, colors, sizes, editions, subcategories, occasions, targets) |
-| `product.master.write` | Create / rename / delete master dictionary rows |
+| `product.master.read` | List SKU master dictionaries (brands, styles, colors, sizes, editions) |
+| `product.master.write` | Create / rename / delete SKU master dictionary rows |
 
 Public `GET /api/v1/products` and `GET /api/v1/products/{id}` stay **unauthenticated**. `product.read` only widens manager view when a valid token is present (same as today's `product_manager` optional-auth behaviour).
 
@@ -243,18 +243,6 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `POST` | `/api/v1/catalog/editions` | `product.master.write` |
 | `PATCH` | `/api/v1/catalog/editions/{code}` | `product.master.write` |
 | `DELETE` | `/api/v1/catalog/editions/{code}` | `product.master.write` |
-| `GET` | `/api/v1/catalog/subcategories` | `product.master.read` |
-| `POST` | `/api/v1/catalog/subcategories` | `product.master.write` |
-| `PATCH` | `/api/v1/catalog/subcategories/{code}` | `product.master.write` |
-| `DELETE` | `/api/v1/catalog/subcategories/{code}` | `product.master.write` |
-| `GET` | `/api/v1/catalog/occasions` | `product.master.read` |
-| `POST` | `/api/v1/catalog/occasions` | `product.master.write` |
-| `PATCH` | `/api/v1/catalog/occasions/{code}` | `product.master.write` |
-| `DELETE` | `/api/v1/catalog/occasions/{code}` | `product.master.write` |
-| `GET` | `/api/v1/catalog/targets` | `product.master.read` |
-| `POST` | `/api/v1/catalog/targets` | `product.master.write` |
-| `PATCH` | `/api/v1/catalog/targets/{code}` | `product.master.write` |
-| `DELETE` | `/api/v1/catalog/targets/{code}` | `product.master.write` |
 | `GET` | `/api/v1/coupons` | `coupon.read` |
 | `POST` | `/api/v1/coupons` | `coupon.create` |
 | `PUT` | `/api/v1/coupons/{code}` | `coupon.update` |

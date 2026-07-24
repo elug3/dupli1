@@ -243,18 +243,6 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | `POST` | `/api/v1/products/catalog/editions` | `product.master.write` | Create edition |
 | `PATCH` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` | Rename edition |
 | `DELETE` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` | Delete edition (409 if in use) |
-| `GET` | `/api/v1/products/catalog/subcategories` | `product.master.read` | List bag subcategories |
-| `POST` | `/api/v1/products/catalog/subcategories` | `product.master.write` | Create subcategory |
-| `PATCH` | `/api/v1/products/catalog/subcategories/{code}` | `product.master.write` | Rename subcategory |
-| `DELETE` | `/api/v1/products/catalog/subcategories/{code}` | `product.master.write` | Delete subcategory (409 if in use) |
-| `GET` | `/api/v1/products/catalog/occasions` | `product.master.read` | List occasions (look/style) |
-| `POST` | `/api/v1/products/catalog/occasions` | `product.master.write` | Create occasion |
-| `PATCH` | `/api/v1/products/catalog/occasions/{code}` | `product.master.write` | Rename occasion |
-| `DELETE` | `/api/v1/products/catalog/occasions/{code}` | `product.master.write` | Delete occasion (409 if in use) |
-| `GET` | `/api/v1/products/catalog/targets` | `product.master.read` | List targets (men/women/kids) |
-| `POST` | `/api/v1/products/catalog/targets` | `product.master.write` | Create target |
-| `PATCH` | `/api/v1/products/catalog/targets/{code}` | `product.master.write` | Rename target |
-| `DELETE` | `/api/v1/products/catalog/targets/{code}` | `product.master.write` | Delete target (409 if in use) |
 | `GET` | `/api/v1/products/coupons` | `coupon.read` | List coupons (legacy: `/api/v1/coupons`) |
 | `POST` | `/api/v1/products/coupons` | `coupon.create` | Create coupon |
 | `PUT` | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` | Update coupon (legacy: `/api/v1/coupons/{code}`) |
@@ -264,7 +252,7 @@ Public search defaults to `status = active` on the **parent**. Query filters: `c
 
 ### Catalog master data
 
-Code → name dictionaries for SKU segments and product attributes (bag subcategory, occasion/style, target). See [product-sku-system.md](product-sku-system.md). Permissions: `product.master.read` / `product.master.write`.
+Code → name dictionaries for SKU segments. See [product-sku-system.md](product-sku-system.md). Permissions: `product.master.read` / `product.master.write`.
 
 ### GET /api/v1/products/health
 

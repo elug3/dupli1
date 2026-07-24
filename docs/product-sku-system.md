@@ -75,16 +75,11 @@ Legacy rows may still use `{productId}-{color}` (e.g. `BOT-001-GRN`); they keep 
 
 ```text
 brands
-  └── styles          (design family under a brand — SKU styleCode)
+  └── styles          (design family under a brand)
 
 colors                (global palette)
 sizes                 (apparel / capacity)
 sku_editions          (optional construction / VariantCode)
-
-# Product attribute masters (not human-SKU segments)
-subcategories         (bag type: handbags, tote, …)
-occasions             (look/style: casual, evening, …)
-targets               (audience: men, women, kids)
 ```
 
 | Master | Table | Code rules | Example |
@@ -94,9 +89,6 @@ targets               (audience: men, women, kids)
 | Color | `colors` | Alphanumeric, reused across products | `BLK` → Black |
 | Size | `sizes` | Alphanumeric | `MED` → Medium |
 | Edition | `sku_editions` | Optional VariantCode segment | `V` → Standard |
-| Subcategory | `subcategories` | Bag type on parent product | `HBG` → Handbags |
-| Occasion | `occasions` | Look/style on parent (not SKU `styleCode`) | `CAS` → Casual |
-| Target | `targets` | Audience on parent product | `WMN` → Women |
 
 ### Code vs name
 
@@ -112,9 +104,6 @@ targets               (audience: men, women, kids)
 brands.code
   └── styles (brand_code, code, name)
         └── products.brand_code + products.style_code   (catalog parent / PDP)
-              ├── subcategory_code → subcategories.code  (nullable)
-              ├── occasion_code    → occasions.code      (nullable)
-              ├── target_code      → targets.code        (nullable)
               └── product_variants
                     ├── sku_id  (ULID, PK)
                     ├── sku     (human, UNIQUE)
@@ -139,9 +128,6 @@ Base: `/api/v1/catalog/...` (gateway → product). Auth required.
 | Colors | `/catalog/colors` | same |
 | Sizes | `/catalog/sizes` | same |
 | Editions | `/catalog/editions` | same |
-| Subcategories | `/catalog/subcategories` (bag type) | same |
-| Occasions | `/catalog/occasions` (look/style: casual, evening, …) | same |
-| Targets | `/catalog/targets` (men / women / kids) | same |
 
 - **POST** body: `{ "code", "name" }`
 - **PATCH** body: `{ "name" }` only (code immutable)
@@ -184,7 +170,7 @@ Lookup:
 
 ## Seeded defaults
 
-On product DB migrate, common rows are seeded (idempotent): brands (`PR`, `BOT`, `LV`, `CD`, `CH`, `GUC`, …), colors (`BLK`, `WHT`, `GRN`, …), sizes (`XS`–`XL`, `MIN`/`SML`/`MED`/`LRG`, `OS`), editions (`V`, `A`, `R`), bag subcategories (`HBG`, `TOT`, `SHD`, `CRS`, `MNI`), occasions (`CAS`, `EVE`, `BUS`, `WKD`, `STM`), targets (`MEN`, `WMN`, `KID`). Runtime catalog APIs are the source of truth afterward.
+On product DB migrate, common rows are seeded (idempotent): brands (`PR`, `BOT`, `LV`, `CD`, `CH`, `GUC`, …), colors (`BLK`, `WHT`, `GRN`, …), sizes (`XS`–`XL`, `MIN`/`SML`/`MED`/`LRG`, `OS`), editions (`V`, `A`, `R`). Runtime catalog APIs are the source of truth afterward.
 
 ---
 
