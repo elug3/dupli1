@@ -11,42 +11,30 @@ import (
 
 // CatalogStore is an in-memory ports.CatalogStore for tests.
 type CatalogStore struct {
-	Brands         map[string]domain.Brand
-	Styles         map[string]domain.Style // key: brandCode+"|"+code
-	Colors         map[string]domain.Color
-	Sizes          map[string]domain.Size
-	Editions       map[string]domain.Edition
-	Subcategories  map[string]domain.Subcategory
-	Occasions      map[string]domain.Occasion
-	Targets        map[string]domain.Target
+	Brands   map[string]domain.Brand
+	Styles   map[string]domain.Style // key: brandCode+"|"+code
+	Colors   map[string]domain.Color
+	Sizes    map[string]domain.Size
+	Editions map[string]domain.Edition
 
 	// Optional back-refs for delete-in-use checks (set by tests or product store).
-	ProductBrandStyles     map[string]string // productID -> brandCode+"|"+styleCode
-	ProductSubcategoryCode map[string]string // productID -> subcategoryCode
-	ProductOccasionCode    map[string]string
-	ProductTargetCode      map[string]string
-	VariantColorCodes      map[string]string // sku -> colorCode
-	VariantSizeCodes       map[string]string // sku -> sizeCode
-	VariantEditionCodes    map[string]string
+	ProductBrandStyles  map[string]string // productID -> brandCode+"|"+styleCode
+	VariantColorCodes   map[string]string // sku -> colorCode
+	VariantSizeCodes    map[string]string // sku -> sizeCode
+	VariantEditionCodes map[string]string
 }
 
 func NewCatalogStore() *CatalogStore {
 	s := &CatalogStore{
-		Brands:                 map[string]domain.Brand{},
-		Styles:                 map[string]domain.Style{},
-		Colors:                 map[string]domain.Color{},
-		Sizes:                  map[string]domain.Size{},
-		Editions:               map[string]domain.Edition{},
-		Subcategories:          map[string]domain.Subcategory{},
-		Occasions:              map[string]domain.Occasion{},
-		Targets:                map[string]domain.Target{},
-		ProductBrandStyles:     map[string]string{},
-		ProductSubcategoryCode: map[string]string{},
-		ProductOccasionCode:    map[string]string{},
-		ProductTargetCode:      map[string]string{},
-		VariantColorCodes:      map[string]string{},
-		VariantSizeCodes:       map[string]string{},
-		VariantEditionCodes:    map[string]string{},
+		Brands:              map[string]domain.Brand{},
+		Styles:              map[string]domain.Style{},
+		Colors:              map[string]domain.Color{},
+		Sizes:               map[string]domain.Size{},
+		Editions:            map[string]domain.Edition{},
+		ProductBrandStyles:  map[string]string{},
+		VariantColorCodes:   map[string]string{},
+		VariantSizeCodes:    map[string]string{},
+		VariantEditionCodes: map[string]string{},
 	}
 	for _, b := range domain.SeedBrands {
 		s.Brands[b.Code] = b
@@ -59,15 +47,6 @@ func NewCatalogStore() *CatalogStore {
 	}
 	for _, e := range domain.SeedEditions {
 		s.Editions[e.Code] = e
-	}
-	for _, sc := range domain.SeedSubcategories {
-		s.Subcategories[sc.Code] = sc
-	}
-	for _, o := range domain.SeedOccasions {
-		s.Occasions[o.Code] = o
-	}
-	for _, t := range domain.SeedTargets {
-		s.Targets[t.Code] = t
 	}
 	return s
 }
@@ -399,191 +378,5 @@ func (s *CatalogStore) DeleteEdition(code string) error {
 		}
 	}
 	delete(s.Editions, code)
-	return nil
-}
-
-func (s *CatalogStore) ListSubcategories() ([]domain.Subcategory, error) {
-	out := make([]domain.Subcategory, 0, len(s.Subcategories))
-	for _, item := range s.Subcategories {
-		out = append(out, item)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Code < out[j].Code })
-	return out, nil
-}
-
-func (s *CatalogStore) GetSubcategory(code string) (*domain.Subcategory, error) {
-	item, ok := s.Subcategories[domain.NormalizeCode(code)]
-	if !ok {
-		return nil, domain.ErrMasterNotFound
-	}
-	return &item, nil
-}
-
-func (s *CatalogStore) CreateSubcategory(item domain.Subcategory) (*domain.Subcategory, error) {
-	item.Code = domain.NormalizeCode(item.Code)
-	item.Name = strings.TrimSpace(item.Name)
-	if !domain.ValidSegmentCode(item.Code) {
-		return nil, ports.Invalid(fmt.Sprintf("invalid subcategory code %q", item.Code))
-	}
-	if item.Name == "" {
-		return nil, ports.Invalid("name is required")
-	}
-	if _, ok := s.Subcategories[item.Code]; ok {
-		return nil, domain.ErrMasterExists
-	}
-	s.Subcategories[item.Code] = item
-	return &item, nil
-}
-
-func (s *CatalogStore) UpdateSubcategoryName(code, name string) (*domain.Subcategory, error) {
-	code = domain.NormalizeCode(code)
-	item, ok := s.Subcategories[code]
-	if !ok {
-		return nil, domain.ErrMasterNotFound
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, ports.Invalid("name is required")
-	}
-	item.Name = name
-	s.Subcategories[code] = item
-	return &item, nil
-}
-
-func (s *CatalogStore) DeleteSubcategory(code string) error {
-	code = domain.NormalizeCode(code)
-	if _, ok := s.Subcategories[code]; !ok {
-		return domain.ErrMasterNotFound
-	}
-	for _, c := range s.ProductSubcategoryCode {
-		if c == code {
-			return domain.ErrMasterInUse
-		}
-	}
-	delete(s.Subcategories, code)
-	return nil
-}
-
-func (s *CatalogStore) ListOccasions() ([]domain.Occasion, error) {
-	out := make([]domain.Occasion, 0, len(s.Occasions))
-	for _, item := range s.Occasions {
-		out = append(out, item)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Code < out[j].Code })
-	return out, nil
-}
-
-func (s *CatalogStore) GetOccasion(code string) (*domain.Occasion, error) {
-	item, ok := s.Occasions[domain.NormalizeCode(code)]
-	if !ok {
-		return nil, domain.ErrMasterNotFound
-	}
-	return &item, nil
-}
-
-func (s *CatalogStore) CreateOccasion(item domain.Occasion) (*domain.Occasion, error) {
-	item.Code = domain.NormalizeCode(item.Code)
-	item.Name = strings.TrimSpace(item.Name)
-	if !domain.ValidSegmentCode(item.Code) {
-		return nil, ports.Invalid(fmt.Sprintf("invalid occasion code %q", item.Code))
-	}
-	if item.Name == "" {
-		return nil, ports.Invalid("name is required")
-	}
-	if _, ok := s.Occasions[item.Code]; ok {
-		return nil, domain.ErrMasterExists
-	}
-	s.Occasions[item.Code] = item
-	return &item, nil
-}
-
-func (s *CatalogStore) UpdateOccasionName(code, name string) (*domain.Occasion, error) {
-	code = domain.NormalizeCode(code)
-	item, ok := s.Occasions[code]
-	if !ok {
-		return nil, domain.ErrMasterNotFound
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, ports.Invalid("name is required")
-	}
-	item.Name = name
-	s.Occasions[code] = item
-	return &item, nil
-}
-
-func (s *CatalogStore) DeleteOccasion(code string) error {
-	code = domain.NormalizeCode(code)
-	if _, ok := s.Occasions[code]; !ok {
-		return domain.ErrMasterNotFound
-	}
-	for _, c := range s.ProductOccasionCode {
-		if c == code {
-			return domain.ErrMasterInUse
-		}
-	}
-	delete(s.Occasions, code)
-	return nil
-}
-
-func (s *CatalogStore) ListTargets() ([]domain.Target, error) {
-	out := make([]domain.Target, 0, len(s.Targets))
-	for _, item := range s.Targets {
-		out = append(out, item)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Code < out[j].Code })
-	return out, nil
-}
-
-func (s *CatalogStore) GetTarget(code string) (*domain.Target, error) {
-	item, ok := s.Targets[domain.NormalizeCode(code)]
-	if !ok {
-		return nil, domain.ErrMasterNotFound
-	}
-	return &item, nil
-}
-
-func (s *CatalogStore) CreateTarget(item domain.Target) (*domain.Target, error) {
-	item.Code = domain.NormalizeCode(item.Code)
-	item.Name = strings.TrimSpace(item.Name)
-	if !domain.ValidSegmentCode(item.Code) {
-		return nil, ports.Invalid(fmt.Sprintf("invalid target code %q", item.Code))
-	}
-	if item.Name == "" {
-		return nil, ports.Invalid("name is required")
-	}
-	if _, ok := s.Targets[item.Code]; ok {
-		return nil, domain.ErrMasterExists
-	}
-	s.Targets[item.Code] = item
-	return &item, nil
-}
-
-func (s *CatalogStore) UpdateTargetName(code, name string) (*domain.Target, error) {
-	code = domain.NormalizeCode(code)
-	item, ok := s.Targets[code]
-	if !ok {
-		return nil, domain.ErrMasterNotFound
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, ports.Invalid("name is required")
-	}
-	item.Name = name
-	s.Targets[code] = item
-	return &item, nil
-}
-
-func (s *CatalogStore) DeleteTarget(code string) error {
-	code = domain.NormalizeCode(code)
-	if _, ok := s.Targets[code]; !ok {
-		return domain.ErrMasterNotFound
-	}
-	for _, c := range s.ProductTargetCode {
-		if c == code {
-			return domain.ErrMasterInUse
-		}
-	}
-	delete(s.Targets, code)
 	return nil
 }

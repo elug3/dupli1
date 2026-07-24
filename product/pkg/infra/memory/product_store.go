@@ -88,18 +88,6 @@ func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Produc
 		if category := filter["category"]; category != "" && p.Category != category {
 			continue
 		}
-		if code := firstNonEmpty(filter["subcategory"], filter["subcategoryCode"]); code != "" &&
-			p.SubcategoryCode != domain.NormalizeCode(code) {
-			continue
-		}
-		if code := firstNonEmpty(filter["occasion"], filter["occasionCode"]); code != "" &&
-			p.OccasionCode != domain.NormalizeCode(code) {
-			continue
-		}
-		if code := firstNonEmpty(filter["target"], filter["targetCode"]); code != "" &&
-			p.TargetCode != domain.NormalizeCode(code) {
-			continue
-		}
 		if status := filter["status"]; status != "" && p.Status != status {
 			continue
 		}
@@ -222,15 +210,6 @@ func atoiFilter(filter map[string]string, key string) (int, bool) {
 	return n, true
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 func hasActiveOption(variants []domain.Variant, field, want string) bool {
 	for _, v := range variants {
 		if v.Status != "" && v.Status != "active" {
@@ -341,24 +320,6 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 	if _, err := cat.GetStyle(p.BrandCode, p.StyleCode); err != nil {
 		return nil, fmt.Errorf("%w: style %s/%s", domain.ErrMasterNotFound, p.BrandCode, p.StyleCode)
 	}
-	p.SubcategoryCode = domain.NormalizeCode(p.SubcategoryCode)
-	p.OccasionCode = domain.NormalizeCode(p.OccasionCode)
-	p.TargetCode = domain.NormalizeCode(p.TargetCode)
-	if p.SubcategoryCode != "" {
-		if _, err := cat.GetSubcategory(p.SubcategoryCode); err != nil {
-			return nil, fmt.Errorf("%w: subcategory %s", domain.ErrMasterNotFound, p.SubcategoryCode)
-		}
-	}
-	if p.OccasionCode != "" {
-		if _, err := cat.GetOccasion(p.OccasionCode); err != nil {
-			return nil, fmt.Errorf("%w: occasion %s", domain.ErrMasterNotFound, p.OccasionCode)
-		}
-	}
-	if p.TargetCode != "" {
-		if _, err := cat.GetTarget(p.TargetCode); err != nil {
-			return nil, fmt.Errorf("%w: target %s", domain.ErrMasterNotFound, p.TargetCode)
-		}
-	}
 	if p.Brand == "" {
 		if b, err := cat.GetBrand(p.BrandCode); err == nil {
 			p.Brand = b.Name
@@ -366,15 +327,6 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 	}
 	s.Products = append(s.Products, p)
 	cat.ProductBrandStyles[p.ID] = p.BrandCode + "|" + p.StyleCode
-	if p.SubcategoryCode != "" {
-		cat.ProductSubcategoryCode[p.ID] = p.SubcategoryCode
-	}
-	if p.OccasionCode != "" {
-		cat.ProductOccasionCode[p.ID] = p.OccasionCode
-	}
-	if p.TargetCode != "" {
-		cat.ProductTargetCode[p.ID] = p.TargetCode
-	}
 
 	switch {
 	case len(p.Variants) > 0:
@@ -404,25 +356,6 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 }
 
 func (s *ProductStore) UpdateProduct(p domain.Product) (*domain.Product, error) {
-	cat := s.catalog()
-	p.SubcategoryCode = domain.NormalizeCode(p.SubcategoryCode)
-	p.OccasionCode = domain.NormalizeCode(p.OccasionCode)
-	p.TargetCode = domain.NormalizeCode(p.TargetCode)
-	if p.SubcategoryCode != "" {
-		if _, err := cat.GetSubcategory(p.SubcategoryCode); err != nil {
-			return nil, fmt.Errorf("%w: subcategory %s", domain.ErrMasterNotFound, p.SubcategoryCode)
-		}
-	}
-	if p.OccasionCode != "" {
-		if _, err := cat.GetOccasion(p.OccasionCode); err != nil {
-			return nil, fmt.Errorf("%w: occasion %s", domain.ErrMasterNotFound, p.OccasionCode)
-		}
-	}
-	if p.TargetCode != "" {
-		if _, err := cat.GetTarget(p.TargetCode); err != nil {
-			return nil, fmt.Errorf("%w: target %s", domain.ErrMasterNotFound, p.TargetCode)
-		}
-	}
 	for i, existing := range s.Products {
 		if existing.ID == p.ID {
 			p.CreatedAt = existing.CreatedAt
@@ -431,21 +364,6 @@ func (s *ProductStore) UpdateProduct(p domain.Product) (*domain.Product, error) 
 			p.BrandCode = existing.BrandCode
 			p.StyleCode = existing.StyleCode
 			s.Products[i] = p
-			if p.SubcategoryCode != "" {
-				cat.ProductSubcategoryCode[p.ID] = p.SubcategoryCode
-			} else {
-				delete(cat.ProductSubcategoryCode, p.ID)
-			}
-			if p.OccasionCode != "" {
-				cat.ProductOccasionCode[p.ID] = p.OccasionCode
-			} else {
-				delete(cat.ProductOccasionCode, p.ID)
-			}
-			if p.TargetCode != "" {
-				cat.ProductTargetCode[p.ID] = p.TargetCode
-			} else {
-				delete(cat.ProductTargetCode, p.ID)
-			}
 			return s.GetProduct(p.ID)
 		}
 	}

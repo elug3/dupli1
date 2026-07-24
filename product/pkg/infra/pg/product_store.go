@@ -371,18 +371,17 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, subcategory_code, occasion_code, target_code, material, category, status, capacity, tags, view_count, sold_count, wishlist_count, created_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, status, capacity, tags, view_count, sold_count, wishlist_count, created_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
 	var createdAt time.Time
 	var tags pgtype.TextArray
 	var capacity string
-	var brandCode, styleCode, subcategoryCode, occasionCode, targetCode *string
+	var brandCode, styleCode *string
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
-		&p.Brand, &brandCode, &styleCode, &subcategoryCode, &occasionCode, &targetCode,
-		&p.Material, &p.Category, &p.Status,
+		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category, &p.Status,
 		&capacity, &tags, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
@@ -393,15 +392,6 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	}
 	if styleCode != nil {
 		p.StyleCode = *styleCode
-	}
-	if subcategoryCode != nil {
-		p.SubcategoryCode = *subcategoryCode
-	}
-	if occasionCode != nil {
-		p.OccasionCode = *occasionCode
-	}
-	if targetCode != nil {
-		p.TargetCode = *targetCode
 	}
 	p.Capacity = capacity
 	p.Tags = scanTextArray(tags)
@@ -543,18 +533,6 @@ func buildProductSearchWhere(filter map[string]string) (string, []interface{}) {
 			query += fmt.Sprintf(" AND p.category = $%d", idx)
 			args = append(args, value)
 			idx++
-		case "subcategory", "subcategoryCode":
-			query += fmt.Sprintf(" AND p.subcategory_code = $%d", idx)
-			args = append(args, domain.NormalizeCode(value))
-			idx++
-		case "occasion", "occasionCode":
-			query += fmt.Sprintf(" AND p.occasion_code = $%d", idx)
-			args = append(args, domain.NormalizeCode(value))
-			idx++
-		case "target", "targetCode":
-			query += fmt.Sprintf(" AND p.target_code = $%d", idx)
-			args = append(args, domain.NormalizeCode(value))
-			idx++
 		case "brand":
 			query += fmt.Sprintf(" AND p.brand ILIKE $%d", idx)
 			args = append(args, "%"+value+"%")
@@ -686,31 +664,17 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 	if err := s.requireStyle(ctx, p.BrandCode, p.StyleCode); err != nil {
 		return nil, err
 	}
-	p.SubcategoryCode = domain.NormalizeCode(p.SubcategoryCode)
-	p.OccasionCode = domain.NormalizeCode(p.OccasionCode)
-	p.TargetCode = domain.NormalizeCode(p.TargetCode)
-	if err := s.requireSubcategory(ctx, p.SubcategoryCode); err != nil {
-		return nil, err
-	}
-	if err := s.requireOccasion(ctx, p.OccasionCode); err != nil {
-		return nil, err
-	}
-	if err := s.requireTarget(ctx, p.TargetCode); err != nil {
-		return nil, err
-	}
 	if p.Brand == "" {
 		p.Brand = s.brandName(ctx, p.BrandCode)
 	}
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO products (id, name, description, price, brand, brand_code, style_code, subcategory_code, occasion_code, target_code, color, material, stock, category, status, image_urls, capacity, tags, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		`INSERT INTO products (id, name, description, price, brand, brand_code, style_code, color, material, stock, category, status, image_urls, capacity, tags, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description, p.Price,
-		p.Brand, nullEmpty(p.BrandCode), nullEmpty(p.StyleCode),
-		nullEmpty(p.SubcategoryCode), nullEmpty(p.OccasionCode), nullEmpty(p.TargetCode),
-		p.Color, p.Material, p.Stock, p.Category, p.Status,
+		p.Brand, nullEmpty(p.BrandCode), nullEmpty(p.StyleCode), p.Color, p.Material, p.Stock, p.Category, p.Status,
 		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), p.CreatedBy,
 	).Scan(&createdAt)
 	if err != nil {
@@ -747,30 +711,15 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 }
 
 func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, error) {
-	ctx := context.Background()
-	p.SubcategoryCode = domain.NormalizeCode(p.SubcategoryCode)
-	p.OccasionCode = domain.NormalizeCode(p.OccasionCode)
-	p.TargetCode = domain.NormalizeCode(p.TargetCode)
-	if err := s.requireSubcategory(ctx, p.SubcategoryCode); err != nil {
-		return nil, err
-	}
-	if err := s.requireOccasion(ctx, p.OccasionCode); err != nil {
-		return nil, err
-	}
-	if err := s.requireTarget(ctx, p.TargetCode); err != nil {
-		return nil, err
-	}
 	var createdAt time.Time
-	err := s.pool.QueryRow(ctx,
+	err := s.pool.QueryRow(context.Background(),
 		`UPDATE products
-		 SET name=$2, description=$3, brand=$4, material=$5, category=$6, status=$7, capacity=$8, tags=$9,
-		     subcategory_code=$10, occasion_code=$11, target_code=$12
+		 SET name=$2, description=$3, brand=$4, material=$5, category=$6, status=$7, capacity=$8, tags=$9
 		 WHERE id=$1
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description,
 		p.Brand, p.Material, p.Category, p.Status,
 		p.Capacity, toTextArray(p.Tags),
-		nullEmpty(p.SubcategoryCode), nullEmpty(p.OccasionCode), nullEmpty(p.TargetCode),
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, wrapDB("update product", err)
