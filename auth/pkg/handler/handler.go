@@ -151,6 +151,7 @@ func (h *Handler) Register(c *gin.Context) {
 	if accountType == "" {
 		accountType = domain.DefaultAccountType
 	}
+	accountType = domain.NormalizeAccountType(accountType)
 	caller := callerFromContext(c)
 	if caller == nil || !domain.CanRegister(caller, accountType, nil) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "management forbidden: cannot register this account type"})
@@ -270,6 +271,9 @@ func (h *Handler) SetUserPermissions(c *gin.Context) {
 	if len(perms) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "permissions is required"})
 		return
+	}
+	if body.AccountType != "" {
+		body.AccountType = domain.NormalizeAccountType(body.AccountType)
 	}
 
 	caller := callerFromContext(c)

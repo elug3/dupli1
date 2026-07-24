@@ -68,7 +68,7 @@ func TestOwnerCanRegisterAndListUsers(t *testing.T) {
 		uuid.New().String(),
 		"admin@dupli1.com",
 		"password",
-		domain.AccountTypeAdmin,
+		domain.AccountTypeManager,
 		permissions.All,
 	)
 	if err != nil {

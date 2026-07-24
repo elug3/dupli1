@@ -80,7 +80,7 @@ Owns:
 
 - Login, logout, refresh, RS256 JWT + JWKS
 - Fine-grained **permissions** on users and in JWT `permissions` claim
-- Account types: `customer`, `admin`, `service` on `User.AccountType` / JSON `account_type`
+- Account types: `customer`, `manager`, `service` on `User.AccountType` / JSON `account_type` (legacy write `admin` → persist `manager`; `admin.*` / ClassAdmin remain permission tiers)
 - User admin at `/api/v1/auth/users` (not `/api/v1/users`); `PATCH …/permissions` canonical
 - Login lockout (5 failed attempts) skips **admin** and **owner**; see [permissions.md](permissions.md)
 - Owner seeding via `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`)

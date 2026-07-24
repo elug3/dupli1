@@ -42,14 +42,14 @@ func ResetAdminAccount(ctx context.Context, dbURL, adminID, email string) (strin
 	adminPerms := permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})
 
 	if user == nil {
-		user, err = domain.NewUser(adminID, email, plainPassword, domain.AccountTypeAdmin, adminPerms...)
+		user, err = domain.NewUser(adminID, email, plainPassword, domain.AccountTypeManager, adminPerms...)
 		if err != nil {
 			return "", fmt.Errorf("create admin: %w", err)
 		}
 	} else {
 		user.Email = email
 		user.SetPermissions(adminPerms)
-		user.AccountType = domain.AccountTypeAdmin
+		user.AccountType = domain.AccountTypeManager
 		if err := user.UpdatePassword(plainPassword); err != nil {
 			return "", fmt.Errorf("update password: %w", err)
 		}

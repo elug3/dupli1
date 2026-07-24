@@ -9,10 +9,10 @@ import (
 )
 
 func TestLockExemptAdminAndOwner(t *testing.T) {
-	owner, _ := domain.NewUser("o1", "owner@dupli1.com", "password12", domain.AccountTypeAdmin, permissions.All)
-	admin, _ := domain.NewUser("a1", "admin@dupli1.com", "password12", domain.AccountTypeAdmin, permissions.AdminAll)
+	owner, _ := domain.NewUser("o1", "owner@dupli1.com", "password12", domain.AccountTypeManager, permissions.All)
+	admin, _ := domain.NewUser("a1", "admin@dupli1.com", "password12", domain.AccountTypeManager, permissions.AdminAll)
 	customer, _ := domain.NewUser("c1", "c@example.com", "password12", domain.AccountTypeCustomer)
-	manager, _ := domain.NewUser("m1", "m@dupli1.com", "password12", domain.AccountTypeAdmin, permissions.UserRead)
+	manager, _ := domain.NewUser("m1", "m@dupli1.com", "password12", domain.AccountTypeManager, permissions.UserRead)
 
 	if !owner.IsLockExempt() || !admin.IsLockExempt() {
 		t.Fatal("owner and admin must be lock-exempt")

@@ -47,7 +47,9 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	}
 
 	backfill := []string{
-		`UPDATE users SET account_type = 'admin'
+		// Rename legacy account_type "admin" → "manager" (admin is a permission tier, not an account type).
+		`UPDATE users SET account_type = 'manager' WHERE account_type = 'admin'`,
+		`UPDATE users SET account_type = 'manager'
 		 WHERE account_type = 'customer'
 		   AND (permissions && ARRAY['owner','admin','user_manager','*','admin.*'])`,
 		`UPDATE users SET account_type = 'service'

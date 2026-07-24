@@ -93,6 +93,7 @@ func (s *Service) Register(ctx context.Context, email, password, accountType str
 	if accountType == "" {
 		accountType = domain.DefaultAccountType
 	}
+	accountType = domain.NormalizeAccountType(accountType)
 	if !domain.ValidAccountType(accountType) {
 		return nil, autherrors.ErrInvalidAccountType
 	}
@@ -265,6 +266,7 @@ func (s *Service) SetUserPermissions(ctx context.Context, userID string, perms [
 		return nil, autherrors.ErrUserNotFound
 	}
 	if accountType != "" {
+		accountType = domain.NormalizeAccountType(accountType)
 		if !domain.ValidAccountType(accountType) {
 			return nil, autherrors.ErrInvalidAccountType
 		}

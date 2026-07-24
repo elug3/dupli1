@@ -166,7 +166,7 @@ func TestLogin_RefreshTokenOmitsPermissions(t *testing.T) {
 }
 
 func TestRefresh_FetchesFreshPermissionsFromDB(t *testing.T) {
-	user, _ := domain.NewUser("u-2", "user@example.com", "pass", domain.AccountTypeAdmin,
+	user, _ := domain.NewUser("u-2", "user@example.com", "pass", domain.AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
 	repo := &stubUserRepository{user: user}
 	gen := &capturingTokenGenerator{}
@@ -187,6 +187,19 @@ func TestRegisterRejectsInvalidAccountType(t *testing.T) {
 
 	if _, err := svc.Register(context.Background(), "customer@example.com", "supersecret", "staff"); !errors.Is(err, autherrors.ErrInvalidAccountType) {
 		t.Fatalf("got %v, want ErrInvalidAccountType", err)
+	}
+}
+
+func TestRegisterNormalizesLegacyAdminAccountType(t *testing.T) {
+	repo := &fakeUserRepository{}
+	svc := NewService(repo, fakeTokenGenerator{})
+
+	user, err := svc.Register(context.Background(), "ops@example.com", "supersecret", domain.AccountTypeAdminLegacy)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+	if user.AccountType != domain.AccountTypeManager {
+		t.Fatalf("Register account_type = %q, want %q", user.AccountType, domain.AccountTypeManager)
 	}
 }
 
@@ -253,11 +266,11 @@ func TestLogin_DoesNotLockAdminOrOwner(t *testing.T) {
 	}{
 		{
 			name: "owner",
-			user: mustUser(t, "owner@dupli1.com", "correct-pass", domain.AccountTypeAdmin, permissions.All),
+			user: mustUser(t, "owner@dupli1.com", "correct-pass", domain.AccountTypeManager, permissions.All),
 		},
 		{
 			name: "admin",
-			user: mustUser(t, "admin@dupli1.com", "correct-pass", domain.AccountTypeAdmin, permissions.AdminAll),
+			user: mustUser(t, "admin@dupli1.com", "correct-pass", domain.AccountTypeManager, permissions.AdminAll),
 		},
 	}
 	for _, tc := range cases {

@@ -37,12 +37,12 @@ func UserClass(u *User) ManagementClass {
 	if permissions.Has(u.Permissions, permissions.All) {
 		return ClassOwner
 	}
-	switch u.AccountType {
+	switch NormalizeAccountType(u.AccountType) {
 	case AccountTypeCustomer:
 		return ClassCustomer
 	case AccountTypeService:
 		return ClassCustomer
-	case AccountTypeAdmin:
+	case AccountTypeManager:
 		if isAdminLevel(u.Permissions) {
 			return ClassAdmin
 		}
@@ -60,10 +60,10 @@ func ClassFromNewUser(accountType string, perms []string) ManagementClass {
 	if accountType == "" {
 		accountType = DefaultAccountType
 	}
-	switch accountType {
+	switch NormalizeAccountType(accountType) {
 	case AccountTypeCustomer, AccountTypeService:
 		return ClassCustomer
-	case AccountTypeAdmin:
+	case AccountTypeManager:
 		if isAdminLevel(perms) {
 			return ClassAdmin
 		}
@@ -114,6 +114,7 @@ func CanRegister(caller *User, accountType string, newPerms []string) bool {
 	if accountType == "" {
 		accountType = DefaultAccountType
 	}
+	accountType = NormalizeAccountType(accountType)
 	if IsRegistrarOnly(caller.Permissions) {
 		return accountType == AccountTypeCustomer && !wouldBeOwner(newPerms)
 	}
@@ -148,7 +149,7 @@ func CanAssignPermissions(caller, target *User, newPerms []string, accountType s
 	}
 	at := target.AccountType
 	if accountType != "" {
-		at = accountType
+		at = NormalizeAccountType(accountType)
 	}
 	intended := ClassFromPermissions(at, newPerms)
 	return CanManage(CallerClass(caller.Permissions), intended)

@@ -42,10 +42,12 @@ Every user has an `account_type` field (JSON key `account_type`) separate from *
 | Value | Meaning | Typical permissions |
 |-------|---------|---------------------|
 | `customer` | End-user storefront account | `[]` (empty — ABAC self-service only) |
-| `admin` | Human operator | `admin.*`, `product.*`, … or `*` (owner) |
+| `manager` | Human operator | job-function permissions (`product.*`, `user.*`, …) or `admin.*` / `*` (owner) |
 | `service` | Machine / integration account | `user.create`, `order.ship`, … per job function |
 
-Seeded accounts: owner (`OWNER_EMAIL`) → `permissions: ["*"]`; `dupli1-web` → `["user.create"]`; `dupli1-order` → `["order.ship", "order.status.update", "inventory.reservation.manage"]`. `POST /register` defaults to `customer` when `account_type` is omitted.
+`admin` is **not** an account type — it is a permission/management tier (`admin.*`, auth ABAC `ClassAdmin`). Write APIs briefly accept legacy `account_type: "admin"` and persist `"manager"`. **manage-web should stop mapping manager→admin on the wire**; remove the alias once clients send `manager`.
+
+Seeded accounts: owner (`OWNER_EMAIL`) → `permissions: ["*"]`, `account_type: manager`; `dupli1-web` → `["user.create"]`; `dupli1-order` → `["order.ship", "order.status.update", "inventory.reservation.manage"]`. `POST /register` defaults to `customer` when `account_type` is omitted.
 
 ---
 
@@ -102,7 +104,7 @@ Create a new user account. Requires `user.create`.
 |-------|------|-------------|
 | `email` | string | required, valid email |
 | `password` | string | required, min 8 chars |
-| `account_type` | string | optional; one of `customer`, `admin`, `service`; defaults to `customer`. Callers with only `user.create` (no `admin.*` or `*`) may register `customer` only |
+| `account_type` | string | optional; one of `customer`, `manager`, `service`; defaults to `customer`. Legacy `"admin"` is accepted and stored as `"manager"`. Callers with only `user.create` (no `admin.*` or `*`) may register `customer` only |
 
 **Response `201`**
 ```json
@@ -249,8 +251,8 @@ List all users. Requires `user.read`. Results are filtered by auth ABAC hierarch
   "users": [
     {
       "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
-      "email": "admin@dupli1.com",
-      "account_type": "admin",
+      "email": "owner@dupli1.com",
+      "account_type": "manager",
       "permissions": ["*"],
       "is_active": true,
       "locked_at": null,
@@ -276,14 +278,14 @@ Replace the permission list for a user. Requires `user.permissions.update`. Subj
 ```json
 {
   "permissions": ["user.password.update", "user.status.update"],
-  "account_type": "admin"
+  "account_type": "manager"
 }
 ```
 
 | Field | Type | Constraints |
 |-------|------|-------------|
 | `permissions` | string[] | required |
-| `account_type` | string | optional; one of `customer`, `admin`, `service` |
+| `account_type` | string | optional; one of `customer`, `manager`, `service`. Legacy `"admin"` is accepted and stored as `"manager"` |
 
 **Response `200`** — updated user object (includes `account_type`, `permissions`)
 
