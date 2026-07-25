@@ -63,6 +63,7 @@ func (s *ProductSearchStore) migrate() error {
 		{"capacity", "TEXT NOT NULL DEFAULT ''"},
 		{"tags", "TEXT[] NOT NULL DEFAULT '{}'"},
 		{"created_by", "TEXT NOT NULL DEFAULT ''"},
+		{"selling_price", "NUMERIC(10,2) NOT NULL DEFAULT 0"},
 	} {
 		if _, err := s.pool.Exec(ctx, fmt.Sprintf(
 			"ALTER TABLE products ADD COLUMN IF NOT EXISTS %s %s", col.name, col.def,
@@ -130,6 +131,9 @@ func (s *ProductSearchStore) migrate() error {
 		return err
 	}
 	if err := s.migrateProductTaxonomy(ctx); err != nil {
+		return err
+	}
+	if err := s.migrateParentPrices(ctx); err != nil {
 		return err
 	}
 	if err := s.migrateProductViews(ctx); err != nil {
@@ -298,7 +302,7 @@ func (s *ProductSearchStore) backfillSkuIDs(ctx context.Context) error {
 func (s *ProductSearchStore) backfillVariants(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO product_variants (sku, product_id, color, size, selling_price, price, status, image_urls, created_at)
-		SELECT p.id, p.id, p.color, '', p.price, p.price, p.status, p.image_urls, p.created_at
+		SELECT p.id, p.id, p.color, '', 0, 0, p.status, p.image_urls, p.created_at
 		FROM products p
 		WHERE NOT EXISTS (
 			SELECT 1 FROM product_variants v WHERE v.product_id = p.id
@@ -374,7 +378,7 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, status, capacity, tags, view_count, sold_count, wishlist_count, created_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price, selling_price, status, capacity, tags, view_count, sold_count, wishlist_count, created_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -387,6 +391,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 		&p.ID, &p.Name, &p.Description,
 		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category,
 		&subCategory, &bagStyle, &target,
+		&p.Price, &p.SellingPrice,
 		&p.Status, &capacity, &tags, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
@@ -404,6 +409,8 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	p.Capacity = capacity
 	p.Tags = scanTextArray(tags)
 	p.CreatedAt = createdAt.Format(time.RFC3339)
+	p.PriceFrom = p.Price
+	p.SellingPriceFrom = p.SellingPrice
 	return p, nil
 }
 
@@ -512,10 +519,7 @@ func buildProductSearchOrder(filter map[string]string) string {
 	case domain.SortWishlist:
 		return fmt.Sprintf(" ORDER BY p.wishlist_count %s, p.id ASC", dir)
 	case domain.SortPrice:
-		return fmt.Sprintf(` ORDER BY (
-			SELECT COALESCE(MIN(v.price), 0) FROM product_variants v
-			WHERE v.product_id = p.id AND v.status = 'active'
-		) %s, p.id ASC`, dir)
+		return fmt.Sprintf(" ORDER BY p.price %s, p.id ASC", dir)
 	case domain.SortName:
 		return fmt.Sprintf(" ORDER BY LOWER(p.name) %s, p.id ASC", dir)
 	default:
@@ -690,10 +694,10 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO products (id, name, description, price, brand, brand_code, style_code, color, material, stock, category, sub_category, bag_style, target, status, image_urls, capacity, tags, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		`INSERT INTO products (id, name, description, price, selling_price, brand, brand_code, style_code, color, material, stock, category, sub_category, bag_style, target, status, image_urls, capacity, tags, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		 RETURNING created_at`,
-		p.ID, p.Name, p.Description, p.Price,
+		p.ID, p.Name, p.Description, p.Price, p.SellingPrice,
 		p.Brand, nullEmpty(p.BrandCode), nullEmpty(p.StyleCode), p.Color, p.Material, p.Stock, p.Category,
 		p.SubCategory, p.Style, p.Target, p.Status,
 		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), p.CreatedBy,
@@ -714,15 +718,13 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 				return nil, err
 			}
 		}
-	case p.Color != "" || p.Price > 0 || p.SellingPrice > 0 || len(p.ImageURLs) > 0:
-		// Legacy create: seed a default variant; SKU is composed from masters (not product id).
+	case p.Color != "" || len(p.ImageURLs) > 0:
+		// Legacy create: seed a default variant; price lives on the parent.
 		if _, err := s.CreateVariant(domain.Variant{
-			ProductID:    p.ID,
-			Color:        p.Color,
-			SellingPrice: p.SellingPrice,
-			Price:        p.Price,
-			Status:       p.Status,
-			ImageURLs:    p.ImageURLs,
+			ProductID: p.ID,
+			Color:     p.Color,
+			Status:    p.Status,
+			ImageURLs: p.ImageURLs,
 		}); err != nil {
 			return nil, err
 		}
@@ -736,13 +738,14 @@ func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, e
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE products
 		 SET name=$2, description=$3, brand=$4, material=$5, category=$6,
-		     sub_category=$7, bag_style=$8, target=$9, status=$10, capacity=$11, tags=$12
+		     sub_category=$7, bag_style=$8, target=$9, price=$10, selling_price=$11,
+		     status=$12, capacity=$13, tags=$14
 		 WHERE id=$1
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description,
 		p.Brand, p.Material, p.Category,
-		p.SubCategory, p.Style, p.Target, p.Status,
-		p.Capacity, toTextArray(p.Tags),
+		p.SubCategory, p.Style, p.Target, p.Price, p.SellingPrice,
+		p.Status, p.Capacity, toTextArray(p.Tags),
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, wrapDB("update product", err)

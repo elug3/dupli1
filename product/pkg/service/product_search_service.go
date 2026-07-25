@@ -183,7 +183,7 @@ func (s *ProductSearchService) GetPublicVariantsBySkuIDs(skuIDs []string) (items
 		byID[v.SkuID] = v
 	}
 
-	activeParent := make(map[string]bool)
+	activeParent := make(map[string]*domain.Product)
 	items = make([]domain.Variant, 0, len(ids))
 	missing = make([]string, 0)
 	for _, id := range ids {
@@ -192,16 +192,19 @@ func (s *ProductSearchService) GetPublicVariantsBySkuIDs(skuIDs []string) (items
 			missing = append(missing, id)
 			continue
 		}
-		active, seen := activeParent[v.ProductID]
+		parent, seen := activeParent[v.ProductID]
 		if !seen {
-			_, err := s.store.GetActiveProduct(v.ProductID)
-			active = err == nil
-			activeParent[v.ProductID] = active
+			p, err := s.store.GetActiveProduct(v.ProductID)
+			if err == nil {
+				parent = p
+			}
+			activeParent[v.ProductID] = parent
 		}
-		if !active {
+		if parent == nil {
 			missing = append(missing, id)
 			continue
 		}
+		v.ApplyParentPrice(*parent)
 		items = append(items, v)
 	}
 	return items, missing, nil
@@ -228,9 +231,11 @@ func (s *ProductSearchService) checkPublicVariant(v *domain.Variant) (*domain.Va
 	if v.Status != "active" {
 		return nil, fmt.Errorf("variant: %w", ports.ErrNotFound)
 	}
-	if _, err := s.store.GetActiveProduct(v.ProductID); err != nil {
+	parent, err := s.store.GetActiveProduct(v.ProductID)
+	if err != nil {
 		return nil, fmt.Errorf("variant: %w", ports.ErrNotFound)
 	}
+	v.ApplyParentPrice(*parent)
 	return v, nil
 }
 
@@ -286,7 +291,8 @@ func (s *ProductSearchService) CreateVariant(productID string, v domain.Variant)
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	if _, err := s.store.GetProduct(productID); err != nil {
+	parent, err := s.store.GetProduct(productID)
+	if err != nil {
 		return nil, err
 	}
 	v.ProductID = productID
@@ -294,14 +300,15 @@ func (s *ProductSearchService) CreateVariant(productID string, v domain.Variant)
 	if err != nil {
 		return nil, err
 	}
-	parent, _ := s.store.GetProduct(productID)
+	created.ApplyParentPrice(*parent)
 	_ = s.publish(context.Background(), variantCreatedSubject, parent, created.SKU, "")
 	return created, nil
 }
 
 // UpdateVariant merges the incoming (possibly partial) body onto the
 // existing variant rather than overwriting it outright, so an update that
-// only sets e.g. price can't silently blank color/size/status/images.
+// only sets e.g. color can't silently blank size/status/images.
+// Price is owned by the parent product and is not updated here.
 func (s *ProductSearchService) UpdateVariant(productID, sku string, v domain.Variant) (*domain.Variant, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
@@ -321,6 +328,9 @@ func (s *ProductSearchService) UpdateVariant(productID, sku string, v domain.Var
 		return nil, err
 	}
 	parent, _ := s.store.GetProduct(productID)
+	if parent != nil {
+		updated.ApplyParentPrice(*parent)
+	}
 	_ = s.publish(context.Background(), variantUpdatedSubject, parent, updated.SKU, "")
 	return updated, nil
 }
@@ -412,7 +422,7 @@ func (s *ProductSearchService) publish(ctx context.Context, subject string, prod
 		Brand:     product.Brand,
 		Category:  product.Category,
 		Status:    product.Status,
-		Price:     product.PriceFrom,
+		Price:     product.Price,
 		ImageURL:  imageURL,
 		Occurred:  s.now(),
 	})

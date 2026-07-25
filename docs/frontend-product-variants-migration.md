@@ -24,7 +24,7 @@ Order and inventory already use **SKU**. The catalog now exposes:
 | Concept | ID example | Role |
 |---------|------------|------|
 | **Parent (style)** | `BOT-001` | Search, list, PDP URL |
-| **Variant (SKU)** | `BOT-001-GRN` | Color/size, images, price, cart, inventory |
+| **Variant (SKU)** | `BOT-001-GRN` | Color/size, images, cart, inventory (price is on the parent) |
 
 Existing products were **backfilled**: each parent has at least one variant with `sku === product.id` (e.g. `BOT-001`). Single-color products keep working if you still send that id as the cart SKU.
 
@@ -141,7 +141,7 @@ Query params:
 |------------|--------|
 | Title | `name` |
 | Brand | `brand` |
-| Price | `priceFrom` (fallback: `price`) |
+| Price | `price` / `priceFrom` (same value; price is stored on the parent) |
 | Thumbnail | `defaultImageUrl` (fallback: `imageUrls[0]`) |
 | Color chips | `availableColors` |
 | Size chips | `availableSizes` |
@@ -181,7 +181,7 @@ function findVariant(
 }
 ```
 
-5. Show `variant.imageUrls` and `variant.price` for the selection.
+5. Show `variant.imageUrls`; price comes from the parent (`product.price` — also echoed on `variant.price` for cart clients).
 6. Add to cart with **`variant.sku`**, not `product.id` (unless they are equal for a legacy single-SKU product).
 
 ### Stock (optional but recommended)
@@ -207,7 +207,7 @@ Order and checkout line items already use `sku`:
 Rules:
 
 - `sku` = **variant.sku**
-- `unit_price_cents` = `Math.round(variant.price)` — product prices are already **KRW won**; do **not** multiply by 100 (KRW is a zero-decimal Stripe currency). JSON field name remains `*_cents` for historical reasons; the value is whole won.
+- `unit_price_cents` = `Math.round(product.price)` (or `variant.price`, which mirrors the parent) — product prices are already **KRW won**; do **not** multiply by 100 (KRW is a zero-decimal Stripe currency). JSON field name remains `*_cents` for historical reasons; the value is whole won.
 
 ### Storefront checklist
 

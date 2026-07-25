@@ -15,13 +15,13 @@ import (
 func TestSearchProductsSortAndOrder(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "A", Name: "Alpha", Category: "bags", Status: "active", ViewCount: 1, SoldCount: 9, WishlistCount: 2, CreatedAt: "2026-01-01T00:00:00Z"},
-		{ID: "B", Name: "Beta", Category: "bags", Status: "active", ViewCount: 10, SoldCount: 1, WishlistCount: 5, CreatedAt: "2026-02-01T00:00:00Z"},
-		{ID: "C", Name: "Gamma", Category: "bags", Status: "active", ViewCount: 5, SoldCount: 5, WishlistCount: 1, CreatedAt: "2026-03-01T00:00:00Z"},
+		{ID: "A", Name: "Alpha", Category: "bags", Status: "active", Price: 100, ViewCount: 1, SoldCount: 9, WishlistCount: 2, CreatedAt: "2026-01-01T00:00:00Z"},
+		{ID: "B", Name: "Beta", Category: "bags", Status: "active", Price: 100, ViewCount: 10, SoldCount: 1, WishlistCount: 5, CreatedAt: "2026-02-01T00:00:00Z"},
+		{ID: "C", Name: "Gamma", Category: "bags", Status: "active", Price: 100, ViewCount: 5, SoldCount: 5, WishlistCount: 1, CreatedAt: "2026-03-01T00:00:00Z"},
 	}
 	for _, p := range store.Products {
 		store.Variants = append(store.Variants, domain.Variant{
-			SKU: p.ID + "-SK", ProductID: p.ID, Status: "active", Price: 100,
+			SKU: p.ID + "-SK", ProductID: p.ID, Status: "active",
 		})
 	}
 	mux := newMux(store)
@@ -137,7 +137,7 @@ func TestWishlistAddRemoveAndSort(t *testing.T) {
 		{ID: "COLD", Name: "Cold", Category: "bags", Status: "active"},
 	}
 	for _, p := range store.Products {
-		store.Variants = append(store.Variants, domain.Variant{SKU: p.ID, ProductID: p.ID, Status: "active", Price: 10})
+		store.Variants = append(store.Variants, domain.Variant{SKU: p.ID, ProductID: p.ID, Status: "active"})
 	}
 	mux := newMux(store)
 

@@ -22,10 +22,10 @@ func (failingViewStore) RecordUniqueView(guestID, productID string) (bool, int64
 func TestPublicGetProductUniqueViewCookie(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega", Status: "active", Category: "bags"},
+		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega", Status: "active", Category: "bags", Price: 100},
 	}
 	store.Variants = []domain.Variant{
-		{SKU: "BOT-001", ProductID: "BOT-001", Color: "Green", Price: 100, Status: "active"},
+		{SKU: "BOT-001", ProductID: "BOT-001", Color: "Green", Status: "active"},
 	}
 	mux := newMux(store)
 
@@ -86,7 +86,7 @@ func TestPublicGetProductInvalidGuestCookieReminted(t *testing.T) {
 		{ID: "BOT-001", Name: "Mini Bag", Status: "active"},
 	}
 	store.Variants = []domain.Variant{
-		{SKU: "BOT-001", ProductID: "BOT-001", Price: 100, Status: "active"},
+		{SKU: "BOT-001", ProductID: "BOT-001", Status: "active"},
 	}
 	mux := newMux(store)
 
@@ -115,7 +115,7 @@ func TestPublicGetProductViewFailureStillOK(t *testing.T) {
 		{ID: "BOT-001", Name: "Mini Bag", Status: "active"},
 	}
 	store.Variants = []domain.Variant{
-		{SKU: "BOT-001", ProductID: "BOT-001", Price: 100, Status: "active"},
+		{SKU: "BOT-001", ProductID: "BOT-001", Status: "active"},
 	}
 	svc := service.NewProductSearchService(store, nil)
 	h := handler.NewHandler(svc, service.NewCouponService(memory.NewCouponStore()), nil, service.NewCatalogService(store.Catalog)).
@@ -143,7 +143,7 @@ func TestPublicGetRecommendations(t *testing.T) {
 	for _, p := range store.Products {
 		if p.Status == "active" {
 			store.Variants = append(store.Variants, domain.Variant{
-				SKU: p.ID, ProductID: p.ID, Price: p.PriceFrom, Status: "active",
+				SKU: p.ID, ProductID: p.ID, Status: "active",
 			})
 		}
 	}
