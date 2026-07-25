@@ -366,7 +366,7 @@ Search **parent styles** (one row per style; colors are not duplicated). No auth
 | `category` | exact (e.g. `bags`) |
 | `subcategory` | exact bag type (`handbags`, `tote`, `shoulder`, `cross`, `mini`; alias `subCategory`) |
 | `style` | exact bag occasion (`casual`, `evening`, `business`, `weekend`, `statement`) — not SKU `styleCode` |
-| `target` | exact audience (`men`, `women`, `kids`) |
+| `target` | exact audience (`all`, `men`, `women`, `kids`) |
 | `brand` | case-insensitive substring |
 | `color` | parent has an active variant with this color |
 | `size` | parent has an active variant with this size |

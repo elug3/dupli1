@@ -11,7 +11,7 @@ Storefront bag filters need a fixed **master catalog** independent of SKU segmen
 |-----------|---------------|-------------|-------|
 | Sub category (bag type) | `subCategory` | `subcategory` (alias `subCategory`) | `handbags`, `tote`, `shoulder`, `cross`, `mini` |
 | Style (occasion / look) | `style` | `style` | `casual`, `evening`, `business`, `weekend`, `statement` |
-| Target (audience) | `target` | `target` | `men`, `women`, `kids` |
+| Target (audience) | `target` | `target` | `all`, `men`, `women`, `kids` |
 
 `style` here is **not** SKU `styleCode` (design family under a brand).
 

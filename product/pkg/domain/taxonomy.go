@@ -41,6 +41,7 @@ var SeedBagStyles = []CatalogTerm{
 
 // Audience / target seeds.
 var SeedTargets = []CatalogTerm{
+	{Code: "all", Name: "All"},
 	{Code: "men", Name: "Men"},
 	{Code: "women", Name: "Women"},
 	{Code: "kids", Name: "Kids"},

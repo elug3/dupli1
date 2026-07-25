@@ -246,7 +246,7 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | `GET` | `/api/v1/products/catalog/master` | public | Bag merchandising taxonomy (`subCategories`, `styles`, `targets`) |
 | `GET` | `/api/v1/products/catalog/subcategories` | public | List bag subcategories |
 | `GET` | `/api/v1/products/catalog/bag-styles` | public | List bag styles (occasion) |
-| `GET` | `/api/v1/products/catalog/targets` | public | List targets (men/women/kids) |
+| `GET` | `/api/v1/products/catalog/targets` | public | List targets (all/men/women/kids) |
 | `GET` | `/api/v1/products/coupons` | `coupon.read` | List coupons (legacy: `/api/v1/coupons`) |
 | `POST` | `/api/v1/products/coupons` | `coupon.create` | Create coupon |
 | `PUT` | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` | Update coupon (legacy: `/api/v1/coupons/{code}`) |
