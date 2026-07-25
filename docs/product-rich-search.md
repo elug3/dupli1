@@ -16,7 +16,7 @@
 
 Response echoes effective `sort`, `order`, and `period` (when set) alongside `total` / `limit` / `offset` / `results`.
 
-Sort keys use denormalized parent counters (`view_count`, `sold_count`, `wishlist_count`) or `created_at` / `name` / min active variant price.
+Sort keys use denormalized parent counters (`view_count`, `sold_count`, `wishlist_count`) or `created_at` / `name` / parent `price`.
 
 `period=week` keeps only parents with `created_at` in the last 7 days (from request time).
 

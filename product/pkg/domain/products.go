@@ -22,13 +22,13 @@ type Variant struct {
 	ColorCode   string `json:"colorCode,omitempty"`
 	EditionCode string `json:"editionCode,omitempty"` // optional VariantCode segment
 	SizeCode    string `json:"sizeCode,omitempty"`
-	// SellingPrice is the official/display price in KRW won (strikethrough / "was" price).
+	// Price and SellingPrice are filled from the parent product on read.
+	// They are not stored on the SKU row (price lives on Product).
 	SellingPrice float64 `json:"sellingPrice,omitempty"`
-	// Price is the real sale price in KRW won (whole won; single currency).
-	Price     float64  `json:"price"`
-	Status    string   `json:"status"` // "active" | "draft" | "archived"
-	ImageURLs []string `json:"imageUrls,omitempty"`
-	CreatedAt string   `json:"createdAt,omitempty"`
+	Price        float64 `json:"price,omitempty"`
+	Status       string  `json:"status"` // "active" | "draft" | "archived"
+	ImageURLs    []string `json:"imageUrls,omitempty"`
+	CreatedAt    string   `json:"createdAt,omitempty"`
 }
 
 // Product is a parent catalog style. Sellable options live on Variants.
@@ -47,7 +47,12 @@ type Product struct {
 	// Distinct from StyleCode (SKU design-family master).
 	Style string `json:"style,omitempty"`
 	// Target is audience (men, women, kids).
-	Target   string   `json:"target,omitempty"`
+	Target string `json:"target,omitempty"`
+	// SellingPrice is the official/display price in KRW won (strikethrough / "was" price).
+	SellingPrice float64 `json:"sellingPrice,omitempty"`
+	// Price is the real sale price in KRW won (whole won; single currency).
+	// Stored on the parent; all variants inherit this price.
+	Price    float64  `json:"price"`
 	Status   string   `json:"status"` // "active" | "draft" | "archived"
 	Capacity string   `json:"capacity,omitempty"`
 	Tags     []string `json:"tags,omitempty"`
@@ -61,23 +66,20 @@ type Product struct {
 	CreatedAt     string `json:"createdAt"`
 	CreatedBy     string `json:"createdBy,omitempty"`
 
-	// Summary fields derived from variants (not stored on parent).
-	// SellingPriceFrom is the official/display price for the cheapest active variant.
+	// Summary fields derived from variants / parent (not separate storage).
+	// SellingPriceFrom mirrors SellingPrice (compat with older list-card clients).
 	SellingPriceFrom float64 `json:"sellingPriceFrom,omitempty"`
-	// PriceFrom is the real sale price (min active variant price).
+	// PriceFrom mirrors Price (compat with older list-card clients).
 	PriceFrom       float64   `json:"priceFrom,omitempty"`
 	DefaultImageURL string    `json:"defaultImageUrl,omitempty"`
 	AvailableColors []string  `json:"availableColors,omitempty"`
 	AvailableSizes  []string  `json:"availableSizes,omitempty"`
 	Variants        []Variant `json:"variants,omitempty"`
 
-	// Legacy fields mirrored from the cheapest active variant for older clients.
-	// SellingPrice is the official/display price; Price is the real sale price.
-	SellingPrice float64  `json:"sellingPrice,omitempty"`
-	Price        float64  `json:"price,omitempty"`
-	Color        string   `json:"color,omitempty"`
-	Stock        int      `json:"stock,omitempty"`
-	ImageURLs    []string `json:"imageUrls,omitempty"`
+	// Legacy display fields mirrored from the default active variant.
+	Color     string   `json:"color,omitempty"`
+	Stock     int      `json:"stock,omitempty"`
+	ImageURLs []string `json:"imageUrls,omitempty"`
 }
 
 // Shoes represents footwear products

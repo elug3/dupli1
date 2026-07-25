@@ -128,11 +128,11 @@ func TestSettings(t *testing.T) {
 func TestSearchProductsParentsOnly(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Cassette", Brand: "Bottega", Category: "bags", Status: "active"},
+		{ID: "BOT-001", Name: "Cassette", Brand: "Bottega", Category: "bags", Status: "active", Price: 2500},
 	}
 	store.Variants = []domain.Variant{
-		{SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Price: 2500, Status: "active"},
-		{SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Price: 2500, Status: "active"},
+		{SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Status: "active"},
+		{SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Status: "active"},
 	}
 	mux := newMux(store)
 	rec := httptest.NewRecorder()
@@ -372,10 +372,10 @@ func TestCreateProductAssignsBrandAndStyleCodes(t *testing.T) {
 func TestPublicGetProduct(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active"},
+		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active", Price: 2500, SellingPrice: 3000},
 	}
 	store.Variants = []domain.Variant{
-		{SKU: "BOT-001", ProductID: "BOT-001", Color: "Green", SellingPrice: 3000, Price: 2500, Status: "active"},
+		{SKU: "BOT-001", ProductID: "BOT-001", Color: "Green", Status: "active"},
 	}
 	mux := newMux(store)
 	rec := httptest.NewRecorder()
@@ -509,11 +509,11 @@ func TestSearchProductsPagination(t *testing.T) {
 func TestPublicListVariantsBySkuIDs(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Cassette", Status: "active"},
+		{ID: "BOT-001", Name: "Cassette", Status: "active", Price: 2500},
 	}
 	store.Variants = []domain.Variant{
-		{SkuID: "ID-A", SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Price: 2500, Status: "active"},
-		{SkuID: "ID-B", SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Price: 2500, Status: "draft"},
+		{SkuID: "ID-A", SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Status: "active"},
+		{SkuID: "ID-B", SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Status: "draft"},
 	}
 	mux := newMux(store)
 

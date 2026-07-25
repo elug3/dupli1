@@ -348,14 +348,12 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 				return nil, err
 			}
 		}
-	case p.Color != "" || p.Price > 0 || p.SellingPrice > 0 || len(p.ImageURLs) > 0:
+	case p.Color != "" || len(p.ImageURLs) > 0:
 		if _, err := s.CreateVariant(domain.Variant{
-			ProductID:    p.ID,
-			Color:        p.Color,
-			SellingPrice: p.SellingPrice,
-			Price:        p.Price,
-			Status:       p.Status,
-			ImageURLs:    p.ImageURLs,
+			ProductID: p.ID,
+			Color:     p.Color,
+			Status:    p.Status,
+			ImageURLs: p.ImageURLs,
 		}); err != nil {
 			return nil, err
 		}
@@ -624,6 +622,9 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 	if v.SkuID == "" {
 		v.SkuID = domain.NewSkuID()
 	}
+	// Price lives on the parent product, not the SKU row.
+	v.Price = 0
+	v.SellingPrice = 0
 	for _, existing := range s.Variants {
 		if existing.SKU == v.SKU {
 			return nil, ports.Conflict(fmt.Sprintf("variant already exists: %s", v.SKU))

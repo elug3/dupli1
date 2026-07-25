@@ -2,10 +2,10 @@ package domain
 
 // MergeUpdate returns a copy of the variant with any non-zero-value fields
 // from incoming applied on top. Used by UpdateVariant so a partial request
-// body (e.g. price-only) can't silently blank out color/size/status/images —
+// body (e.g. color-only) can't silently blank out size/status/images —
 // omitted fields keep their current value instead of being overwritten with
 // the JSON zero value. Identity fields (SkuID, SKU, ProductID, CreatedAt)
-// are never taken from incoming; callers set those from the lookup key.
+// and price fields (owned by the parent product) are never taken from incoming.
 func (existing Variant) MergeUpdate(incoming Variant) Variant {
 	merged := existing
 	if incoming.Color != "" {
@@ -23,26 +23,42 @@ func (existing Variant) MergeUpdate(incoming Variant) Variant {
 	if incoming.SizeCode != "" {
 		merged.SizeCode = incoming.SizeCode
 	}
-	if incoming.SellingPrice != 0 {
-		merged.SellingPrice = incoming.SellingPrice
-	}
-	if incoming.Price != 0 {
-		merged.Price = incoming.Price
-	}
 	if incoming.Status != "" {
 		merged.Status = incoming.Status
 	}
 	if len(incoming.ImageURLs) > 0 {
 		merged.ImageURLs = incoming.ImageURLs
 	}
+	// Price / SellingPrice stay on the parent product; clear any request values.
+	merged.Price = existing.Price
+	merged.SellingPrice = existing.SellingPrice
 	return merged
 }
 
-// EnrichFromVariants fills summary and legacy fields from variants.
-// When includeVariants is false, Variants is left empty (list/search cards).
+// ApplyParentPrice copies the parent product's price onto a variant for API
+// responses (cart/order still read price from the variant JSON).
+func (v *Variant) ApplyParentPrice(p Product) {
+	if v == nil {
+		return
+	}
+	v.Price = p.Price
+	v.SellingPrice = p.SellingPrice
+}
+
+// EnrichFromVariants fills summary and legacy display fields from variants.
+// Price stays on the parent (Price / SellingPrice); PriceFrom mirrors them for
+// older list-card clients. When includeVariants is false, Variants is left empty.
 func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
+	p.PriceFrom = p.Price
+	p.SellingPriceFrom = p.SellingPrice
+
 	if includeVariants {
-		p.Variants = variants
+		stamped := make([]Variant, len(variants))
+		for i := range variants {
+			stamped[i] = variants[i]
+			stamped[i].ApplyParentPrice(*p)
+		}
+		p.Variants = stamped
 	} else {
 		p.Variants = nil
 	}
@@ -51,9 +67,6 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 	sizes := make([]string, 0)
 	colorSeen := map[string]bool{}
 	sizeSeen := map[string]bool{}
-	var priceFrom float64
-	var sellingPriceFrom float64
-	var hasPrice bool
 	var defaultVariant *Variant
 
 	for i := range variants {
@@ -72,21 +85,10 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 			sizeSeen[v.Size] = true
 			sizes = append(sizes, v.Size)
 		}
-		if !hasPrice || v.Price < priceFrom {
-			priceFrom = v.Price
-			sellingPriceFrom = v.SellingPrice
-			hasPrice = true
-		}
 	}
 
 	p.AvailableColors = colors
 	p.AvailableSizes = sizes
-	if hasPrice {
-		p.PriceFrom = priceFrom
-		p.Price = priceFrom
-		p.SellingPriceFrom = sellingPriceFrom
-		p.SellingPrice = sellingPriceFrom
-	}
 	if defaultVariant != nil {
 		p.Color = defaultVariant.Color
 		p.ImageURLs = defaultVariant.ImageURLs

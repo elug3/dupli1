@@ -12,11 +12,11 @@ import (
 func TestSearchProductsNoColorDuplicates(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Cassette", Category: "bags", Status: "active"},
+		{ID: "BOT-001", Name: "Cassette", Category: "bags", Status: "active", Price: 2500},
 	}
 	store.Variants = []domain.Variant{
-		{SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Price: 2500, Status: "active"},
-		{SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Price: 2500, Status: "active"},
+		{SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Status: "active"},
+		{SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Status: "active"},
 	}
 	svc := service.NewProductSearchService(store, nil)
 
@@ -41,19 +41,22 @@ func TestCreateVariantUnderParent(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Cassette", BrandCode: "BOT", StyleCode: "CAS001", Status: "active"},
+		{ID: "BOT-001", Name: "Cassette", BrandCode: "BOT", StyleCode: "CAS001", Status: "active", Price: 2500},
 	}
 	store.Variants = []domain.Variant{
-		{SKU: "BOT_CAS001_GRN_OS", ProductID: "BOT-001", Color: "Green", ColorCode: "GRN", SizeCode: "OS", Price: 2500, Status: "active"},
+		{SKU: "BOT_CAS001_GRN_OS", ProductID: "BOT-001", Color: "Green", ColorCode: "GRN", SizeCode: "OS", Status: "active"},
 	}
 	svc := service.NewProductSearchService(store, nil)
 
-	v, err := svc.CreateVariant("BOT-001", domain.Variant{Color: "Black", Price: 2500})
+	v, err := svc.CreateVariant("BOT-001", domain.Variant{Color: "Black"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if v.SKU != "BOT_CAS001_BLK_OS" || v.ProductID != "BOT-001" {
 		t.Fatalf("unexpected variant: %+v", v)
+	}
+	if v.Price != 2500 {
+		t.Fatalf("variant should inherit parent price, got %v", v.Price)
 	}
 
 	p, err := svc.GetPublicProduct("BOT-001")
@@ -68,28 +71,30 @@ func TestCreateVariantUnderParent(t *testing.T) {
 func TestUpdateVariant_PartialBodyDoesNotClearOtherFields(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Cassette", Status: "active"},
+		{ID: "BOT-001", Name: "Cassette", Status: "active", Price: 2500},
 	}
 	store.Variants = []domain.Variant{
 		{
 			SkuID: "SKUID-1", SKU: "BOT-001-GRN", ProductID: "BOT-001",
-			Color: "Green", Size: "M", Price: 2500, Status: "draft",
+			Color: "Green", Size: "M", Status: "draft",
 			ImageURLs: []string{"green.jpg"},
 		},
 	}
 	svc := service.NewProductSearchService(store, nil)
 
-	// Price-only update, as an admin PUT would send if the client only
-	// changed the price field on the form.
-	updated, err := svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{Price: 2600})
+	// Size-only update — color/status/images must survive; price comes from parent.
+	updated, err := svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{Size: "L", Price: 9999})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Price != 2600 {
-		t.Fatalf("price = %v, want 2600", updated.Price)
+	if updated.Size != "L" {
+		t.Fatalf("size = %q, want L", updated.Size)
 	}
-	if updated.Color != "Green" || updated.Size != "M" {
-		t.Fatalf("color/size were wiped by a partial update: %+v", updated)
+	if updated.Price != 2500 {
+		t.Fatalf("price = %v, want parent price 2500 (SKU price ignored)", updated.Price)
+	}
+	if updated.Color != "Green" {
+		t.Fatalf("color was wiped by a partial update: %+v", updated)
 	}
 	if updated.Status != "draft" {
 		t.Fatalf("status = %q, want draft to survive an unrelated field update", updated.Status)
@@ -112,13 +117,13 @@ func TestUpdateVariant_PartialBodyDoesNotClearOtherFields(t *testing.T) {
 func TestGetPublicVariantsBySkuIDs(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Cassette", Status: "active"},
-		{ID: "BOT-002", Name: "Draft Bag", Status: "draft"},
+		{ID: "BOT-001", Name: "Cassette", Status: "active", Price: 2500},
+		{ID: "BOT-002", Name: "Draft Bag", Status: "draft", Price: 3000},
 	}
 	store.Variants = []domain.Variant{
-		{SkuID: "ID-A", SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Price: 2500, Status: "active"},
-		{SkuID: "ID-B", SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Price: 2500, Status: "draft"},
-		{SkuID: "ID-C", SKU: "BOT-002-BLK", ProductID: "BOT-002", Color: "Black", Price: 3000, Status: "active"},
+		{SkuID: "ID-A", SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Status: "active"},
+		{SkuID: "ID-B", SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Status: "draft"},
+		{SkuID: "ID-C", SKU: "BOT-002-BLK", ProductID: "BOT-002", Color: "Black", Status: "active"},
 	}
 	svc := service.NewProductSearchService(store, nil)
 

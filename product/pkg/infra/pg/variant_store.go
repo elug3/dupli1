@@ -14,7 +14,7 @@ import (
 
 const variantSelectCols = `sku_id, sku, product_id, color, size,
 	COALESCE(color_code, ''), COALESCE(edition_code, ''), COALESCE(size_code, ''),
-	selling_price, price, status, image_urls, created_at`
+	status, image_urls, created_at`
 
 func scanVariant(scan func(...any) error) (domain.Variant, error) {
 	var v domain.Variant
@@ -23,7 +23,7 @@ func scanVariant(scan func(...any) error) (domain.Variant, error) {
 	err := scan(
 		&v.SkuID, &v.SKU, &v.ProductID, &v.Color, &v.Size,
 		&v.ColorCode, &v.EditionCode, &v.SizeCode,
-		&v.SellingPrice, &v.Price, &v.Status, &imageURLs, &createdAt,
+		&v.Status, &imageURLs, &createdAt,
 	)
 	if err != nil {
 		return domain.Variant{}, err
@@ -196,11 +196,11 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 	var createdAt time.Time
 	err = s.pool.QueryRow(ctx,
 		`INSERT INTO product_variants (sku_id, sku, product_id, color, size, color_code, edition_code, size_code, selling_price, price, status, image_urls)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, $9, $10)
 		 RETURNING created_at`,
 		v.SkuID, v.SKU, v.ProductID, v.Color, v.Size,
 		nullEmpty(v.ColorCode), nullEmpty(v.EditionCode), nullEmpty(v.SizeCode),
-		v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
+		v.Status, toTextArray(v.ImageURLs),
 	).Scan(&createdAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -220,12 +220,12 @@ func (s *ProductSearchStore) UpdateVariant(v domain.Variant) (*domain.Variant, e
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE product_variants
 		 SET color=$2, size=$3, color_code=$4, edition_code=$5, size_code=$6,
-		     selling_price=$7, price=$8, status=$9, image_urls=$10
+		     status=$7, image_urls=$8
 		 WHERE sku=$1
 		 RETURNING sku_id, product_id, created_at`,
 		v.SKU, v.Color, v.Size,
 		nullEmpty(v.ColorCode), nullEmpty(v.EditionCode), nullEmpty(v.SizeCode),
-		v.SellingPrice, v.Price, v.Status, toTextArray(v.ImageURLs),
+		v.Status, toTextArray(v.ImageURLs),
 	).Scan(&v.SkuID, &v.ProductID, &createdAt)
 	if err != nil {
 		return nil, wrapDB("update variant", err)
