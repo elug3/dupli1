@@ -2,13 +2,16 @@
 
 **Release boundary:** [v1-release-plan.md](v1-release-plan.md) (v1.0 launch cut) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch themes & slices).
 
-## v1.1 (post-launch — logging, deployment, automation)
+## v1.1 (post-launch — logging, sessions, access control, deployment, automation)
 
 See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criteria.
 
-- [ ] **Structured API errors + log messages** — stable machine `code` on all services; structured `slog` on error paths — [product-error-wrapping.md](product-error-wrapping.md)
-- [ ] **AWS deployment alignment** — cost orphan cleanup, ALB redirect, gateway/nginx ECS config — [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md), [deployment-aws.md](deployment-aws.md)
-- [ ] **CI/CD automation** — backend OIDC, frontend task-def alignment, post-deploy smoke — `.github/workflows/`
+- [ ] **Structured API errors + log messages** — stable machine `code`; structured `slog` — [product-error-wrapping.md](product-error-wrapping.md)
+- [ ] **Consistent sessions** — BFF holds refresh; `dupli1_session` HttpOnly cookie contract — [api.md](api.md)
+- [ ] **Verify access control** — ABAC + permissions matrix; negative tests on money path — [permissions.md](permissions.md)
+- [ ] **Revocable session from BFF** — logout revokes refresh in Redis + clears cookie — `dupli1-web`
+- [ ] **AWS deployment alignment** — [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md), [deployment-aws.md](deployment-aws.md)
+- [ ] **CI/CD automation** — backend OIDC, frontend task-def alignment, post-deploy smoke
 
 ## v1.2 (commerce & product — deferred)
 

@@ -85,17 +85,20 @@ Money-path Criticals **C1 / H1 / H3 / H7** are fixed in code — re-verify on th
 - Manager settings API  
 - Email/SMS notifications  
 - Chat, user profiles, analytics packages  
-- Dropping legacy nginx aliases (after clients migrate — can start in v1.0, finish in v1.1)
+- Dropping legacy nginx aliases (after clients migrate — can start in v1.0, finish in v1.2)
 
 ---
 
 ## v1.1 — platform (post-launch)
 
-Authoritative plan: [v1.1-release-plan.md](v1.1-release-plan.md). **Logging, deployment, automation** — not commerce features.
+Authoritative plan: [v1.1-release-plan.md](v1.1-release-plan.md). **Logging, sessions, access control, deployment, automation** — not commerce features.
 
 | Item | Theme |
 |------|--------|
 | Structured API errors + `slog` logging | Logging |
+| Consistent refresh sessions (auth + BFF cookie contract) | Sessions |
+| Verify ABAC + permissions on money-path routes | Access control |
+| BFF logout revokes refresh session (`dupli1-web`) | Sessions |
 | AWS cost orphan cleanup, ALB redirect, nginx/ECS alignment | Deployment |
 | Backend CI OIDC, frontend task-def alignment, deploy smoke | Automation |
 | Notification handler logging, auth register soft-success | Logging / hygiene |
@@ -146,9 +149,6 @@ Grouped by theme. None of these should delay v1.0 launch or v1.1 platform work.
 | Password reset / OAuth / email verify | Ops create accounts for now |
 | Formal SQL migrations directory | Inline migrate works |
 | Local TLS in Compose | Prod has ALB HTTPS |
-| AWS cost orphan cleanup / CI OIDC for backend | **v1.1** — [v1.1-release-plan.md](v1.1-release-plan.md) |
-| HTTP→HTTPS ALB `:80` redirect align | **v1.1** |
-| Align frontend CI task defs with live EC2 bridge | **v1.1** |
 
 ---
 
@@ -173,8 +173,10 @@ Then tag **v1.0** and execute **v1.1** from [v1.1-release-plan.md](v1.1-release-
 Authoritative plan: [v1.1-release-plan.md](v1.1-release-plan.md).
 
 1. Structured API errors + `slog` logging — **P0**  
-2. AWS deployment alignment (cost cleanup, ALB redirect, gateway config) — **P0**  
-3. CI/CD automation (OIDC, workflow alignment, deploy smoke) — **P1**  
+2. Consistent sessions + BFF revocable logout — **P0**  
+3. Verify access control (ABAC + permissions) — **P0**  
+4. AWS deployment alignment — **P0**  
+5. CI/CD automation (OIDC, smoke) — **P1**  
 
 Commerce backlog (guest cart, refunds, co-view, …) → **v1.2**.
 
