@@ -1,7 +1,7 @@
 # Dupli1 v1.0 release plan
 
-**Status:** In progress (2026-07-26) — repo-side work in section C is done; section A/B are operator + sibling-repo work.  
-**Closeout checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) — authoritative spec + ship checklist (not shipped yet).  
+**Status:** **Postponed** (2026-07-27) — v1.0 will not ship until every open item in [v1.0-release-spec.md](v1.0-release-spec.md) sections A–F is resolved (ops, smoke, frontends, sign-off — not only backend hardening).  
+**Closeout checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) — authoritative spec + ship checklist.  
 **Scope:** Backend repo `dupli1` + production ops needed for a KRW fashion-bag marketplace launch.  
 **Sibling frontends:** `dupli1-web`, `dupli1-manage-web` (called out where they block launch).
 
@@ -11,9 +11,9 @@
 
 ## Verdict
 
-The **money path is implemented**: cart → checkout/order → Stripe/Bypass → `payment.succeeded` → `paid` → ship → stock commit. Critical money/auth bugs from the Jul review (server-side pricing, JWT fail-closed, outboxes) are done.
+The **money path is implemented**: cart → checkout/order → Stripe/Bypass → `payment.succeeded` → `paid` → ship → stock commit. Critical money/auth bugs from the Jul review (server-side pricing, JWT fail-closed, outboxes) are done. Backend hardening (section C) is **done in the repo**.
 
-**v1.0 is a launch cut**, not feature-complete. Ship a reliable KRW checkout loop with catalog, inventory, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. Post-launch **v1.1** is logging, deployment, and automation — see [v1.1-release-plan.md](v1.1-release-plan.md).
+**v1.0 is postponed** until all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed — production images CDN, persistent JWT secret, prod smoke, and `dupli1-web` / `dupli1-manage-web` alignment remain open. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
 
 ---
 

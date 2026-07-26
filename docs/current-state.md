@@ -176,7 +176,7 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Per
 3. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
 4. **Planned packages not started** — user, chat, analytics (beyond `shared/pkg/permissions`)
 5. **Quality/performance** — see [quality-performance-review.md](quality-performance-review.md); money-path Criticals (C1 pricing, H7 JWT) are fixed — remaining items in [TODO.md](TODO.md)
-6. **v1.0 vs v1.1 vs v1.2** — v1.0 closeout: [v1.0-release-spec.md](v1.0-release-spec.md); narrative: [v1-release-plan.md](v1-release-plan.md); v1.1: [v1.1-release-plan.md](v1.1-release-plan.md)
+6. **v1.0 vs v1.1 vs v1.2** — **v1.0 postponed** (2026-07-27) until all checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are done; narrative: [v1-release-plan.md](v1-release-plan.md); v1.1 starts after v1.0 tags: [v1.1-release-plan.md](v1.1-release-plan.md)
 7. **Production JWT signing key** — auth supports `JWT_PRIVATE_KEY` and Terraform can inject it, but the secret is not created yet, so production still signs with a per-restart ephemeral key. `GET /api/v1/auth/settings` reports `features.ephemeral_jwt_key`. See the [launch runbook](v1-release-plan.md#launch-runbook-section-a) (checklist item A6)
 8. **Legacy API path aliases** — canonical `/api/v1/{service}/…` paths are documented; the old top-level prefixes stay registered until the frontends migrate ([TODO.md](TODO.md))
 

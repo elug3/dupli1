@@ -2,7 +2,9 @@
 
 **Release boundary:** [v1.0-release-spec.md](v1.0-release-spec.md) (v1.0 closeout checklist) · [v1-release-plan.md](v1-release-plan.md) (narrative) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch).
 
-## v1.0 closeout (not shipped)
+## v1.0 closeout (**postponed** — 2026-07-27)
+
+**Do not tag v1.0** until every open item below and in [v1.0-release-spec.md](v1.0-release-spec.md) is resolved.
 
 **Checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) — ops (A), smoke (B), backend (C), `dupli1-web` (D), `dupli1-manage-web` (E), sign-off (F).
 
