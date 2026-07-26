@@ -25,6 +25,13 @@ func TestNormalizeProductTaxonomy(t *testing.T) {
 	if err := NormalizeProductTaxonomy(&Product{Target: "unisex"}); err == nil {
 		t.Fatal("expected invalid target error")
 	}
+	all := Product{Target: "ALL"}
+	if err := NormalizeProductTaxonomy(&all); err != nil {
+		t.Fatal(err)
+	}
+	if all.Target != "all" {
+		t.Fatalf("got target=%q, want all", all.Target)
+	}
 	empty := Product{}
 	if err := NormalizeProductTaxonomy(&empty); err != nil {
 		t.Fatal(err)
@@ -33,10 +40,10 @@ func TestNormalizeProductTaxonomy(t *testing.T) {
 
 func TestDefaultMasterCatalog(t *testing.T) {
 	c := DefaultMasterCatalog()
-	if len(c.SubCategories) != 5 || len(c.Styles) != 5 || len(c.Targets) != 3 {
+	if len(c.SubCategories) != 5 || len(c.Styles) != 5 || len(c.Targets) != 4 {
 		t.Fatalf("unexpected lengths: %+v", c)
 	}
-	if c.SubCategories[0].Code != "handbags" || c.Styles[0].Code != "casual" || c.Targets[0].Code != "men" {
+	if c.SubCategories[0].Code != "handbags" || c.Styles[0].Code != "casual" || c.Targets[0].Code != "all" {
 		t.Fatalf("unexpected first entries: %+v", c)
 	}
 }

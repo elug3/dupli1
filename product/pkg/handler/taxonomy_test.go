@@ -30,7 +30,7 @@ func TestMasterCatalogEndpoints(t *testing.T) {
 	if len(catalog.Styles) != 5 || catalog.Styles[0].Code != "casual" {
 		t.Fatalf("styles: %+v", catalog.Styles)
 	}
-	if len(catalog.Targets) != 3 || catalog.Targets[0].Code != "men" {
+	if len(catalog.Targets) != 4 || catalog.Targets[0].Code != "all" {
 		t.Fatalf("targets: %+v", catalog.Targets)
 	}
 

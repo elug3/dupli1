@@ -177,7 +177,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [men, women, kids]
+            enum: [all, men, women, kids]
           description: Audience target
         - name: status
           in: query

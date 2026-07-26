@@ -46,7 +46,7 @@ type Product struct {
 	// Style is bag occasion / look (casual, evening, business, weekend, statement).
 	// Distinct from StyleCode (SKU design-family master).
 	Style string `json:"style,omitempty"`
-	// Target is audience (men, women, kids).
+	// Target is audience (all, men, women, kids).
 	Target string `json:"target,omitempty"`
 	// SellingPrice is the official/display price in KRW won (strikethrough / "was" price).
 	SellingPrice float64 `json:"sellingPrice,omitempty"`
