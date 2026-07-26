@@ -25,7 +25,7 @@ func TestValidAccountType(t *testing.T) {
 		{domain.AccountTypeCustomer, true},
 		{domain.AccountTypeManager, true},
 		{domain.AccountTypeService, true},
-		{domain.AccountTypeAdminLegacy, false}, // must normalize first
+		{"admin", false}, // permission tier, not account_type
 		{"", false},
 		{"staff", false},
 	} {
@@ -35,7 +35,7 @@ func TestValidAccountType(t *testing.T) {
 	}
 }
 
-func TestNormalizeAccountType(t *testing.T) {
+func TestNormalizeAccountType_LegacyDBAdmin(t *testing.T) {
 	for _, tt := range []struct {
 		in, want string
 	}{
@@ -43,7 +43,7 @@ func TestNormalizeAccountType(t *testing.T) {
 		{domain.AccountTypeCustomer, domain.AccountTypeCustomer},
 		{domain.AccountTypeManager, domain.AccountTypeManager},
 		{domain.AccountTypeService, domain.AccountTypeService},
-		{domain.AccountTypeAdminLegacy, domain.AccountTypeManager},
+		{"admin", domain.AccountTypeManager}, // stale DB row only
 		{"staff", "staff"},
 	} {
 		if got := domain.NormalizeAccountType(tt.in); got != tt.want {
@@ -52,12 +52,13 @@ func TestNormalizeAccountType(t *testing.T) {
 	}
 }
 
-func TestUserClassAcceptsLegacyAdminAccountType(t *testing.T) {
-	u, err := domain.NewUser("id-1", "ops@example.com", "supersecret", domain.AccountTypeAdminLegacy, permissions.AdminAll)
+func TestUserClassTreatsStaleAdminAccountTypeAsManagerTier(t *testing.T) {
+	// Stale DB row before migrate; ABAC still classifies via NormalizeAccountType.
+	u, err := domain.NewUser("id-1", "ops@example.com", "supersecret", "admin", permissions.AdminAll)
 	if err != nil {
 		t.Fatalf("NewUser: %v", err)
 	}
 	if got := domain.UserClass(u); got != domain.ClassAdmin {
-		t.Fatalf("UserClass = %v, want ClassAdmin for legacy account_type admin + admin.*", got)
+		t.Fatalf("UserClass = %v, want ClassAdmin for stale account_type admin + admin.*", got)
 	}
 }

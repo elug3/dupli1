@@ -174,7 +174,10 @@ paths:
       operationId: authRegister
       security:
         - bearerAuth: []
-      description: Requires `owner`, `admin`, `user_manager`, or `customer_registrar` role. New users receive the `customer` role by default and `account_type` `customer` unless overridden.
+      description: >
+        Requires `user.create` (or temporary open register). New users receive empty
+        permissions by default and `account_type` `customer` unless overridden with
+        `customer` | `manager` | `service` (never `admin` — that is a permission).
       requestBody:
         required: true
         content:
@@ -289,8 +292,10 @@ paths:
                   example: [customer, user_manager]
                 account_type:
                   type: string
-                  enum: [customer, admin, service]
-                  description: Optional. When set, updates the user's account_type.
+                  enum: [customer, manager, service]
+                  description: >
+                    Optional. Updates the user's account_type. Use `manager` for operators;
+                    `admin` is a permission (`admin.*`), not an account_type.
       responses:
         '200':
           description: Updated user
@@ -487,9 +492,12 @@ components:
           minLength: 8
         account_type:
           type: string
-          enum: [customer, admin, service]
+          enum: [customer, manager, service]
           default: customer
-          description: Account classification. `customer_registrar` callers may only use `customer`.
+          description: >
+            Account classification (not a permission). Use `manager` for human operators.
+            `admin` is a permission tier (`admin.*`), not an account_type.
+            `customer_registrar` / `user.create`-only callers may only use `customer`.
 
     RegisterResponse:
       type: object
@@ -522,7 +530,7 @@ components:
 
     User:
       type: object
-      required: [user_id, email, account_type, roles, is_active, failed_login_attempts]
+      required: [user_id, email, account_type, permissions, is_active, failed_login_attempts]
       properties:
         user_id:
           type: string
@@ -532,12 +540,13 @@ components:
           format: email
         account_type:
           type: string
-          enum: [customer, admin, service]
-        roles:
+          enum: [customer, manager, service]
+          description: Account classification. Not a permission — use `manager` for operators (`admin.*` is a permission).
+        permissions:
           type: array
           items:
             type: string
-            enum: [admin, user_manager, customer_registrar, customer, owner, product_manager]
+          description: Fine-grained permission strings (e.g. product.create, admin.*, *)
         is_active:
           type: boolean
         locked_at:

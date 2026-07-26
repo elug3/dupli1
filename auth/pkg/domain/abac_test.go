@@ -70,8 +70,8 @@ func TestCanRegister_registrarOnlyCustomer(t *testing.T) {
 	if CanRegister(registrar, AccountTypeManager, nil) {
 		t.Fatal("registrar should not register manager account type")
 	}
-	if CanRegister(registrar, AccountTypeAdminLegacy, nil) {
-		t.Fatal("registrar should not register legacy admin (normalized to manager)")
+	if CanRegister(registrar, "admin", nil) {
+		t.Fatal("registrar should not register admin (not an account_type; treated as manager tier)")
 	}
 }
 
