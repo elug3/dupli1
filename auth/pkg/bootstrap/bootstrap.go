@@ -152,7 +152,7 @@ func buildTokenGenerators(cfg Config) (access ports.TokenGenerator, refresh port
 	}
 
 	// No key configured — generate a throwaway RSA key. Tokens are invalid across restarts.
-	cfg.Logger.Warn().Msg("no JWT_PRIVATE_KEY_FILE configured — generating ephemeral RSA-2048 key; tokens will be invalidated on restart")
+	cfg.Logger.Warn().Msg("no JWT_PRIVATE_KEY or JWT_PRIVATE_KEY_FILE configured — generating ephemeral RSA-2048 key; every issued token is invalidated on restart")
 	key, genErr := jwtinfra.GenerateRSAKey(2048)
 	if genErr != nil {
 		return nil, nil, nil, fmt.Errorf("generate ephemeral RSA key: %w", genErr)
