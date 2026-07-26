@@ -41,6 +41,7 @@ func (s *ProductSearchStore) migrate() error {
 			name        TEXT NOT NULL DEFAULT '',
 			description TEXT NOT NULL DEFAULT '',
 			price       NUMERIC(10,2) NOT NULL DEFAULT 0,
+			official_price NUMERIC(10,2) NOT NULL DEFAULT 0,
 			brand       TEXT NOT NULL DEFAULT '',
 			color       TEXT NOT NULL DEFAULT '',
 			material    TEXT NOT NULL DEFAULT '',
@@ -63,7 +64,6 @@ func (s *ProductSearchStore) migrate() error {
 		{"capacity", "TEXT NOT NULL DEFAULT ''"},
 		{"tags", "TEXT[] NOT NULL DEFAULT '{}'"},
 		{"created_by", "TEXT NOT NULL DEFAULT ''"},
-		{"selling_price", "NUMERIC(10,2) NOT NULL DEFAULT 0"},
 		{"official_price", "NUMERIC(10,2) NOT NULL DEFAULT 0"},
 	} {
 		if _, err := s.pool.Exec(ctx, fmt.Sprintf(
@@ -85,8 +85,6 @@ func (s *ProductSearchStore) migrate() error {
 			product_id     TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
 			color          TEXT NOT NULL DEFAULT '',
 			size           TEXT NOT NULL DEFAULT '',
-			selling_price  NUMERIC(10,2) NOT NULL DEFAULT 0,
-			price          NUMERIC(10,2) NOT NULL DEFAULT 0,
 			status         TEXT NOT NULL DEFAULT 'active',
 			image_urls     TEXT[] NOT NULL DEFAULT '{}',
 			created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -97,11 +95,6 @@ func (s *ProductSearchStore) migrate() error {
 		return fmt.Errorf("migrate product_variants: %w", err)
 	}
 
-	if _, err := s.pool.Exec(ctx,
-		`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS selling_price NUMERIC(10,2) NOT NULL DEFAULT 0`,
-	); err != nil {
-		return fmt.Errorf("migrate product_variants add selling_price: %w", err)
-	}
 	if _, err := s.pool.Exec(ctx, `ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS sku_id TEXT`); err != nil {
 		return fmt.Errorf("migrate product_variants add sku_id: %w", err)
 	}
@@ -302,8 +295,8 @@ func (s *ProductSearchStore) backfillSkuIDs(ctx context.Context) error {
 // SKU equals the product id so existing inventory/order references keep working.
 func (s *ProductSearchStore) backfillVariants(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO product_variants (sku, product_id, color, size, selling_price, price, status, image_urls, created_at)
-		SELECT p.id, p.id, p.color, '', 0, 0, p.status, p.image_urls, p.created_at
+		INSERT INTO product_variants (sku, product_id, color, size, status, image_urls, created_at)
+		SELECT p.id, p.id, p.color, '', p.status, p.image_urls, p.created_at
 		FROM products p
 		WHERE NOT EXISTS (
 			SELECT 1 FROM product_variants v WHERE v.product_id = p.id

@@ -23,11 +23,18 @@ Removed legacy fields: `sellingPrice`, `sellingPriceFrom`, `priceFrom`.
 - `sort=price` orders by `products.price`.
 - `PUT /products/{id}` uses merge-on-update: omitted fields (including `price`) keep their current values.
 
+## Schema
+
+| Table | Pricing columns |
+|-------|-----------------|
+| `products` | `price`, `official_price` |
+| `product_variants` | none (echo parent on read) |
+
 ## Migration
 
 On product-service startup:
 
 1. Ensure `products.official_price` exists.
-2. Backfill parent `price` / `official_price` from cheapest active variant when parent `price` is still `0`.
-3. Copy legacy `selling_price` → `official_price` when official is still `0`.
-4. Zero variant price columns (columns kept for schema compat; app no longer reads/writes them).
+2. Backfill parent `price` / `official_price` from cheapest active variant when parent `price` is still `0` (legacy DBs only).
+3. Copy legacy `products.selling_price` → `official_price` when official is still `0`.
+4. Drop `products.selling_price` and `product_variants.price` / `selling_price` if present.
