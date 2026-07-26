@@ -67,3 +67,8 @@ output "manage_web_url" {
   description = "Public admin UI URL (ALB host-header manage.dupli1.com)."
   value       = "https://manage.dupli1.com"
 }
+
+output "github_actions_deploy_role_arn" {
+  description = "IAM role ARN for GitHub Actions OIDC (ECR + ECS deploy)."
+  value       = aws_iam_role.github_actions_deploy.arn
+}
