@@ -331,4 +331,4 @@ Local Postgres: `postgres://dupli1:dupli1_dev@localhost:5436/cart?sslmode=disabl
 | Guest cart + merge on login | Not started — reuse `dupli1_guest` from [product-guest-views-plan.md](product-guest-views-plan.md) |
 | `POST /api/v1/cart/checkout` | Not started |
 | Stock enforcement on add | Not started |
-| CI / ECS deploy for cart | Partial (Compose only) |
+| CI / ECS deploy for cart | Done (ECS live; see [current-state.md](current-state.md)) |
