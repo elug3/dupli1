@@ -76,7 +76,7 @@ func TestUpdateProduct_StyleOnlyKeepsPrice(t *testing.T) {
 	store.Products = []domain.Product{
 		{
 			ID: "BOT-001", Name: "Cassette", Brand: "Bottega", BrandCode: "BOT", StyleCode: "CAS001",
-			Category: "bags", Style: "casual", Price: 2500, SellingPrice: 3000, Status: "active",
+			Category: "bags", Style: "casual", Price: 2500, OfficialPrice: 3000, Status: "active",
 		},
 	}
 	svc := service.NewProductSearchService(store, nil)
@@ -88,8 +88,8 @@ func TestUpdateProduct_StyleOnlyKeepsPrice(t *testing.T) {
 	if updated.Style != "evening" {
 		t.Fatalf("style = %q, want evening", updated.Style)
 	}
-	if updated.Price != 2500 || updated.SellingPrice != 3000 {
-		t.Fatalf("price wiped: price=%v selling=%v", updated.Price, updated.SellingPrice)
+	if updated.Price != 2500 || updated.OfficialPrice != 3000 {
+		t.Fatalf("price wiped: price=%v official=%v", updated.Price, updated.OfficialPrice)
 	}
 	if updated.Name != "Cassette" || updated.Category != "bags" {
 		t.Fatalf("other fields wiped: %+v", updated)

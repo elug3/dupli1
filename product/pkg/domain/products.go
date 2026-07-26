@@ -22,13 +22,13 @@ type Variant struct {
 	ColorCode   string `json:"colorCode,omitempty"`
 	EditionCode string `json:"editionCode,omitempty"` // optional VariantCode segment
 	SizeCode    string `json:"sizeCode,omitempty"`
-	// Price and SellingPrice are filled from the parent product on read.
+	// Price and OfficialPrice are filled from the parent product on read.
 	// They are not stored on the SKU row (price lives on Product).
-	SellingPrice float64 `json:"sellingPrice,omitempty"`
-	Price        float64 `json:"price,omitempty"`
-	Status       string  `json:"status"` // "active" | "draft" | "archived"
-	ImageURLs    []string `json:"imageUrls,omitempty"`
-	CreatedAt    string   `json:"createdAt,omitempty"`
+	OfficialPrice float64  `json:"officialPrice,omitempty"`
+	Price         float64  `json:"price,omitempty"`
+	Status        string   `json:"status"` // "active" | "draft" | "archived"
+	ImageURLs     []string `json:"imageUrls,omitempty"`
+	CreatedAt     string   `json:"createdAt,omitempty"`
 }
 
 // Product is a parent catalog style. Sellable options live on Variants.
@@ -48,10 +48,10 @@ type Product struct {
 	Style string `json:"style,omitempty"`
 	// Target is audience (all, men, women, kids).
 	Target string `json:"target,omitempty"`
-	// SellingPrice is the official/display price in KRW won (strikethrough / "was" price).
-	SellingPrice float64 `json:"sellingPrice,omitempty"`
-	// Price is the real sale price in KRW won (whole won; single currency).
-	// Stored on the parent; all variants inherit this price.
+	// OfficialPrice is the reference / list price in KRW won (not charged).
+	OfficialPrice float64 `json:"officialPrice,omitempty"`
+	// Price is the actual sale price in KRW won after discounts (whole won).
+	// Stored on the parent; all variants inherit this price for cart/order.
 	Price    float64  `json:"price"`
 	Status   string   `json:"status"` // "active" | "draft" | "archived"
 	Capacity string   `json:"capacity,omitempty"`
@@ -66,11 +66,7 @@ type Product struct {
 	CreatedAt     string `json:"createdAt"`
 	CreatedBy     string `json:"createdBy,omitempty"`
 
-	// Summary fields derived from variants / parent (not separate storage).
-	// SellingPriceFrom mirrors SellingPrice (compat with older list-card clients).
-	SellingPriceFrom float64 `json:"sellingPriceFrom,omitempty"`
-	// PriceFrom mirrors Price (compat with older list-card clients).
-	PriceFrom       float64   `json:"priceFrom,omitempty"`
+	// Summary fields derived from variants (not separate storage).
 	DefaultImageURL string    `json:"defaultImageUrl,omitempty"`
 	AvailableColors []string  `json:"availableColors,omitempty"`
 	AvailableSizes  []string  `json:"availableSizes,omitempty"`

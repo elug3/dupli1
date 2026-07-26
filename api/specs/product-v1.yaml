@@ -862,14 +862,14 @@ components:
           type: string
         description:
           type: string
-        sellingPrice:
+        officialPrice:
           type: number
           format: double
-          description: Official/display price (legacy mirror of cheapest active variant)
+          description: Reference / list price in KRW won (display only; not charged)
         price:
           type: number
           format: double
-          description: Real sale price in KRW won (whole won; single storefront currency)
+          description: Actual sale price in KRW won after discounts (whole won; charged)
         brand:
           type: string
         brandCode:
@@ -916,14 +916,6 @@ components:
         createdAt:
           type: string
           format: date-time
-        sellingPriceFrom:
-          type: number
-          format: double
-          description: Official/display price of the cheapest active variant
-        priceFrom:
-          type: number
-          format: double
-          description: Real sale price (min active variant price)
         defaultImageUrl:
           type: string
         availableColors:
@@ -967,14 +959,14 @@ components:
         sizeCode:
           type: string
           example: MED
-        sellingPrice:
+        officialPrice:
           type: number
           format: double
-          description: Official/display price (strikethrough / "was" price)
+          description: Reference / list price copied from parent (display only)
         price:
           type: number
           format: double
-          description: Real sale price used for discount calculation
+          description: Actual sale price copied from parent (charged)
         status:
           $ref: '#/components/schemas/ProductStatus'
         imageUrls:
@@ -1002,14 +994,6 @@ components:
           type: string
         sizeCode:
           type: string
-        sellingPrice:
-          type: number
-          format: double
-          description: Official/display price (strikethrough / "was" price)
-        price:
-          type: number
-          format: double
-          description: Real sale price used for discount calculation
         status:
           $ref: '#/components/schemas/ProductStatus'
         imageUrls:
@@ -1032,14 +1016,14 @@ components:
           type: string
         description:
           type: string
-        sellingPrice:
+        officialPrice:
           type: number
           format: double
-          description: Official/display price (legacy create seeds default variant)
+          description: Reference / list price (display only; not charged)
         price:
           type: number
           format: double
-          description: Real sale price used for discount calculation
+          description: Actual sale price after discounts (charged)
         brand:
           type: string
         brandCode:

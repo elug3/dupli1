@@ -5,11 +5,11 @@ import "testing"
 func TestScoreRecommendationWeights(t *testing.T) {
 	seed := Product{
 		ID: "A", BrandCode: "BOT", Brand: "Bottega", Material: "leather",
-		Tags: []string{"tote", "daily"}, PriceFrom: 100, Category: "bags",
+		Tags: []string{"tote", "daily"}, Price: 100, Category: "bags",
 	}
-	sameBrand := Product{ID: "B", BrandCode: "BOT", Brand: "Bottega", Status: "active", Category: "bags", PriceFrom: 100}
+	sameBrand := Product{ID: "B", BrandCode: "BOT", Brand: "Bottega", Status: "active", Category: "bags", Price: 100}
 	sameBrandMaterial := Product{
-		ID: "C", BrandCode: "BOT", Material: "leather", Status: "active", Category: "bags", PriceFrom: 100,
+		ID: "C", BrandCode: "BOT", Material: "leather", Status: "active", Category: "bags", Price: 100,
 	}
 	if ScoreRecommendation(seed, sameBrandMaterial) <= ScoreRecommendation(seed, sameBrand) {
 		t.Fatal("same brand+material should score higher than brand alone")
@@ -19,15 +19,15 @@ func TestScoreRecommendationWeights(t *testing.T) {
 func TestRankRecommendationsOrderAndFilters(t *testing.T) {
 	seed := Product{
 		ID: "SEED", BrandCode: "BOT", Material: "leather", Category: "bags",
-		Tags: []string{"tote"}, PriceFrom: 200, Status: "active",
+		Tags: []string{"tote"}, Price: 200, Status: "active",
 	}
 	candidates := []Product{
 		{ID: "SEED", BrandCode: "BOT", Category: "bags", Status: "active"}, // self
 		{ID: "DRAFT", BrandCode: "BOT", Category: "bags", Status: "draft"},
 		{ID: "SHOES", BrandCode: "BOT", Category: "shoes", Status: "active"},
 		{ID: "LOW", Brand: "Other", Category: "bags", Status: "active", ViewCount: 1000},
-		{ID: "HIGH", BrandCode: "BOT", Material: "leather", Tags: []string{"tote"}, Category: "bags", Status: "active", PriceFrom: 200, ViewCount: 1},
-		{ID: "MID", BrandCode: "BOT", Category: "bags", Status: "active", PriceFrom: 200, ViewCount: 50},
+		{ID: "HIGH", BrandCode: "BOT", Material: "leather", Tags: []string{"tote"}, Category: "bags", Status: "active", Price: 200, ViewCount: 1},
+		{ID: "MID", BrandCode: "BOT", Category: "bags", Status: "active", Price: 200, ViewCount: 50},
 	}
 	got := RankRecommendations(seed, candidates, 3)
 	if len(got) != 3 {

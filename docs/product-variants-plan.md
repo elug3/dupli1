@@ -90,7 +90,7 @@ Optional later: generic `options JSONB` if more than color/size is needed. Start
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `GET` | `/api/v1/products` | **Parents only.** No duplicate styles. Query: `category`, `brand`, `material`, `tags`, and filters that match *any* variant (`color`, `size`). Response includes summary: `availableColors`, `availableSizes`, `defaultImageUrl`, `priceFrom`. |
+| `GET` | `/api/v1/products` | **Parents only.** No duplicate styles. Query: `category`, `brand`, `material`, `tags`, and filters that match *any* variant (`color`, `size`). Response includes summary: `availableColors`, `availableSizes`, `defaultImageUrl`, `price`, `officialPrice`. |
 | `GET` | `/api/v1/products/{id}` | Parent + embedded `variants[]`. Derive `availableColors` / `availableSizes` from active variants. Optionally attach `inStock` per variant (product → inventory, or client fetches inventory). |
 
 Example PDP:
@@ -153,7 +153,8 @@ Deprecate:
 2. If `color` or `size` filter is present, restrict to parents that have at least one matching **active** variant.
 3. List card fields:
    - `defaultImageUrl` — first image of first active variant (or preferred color).
-   - `priceFrom` — min active variant price.
+   - `price` — actual sale price on the parent.
+   - `officialPrice` — reference / list price on the parent.
    - `availableColors` / `availableSizes` — distinct values from active variants.
 
 ## Stock

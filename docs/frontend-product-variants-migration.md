@@ -91,7 +91,8 @@ interface Product {
   createdAt: string;
 
   // Derived from variants (prefer these)
-  priceFrom?: number;
+  price: number;
+  officialPrice?: number;
   defaultImageUrl?: string;
   availableColors?: string[];
   availableSizes?: string[];
@@ -141,7 +142,8 @@ Query params:
 |------------|--------|
 | Title | `name` |
 | Brand | `brand` |
-| Price | `price` / `priceFrom` (same value; price is stored on the parent) |
+| Price | `price` (actual / discounted) |
+| Official price | `officialPrice` (reference only; not charged) |
 | Thumbnail | `defaultImageUrl` (fallback: `imageUrls[0]`) |
 | Color chips | `availableColors` |
 | Size chips | `availableSizes` |
@@ -181,7 +183,7 @@ function findVariant(
 }
 ```
 
-5. Show `variant.imageUrls`; price comes from the parent (`product.price` — also echoed on `variant.price` for cart clients).
+5. Show `variant.imageUrls`; price comes from the parent (`product.price` / `product.officialPrice` — also echoed on the variant for cart clients).
 6. Add to cart with **`variant.sku`**, not `product.id` (unless they are equal for a legacy single-SKU product).
 
 ### Stock (optional but recommended)
@@ -213,7 +215,7 @@ Rules:
 
 - [ ] Replace `/api/v1/products/bags` with `/api/v1/products?category=bags`
 - [ ] Parse list as `{ total, results }`
-- [ ] List cards use parent fields (`priceFrom`, `defaultImageUrl`, `availableColors`)
+- [ ] List cards use parent fields (`price`, `officialPrice`, `defaultImageUrl`, `availableColors`)
 - [ ] PDP loads `variants` and selects color/size → variant
 - [ ] Gallery uses `variant.imageUrls`
 - [ ] Cart/checkout send **variant SKU**
