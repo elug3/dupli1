@@ -63,12 +63,11 @@ Steady-state Dupli1 core (2×`t3.large` + NAT + ALB + RDS) is about **$210–230
 
 | Type | Name | Purpose |
 |------|------|---------|
-| Secret | `AWS_ACCESS_KEY_ID` | CI deploy credentials (prefer OIDC role long-term) |
-| Secret | `AWS_SECRET_ACCESS_KEY` | CI deploy credentials |
 | Variable | `AWS_REGION` | `us-east-1` |
 | Variable | `ECS_CLUSTER` | `production` |
+| Variable | `AWS_ROLE_ARN` | (optional) defaults to `arn:aws:iam::845061289093:role/github-actions-deploy-role` |
 
-Frontends (`dupli1-web`, `dupli1-manage-web`) deploy via OIDC role `github-actions-deploy-role`.
+Backend (`dupli1`) and frontends (`dupli1-web`, `dupli1-manage-web`) deploy via **GitHub OIDC** and IAM role `github-actions-deploy-role` (ECR push + ECS deploy). Do not use long-lived `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` secrets for CI.
 
 ## Local development
 

@@ -110,7 +110,17 @@ Or let the script call `terraform apply` after deleting the old services.
 
 ## Images
 
-GitHub Actions (`.github/workflows/aws.yml`) builds and pushes to ECR (including `dupli1-cart` / `dupli1-payment`), then force-redeploys ECS services. Proxy uses `api/Dockerfile.ecs` (Cloud Map DNS).
+GitHub Actions (`.github/workflows/aws.yml`) builds and pushes to ECR (including `dupli1-cart` / `dupli1-payment`), then force-redeploys ECS services via **OIDC** (`github-actions-deploy-role`). Proxy uses `api/Dockerfile.ecs` (Cloud Map DNS).
+
+### GitHub Actions OIDC role
+
+`github_actions_oidc.tf` manages `github-actions-deploy-role` (ECR push + ECS deploy). The role already exists in the account; import before the first Terraform apply:
+
+```bash
+terraform import aws_iam_role.github_actions_deploy github-actions-deploy-role
+terraform import aws_iam_role_policy.github_actions_ecs_deploy github-actions-deploy-role:ECSDeployPolicy
+terraform import aws_iam_role_policy_attachment.github_actions_ecr_power_user github-actions-deploy-role/arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
+```
 
 ## Product images (CloudFront)
 

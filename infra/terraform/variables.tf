@@ -189,3 +189,9 @@ variable "web_service_email" {
   type        = string
   default     = "dupli1-web@web.dupli1.com"
 }
+
+variable "github_oidc_extra_subjects" {
+  description = "Additional token.actions.githubusercontent.com:sub values for the GitHub Actions deploy role."
+  type        = list(string)
+  default     = []
+}
