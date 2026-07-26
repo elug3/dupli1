@@ -4,7 +4,7 @@
 **Scope:** Backend repo `dupli1` + production ops needed for a KRW fashion-bag marketplace launch.  
 **Sibling frontends:** `dupli1-web`, `dupli1-manage-web` (called out where they block launch).
 
-**Related:** [current-state.md](current-state.md), [TODO.md](TODO.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [payment-methods-plan.md](payment-methods-plan.md).
+**Related:** [current-state.md](current-state.md), [TODO.md](TODO.md), [v1.1-release-plan.md](v1.1-release-plan.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [payment-methods-plan.md](payment-methods-plan.md).
 
 ---
 
