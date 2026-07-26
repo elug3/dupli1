@@ -54,6 +54,7 @@ See [service-layout.md](service-layout.md) for details.
   - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`); seeded/synced on auth boot; ECS injects the shared Secrets Manager secret into auth + web (see [infra/terraform/README.md](../infra/terraform/README.md))
   - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage` (`DUPLI1_ORDER_SERVICE_*`); order refreshes a Bearer access token and calls product stock/coupons via **`DUPLI1_GATEWAY_URL`** (`httpstock` / gateway paths)
   - Login/refresh rate-limited per IP via Redis
+  - `user.registered` NATS publish is best-effort: a broker outage is logged and the account still registers
 - **Tests:** `cd auth && go test ./...`
 
 ### dupli1-product
@@ -66,11 +67,11 @@ See [service-layout.md](service-layout.md) for details.
   - Bag merchandising taxonomy (`subCategory`, `style`, `target`) with public master catalog + product search filters
   - Price stored on parent product (`price` / `officialPrice`); variants inherit for cart JSON — [product-price-on-parent.md](product-price-on-parent.md)
   - Parent `attributes` string map (PDP memo; not searched) — [product-attributes.md](product-attributes.md)
-  - Dual SKU identity + master dictionaries: [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`; human `sku`; `/api/v1/catalog/…`; Phase C enforces existing master codes on create)
+  - Dual SKU identity + master dictionaries: [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`; human `sku`; `/api/v1/products/catalog/…`; Phase C enforces existing master codes on create)
   - Error wrapping: store-boundary sentinels + sanitized 500s — [product-error-wrapping.md](product-error-wrapping.md)
   - Public: `GET /api/v1/products` (optional `product.read` widens view; filters `q`, `category`, `subcategory`, `style`, `target`, `brand`, `color`, `size`, `material`, `tags`; `sort`/`order` — [product-rich-search.md](product-rich-search.md), [product-master-catalog.md](product-master-catalog.md)), `GET /api/v1/products/{id}` (parent + variants; unique guest `viewCount` via `dupli1_guest` cookie; `soldCount` on reservation commit — [product-sold-count.md](product-sold-count.md); `wishlistCount`), wishlist add/remove/list, `GET /api/v1/products/{id}/recommendations` (content + popularity — [product-recommendations.md](product-recommendations.md)), `GET /api/v1/products/variants?sku_ids=` (batch public variant lookup), coupon redeem
   - Admin: per-route permissions (`product.create`, `coupon.read`, …) — see [permissions.md](permissions.md); parent CRUD, variant CRUD at `/api/v1/products/{id}/variants`, images on variant or default variant
-  - Stock and reservations at `/api/v1/inventory/*` (merged in from the former standalone `inventory` service), keyed by a canonical ULID `SkuID` with `sku` and `by-sku-id/{skuId}` lookups both supported; reads are public, writes require `inventory.stock.write` or `inventory.reservation.manage`
+  - Stock and reservations at `/api/v1/products/inventory/*` (merged in from the former standalone `inventory` service; legacy `/api/v1/inventory/*` still aliased), keyed by a canonical ULID `SkuID` with `sku` and `by-sku-id/{skuId}` lookups both supported; reads are public, writes require `inventory.stock.write` or `inventory.reservation.manage`
   - Protected routes validate RS256 via `AUTH_JWKS_URL`; authorization from `permissions` claim
   - Inline schema migration + variant backfill on startup; brand/color/size/edition master tables seeded on migrate
   - Plan: [product-variants-plan.md](product-variants-plan.md), [product-sku-system.md](product-sku-system.md)
@@ -81,7 +82,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Host port:** 8083
 - **Persistence:** PostgreSQL (`orders` on `postgres-order`)
 - **Features:**
-  - Checkout sessions at `/api/v1/checkout/sessions` (see [checkout-session.md](checkout-session.md))
+  - Checkout sessions at `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions` still aliased; see [checkout-session.md](checkout-session.md))
   - Order lifecycle at `/api/v1/orders` — statuses: `pending`, `paid`, `in_transit`, `fulfilled`, `canceled`
   - Consumes **`payment.succeeded`** (NATS) → `paid`; 5-minute unpaid `pending` expiry worker
   - Publishes order events via transactional **outbox** (`order.created` / status updates); outbox drain worker
@@ -97,7 +98,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Persistence:** PostgreSQL (`cart` on `postgres-cart`)
 - **Features:**
   - Persistent per-customer cart at `/api/v1/cart` (see [cart-service.md](cart-service.md))
-  - Admin read at `/api/v1/carts/{customer_id}` requires `cart.read`
+  - Admin read at `/api/v1/cart/customers/{customer_id}` requires `cart.read` (legacy `/api/v1/carts/{customer_id}` still aliased)
   - Enriches lines from product (price, images, availability)
 - **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only), with `JWT_SECRET` HS256 fallback in dev
 - **Tests:** `cd cart && go test ./...`
@@ -118,14 +119,14 @@ See [service-layout.md](service-layout.md) for details.
 ### dupli1-notification
 
 - **Host port:** 8084
-- **Features:** NATS subscriber; Telegram alerts on order/product events when `TELEGRAM_*` is set
+- **Features:** NATS subscriber; Telegram alerts on order/product events when `TELEGRAM_*` is set. Handler failures (payload decode, Telegram send) are logged; core NATS does not redeliver, so a failed alert is dropped after the log line
 - **Production:** bot token + chat IDs from Secrets Manager `dupli1/production/telegram` (see [deployment-aws.md](deployment-aws.md) / Terraform README)
 - **Status:** Health + event dispatch (no outbound email/SMS yet)
 
 ### dupli1-proxy
 
 - **Host ports:** 8080 and 80 (HTTP), 443 exposed but TLS not configured in nginx
-- **Config:** [api/nginx.conf](../api/nginx.conf)
+- **Config:** [api/nginx.conf](../api/nginx.conf) locally, [api/nginx.prod.conf](../api/nginx.prod.conf) for the single-EC2 Compose overlay, [api/nginx.ecs.conf](../api/nginx.ecs.conf) for production ECS (baked into `api/Dockerfile.ecs`). All three route the same API prefixes
 - **Health:** `GET /gateway/health` → `ok`
 
 ## Data stores
@@ -176,6 +177,8 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Per
 4. **Planned packages not started** — user, chat, analytics (beyond `shared/pkg/permissions`)
 5. **Quality/performance** — see [quality-performance-review.md](quality-performance-review.md); money-path Criticals (C1 pricing, H7 JWT) are fixed — remaining items in [TODO.md](TODO.md)
 6. **v1.0 vs v1.1** — launch cut: [v1-release-plan.md](v1-release-plan.md); post-launch plan: [v1.1-release-plan.md](v1.1-release-plan.md)
+7. **Production JWT signing key** — auth supports `JWT_PRIVATE_KEY` and Terraform can inject it, but the secret is not created yet, so production still signs with a per-restart ephemeral key. `GET /api/v1/auth/settings` reports `features.ephemeral_jwt_key`. See the [launch runbook](v1-release-plan.md#launch-runbook-section-a)
+8. **Legacy API path aliases** — canonical `/api/v1/{service}/…` paths are documented; the old top-level prefixes stay registered until the frontends migrate ([TODO.md](TODO.md))
 
 ## Running and testing
 

@@ -2,6 +2,29 @@
 
 **Release boundary:** [v1-release-plan.md](v1-release-plan.md) (v1.0 launch cut) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch themes & slices).
 
+## v1.0 launch cut
+
+Backend hardening (section C of [v1-release-plan.md](v1-release-plan.md)) is **done**:
+
+- [x] Auth `user.registered` publish is best-effort — a NATS outage no longer rolls back a registration
+- [x] Notification logs NATS handler failures (decode + Telegram send)
+- [x] Persistent RS256 signing key via `JWT_PRIVATE_KEY` (ECS-friendly) + optional Terraform secret wiring
+- [x] `api/nginx.prod.conf` routes cart / payment / notification / variants; 20m body limit
+- [x] Order status machine + canonical paths corrected in `api.md`, `permissions.md`, `api/specs/order-v1.yaml`
+- [x] OpenAPI covers inventory, catalog and coupons (`api/specs/product-v1.yaml`); `docs/openapi.yaml` is a full gateway index
+- [x] CI runs the notification module tests
+
+Remaining for launch is operator + sibling-repo work — see the
+[launch runbook](v1-release-plan.md#launch-runbook-section-a):
+
+- [ ] Create the JWT signing-key secret and set `jwt_private_key_secret_arn` (auth still uses an ephemeral key in production until then)
+- [ ] Apply the product-images CloudFront/OAC Terraform and rewrite stale `imageUrls` hosts
+- [ ] Live Stripe key + webhook secret; confirm `dev_simulate_success` is off
+- [ ] Telegram secret wired for `order.paid` alerts
+- [ ] Verify no live products have zeroed `price` / `official_price`
+- [ ] Storefront + admin migrate to canonical paths, parent pricing and `skuId`
+- [ ] Money-path smoke test on production
+
 ## v1.1 (post-launch)
 
 See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criteria.
@@ -47,7 +70,7 @@ Implement in the order in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) (
     | `/api/v1/inventory/reservations/*` | `/api/v1/products/inventory/reservations/*` |
     | `/api/v1/checkout/*` | `/api/v1/orders/checkout/*` |
     | `/api/v1/carts/{id}` | `/api/v1/cart/customers/{id}` |
-- [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md)). Code path for private images via CloudFront OAC landed (#96); Terraform apply / host rewrite still open.
+- [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md)). Code path for private images via CloudFront OAC landed (#96); Terraform apply / host rewrite still open — steps in the [launch runbook](v1-release-plan.md#launch-runbook-section-a).
 - [x] **Server-side order/checkout pricing (C1)** — ignore client `unit_price_cents`; resolve from product like cart ([quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)#1-c1--server-side-pricing-critical)
 - [x] Inventory service token refresh in order bootstrap
 - [x] **H1** Order create `Idempotency-Key` + transactional outbox (soft-success publish; worker drain)

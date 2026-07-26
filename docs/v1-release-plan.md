@@ -1,6 +1,6 @@
 # Dupli1 v1.0 release plan
 
-**Status:** Planning (2026-07-26)  
+**Status:** In progress (2026-07-26) — repo-side work in section C is done; section A/B are operator + sibling-repo work.  
 **Scope:** Backend repo `dupli1` + production ops needed for a KRW fashion-bag marketplace launch.  
 **Sibling frontends:** `dupli1-web`, `dupli1-manage-web` (called out where they block launch).
 
@@ -38,12 +38,12 @@ The **money path is implemented**: cart → checkout/order → Stripe/Bypass →
 | Product image URLs still point at private S3 (browser 403) if CloudFront/`S3_PUBLIC_ENDPOINT` not applied | **Launch-blocker** | Apply CDN + rewrite hosts — [product-images-browser-access.md](product-images-browser-access.md) |
 | Frontends still on legacy paths / human `sku` only (not `skuId`) / old price fields | **Launch-blocker** | Migrate storefront + admin before cut |
 | Catalog prices wiped to `0` (historical partial-PUT bug) | **Data** | Verify prod prices; restore snapshot/PITR or re-enter if still zero |
-| `MergeUpdate` cannot deliberately set `price`/`officialPrice` to `0` | Low | Document; rare admin case |
-| Auth `user.registered` NATS publish fails → register rolls back (no consumer) | Med | Soft-success publish for v1.0 if register is used in prod |
-| Notification handler errors silently discarded | Med | Log errors before launch |
-| Stale docs (`api.md` still mentions `confirmed`; `current-state` still flags client prices) | Med | Fix docs in v1.0 cut |
-| `api/nginx.prod.conf` missing cart/payment/variants (Compose “prod” file) | Med | Confirm live uses `nginx.ecs.conf`; do not deploy broken prod conf |
-| OpenAPI lag (inventory, catalog, coupons canonical paths) | Low–med | Refresh specs for external integrators |
+| `MergeUpdate` cannot deliberately set `price`/`officialPrice` to `0` | Low | **Documented** in [product-price-on-parent.md](product-price-on-parent.md) + [api.md](api.md); rare admin case |
+| Auth `user.registered` NATS publish fails → register rolls back (no consumer) | Med | **Fixed** — publish is best-effort; failure is logged and the account survives |
+| Notification handler errors silently discarded | Med | **Fixed** — NATS dispatch logs subject + error |
+| Stale docs (`api.md` still mentions `confirmed`) | Med | **Fixed** — status machine, persistence and canonical paths corrected in `api.md`, `permissions.md`, `api/specs/order-v1.yaml` |
+| `api/nginx.prod.conf` missing cart/payment/variants (Compose “prod” file) | Med | **Fixed** — cart/payment/notification/variants locations added, body limit raised to 20m. Live ECS still uses `nginx.ecs.conf`, which was already complete |
+| OpenAPI lag (inventory, catalog, coupons canonical paths) | Low–med | **Fixed** — `api/specs/product-v1.yaml` covers all 41 canonical product routes; `docs/openapi.yaml` is a complete 67-path gateway index |
 | Admin/owner never locked out | Accepted | Keep rate limits + strong passwords |
 
 Money-path Criticals **C1 / H1 / H3 / H7** are fixed in code — re-verify on the deployed revision, don’t re-implement.
@@ -57,10 +57,12 @@ Money-path Criticals **C1 / H1 / H3 / H7** are fixed in code — re-verify on th
 1. **Deploy latest product** so `official_price` migrate + drop of `selling_price` has run on RDS.
 2. **Product images CDN** — Terraform apply CloudFront + OAC; set `S3_PUBLIC_ENDPOINT`; rewrite existing `imageUrls` if hosts are stale.
 3. **Stripe live** — `STRIPE_SECRET_KEY` + webhook secret; confirm Bypass only for managers.
-4. **Persistent JWT signing key** — no ephemeral RSA on auth restart.
+4. **Persistent JWT signing key** — no ephemeral RSA on auth restart. Code + Terraform support landed (`JWT_PRIVATE_KEY`); the secret still has to be created and `jwt_private_key_secret_arn` set.
 5. **Telegram** — Secrets Manager wired if ops alerts are required.
 6. **Smoke the money path on prod** — add to cart → checkout → pay → `paid` → ship → stock committed / `soldCount` up.
 7. **Confirm catalog prices** — spot-check non-zero `price` / `officialPrice` after earlier wipe + migrate.
+
+Step-by-step commands and verification for all of these: [launch runbook](#launch-runbook-section-a) below.
 
 ### B. Client alignment (sibling repos)
 
@@ -69,12 +71,13 @@ Money-path Criticals **C1 / H1 / H3 / H7** are fixed in code — re-verify on th
 3. Prefer `skuId` for cart/order/inventory; keep displaying human `sku`.
 4. Stock UX: call inventory (or accept oversell risk) — PDP `inStock` enrichment is **not** required if clients poll inventory.
 
-### C. Backend hardening (small, launch-relevant)
+### C. Backend hardening (small, launch-relevant) — **done**
 
-1. Soft-success auth `user.registered` publish (don’t delete user if NATS flaps).
-2. Log notification NATS handler failures.
-3. Fix stale API docs status machine (`paid` / `in_transit`, not `confirmed`).
-4. Refresh OpenAPI enough for storefront/admin (inventory + catalog + coupons).
+1. [x] Soft-success auth `user.registered` publish (don’t delete user if NATS flaps).
+2. [x] Log notification NATS handler failures.
+3. [x] Fix stale API docs status machine (`paid` / `in_transit`, not `confirmed`).
+4. [x] Refresh OpenAPI enough for storefront/admin (inventory + catalog + coupons).
+5. [x] Complete `api/nginx.prod.conf` (cart / payment / notification / variants + 20m body limit).
 
 ### D. Explicitly **out of** v1.0 (still OK to leave as 501 / unfinished)
 
@@ -149,9 +152,117 @@ Ship when all are true:
 - [ ] Telegram (or accepted alternative) fires on `order.paid`
 - [ ] No known zeroed catalog prices on live products
 - [ ] Frontends use canonical paths + parent pricing (+ `skuId` preferred)
-- [ ] Runbook: [deployment-aws.md](deployment-aws.md) followed for secrets/JWT/Stripe
+- [ ] Runbook below executed for secrets / JWT / Stripe / images
 
 Then tag **v1.0** and execute **v1.1** from [v1.1-release-plan.md](v1.1-release-plan.md) (themes, slices, exit criteria). The postpone table above remains the inventory of deferred items.
+
+---
+
+## Launch runbook (section A)
+
+Operator steps that cannot be done from the repo. Region `us-east-1`, ECS cluster
+`production`, Terraform in `infra/terraform/`. Architecture reference:
+[deployment-aws.md](deployment-aws.md).
+
+### 1. Persistent JWT signing key
+
+Without this, auth mints a new RSA key on every task start: all outstanding access and
+refresh tokens break and the other services see a changed JWKS. Auth reads the PEM from
+`JWT_PRIVATE_KEY` (see [deployment-aws.md](deployment-aws.md#jwt-signing-key)).
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out jwt-private-key.pem
+aws secretsmanager create-secret --name dupli1/production/jwt-private-key \
+  --secret-string "file://jwt-private-key.pem"
+# set jwt_private_key_secret_arn to the returned ARN, then:
+terraform -chdir=infra/terraform apply
+aws ecs update-service --cluster production --service dupli1-auth --force-new-deployment
+shred -u jwt-private-key.pem
+```
+
+Verify — `ephemeral_jwt_key` must be `false`, and the `kid`/`n` must survive a restart:
+
+```bash
+curl -s https://dupli1.com/api/v1/auth/settings | jq .features.ephemeral_jwt_key
+curl -s https://dupli1.com/api/v1/auth/.well-known/jwks.json | jq -r '.keys[0].n' | sha256sum
+```
+
+### 2. Product images CDN
+
+Terraform already declares CloudFront + OAC, the bucket policy and the
+`S3_PUBLIC_ENDPOINT` task env. Apply it, then repoint any rows still holding raw S3 hosts
+([product-images-browser-access.md](product-images-browser-access.md)):
+
+```bash
+terraform -chdir=infra/terraform apply
+terraform -chdir=infra/terraform output product_images_cdn_url
+aws ecs update-service --cluster production --service dupli1-product --force-new-deployment
+```
+
+```sql
+-- image_urls is TEXT[] on product_variants and on the legacy parent products column.
+-- Check first, and match whatever host the rows actually hold:
+SELECT sku, image_urls FROM product_variants
+WHERE EXISTS (SELECT 1 FROM unnest(image_urls) AS u WHERE u LIKE '%s3.amazonaws.com%');
+
+UPDATE product_variants
+SET image_urls = ARRAY(
+  SELECT replace(u, 'https://dupli1-production-product-images.s3.amazonaws.com',
+                    'https://images.dupli1.com')
+  FROM unnest(image_urls) AS u
+)
+WHERE EXISTS (SELECT 1 FROM unnest(image_urls) AS u WHERE u LIKE '%s3.amazonaws.com%');
+-- repeat for products.image_urls if legacy parent rows still carry absolute URLs
+```
+
+Verify a PDP image URL returns `200` from a plain browser fetch (no signature), not `403`.
+
+### 3. Stripe live keys
+
+Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` from Secrets Manager on
+`dupli1-payment`, and register the endpoint
+`https://dupli1.com/api/v1/payments/webhooks/stripe` in the Stripe dashboard. Bypass stays
+gated on `payment.bypass` ([payment-service.md](payment-service.md),
+[payment-methods-plan.md](payment-methods-plan.md)). Verify:
+
+```bash
+curl -s https://dupli1.com/api/v1/payments/settings \
+  | jq '{stripe_checkout: .features.stripe_checkout,
+         stripe_webhook: .features.stripe_webhook,
+         dev_simulate_success: .features.dev_simulate_success}'
+# want: stripe_checkout true, stripe_webhook true, dev_simulate_success false
+```
+
+`dev_simulate_success` is derived from an empty `STRIPE_SECRET_KEY`, so a `true` here means
+the live key never reached the task.
+
+### 4. Telegram ops alerts
+
+Populate `dupli1/production/telegram` (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ORDER_CHAT_ID`,
+`TELEGRAM_PRODUCT_CHAT_ID`) and redeploy `dupli1-notification`. A missing token is not an
+error — messages are skipped and logged, so check the log line if nothing arrives. Handler
+failures are logged as `notification nats handler subject=… error=…`; core NATS does not
+redeliver, so a logged failure means that one alert was lost.
+
+### 5. Catalog price check
+
+An earlier partial-PUT bug wrote `price = 0`. Confirm nothing live is still zeroed:
+
+```sql
+SELECT id, name, price, official_price FROM products
+WHERE status = 'active' AND (price IS NULL OR price = 0);
+```
+
+Restore from snapshot/PITR or re-enter the values. Note that sending `price: 0` through
+the API is ignored by design ([product-price-on-parent.md](product-price-on-parent.md)), so
+zeroed rows must be fixed with a real amount.
+
+### 6. Money-path smoke test
+
+Against production, with a throwaway customer account: add to cart → create a checkout
+session → complete it → pay by card → order reaches `paid` → `POST /orders/{id}/ship`
+returns `in_transit` → stock decremented and `soldCount` incremented on the PDP. Confirm
+the `order.paid` Telegram alert arrived.
 
 ---
 
@@ -173,4 +284,5 @@ Authoritative plan: [v1.1-release-plan.md](v1.1-release-plan.md).
 
 - Keep [TODO.md](TODO.md) as the checklist; this file is the **v1.0 release boundary**.
 - Post-launch scope: [v1.1-release-plan.md](v1.1-release-plan.md).
-- Update [current-state.md](current-state.md) “Known gaps” when v1.0 ships (remove stale “client-trusted prices” risk — fixed).
+- Done in this cut: order status machine and canonical paths in [api.md](api.md) / [permissions.md](permissions.md) / `api/specs/order-v1.yaml`; inventory, catalog and coupon coverage in `api/specs/product-v1.yaml`; [openapi.yaml](openapi.yaml) rebuilt as a full gateway index; [current-state.md](current-state.md) “Known gaps” refreshed (the “client-trusted prices” risk was already fixed and is not listed).
+- Still to update at ship time: tick the exit criteria above and record the production values (CDN domain, JWT key secret ARN) in [deployment-aws.md](deployment-aws.md).

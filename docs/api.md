@@ -510,6 +510,8 @@ Routes below require `Authorization: Bearer <access_token>`. Product validates R
 | PUT | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` |
 | DELETE | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` |
 
+`PUT /api/v1/products/{id}` and variant updates **merge**: omitted JSON fields keep their current value, so a partial body cannot blank out data. The trade-off is that a zero value is indistinguishable from an omitted one — sending `price: 0` or `officialPrice: 0` is ignored rather than clearing the price. See [product-price-on-parent.md](product-price-on-parent.md).
+
 New parent `id`s are ULIDs (`domain.NewProductID()`); legacy brand-prefixed ids (e.g. `BOT-001`) remain valid. Human identity is `brandCode` + `styleCode`. Dual variant identity and master dictionaries: [product-sku-system.md](product-sku-system.md) — ULID `skuId` (canonical) + human `sku` (`Brand_Style_Color[_Edition]_Size`). Catalog CRUD at `/api/v1/products/catalog/…` (legacy alias `/api/v1/catalog/…`). Product/variant create requires existing master codes (Phase C). See also [product-variants-plan.md](product-variants-plan.md).
 
 ---
