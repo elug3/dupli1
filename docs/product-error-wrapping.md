@@ -54,11 +54,11 @@ FK insert) check and return **before** `wrapDB`.
 
 - Known sentinels → status + `err.Error()` (safe, no SQL).
 - Default → **500** with body `"internal error"`, and the real error is logged
-  (`log.Printf("product: internal error: %v", err)`).
+  (v1.1: migrate to **zerolog** — today `log.Printf("product: internal error: %v", err)`).
 
 Do not return `err.Error()` on 500s from product handlers.
 
-The same default applies in **auth**, **order**, **cart**, and **payment** handlers (`"internal error"` + log).
+The same default applies in **auth**, **order**, **cart**, and **payment** handlers (`"internal error"` + log). v1.1 standardizes all services on **zerolog** via `shared/pkg/log`.
 
 ## Adding a new store method
 
