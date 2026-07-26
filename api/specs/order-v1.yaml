@@ -9,10 +9,17 @@ info:
     `Authorization: Bearer <access_token>` (RS256 via auth JWKS when `AUTH_JWKS_URL` is set;
     HS256 via `JWT_SECRET` in dev). The token must include claim `"type": "access"`.
 
-    **Roles:** `customer`, `order_manager`, `admin`. Order CRUD enforces ABAC for customers;
-    checkout session endpoints do not verify `customer_id` against the JWT subject.
+    **Authorization:** fine-grained permission strings, not roles. Callers with empty
+    `permissions` (storefront customers) are restricted by ABAC to their own `customer_id`
+    and their own checkout sessions; `order.create` / `order.read.all` bypass ABAC, and
+    `order.ship` / `order.status.update` gate the fulfilment routes.
 
-    **Persistence:** In-memory only — data is lost on service restart.
+    **Persistence:** PostgreSQL (`DUPLI1_ORDER_DB`). The in-memory store is a test-only
+    fallback used when no database URL is configured.
+
+    **Paths:** checkout sessions are canonically namespaced under `/api/v1/orders/checkout/…`.
+    The older top-level `/api/v1/checkout/…` prefix is still registered as an alias for every
+    checkout route and will be removed once clients migrate.
 
 servers:
   - url: http://localhost:8080
@@ -144,20 +151,54 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/orders/{id}/ship:
+    post:
+      tags: [Orders]
+      summary: Ship a paid order
+      operationId: orderShip
+      security:
+        - bearerAuth: []
+      description: |
+        Requires `order.ship`. Commits the inventory reservation, then moves
+        `paid` → `in_transit`. Any other current status is an invalid transition (`400`).
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order shipped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v1/orders/{id}/status:
     put:
       tags: [Orders]
-      summary: Update order status
+      summary: Cancel or fulfil an order
       operationId: orderUpdateStatus
       security:
         - bearerAuth: []
       description: |
-        Requires `order_manager` or `admin` role.
+        Requires `order.status.update`. Accepts only `canceled` and `fulfilled` —
+        any other value (including the removed `confirmed`) returns `400`.
 
         Valid transitions:
-        - `pending` → `confirmed` (commits inventory reservation)
-        - `pending` → `canceled` (releases reservation)
-        - `confirmed` → `fulfilled`
+        - `pending` → `canceled` (releases the reservation)
+        - `paid` → `canceled` (releases the reservation; refund is manual in v1.0)
+        - `in_transit` → `fulfilled`
+
+        `pending` → `paid` is driven by the payment service (`payment.succeeded`) and
+        has no client route. `paid` → `in_transit` uses `POST /api/v1/orders/{id}/ship`.
       parameters:
         - $ref: '#/components/parameters/OrderId'
       requestBody:
@@ -169,7 +210,7 @@ paths:
               required: [status]
               properties:
                 status:
-                  $ref: '#/components/schemas/OrderStatus'
+                  $ref: '#/components/schemas/OrderStatusUpdate'
       responses:
         '200':
           description: Updated order
@@ -188,7 +229,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/checkout/sessions:
+  /api/v1/orders/checkout/sessions:
     post:
       tags: [Checkout]
       summary: Create a checkout session
@@ -220,7 +261,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/checkout/sessions/{id}:
+  /api/v1/orders/checkout/sessions/{id}:
     get:
       tags: [Checkout]
       summary: Get a checkout session
@@ -244,7 +285,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/checkout/sessions/{id}/items:
+  /api/v1/orders/checkout/sessions/{id}/items:
     put:
       tags: [Checkout]
       summary: Replace all line items
@@ -311,10 +352,10 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/checkout/sessions/{id}/items/{sku}:
+  /api/v1/orders/checkout/sessions/{id}/items/{sku}:
     delete:
       tags: [Checkout]
-      summary: Remove a line item by SKU
+      summary: Remove a line item by human SKU
       operationId: checkoutRemoveItem
       security:
         - bearerAuth: []
@@ -340,7 +381,36 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/checkout/sessions/{id}/coupon:
+  /api/v1/orders/checkout/sessions/{id}/items/by-sku-id/{skuId}:
+    delete:
+      tags: [Checkout]
+      summary: Remove a line item by canonical skuId
+      operationId: checkoutRemoveItemBySkuId
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - name: skuId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Canonical ULID variant id
+      responses:
+        '200':
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/orders/checkout/sessions/{id}/coupon:
     post:
       tags: [Checkout]
       summary: Apply a coupon to the session
@@ -377,7 +447,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/checkout/sessions/{id}/complete:
+  /api/v1/orders/checkout/sessions/{id}/complete:
     post:
       tags: [Checkout]
       summary: Complete checkout and create an order
@@ -475,7 +545,16 @@ components:
 
     OrderStatus:
       type: string
-      enum: [pending, confirmed, canceled, fulfilled]
+      description: |
+        `pending` (created, awaiting payment) → `paid` (payment succeeded) →
+        `in_transit` (shipped, stock committed) → `fulfilled` (delivered).
+        `canceled` is reachable from `pending` and `paid`.
+      enum: [pending, paid, in_transit, fulfilled, canceled]
+
+    OrderStatusUpdate:
+      type: string
+      description: The subset of OrderStatus that PUT /status accepts.
+      enum: [canceled, fulfilled]
 
     CheckoutSessionStatus:
       type: string
@@ -658,7 +737,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Forbidden:
-      description: Insufficient role or ABAC violation
+      description: Insufficient permission or ABAC violation
       content:
         application/json:
           schema:
