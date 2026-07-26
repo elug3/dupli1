@@ -3,6 +3,7 @@ package nats
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 
 	natsgo "github.com/nats-io/nats.go"
@@ -37,10 +38,7 @@ func (s *Subscriber) Subscribe(ctx context.Context, subject string, handler port
 	}
 
 	sub, err := s.conn.Subscribe(subject, func(msg *natsgo.Msg) {
-		if handler == nil {
-			return
-		}
-		_ = handler(ctx, msg.Subject, msg.Data)
+		dispatch(ctx, handler, msg.Subject, msg.Data)
 	})
 	if err != nil {
 		return fmt.Errorf("subscribe %s: %w", subject, err)
@@ -48,6 +46,17 @@ func (s *Subscriber) Subscribe(ctx context.Context, subject string, handler port
 
 	s.subs = append(s.subs, sub)
 	return nil
+}
+
+// dispatch runs handler and logs any failure. Core NATS does not redeliver, so a
+// dropped notification is only ever visible in the logs.
+func dispatch(ctx context.Context, handler ports.MessageHandler, subject string, data []byte) {
+	if handler == nil {
+		return
+	}
+	if err := handler(ctx, subject, data); err != nil {
+		log.Printf("notification nats handler subject=%s error=%v", subject, err)
+	}
 }
 
 // Close drains and closes the NATS connection.
