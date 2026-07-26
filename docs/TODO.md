@@ -1,6 +1,6 @@
 # TODO
 
-**Release boundary:** [v1-release-plan.md](v1-release-plan.md) — what must ship for **v1.0** vs postpone to **v1.1**.
+**Release boundary:** [v1-release-plan.md](v1-release-plan.md) (v1.0 launch cut) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch themes & slices).
 
 ## Temporary / ops
 
