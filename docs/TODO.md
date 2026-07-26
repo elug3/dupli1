@@ -2,11 +2,17 @@
 
 **Release boundary:** [v1-release-plan.md](v1-release-plan.md) (v1.0 launch cut) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch themes & slices).
 
-## v1.1 (post-launch)
+## v1.1 (post-launch — logging, deployment, automation)
 
 See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criteria.
 
-- [ ] **Structured API errors + log messages** — stable machine `code` on all services (not HTTP status int); structured `slog` fields on error paths. Product sentinels done — [product-error-wrapping.md](product-error-wrapping.md); extend to auth/order/cart/payment + shared helper.
+- [ ] **Structured API errors + log messages** — stable machine `code` on all services; structured `slog` on error paths — [product-error-wrapping.md](product-error-wrapping.md)
+- [ ] **AWS deployment alignment** — cost orphan cleanup, ALB redirect, gateway/nginx ECS config — [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md), [deployment-aws.md](deployment-aws.md)
+- [ ] **CI/CD automation** — backend OIDC, frontend task-def alignment, post-deploy smoke — `.github/workflows/`
+
+## v1.2 (commerce & product — deferred)
+
+Guest cart, refunds, co-view, legacy alias removal, manager settings, H6, Redis cache — see v1.1 plan “Deferred to v1.2” table.
 
 ## Temporary / ops
 
