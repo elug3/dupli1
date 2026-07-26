@@ -68,6 +68,34 @@ func TestCreateVariantUnderParent(t *testing.T) {
 	}
 }
 
+func TestUpdateProduct_StyleOnlyKeepsPrice(t *testing.T) {
+	store := memory.NewProductStore()
+	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "BOT", Code: "CAS001", Name: "Cassette"}); err != nil {
+		t.Fatal(err)
+	}
+	store.Products = []domain.Product{
+		{
+			ID: "BOT-001", Name: "Cassette", Brand: "Bottega", BrandCode: "BOT", StyleCode: "CAS001",
+			Category: "bags", Style: "casual", Price: 2500, SellingPrice: 3000, Status: "active",
+		},
+	}
+	svc := service.NewProductSearchService(store, nil)
+
+	updated, err := svc.UpdateProduct(domain.Product{ID: "BOT-001", Style: "evening"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Style != "evening" {
+		t.Fatalf("style = %q, want evening", updated.Style)
+	}
+	if updated.Price != 2500 || updated.SellingPrice != 3000 {
+		t.Fatalf("price wiped: price=%v selling=%v", updated.Price, updated.SellingPrice)
+	}
+	if updated.Name != "Cassette" || updated.Category != "bags" {
+		t.Fatalf("other fields wiped: %+v", updated)
+	}
+}
+
 func TestUpdateVariant_PartialBodyDoesNotClearOtherFields(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
