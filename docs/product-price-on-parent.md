@@ -32,6 +32,7 @@ Removed legacy fields: `sellingPrice`, `sellingPriceFrom`, `priceFrom`.
 On product-service startup:
 
 1. Ensure `products.official_price` exists.
-2. Backfill parent `price` / `official_price` from cheapest active variant when parent `price` is still `0` (legacy DBs only).
-3. Copy legacy `products.selling_price` → `official_price` when official is still `0`.
-4. Drop `products.selling_price` and `product_variants.price` / `selling_price` if present.
+2. Backfill parent `price` from `MIN(active variant.price)` when parent `price` is still `0`.
+3. Backfill parent `official_price` from `MAX(active variant.selling_price)` when official is still `0` (even if sale price was already set).
+4. Copy legacy `products.selling_price` → `official_price` when official is still `0`.
+5. Drop `products.selling_price` and `product_variants.price` / `selling_price` if present.
