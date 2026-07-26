@@ -232,6 +232,13 @@ func applyEnv(opts *auth.ServerOptions) {
 	if v := os.Getenv("DUPLI1_ORDER_SERVICE_PASSWORD"); v != "" {
 		opts.OrderServicePassword = v
 	}
+	// AUTH_OPEN_REGISTER / DUPLI1_AUTH_OPEN_REGISTER — temporary public customer signup.
+	// Default is true (see NewServerOptions); set false/0/no to re-lock behind user.create.
+	if v := os.Getenv("AUTH_OPEN_REGISTER"); v != "" {
+		opts.OpenRegister = strings.EqualFold(v, "true") || v == "1"
+	} else if v := os.Getenv("DUPLI1_AUTH_OPEN_REGISTER"); v != "" {
+		opts.OpenRegister = strings.EqualFold(v, "true") || v == "1"
+	}
 
 	setDurationEnv(&opts.ReadTimeout, "DUPLI1_AUTH_READ_TIMEOUT")
 	setDurationEnv(&opts.WriteTimeout, "DUPLI1_AUTH_WRITE_TIMEOUT")

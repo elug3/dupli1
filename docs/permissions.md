@@ -199,7 +199,7 @@ Stripe webhook and dev simulate endpoints are **unauthenticated** (signature / d
 
 | Method | Path | Permission |
 |--------|------|------------|
-| `POST` | `/api/v1/auth/register` | `user.create` |
+| `POST` | `/api/v1/auth/register` | `user.create` (or temporary open register) |
 | `GET` | `/api/v1/auth/me` | (authenticated) |
 | `GET` | `/api/v1/auth/users` | `user.read` |
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` |

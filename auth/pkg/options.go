@@ -62,6 +62,10 @@ type ServerOptions struct {
 	// OrderServiceEmail and OrderServicePassword seed the dupli1-order service account.
 	OrderServiceEmail    string
 	OrderServicePassword string
+
+	// OpenRegister temporarily allows POST /register without auth / user.create
+	// (customer accounts only). Default true until re-locked; set AUTH_OPEN_REGISTER=false.
+	OpenRegister bool
 }
 
 // NewServerOptions returns ServerOptions populated with sensible defaults.
@@ -75,13 +79,14 @@ func NewServerOptions() *ServerOptions {
 		ShutdownTimeout:    10 * time.Second,
 		TokenExpiry:        15 * time.Minute,
 		RefreshTokenExpiry: 24 * time.Hour,
-		CookieName:     "dupli1_session",
-		CookieSecure:   true,
-		CookieHTTPOnly: true,
+		CookieName:         "dupli1_session",
+		CookieSecure:       true,
+		CookieHTTPOnly:     true,
 		MaxConns:           100,
 		Debug:              false,
 		LogOutput:          "json",
 		LogLevel:           "info",
+		OpenRegister:       true, // temporary public customer signup
 	}
 }
 

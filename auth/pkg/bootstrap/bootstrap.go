@@ -94,7 +94,10 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		service.WithEventPublisher(eventPublisher),
 	)
 
-	h := handler.NewHandler(svc, cfg.Logger)
+	h := handler.NewHandler(svc, cfg.Logger).WithOpenRegister(cfg.OpenRegister)
+	if cfg.OpenRegister {
+		cfg.Logger.Warn().Str("event", "open_register_enabled").Msg("TEMPORARY: unauthenticated customer register is enabled")
+	}
 	engine := newRouter(h, cfg.Debug, jwksJSON, redisClient, cfg.CORSOrigins, BuildSettings(cfg))
 
 	app := &App{

@@ -33,4 +33,8 @@ type Config struct {
 	// OrderServiceEmail and OrderServicePassword seed the dupli1-order service account.
 	OrderServiceEmail    string
 	OrderServicePassword string
+
+	// OpenRegister temporarily allows unauthenticated customer signup
+	// (no user.create). Set false to restore gated register.
+	OpenRegister bool
 }

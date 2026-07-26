@@ -2,6 +2,10 @@
 
 **Release boundary:** [v1-release-plan.md](v1-release-plan.md) — what must ship for **v1.0** vs postpone to **v1.1**.
 
+## Temporary / ops
+
+- [ ] **Re-lock auth register** — `AUTH_OPEN_REGISTER` is temporarily **true** (public customer signup). Set `false` / remove when storefront no longer needs open registration; restore Bearer + `user.create` only.
+
 ## Quality / performance (reviewed 2026-07-15)
 
 Full write-up: [quality-performance-review.md](quality-performance-review.md).

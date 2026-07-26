@@ -43,13 +43,28 @@ func toUserResponse(u *domain.User) userResponse {
 // Handler holds service dependencies for HTTP handlers.
 // Access control is enforced via RequireAuth / RequirePermission middleware in the router.
 type Handler struct {
-	svc    *service.Service
-	logger zerolog.Logger
+	svc          *service.Service
+	logger       zerolog.Logger
+	openRegister bool // temporary: allow unauthenticated customer signup
 }
 
 // NewHandler creates a new Handler.
 func NewHandler(svc *service.Service, logger zerolog.Logger) *Handler {
 	return &Handler{svc: svc, logger: logger}
+}
+
+// WithOpenRegister enables temporary public customer registration (no auth / user.create).
+// Authenticated callers with user.create still follow ABAC for non-customer types.
+func (h *Handler) WithOpenRegister(enabled bool) *Handler {
+	if h != nil {
+		h.openRegister = enabled
+	}
+	return h
+}
+
+// OpenRegister reports whether unauthenticated customer signup is allowed.
+func (h *Handler) OpenRegister() bool {
+	return h != nil && h.openRegister
 }
 
 // respondInternalError logs the real error and returns a generic 500 body.
@@ -153,7 +168,14 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 	accountType = domain.NormalizeAccountType(accountType)
 	caller := callerFromContext(c)
-	if caller == nil || !domain.CanRegister(caller, accountType, nil) {
+	if caller == nil {
+		if !h.openRegister {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing bearer token"})
+			return
+		}
+		// Temporary open register: anonymous signup is customer-only with empty permissions.
+		accountType = domain.AccountTypeCustomer
+	} else if !domain.CanRegister(caller, accountType, nil) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "management forbidden: cannot register this account type"})
 		return
 	}

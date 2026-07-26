@@ -231,6 +231,8 @@ resource "aws_ecs_task_definition" "auth" {
         { name = "DUPLI1_AUTH_ADDR", value = ":8080" },
         { name = "REDIS_URL", value = "redis://redis.dupli1.local:6379" },
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
+        # TEMPORARY: public customer signup without user.create. Set false to re-lock.
+        { name = "AUTH_OPEN_REGISTER", value = "true" },
       ]
       secrets = [
         {

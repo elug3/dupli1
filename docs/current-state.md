@@ -46,7 +46,8 @@ See [service-layout.md](service-layout.md) for details.
   - Permission constants and evaluation in `shared/pkg/permissions` (`github.com/elug3/dupli1/shared`)
   - Wildcards: `*`, `admin.*`, `{resource}.*` (e.g. `product.*`)
   - Account types: `customer`, `manager`, `service` (JSON field `account_type`; distinct from permissions). Legacy write value `admin` is accepted and stored as `manager`.
-  - Register requires `user.create` (not public); auth ABAC hierarchy governs who may manage whom
+  - Register: **temporary open customer signup** via `AUTH_OPEN_REGISTER` (default on); anonymous callers create `customer` only. Set `AUTH_OPEN_REGISTER=false` to require `user.create` again. Authenticated `user.create` still follows ABAC for other account types.
+  - Auth ABAC hierarchy governs who may manage whom
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `manager`)
   - Login lockout after 5 failed attempts for customers/managers; **admin and owner are never locked**

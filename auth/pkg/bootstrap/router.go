@@ -52,7 +52,13 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 
 	v1 := r.Group("/api/v1/auth")
 	{
-		v1.POST("/register", h.RequireAuth(), handler.RequirePermission(permissions.UserCreate), h.Register)
+		if h.OpenRegister() {
+			// Temporary: public customer signup (no user.create). OptionalAuth keeps
+			// privileged register working when a bearer token is supplied.
+			v1.POST("/register", h.OptionalAuth(), h.Register)
+		} else {
+			v1.POST("/register", h.RequireAuth(), handler.RequirePermission(permissions.UserCreate), h.Register)
+		}
 		v1.POST("/login", loginLimiter.Middleware(), h.Login)
 		v1.POST("/refresh", refreshLimiter.Middleware(), h.Refresh)
 		v1.POST("/logout", h.Logout)

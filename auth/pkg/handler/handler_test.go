@@ -277,6 +277,55 @@ func TestRegister(t *testing.T) {
 	}
 }
 
+func TestRegister_OpenRegisterAllowsUnauthenticatedCustomer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	repo := newFakeUserRepo()
+	accessGen := jwtgen.NewTokenGeneratorWithType("access-secret", 900, "access")
+	refreshGen := jwtgen.NewTokenGeneratorWithType("refresh-secret", 3600, "refresh")
+	sessions := memory.NewSessionStore()
+	svc := service.NewService(
+		repo,
+		accessGen,
+		service.WithRefreshTokenGen(refreshGen, time.Hour),
+		service.WithSessionStore(sessions),
+	)
+	h := handler.NewHandler(svc, zerolog.Nop()).WithOpenRegister(true)
+	r := bootstrap.NewRouter(h, false, nil, nil, nil)
+
+	body, _ := json.Marshal(map[string]string{
+		"email":        "selfserve@example.com",
+		"password":     "supersecret",
+		"account_type": "manager", // ignored — forced to customer
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	u, err := repo.FindByEmail(context.Background(), "selfserve@example.com")
+	if err != nil || u == nil {
+		t.Fatalf("user not saved: %v", err)
+	}
+	if u.AccountType != domain.AccountTypeCustomer {
+		t.Fatalf("account_type = %q, want customer", u.AccountType)
+	}
+	if len(u.Permissions) != 0 {
+		t.Fatalf("permissions = %v, want empty", u.Permissions)
+	}
+	if resp.UserID != u.ID {
+		t.Fatalf("user_id = %q, want %q", resp.UserID, u.ID)
+	}
+}
+
 func TestRegister_BadJSON(t *testing.T) {
 	s := newStack(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString("{bad"))
