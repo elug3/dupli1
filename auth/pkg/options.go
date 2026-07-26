@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -25,7 +26,7 @@ type ServerOptions struct {
 	// Token settings — provide JWTPrivateKeyFile or JWTPrivateKeyPEM for RS256/JWKS.
 	// When neither is set, an ephemeral RSA key is generated on startup (dev only).
 	JWTPrivateKeyFile  string // path to PEM-encoded RSA private key
-	JWTPrivateKeyPEM   []byte // raw PEM bytes (populated from JWTPrivateKeyFile)
+	JWTPrivateKeyPEM   []byte // raw PEM bytes; from JWT_PRIVATE_KEY or JWTPrivateKeyFile
 	JWTKeyID           string // "kid" in the JWKS document (default: "default")
 	TokenExpiry        time.Duration
 	RefreshTokenExpiry time.Duration
@@ -88,6 +89,18 @@ func NewServerOptions() *ServerOptions {
 		LogLevel:           "info",
 		OpenRegister:       true, // temporary public customer signup
 	}
+}
+
+// NormalizePEM prepares a PEM block that arrived as a single environment-variable
+// value. Some secret stores and hand-edited task definitions deliver the block with
+// literal "\n" sequences instead of real newlines, which no PEM decoder accepts.
+func NormalizePEM(value string) []byte {
+	value = strings.TrimSpace(value)
+	if !strings.Contains(value, "\n") {
+		value = strings.ReplaceAll(value, `\n`, "\n")
+	}
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	return []byte(value + "\n")
 }
 
 // Validate performs basic sanity checks on the options.
