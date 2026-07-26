@@ -16,7 +16,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Shopping cart | Implemented (PostgreSQL) |
 | Payments (Stripe Checkout) | Implemented — see [payment-service.md](payment-service.md) |
 | Payment methods | Credit card + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
-| Notifications | Stub (health only) |
+| Notifications | Implemented (NATS → Telegram when configured) |
 | User profiles, chat, analytics | Guest cookie + unique PDP views + simple recommendations implemented in product — see [product-guest-views-plan.md](product-guest-views-plan.md), [product-recommendations.md](product-recommendations.md); broader analytics still not started |
 | Manager settings (mutable store policy) | Sketch — see [manager-settings-api.md](manager-settings-api.md) |
 

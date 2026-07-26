@@ -129,7 +129,7 @@ Manager-tier and `customer` / `service` accounts still use the normal lockout.
 | `product.create` | Create parent product |
 | `product.update` | Update parent product |
 | `product.delete` | Delete parent product (cascades variants) |
-| `product.read` | List/search with drafts, `status` filter, and `cost` field |
+| `product.read` | List/search with drafts and `status` filter |
 | `product.variant.create` | Create variant (SKU) |
 | `product.variant.update` | Update variant |
 | `product.variant.delete` | Delete variant |

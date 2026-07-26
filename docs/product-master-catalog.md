@@ -38,6 +38,8 @@ GET /api/v1/products?category=bags&subcategory=tote&style=casual&target=women
 
 Filters are exact match on the normalized codes stored on the parent product.
 
+**Note:** `target=all` means products tagged with audience code `all`, not “any target.” To leave audience unfiltered, omit the `target` query param.
+
 ## Product create / update
 
 Optional JSON fields on parent:

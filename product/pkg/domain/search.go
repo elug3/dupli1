@@ -41,7 +41,9 @@ func NormalizeSearchSort(raw string) string {
 		return SortSold
 	case SortWishlist, "wish", "wishlist_count", "wishlistcount":
 		return SortWishlist
-	case SortPrice, "price_from", "pricefrom":
+	case SortPrice:
+		return SortPrice
+	case "price_from", "pricefrom": // legacy aliases; prefer sort=price
 		return SortPrice
 	case SortName, "title":
 		return SortName

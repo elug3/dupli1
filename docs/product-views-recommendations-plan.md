@@ -216,12 +216,12 @@ Reuse Part A stores for views; do not couple recommendation reads to the cookie 
 ### Suggested SQL sketch (v1)
 
 ```sql
--- Pseudocode: weights mirror the table above; price_from via existing variant aggregate or denormalized summary.
+-- Pseudocode: weights mirror the table above; use parent products.price.
 SELECT p.id, …,
   (CASE WHEN p.brand_code = $seed_brand THEN 5 ELSE 0 END)
   + (CASE WHEN p.material = $seed_material THEN 3 ELSE 0 END)
   + (2 * LEAST(cardinality(ARRAY(SELECT UNNEST(p.tags) INTERSECT SELECT UNNEST($seed_tags::text[]))), 3))
-  + (CASE WHEN p.price_from BETWEEN $lo AND $hi THEN 2 ELSE 0 END)
+  + (CASE WHEN p.price BETWEEN $lo AND $hi THEN 2 ELSE 0 END)
   + LN(10, p.view_count + 1) AS score
 FROM products p
 WHERE p.status = 'active'
@@ -231,7 +231,7 @@ ORDER BY score DESC, p.view_count DESC, p.id ASC
 LIMIT $limit;
 ```
 
-Exact `price_from` / tag intersection syntax follows whatever the current `products` + variant summary columns already expose in `product_store.go` (compute in Go over candidates if SQL array intersect is awkward).
+Exact price-band / tag intersection syntax follows whatever the current `products` columns already expose in `product_store.go` (compute in Go over candidates if SQL array intersect is awkward).
 
 ---
 

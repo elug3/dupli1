@@ -396,7 +396,11 @@ func (s *ProductSearchService) UploadVariantImage(ctx context.Context, productID
 	if err != nil {
 		return nil, err
 	}
-	parent, _ := s.store.GetProduct(productID)
+	parent, err := s.store.GetProduct(productID)
+	if err != nil {
+		return nil, err
+	}
+	updated.ApplyParentPrice(*parent)
 	if err := s.publish(ctx, productImageUploadedSubject, parent, sku, url); err != nil {
 		return nil, err
 	}

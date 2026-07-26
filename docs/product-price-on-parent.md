@@ -23,12 +23,9 @@ Removed legacy fields: `sellingPrice`, `sellingPriceFrom`, `priceFrom`.
 - `sort=price` orders by `products.price`.
 - `PUT /products/{id}` uses merge-on-update: omitted fields (including `price`) keep their current values.
 
-## Schema
+## Partial updates
 
-| Table | Pricing columns |
-|-------|-----------------|
-| `products` | `price`, `official_price` |
-| `product_variants` | none (echo parent on read) |
+`PUT /products/{id}` merges non-empty / non-zero fields. Omitted JSON fields keep their current values. Setting `price` or `officialPrice` to `0` is ignored (cannot clear a price via zero); send a positive amount to change them.
 
 ## Migration
 

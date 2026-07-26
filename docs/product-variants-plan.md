@@ -2,6 +2,8 @@
 
 **Status:** Phases 1–3 implemented in product service (schema, backfill, read/write APIs). Phases 4–5 below (stock integration, cleanup) were superseded by a larger follow-up: every variant now has a canonical ULID `SkuID` (in addition to the human `sku`), and the standalone inventory service was merged into product outright (stock/reservations now live in product's own database, not read via an external HTTP client). See `product/pkg/domain/skuid.go`, `product/pkg/service/inventory_service.go`, and [current-state.md](current-state.md) for the implemented shape.
 
+**Pricing:** Sale and reference prices live on the **parent** (`price` / `officialPrice`) — see [product-price-on-parent.md](product-price-on-parent.md). Sections below that show `price` on variants are historical.
+
 **Frontend clients:** see [frontend-product-variants-migration.md](frontend-product-variants-migration.md) (`dupli1-web`, `dupli1-manage-web`).
 
 Goal: customers see **one catalog entry per style** (no duplicates), while color, size, images, and stock live on **sellable variants (SKUs)**.
@@ -59,7 +61,7 @@ status                            size: "" (optional)
 Keep shared catalog fields:
 
 - `id`, `name`, `description`, `brand`, `material`, `category`, `status`, `tags`, `capacity`, `created_at`
-- `cost` stays on parent or moves to variant later (start: parent-level cost for admin)
+- Pricing is on the parent (`price` / `officialPrice`); `cost` was removed from the product API.
 
 Deprecate as source of truth (migrate off):
 
