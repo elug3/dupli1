@@ -104,9 +104,16 @@ else
   log "Skip RDS $RDS_EC2_ID (set DELETE_RDS_EC2=1). Avoids storage + 7-day auto-restart."
 fi
 
-# --- Shrink ECS ASG (trunking packs tasks on 2×t3.large) ---
+# --- Shrink ECS ASG ---
+# WARNING (2026-07-26): awsvpcTrunking must be enabled for IAM role
+# dupli1-production-ecs-instance (account root setting), and instances must be
+# replaced so a trunk ENI attaches. Otherwise 2 hosts hit RESOURCE:ENI
+# (t3.large ≈ 2 awsvpc tasks each) and services fail. Safe floor without
+# trunking: desired/min ≈ 5. Defaults below assume trunking works.
 if [[ "$SHRINK_ASG" == "1" ]]; then
   log "== ASG $ASG_NAME → min=$ASG_MIN desired=$ASG_DESIRED max=$ASG_MAX =="
+  log "NOTE: Temporarily disable capacity-provider managed scaling before shrink,"
+  log "      or it may scale desired back up while instances drain."
   run aws autoscaling update-auto-scaling-group \
     --region "$AWS_REGION" \
     --auto-scaling-group-name "$ASG_NAME" \
@@ -116,7 +123,7 @@ if [[ "$SHRINK_ASG" == "1" ]]; then
     --no-cli-pager
   log
 else
-  log "Skip ASG shrink (set SHRINK_ASG=1). Est. save ~\$240–300/mo vs 5–6×t3.large."
+  log "Skip ASG shrink (set SHRINK_ASG=1). Only safe at 2× if trunk ENIs exist on hosts."
 fi
 
 log "Done. Re-run with APPLY=1 and the flags you want to execute."

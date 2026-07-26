@@ -189,6 +189,28 @@ aws globalaccelerator list-accelerators --region us-west-2
 
 ---
 
+## Actions taken 2026-07-26
+
+| Action | Result |
+|--------|--------|
+| Deleted Global Accelerators `MyAcc`, `MyAccelerator` | Done (was ~$36/mo + IPv4) |
+| Stopped Sydney `schick-test`, `mweb-vpn` | Done |
+| Deleted RDS `dupli1-ec2` (final snapshot `dupli1-ec2-final-20260726`) | Done |
+| Released idle `dupli1-vpn` EIP | Done |
+| ASG shrink to 2× `t3.large` | **Rolled back** — hit `RESOURCE:ENI` |
+
+### Why shrink-to-2 failed
+
+Hosts advertise `ecs.capability.task-eni-trunking` and user-data sets `ECS_ENABLE_AWSVPC_TRUNKING=true`, but **no trunk ENIs attach**. `awsvpcTrunking` is enabled for IAM user `cursor-agent` (and we set the account default for `root`), yet container instances still get only the normal **3 ENIs / 2 awsvpc tasks** per `t3.large`. With **10 awsvpc** services (+ 1 bridge `dupli1-web`), the floor is **~5 hosts**, not 2.
+
+ASG left at **min=5 / desired=5 / max=6** with all 11 services healthy and `https://dupli1.com` / manage / products API returning 200.
+
+### Remaining unlock for ~$210–230/mo
+
+An account admin (root) must ensure `awsvpcTrunking=enabled` applies to role `dupli1-production-ecs-instance`, **replace** ECS instances so each gets a trunk ENI, then shrink to 2× `t3.large`. Until then, do not set desired below 5.
+
+---
+
 ## Bottom line
 
-July is expensive because Dupli1 ran **production-shaped infrastructure at 6× `t3.large`**, plus **~$50–70/mo of pure orphans** (Global Accelerator, Sydney, extra RDS/EIP), on top of unavoidable NAT/ALB. The spend is **highly reducible** without redesign: apply the existing Phase 1–2 plan (delete idle GA, shrink ASG to 2) to cut toward **~$210–230/mo**, and use pause scripts when the site is not needed.
+July is expensive because Dupli1 ran **6× `t3.large`** plus orphans. On 2026-07-26 we removed the orphans and one host (→ **5×**). Further cut to 2× needs **working ENI trunking** on the instance role; without it, shrink breaks awsvpc placement.

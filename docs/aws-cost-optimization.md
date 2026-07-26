@@ -1,5 +1,7 @@
 # AWS cost optimization review (2026-07-14)
 
+> **Update (2026-07-26):** Phase 1 orphans removed (GA, Sydney stopped, `dupli1-ec2` deleted, VPN EIP released). ASG shrink to 2 **failed** — trunk ENIs never attach despite capability flags; safe floor is **5×`t3.large`**. Details: [aws-july-2026-cost-report.md](aws-july-2026-cost-report.md).
+
 Live Cost Explorer + resource inventory for account `845061289093` (`us-east-1` production). All figures are **unblended** USD.
 
 > **Update:** Full July MTD report (through 2026-07-26) is in [aws-july-2026-cost-report.md](aws-july-2026-cost-report.md). Mid-month actions below were **not** applied; ASG remains 6× `t3.large`, Global Accelerators still idle. July forecast ~$474.
