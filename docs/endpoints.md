@@ -252,7 +252,7 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 | `PUT` | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` | Update coupon (legacy: `/api/v1/coupons/{code}`) |
 | `DELETE` | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` | Delete coupon |
 
-Public search defaults to `status = active` on the **parent**. Query filters: `category`, `subcategory`, `style`, `target`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** (human `sku` or canonical `skuId`) with inventory. Identity + masters: [product-sku-system.md](product-sku-system.md). Bag taxonomy: [product-master-catalog.md](product-master-catalog.md). See also [product-variants-plan.md](product-variants-plan.md).
+Public search defaults to `status = active` on the **parent**. Query filters: `category`, `subcategory`, `style`, `target`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** (human `sku` or canonical `skuId`) with inventory. Identity + masters: [product-sku-system.md](product-sku-system.md). Bag taxonomy: [product-master-catalog.md](product-master-catalog.md). Parent display memo: [product-attributes.md](product-attributes.md). See also [product-variants-plan.md](product-variants-plan.md).
 
 ### Catalog master data
 

@@ -124,3 +124,4 @@ func TestProductMergeUpdate_ExplicitPriceChange(t *testing.T) {
 		t.Fatalf("got price=%v official=%v name=%q", merged.Price, merged.OfficialPrice, merged.Name)
 	}
 }
+
