@@ -1,10 +1,11 @@
 # Dupli1 v1.0 release plan
 
 **Status:** Planning (2026-07-26)  
+**Closeout checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) — authoritative spec + ship checklist (not shipped yet).  
 **Scope:** Backend repo `dupli1` + production ops needed for a KRW fashion-bag marketplace launch.  
 **Sibling frontends:** `dupli1-web`, `dupli1-manage-web` (called out where they block launch).
 
-**Related:** [current-state.md](current-state.md), [TODO.md](TODO.md), [v1.1-release-plan.md](v1.1-release-plan.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [payment-methods-plan.md](payment-methods-plan.md).
+**Related:** [current-state.md](current-state.md), [TODO.md](TODO.md), [v1.0-release-spec.md](v1.0-release-spec.md), [v1.1-release-plan.md](v1.1-release-plan.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [payment-methods-plan.md](payment-methods-plan.md).
 
 ---
 
@@ -12,7 +13,7 @@
 
 The **money path is implemented**: cart → checkout/order → Stripe/Bypass → `payment.succeeded` → `paid` → ship → stock commit. Critical money/auth bugs from the Jul review (server-side pricing, JWT fail-closed, outboxes) are done.
 
-**v1.0 is a launch cut**, not feature-complete. Ship a reliable KRW checkout loop with catalog, inventory, and ops alerts. Defer guest commerce, Bitcoin, refunds automation, co-view recs, chat/analytics, and deep cleanup to **v1.1**.
+**v1.0 is a launch cut**, not feature-complete. Ship a reliable KRW checkout loop with catalog, inventory, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. Post-launch **v1.1** is logging, deployment, and automation — see [v1.1-release-plan.md](v1.1-release-plan.md).
 
 ---
 
@@ -85,13 +86,29 @@ Money-path Criticals **C1 / H1 / H3 / H7** are fixed in code — re-verify on th
 - Manager settings API  
 - Email/SMS notifications  
 - Chat, user profiles, analytics packages  
-- Dropping legacy nginx aliases (after clients migrate — can start in v1.0, finish in v1.1)
+- Dropping legacy nginx aliases (after clients migrate — can start in v1.0, finish in v1.2)
 
 ---
 
-## v1.1 — postpone
+## v1.1 — platform (post-launch)
 
-Grouped by theme. None of these should delay a KRW card-checkout launch.
+Authoritative plan: [v1.1-release-plan.md](v1.1-release-plan.md). **Logging, sessions, access control, deployment, automation** — not commerce features.
+
+| Item | Theme |
+|------|--------|
+| Structured API errors + **zerolog** logging | Logging |
+| Consistent refresh sessions (auth + BFF cookie contract) | Sessions |
+| Verify ABAC + permissions on money-path routes | Access control |
+| BFF logout revokes refresh session (`dupli1-web`) | Sessions |
+| AWS cost orphan cleanup, ALB redirect, nginx/ECS alignment | Deployment |
+| Backend CI OIDC, frontend task-def alignment, deploy smoke | Automation |
+| Notification handler logging, auth register soft-success | Logging / hygiene |
+
+Commerce items below move to **v1.2**.
+
+## v1.2 — commerce & product (deferred from v1.0)
+
+Grouped by theme. None of these should delay v1.0 launch or v1.1 platform work.
 
 ### Commerce UX
 
@@ -133,15 +150,14 @@ Grouped by theme. None of these should delay a KRW card-checkout launch.
 | Password reset / OAuth / email verify | Ops create accounts for now |
 | Formal SQL migrations directory | Inline migrate works |
 | Local TLS in Compose | Prod has ALB HTTPS |
-| AWS cost orphan cleanup / CI OIDC for backend | Cost & hygiene |
-| HTTP→HTTPS ALB `:80` redirect align | Confirm live vs Terraform |
-| Align frontend CI task defs with live EC2 bridge | Ops cleanup |
 
 ---
 
 ## Suggested v1.0 exit criteria
 
-Ship when all are true:
+**Authoritative checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) (sections A–F with owners and Required/Recommended).
+
+Summary — ship when all are true:
 
 - [ ] Storefront can browse bags, see images, add to cart, checkout, pay with card, see order `paid`
 - [ ] Ops can ship → `in_transit` and stock commits
@@ -159,13 +175,13 @@ Then tag **v1.0** and execute **v1.1** from [v1.1-release-plan.md](v1.1-release-
 
 Authoritative plan: [v1.1-release-plan.md](v1.1-release-plan.md).
 
-1. Guest cart + merge (`dupli1_guest`) — **P0**  
-2. Refunds on paid cancel — **P0**  
-3. Remove legacy API aliases once clients are clean — **P1**  
-4. Co-view recommendations — **P1**  
-5. H6 context + Redis cache — **P2**  
-6. Structured API errors + log messages — **P1**  
-7. Manager settings + SKU master admin UI — **P2** / sibling  
+1. Structured API errors + **zerolog** logging — **P0**  
+2. Consistent sessions + BFF revocable logout — **P0**  
+3. Verify access control (ABAC + permissions) — **P0**  
+4. AWS deployment alignment — **P0**  
+5. CI/CD automation (OIDC, smoke) — **P1**  
+
+Commerce backlog (guest cart, refunds, co-view, …) → **v1.2**.
 
 ---
 

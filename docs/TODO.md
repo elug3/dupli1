@@ -1,12 +1,33 @@
 # TODO
 
-**Release boundary:** [v1-release-plan.md](v1-release-plan.md) (v1.0 launch cut) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch themes & slices).
+**Release boundary:** [v1.0-release-spec.md](v1.0-release-spec.md) (v1.0 closeout checklist) · [v1-release-plan.md](v1-release-plan.md) (narrative) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch).
 
-## v1.1 (post-launch)
+## v1.0 closeout (not shipped)
+
+**Checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) — ops (A), smoke (B), backend (C), `dupli1-web` (D), `dupli1-manage-web` (E), sign-off (F).
+
+Open highlights:
+
+- [ ] Product images CDN applied on prod (A2–A3)
+- [ ] Prod money-path smoke (A10, B)
+- [ ] Frontends: canonical paths, parent pricing, `skuId` (D, E)
+- [ ] Auth register soft-success if open register in prod (C1)
+- [ ] Tag `v1.0` (F4)
+
+## v1.1 (post-launch — logging, sessions, access control, deployment, automation)
 
 See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criteria.
 
-- [ ] **Structured API errors + log messages** — stable machine `code` on all services (not HTTP status int); structured `slog` fields on error paths. Product sentinels done — [product-error-wrapping.md](product-error-wrapping.md); extend to auth/order/cart/payment + shared helper.
+- [ ] **Structured API errors + zerolog** — stable machine `code`; shared `shared/pkg/log` zerolog factory on all services — [product-error-wrapping.md](product-error-wrapping.md)
+- [ ] **Consistent sessions** — BFF holds refresh; `dupli1_session` HttpOnly cookie contract — [api.md](api.md)
+- [ ] **Verify access control** — ABAC + permissions matrix; negative tests on money path — [permissions.md](permissions.md)
+- [ ] **Revocable session from BFF** — logout revokes refresh in Redis + clears cookie — `dupli1-web`
+- [ ] **AWS deployment alignment** — [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md), [deployment-aws.md](deployment-aws.md)
+- [ ] **CI/CD automation** — backend OIDC, frontend task-def alignment, post-deploy smoke
+
+## v1.2 (commerce & product — deferred)
+
+Guest cart, refunds, co-view, legacy alias removal, manager settings, H6, Redis cache — see v1.1 plan “Deferred to v1.2” table.
 
 ## Temporary / ops
 
