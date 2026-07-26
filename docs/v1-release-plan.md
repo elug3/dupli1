@@ -1,10 +1,11 @@
 # Dupli1 v1.0 release plan
 
 **Status:** Planning (2026-07-26)  
+**Closeout checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) — authoritative spec + ship checklist (not shipped yet).  
 **Scope:** Backend repo `dupli1` + production ops needed for a KRW fashion-bag marketplace launch.  
 **Sibling frontends:** `dupli1-web`, `dupli1-manage-web` (called out where they block launch).
 
-**Related:** [current-state.md](current-state.md), [TODO.md](TODO.md), [v1.1-release-plan.md](v1.1-release-plan.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [payment-methods-plan.md](payment-methods-plan.md).
+**Related:** [current-state.md](current-state.md), [TODO.md](TODO.md), [v1.0-release-spec.md](v1.0-release-spec.md), [v1.1-release-plan.md](v1.1-release-plan.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [payment-methods-plan.md](payment-methods-plan.md).
 
 ---
 
@@ -154,7 +155,9 @@ Grouped by theme. None of these should delay v1.0 launch or v1.1 platform work.
 
 ## Suggested v1.0 exit criteria
 
-Ship when all are true:
+**Authoritative checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) (sections A–F with owners and Required/Recommended).
+
+Summary — ship when all are true:
 
 - [ ] Storefront can browse bags, see images, add to cart, checkout, pay with card, see order `paid`
 - [ ] Ops can ship → `in_transit` and stock commits

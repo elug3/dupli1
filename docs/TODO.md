@@ -1,6 +1,18 @@
 # TODO
 
-**Release boundary:** [v1-release-plan.md](v1-release-plan.md) (v1.0 launch cut) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch themes & slices).
+**Release boundary:** [v1.0-release-spec.md](v1.0-release-spec.md) (v1.0 closeout checklist) · [v1-release-plan.md](v1-release-plan.md) (narrative) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch).
+
+## v1.0 closeout (not shipped)
+
+**Checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) — ops (A), smoke (B), backend (C), `dupli1-web` (D), `dupli1-manage-web` (E), sign-off (F).
+
+Open highlights:
+
+- [ ] Product images CDN applied on prod (A2–A3)
+- [ ] Prod money-path smoke (A10, B)
+- [ ] Frontends: canonical paths, parent pricing, `skuId` (D, E)
+- [ ] Auth register soft-success if open register in prod (C1)
+- [ ] Tag `v1.0` (F4)
 
 ## v1.1 (post-launch — logging, sessions, access control, deployment, automation)
 
