@@ -200,9 +200,6 @@ Stripe webhook and dev simulate endpoints are **unauthenticated** (signature / d
 | Method | Path | Permission |
 |--------|------|------------|
 | `POST` | `/api/v1/auth/register` | `user.create` (or temporary open register) |
-
-**Temporary:** `AUTH_OPEN_REGISTER=true` allows unauthenticated customer signup (empty permissions). Re-lock with `AUTH_OPEN_REGISTER=false`.
-
 | `GET` | `/api/v1/auth/me` | (authenticated) |
 | `GET` | `/api/v1/auth/users` | `user.read` |
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` |
