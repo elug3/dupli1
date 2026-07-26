@@ -6,7 +6,7 @@
 
 See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criteria.
 
-- [ ] **Structured API errors + log messages** — stable machine `code`; structured `slog` — [product-error-wrapping.md](product-error-wrapping.md)
+- [ ] **Structured API errors + zerolog** — stable machine `code`; shared `shared/pkg/log` zerolog factory on all services — [product-error-wrapping.md](product-error-wrapping.md)
 - [ ] **Consistent sessions** — BFF holds refresh; `dupli1_session` HttpOnly cookie contract — [api.md](api.md)
 - [ ] **Verify access control** — ABAC + permissions matrix; negative tests on money path — [permissions.md](permissions.md)
 - [ ] **Revocable session from BFF** — logout revokes refresh in Redis + clears cookie — `dupli1-web`

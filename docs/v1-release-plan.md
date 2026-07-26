@@ -95,7 +95,7 @@ Authoritative plan: [v1.1-release-plan.md](v1.1-release-plan.md). **Logging, ses
 
 | Item | Theme |
 |------|--------|
-| Structured API errors + `slog` logging | Logging |
+| Structured API errors + **zerolog** logging | Logging |
 | Consistent refresh sessions (auth + BFF cookie contract) | Sessions |
 | Verify ABAC + permissions on money-path routes | Access control |
 | BFF logout revokes refresh session (`dupli1-web`) | Sessions |
@@ -172,7 +172,7 @@ Then tag **v1.0** and execute **v1.1** from [v1.1-release-plan.md](v1.1-release-
 
 Authoritative plan: [v1.1-release-plan.md](v1.1-release-plan.md).
 
-1. Structured API errors + `slog` logging — **P0**  
+1. Structured API errors + **zerolog** logging — **P0**  
 2. Consistent sessions + BFF revocable logout — **P0**  
 3. Verify access control (ABAC + permissions) — **P0**  
 4. AWS deployment alignment — **P0**  
