@@ -12,6 +12,10 @@ info:
 
     Access tokens are RS256 JWTs verifiable via `GET /.well-known/jwks.json`.
 
+    **Authorization:** fine-grained permission strings in the `permissions` claim, not roles.
+    Each protected operation lists what it needs in `x-required-permissions`; ABAC additionally
+    prevents managing an account at or above the caller's own tier. See docs/permissions.md.
+
 servers:
   - url: http://localhost:8080
     description: Local nginx gateway
@@ -196,7 +200,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Insufficient role
+          description: Insufficient permission
           content:
             application/json:
               schema:
@@ -242,7 +246,7 @@ paths:
       operationId: authListUsers
       security:
         - bearerAuth: []
-      description: Requires `owner` or `admin` role.
+      x-required-permissions: [user.read]
       responses:
         '200':
           description: User list
@@ -259,7 +263,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Owner or admin role required
+          description: Missing `user.read`
           content:
             application/json:
               schema:
@@ -267,14 +271,17 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/auth/users/{id}/roles:
+  /api/v1/auth/users/{id}/permissions:
     patch:
       tags: [Users]
-      summary: Replace a user's roles
-      operationId: authSetUserRoles
+      summary: Replace a user's permissions
+      operationId: authSetUserPermissions
       security:
         - bearerAuth: []
-      description: Requires `owner` or `admin` role.
+      x-required-permissions: [user.permissions.update]
+      description: |
+        Replaces the permission set wholesale; `permissions` must be non-empty.
+        ABAC additionally prevents managing an account at or above the caller's tier.
       parameters:
         - $ref: '#/components/parameters/UserId'
       requestBody:
@@ -283,13 +290,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [roles]
+              required: [permissions]
               properties:
-                roles:
+                permissions:
                   type: array
+                  minItems: 1
                   items:
                     type: string
-                  example: [customer, user_manager]
+                  example: [product.create, product.update]
                 account_type:
                   type: string
                   enum: [customer, manager, service]
@@ -308,13 +316,19 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Owner or admin role required
+          description: Missing `user.permissions.update`, or ABAC forbids managing this account
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          description: Invalid account_type or unknown permission string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -325,7 +339,7 @@ paths:
       operationId: authUpdateUserPassword
       security:
         - bearerAuth: []
-      description: Requires `admin` or `user_manager` role.
+      x-required-permissions: [user.password.update]
       parameters:
         - $ref: '#/components/parameters/UserId'
       requestBody:
@@ -347,7 +361,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Insufficient role
+          description: Insufficient permission
           content:
             application/json:
               schema:
@@ -370,7 +384,7 @@ paths:
       operationId: authSetUserStatus
       security:
         - bearerAuth: []
-      description: Requires `admin` or `user_manager` role.
+      x-required-permissions: [user.status.update]
       parameters:
         - $ref: '#/components/parameters/UserId'
       requestBody:
@@ -395,7 +409,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Insufficient role
+          description: Insufficient permission
           content:
             application/json:
               schema:

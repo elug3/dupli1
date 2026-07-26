@@ -3,13 +3,23 @@ info:
   title: Dupli1 Product API
   version: v1
   description: |
-    Private product catalog and coupon API for the Dupli1 marketplace.
+    Product catalog, variants, coupons, stock and SKU master data for the Dupli1 marketplace.
+    Stock and reservations were merged into this service from the former standalone inventory
+    service.
 
     Protected routes require a Bearer access token (RS256 via auth JWKS when AUTH_JWKS_URL is set,
     or HS256 via JWT_SECRET in dev). The token must include claim "type": "access".
 
-    **Roles:** `product_manager`, `admin`, `owner`. Product and coupon management routes return
-    `403` when the token is valid but lacks one of these roles.
+    **Authorization:** fine-grained permission strings, not roles — e.g. `product.create`,
+    `product.master.write`, `coupon.update`, `inventory.stock.write`,
+    `inventory.reservation.manage`. A valid token without the required permission gets `403`.
+    Each operation below lists what it needs in `x-required-permissions`.
+
+    **Paths:** every route is namespaced under `/api/v1/products/…`. The older top-level
+    prefixes `/api/v1/variants`, `/api/v1/coupons`, `/api/v1/catalog` and `/api/v1/inventory`
+    remain registered as aliases with identical contracts and will be removed once clients
+    migrate; only the canonical paths are documented here except where a legacy path is
+    listed explicitly.
 
 servers:
   - url: http://localhost:8080
@@ -22,6 +32,8 @@ tags:
   - name: Settings
   - name: Products
   - name: Coupons
+  - name: Inventory
+  - name: Catalog
 
 paths:
   /api/v1/products/health:
@@ -55,7 +67,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/Settings'
 
-  /api/v1/inventory/settings:
+  /api/v1/products/inventory/health:
+    get:
+      tags: [Health]
+      summary: Inventory health check (same product service process)
+      operationId: inventoryHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/products/inventory/settings:
     get:
       tags: [Settings]
       summary: Non-secret service settings (product service)
@@ -664,7 +694,855 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v1/coupons/redeem:
+  /api/v1/products/inventory/items/{sku}:
+    get:
+      tags: [Inventory]
+      summary: Get stock for a human SKU
+      operationId: inventoryGetItem
+      description: Public read. Legacy alias `GET /api/v1/inventory/{sku}`.
+      parameters:
+        - $ref: '#/components/parameters/VariantSku'
+      responses:
+        '200':
+          description: Stock item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Inventory]
+      summary: Set stock quantity
+      operationId: inventoryUpsertItem
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.stock.write]
+      description: |
+        Sets the absolute on-hand quantity. Rejected with `400` when the quantity is
+        negative or lower than the currently reserved amount.
+      parameters:
+        - $ref: '#/components/parameters/VariantSku'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockQuantityInput'
+      responses:
+        '200':
+          description: Updated stock item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/inventory/items/{sku}/adjust:
+    post:
+      tags: [Inventory]
+      summary: Adjust stock by a signed delta
+      operationId: inventoryAdjustItem
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.stock.write]
+      description: |
+        Creates the stock row at zero when missing, then applies the delta. Rejected with
+        `400` when the result would be negative or below the reserved amount.
+      parameters:
+        - $ref: '#/components/parameters/VariantSku'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockDeltaInput'
+      responses:
+        '200':
+          description: Updated stock item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/inventory/items/by-sku-id/{skuId}:
+    get:
+      tags: [Inventory]
+      summary: Get stock by canonical skuId
+      operationId: inventoryGetItemBySkuId
+      description: Public read. Preferred over the human-SKU form.
+      parameters:
+        - $ref: '#/components/parameters/VariantSkuId'
+      responses:
+        '200':
+          description: Stock item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Inventory]
+      summary: Set stock quantity by canonical skuId
+      operationId: inventoryUpsertItemBySkuId
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.stock.write]
+      parameters:
+        - $ref: '#/components/parameters/VariantSkuId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockQuantityInput'
+      responses:
+        '200':
+          description: Updated stock item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/inventory/items/by-sku-id/{skuId}/adjust:
+    post:
+      tags: [Inventory]
+      summary: Adjust stock by a signed delta, by canonical skuId
+      operationId: inventoryAdjustItemBySkuId
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.stock.write]
+      parameters:
+        - $ref: '#/components/parameters/VariantSkuId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockDeltaInput'
+      responses:
+        '200':
+          description: Updated stock item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/inventory/reservations:
+    post:
+      tags: [Inventory]
+      summary: Reserve stock for an order
+      operationId: inventoryCreateReservation
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.reservation.manage]
+      description: |
+        Called by the order service when an order or checkout completion is created.
+        Identify each line by `skuId` (preferred) or human `sku`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationInput'
+      responses:
+        '201':
+          description: Reservation created with status `active`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/inventory/reservations/{id}/commit:
+    post:
+      tags: [Inventory]
+      summary: Commit a reservation (deduct stock)
+      operationId: inventoryCommitReservation
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.reservation.manage]
+      description: Called when an order ships. Only an `active` reservation can be committed.
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '200':
+          description: Reservation with status `committed`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/inventory/reservations/{id}/release:
+    post:
+      tags: [Inventory]
+      summary: Release a reservation (return stock)
+      operationId: inventoryReleaseReservation
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.reservation.manage]
+      description: Called when an order is canceled or expires unpaid.
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '200':
+          description: Reservation with status `released`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/products/catalog/brands:
+    get:
+      tags: [Catalog]
+      summary: List brand master data
+      operationId: catalogListBrands
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.read]
+      responses:
+        '200':
+          description: Brands
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Brand'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Catalog]
+      summary: Create a brand
+      operationId: catalogCreateBrand
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      description: '`code` must match `^[A-Z]{2,3}$` and is immutable once created.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeNameInput'
+      responses:
+        '201':
+          description: Brand created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Brand'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/products/catalog/brands/{code}:
+    patch:
+      tags: [Catalog]
+      summary: Rename a brand
+      operationId: catalogUpdateBrand
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      description: Only `name` is mutable; the code is part of every SKU string.
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameInput'
+      responses:
+        '200':
+          description: Updated brand
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Brand'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Catalog]
+      summary: Delete a brand
+      operationId: catalogDeleteBrand
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+      responses:
+        '204':
+          description: Brand deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/products/catalog/brands/{code}/styles:
+    get:
+      tags: [Catalog]
+      summary: List styles for a brand
+      operationId: catalogListStyles
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.read]
+      description: Returns an empty array for a brand with no styles.
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+      responses:
+        '200':
+          description: Styles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Style'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Catalog]
+      summary: Create a style under a brand
+      operationId: catalogCreateStyle
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      description: '`code` must match `^[A-Z0-9]{1,12}$` and is unique within the brand.'
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeNameInput'
+      responses:
+        '201':
+          description: Style created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Style'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/products/catalog/brands/{code}/styles/{styleCode}:
+    patch:
+      tags: [Catalog]
+      summary: Rename a style
+      operationId: catalogUpdateStyle
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+        - $ref: '#/components/parameters/StyleCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameInput'
+      responses:
+        '200':
+          description: Updated style
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Style'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Catalog]
+      summary: Delete a style
+      operationId: catalogDeleteStyle
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+        - $ref: '#/components/parameters/StyleCode'
+      responses:
+        '204':
+          description: Style deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/products/catalog/colors:
+    get:
+      tags: [Catalog]
+      summary: List color master data
+      operationId: catalogListColors
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.read]
+      responses:
+        '200':
+          description: Colors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogTerm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Catalog]
+      summary: Create a color
+      operationId: catalogCreateColor
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeNameInput'
+      responses:
+        '201':
+          description: Color created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogTerm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/products/catalog/colors/{code}:
+    patch:
+      tags: [Catalog]
+      summary: Rename a color
+      operationId: catalogUpdateColor
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameInput'
+      responses:
+        '200':
+          description: Updated color
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogTerm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Catalog]
+      summary: Delete a color
+      operationId: catalogDeleteColor
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+      responses:
+        '204':
+          description: Color deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/products/catalog/sizes:
+    get:
+      tags: [Catalog]
+      summary: List size master data
+      operationId: catalogListSizes
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.read]
+      responses:
+        '200':
+          description: Sizes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogTerm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Catalog]
+      summary: Create a size
+      operationId: catalogCreateSize
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeNameInput'
+      responses:
+        '201':
+          description: Size created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogTerm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/products/catalog/sizes/{code}:
+    patch:
+      tags: [Catalog]
+      summary: Rename a size
+      operationId: catalogUpdateSize
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameInput'
+      responses:
+        '200':
+          description: Updated size
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogTerm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Catalog]
+      summary: Delete a size
+      operationId: catalogDeleteSize
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+      responses:
+        '204':
+          description: Size deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/products/catalog/editions:
+    get:
+      tags: [Catalog]
+      summary: List edition master data
+      operationId: catalogListEditions
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.read]
+      responses:
+        '200':
+          description: Editions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogTerm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Catalog]
+      summary: Create an edition
+      operationId: catalogCreateEdition
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeNameInput'
+      responses:
+        '201':
+          description: Edition created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogTerm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/products/catalog/editions/{code}:
+    patch:
+      tags: [Catalog]
+      summary: Rename an edition
+      operationId: catalogUpdateEdition
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameInput'
+      responses:
+        '200':
+          description: Updated edition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogTerm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Catalog]
+      summary: Delete an edition
+      operationId: catalogDeleteEdition
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      parameters:
+        - $ref: '#/components/parameters/MasterCode'
+      responses:
+        '204':
+          description: Edition deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/products/catalog/master:
+    get:
+      tags: [Catalog]
+      summary: Bag merchandising taxonomy dictionaries
+      operationId: catalogMaster
+      description: |
+        Public read for storefront filter UIs. These are merchandising terms
+        (subcategory, occasion style, audience), not the SKU segment masters above.
+      responses:
+        '200':
+          description: subCategories, styles and targets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterCatalog'
+
+  /api/v1/products/catalog/subcategories:
+    get:
+      tags: [Catalog]
+      summary: List bag subcategories
+      operationId: catalogSubCategories
+      responses:
+        '200':
+          description: Subcategory terms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogTerm'
+
+  /api/v1/products/catalog/bag-styles:
+    get:
+      tags: [Catalog]
+      summary: List bag occasion styles
+      operationId: catalogBagStyles
+      responses:
+        '200':
+          description: Style terms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogTerm'
+
+  /api/v1/products/catalog/targets:
+    get:
+      tags: [Catalog]
+      summary: List audience targets
+      operationId: catalogTargets
+      responses:
+        '200':
+          description: Target terms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogTerm'
+
+  /api/v1/products/coupons/redeem:
     post:
       tags: [Coupons]
       summary: Redeem a coupon
@@ -697,13 +1575,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/coupons:
+  /api/v1/products/coupons:
     get:
       tags: [Coupons]
       summary: List all coupons
       operationId: couponList
       security:
         - bearerAuth: []
+      x-required-permissions: [coupon.read]
       responses:
         '200':
           description: Coupon list
@@ -719,7 +1598,8 @@ paths:
       operationId: couponCreate
       security:
         - bearerAuth: []
-      description: Code is normalized to uppercase. Coupons are stored in memory (not persisted).
+      x-required-permissions: [coupon.create]
+      description: Code is normalized to uppercase. Coupons are persisted in PostgreSQL.
       requestBody:
         required: true
         content:
@@ -744,13 +1624,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/coupons/{code}:
+  /api/v1/products/coupons/by-code/{code}:
     put:
       tags: [Coupons]
       summary: Update a coupon
       operationId: couponUpdate
       security:
         - bearerAuth: []
+      x-required-permissions: [coupon.update]
       parameters:
         - $ref: '#/components/parameters/CouponCode'
       requestBody:
@@ -778,6 +1659,7 @@ paths:
       operationId: couponDelete
       security:
         - bearerAuth: []
+      x-required-permissions: [coupon.delete]
       parameters:
         - $ref: '#/components/parameters/CouponCode'
       responses:
@@ -820,6 +1702,34 @@ components:
       schema:
         type: string
       example: SUMMER30
+    VariantSkuId:
+      name: skuId
+      in: path
+      required: true
+      description: Canonical ULID variant id
+      schema:
+        type: string
+    ReservationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    MasterCode:
+      name: code
+      in: path
+      required: true
+      description: Master-data code (uppercase; immutable)
+      schema:
+        type: string
+      example: BOT
+    StyleCode:
+      name: styleCode
+      in: path
+      required: true
+      schema:
+        type: string
+      example: CAS001
 
   schemas:
     Settings:
@@ -1216,6 +2126,179 @@ components:
           items:
             $ref: '#/components/schemas/Coupon'
 
+    StockItem:
+      type: object
+      required: [skuId, quantity, reserved, updated_at]
+      properties:
+        skuId:
+          type: string
+          description: Canonical ULID variant id
+        sku:
+          type: string
+          example: BOT-001-GRN
+        quantity:
+          type: integer
+          description: On-hand quantity, including the reserved portion
+        reserved:
+          type: integer
+          description: Quantity held by active reservations
+        updated_at:
+          type: string
+          format: date-time
+
+    StockQuantityInput:
+      type: object
+      required: [quantity]
+      properties:
+        quantity:
+          type: integer
+          minimum: 0
+
+    StockDeltaInput:
+      type: object
+      required: [delta]
+      properties:
+        delta:
+          type: integer
+          description: Signed change; negative decrements stock
+          example: -5
+
+    ReservationStatus:
+      type: string
+      enum: [active, committed, released]
+
+    ReservationItem:
+      type: object
+      required: [skuId, quantity]
+      properties:
+        skuId:
+          type: string
+        sku:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+
+    ReservationInput:
+      type: object
+      required: [order_id, items]
+      properties:
+        order_id:
+          type: string
+          example: ord_000001
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [quantity]
+            properties:
+              skuId:
+                type: string
+                description: Canonical ULID variant id (preferred)
+              sku:
+                type: string
+                description: Human SKU; used when skuId is absent
+              quantity:
+                type: integer
+                minimum: 1
+
+    Reservation:
+      type: object
+      required: [id, order_id, items, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        order_id:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReservationItem'
+        status:
+          $ref: '#/components/schemas/ReservationStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ReservationCreated:
+      type: object
+      required: [reservation_id, reservation]
+      properties:
+        reservation_id:
+          type: string
+        reservation:
+          $ref: '#/components/schemas/Reservation'
+
+    CatalogTerm:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+
+    Brand:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          example: BOT
+        name:
+          type: string
+          example: Bottega Veneta
+
+    Style:
+      type: object
+      required: [brandCode, code, name]
+      properties:
+        brandCode:
+          type: string
+          example: BOT
+        code:
+          type: string
+          example: CAS001
+        name:
+          type: string
+
+    MasterCatalog:
+      type: object
+      required: [subCategories, styles, targets]
+      properties:
+        subCategories:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogTerm'
+        styles:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogTerm'
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogTerm'
+
+    CodeNameInput:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+
+    NameInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
   responses:
     BadRequest:
       description: Invalid request
@@ -1229,8 +2312,14 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Master data already exists or is still in use
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     Forbidden:
-      description: Valid token but insufficient role (requires product_manager, admin, or owner)
+      description: Valid token but the required permission is missing
       content:
         application/json:
           schema:
