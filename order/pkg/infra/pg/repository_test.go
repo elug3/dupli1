@@ -18,29 +18,45 @@ func requireDSN(t *testing.T) string {
 	return dsn
 }
 
-// freshSchema gives each test an empty schema so migrate() runs the same way it
-// does against a brand-new database.
-func freshSchema(t *testing.T, dsn string) *pgxpool.Pool {
+// freshSchema gives the test an empty schema so migrate() runs the way it does
+// against a brand-new database. search_path is set on the pool config rather than
+// with a SET statement, so it holds for every connection the pool opens.
+func freshSchema(t *testing.T, dsn, schema string) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
-	pool, err := pgxpool.Connect(ctx, withPostgresSSLMode(dsn))
+
+	admin, err := pgxpool.Connect(ctx, withPostgresSSLMode(dsn))
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	schema := "order_migrate_test"
+	defer admin.Close()
 	for _, stmt := range []string{
 		`DROP SCHEMA IF EXISTS ` + schema + ` CASCADE`,
 		`CREATE SCHEMA ` + schema,
-		`SET search_path TO ` + schema,
 	} {
-		if _, err := pool.Exec(ctx, stmt); err != nil {
-			pool.Close()
+		if _, err := admin.Exec(ctx, stmt); err != nil {
 			t.Fatalf("prepare schema (%s): %v", stmt, err)
 		}
 	}
+
+	cfg, err := pgxpool.ParseConfig(withPostgresSSLMode(dsn))
+	if err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	pool, err := pgxpool.ConnectConfig(ctx, cfg)
+	if err != nil {
+		t.Fatalf("connect with search_path: %v", err)
+	}
+
 	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
 		pool.Close()
+		cleanup, err := pgxpool.Connect(ctx, withPostgresSSLMode(dsn))
+		if err != nil {
+			return
+		}
+		defer cleanup.Close()
+		_, _ = cleanup.Exec(ctx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
 	})
 	return pool
 }
@@ -49,7 +65,8 @@ func freshSchema(t *testing.T, dsn string) *pgxpool.Pool {
 // anything depending on it must come after them or the service cannot start at all.
 func TestMigrateOnEmptyDatabase(t *testing.T) {
 	dsn := requireDSN(t)
-	pool := freshSchema(t, dsn)
+	schema := "order_migrate_empty_test"
+	pool := freshSchema(t, dsn, schema)
 	repo := &Repository{pool: pool}
 
 	if err := repo.migrate(); err != nil {
@@ -60,8 +77,8 @@ func TestMigrateOnEmptyDatabase(t *testing.T) {
 	var columns int
 	if err := pool.QueryRow(ctx, `
 		SELECT count(*) FROM information_schema.columns
-		WHERE table_name = 'orders' AND column_name = 'payment_due_at'
-	`).Scan(&columns); err != nil {
+		WHERE table_schema = $1 AND table_name = 'orders' AND column_name = 'payment_due_at'
+	`, schema).Scan(&columns); err != nil {
 		t.Fatalf("inspect orders columns: %v", err)
 	}
 	if columns != 1 {
@@ -71,8 +88,9 @@ func TestMigrateOnEmptyDatabase(t *testing.T) {
 	var indexes int
 	if err := pool.QueryRow(ctx, `
 		SELECT count(*) FROM pg_indexes
-		WHERE tablename = 'orders' AND indexname = 'idx_orders_pending_payment_due_at'
-	`).Scan(&indexes); err != nil {
+		WHERE schemaname = $1 AND tablename = 'orders'
+		  AND indexname = 'idx_orders_pending_payment_due_at'
+	`, schema).Scan(&indexes); err != nil {
 		t.Fatalf("inspect orders indexes: %v", err)
 	}
 	if indexes != 1 {
@@ -82,7 +100,7 @@ func TestMigrateOnEmptyDatabase(t *testing.T) {
 
 func TestMigrateIsIdempotent(t *testing.T) {
 	dsn := requireDSN(t)
-	pool := freshSchema(t, dsn)
+	pool := freshSchema(t, dsn, "order_migrate_idempotent_test")
 	repo := &Repository{pool: pool}
 
 	if err := repo.migrate(); err != nil {
