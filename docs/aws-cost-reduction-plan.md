@@ -2,7 +2,8 @@
 
 Action plan to cut Dupli1 AWS spend from the **~$350–420/mo** run-rate (6×`t3.large` + idle orphans) down to **~$210–230/mo** core, or lower when paused.
 
-Companion review with inventory and Cost Explorer detail: [aws-cost-optimization.md](aws-cost-optimization.md).
+Companion review with inventory and Cost Explorer detail: [aws-cost-optimization.md](aws-cost-optimization.md).  
+**July month-end report (2026-07-26):** [aws-july-2026-cost-report.md](aws-july-2026-cost-report.md) — MTD ~$365, forecast ~$474; Phase 1–2 still open.
 
 ## Target outcomes
 
@@ -204,13 +205,15 @@ Verify with Cost Explorer 3–5 days after Phase 2 (`EC2 - Compute` and `EC2 - O
 
 - [x] Phase 0 baseline captured (**2026-07-14** — ASG 5/6/6 ×6 `t3.large`; ~$8.45/day Jul 12–13)
 - [x] Stopped `dupli1-vpn`; public admin at `https://manage.dupli1.com`
-- [ ] Phase 1.1 Global Accelerators deleted
-- [ ] Phase 1.2 Sydney stopped (if unused)
-- [ ] Phase 1.3 `dupli1-ec2` deleted (if unused)
-- [ ] Phase 2 ASG at 2/1/4; site healthy
+- [ ] Phase 1.1 Global Accelerators deleted — **still open as of 2026-07-26** (`MyAcc`, `MyAccelerator` enabled, empty endpoints)
+- [ ] Phase 1.2 Sydney stopped (if unused) — **still running** (`schick-test`, `mweb-vpn`)
+- [ ] Phase 1.3 `dupli1-ec2` deleted (if unused) — **auto-restarted to available** (was stopped mid-month)
+- [ ] Phase 2 ASG at 2/1/4; site healthy — **still 5/6/6 ×6 `t3.large`**; cluster ~25% CPU / ~13% mem
 - [ ] Phase 2 Terraform plan does not scale ASG up
 - [ ] Phase 3 pause/resume documented for operators
 - [ ] Phase 4 decided (defer / endpoints / EC2 Compose)
+
+**Note (2026-07-26):** Steady burn Jul 18–24 is **~$18.50/day** (~$474 July forecast). See [aws-july-2026-cost-report.md](aws-july-2026-cost-report.md).
 
 ## Owners / scripts
 
