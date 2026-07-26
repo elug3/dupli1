@@ -100,6 +100,17 @@ variable "jwt_secret_arn" {
   default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/jwt-secret-tTYcMy"
 }
 
+variable "jwt_private_key_secret_arn" {
+  description = <<-EOT
+    Secrets Manager ARN holding the PEM-encoded RSA private key auth signs RS256 tokens
+    with (injected as JWT_PRIVATE_KEY). Leave empty and auth generates a throwaway key on
+    every start, which invalidates every issued token and breaks JWKS validation in the
+    other services after a deploy. See docs/v1-release-plan.md for the rollout steps.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "telegram_secret_arn" {
   description = "Secrets Manager ARN for Telegram bot JSON (TELEGRAM_BOT_TOKEN, TELEGRAM_ORDER_CHAT_ID, TELEGRAM_PRODUCT_CHAT_ID)."
   type        = string

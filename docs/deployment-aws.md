@@ -33,6 +33,37 @@ Production uses **Amazon RDS PostgreSQL 16** (`dupli1-production`).
 
 Create app DBs after RDS is up: `bash infra/scripts/create-rds-databases.sh`.
 
+## JWT signing key
+
+Auth signs RS256 access and refresh tokens with an RSA key and publishes the public half
+at `/.well-known/jwks.json`, which product, order, cart and payment fetch to validate
+tokens. The key comes from one of, in order:
+
+| Source | Env var | Used by |
+|--------|---------|---------|
+| PEM contents | `JWT_PRIVATE_KEY` | ECS (Secrets Manager injects secrets as env vars) |
+| PEM file path | `JWT_PRIVATE_KEY_FILE` | single-EC2 Compose (mounted `/run/secrets`) |
+| Generated at startup | — | local dev only |
+
+**Neither set means a throwaway key per start**: every previously issued token stops
+validating and JWKS changes under the other services on each auth deploy or task
+replacement. Auth logs a warning at startup and reports
+`features.ephemeral_jwt_key: true` on `GET /api/v1/auth/settings`.
+
+Create the key and point Terraform at it:
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out jwt-private-key.pem
+aws secretsmanager create-secret \
+  --name dupli1/production/jwt-private-key \
+  --secret-string "file://jwt-private-key.pem"
+# then set jwt_private_key_secret_arn in Terraform and apply
+```
+
+`JWT_SECRET` stays as the HS256 dev fallback for order/cart/payment and is unrelated to
+this key. Rotating the RSA key invalidates all outstanding refresh tokens, so every user
+must log in again — do it during a quiet window.
+
 ## ECS services
 
 | Service | Purpose |

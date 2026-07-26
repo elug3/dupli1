@@ -234,7 +234,7 @@ resource "aws_ecs_task_definition" "auth" {
         # TEMPORARY: public customer signup without user.create. Set false to re-lock.
         { name = "AUTH_OPEN_REGISTER", value = "true" },
       ]
-      secrets = [
+      secrets = concat([
         {
           name      = "DB_URL"
           valueFrom = var.auth_db_url_secret_arn
@@ -251,7 +251,14 @@ resource "aws_ecs_task_definition" "auth" {
           name      = "DUPLI1_WEB_SERVICE_PASSWORD"
           valueFrom = "${aws_secretsmanager_secret.web_service.arn}:DUPLI1_WEB_SERVICE_PASSWORD::"
         },
-      ]
+        ],
+        # Without this, auth signs with an ephemeral key that changes on every restart.
+        var.jwt_private_key_secret_arn == "" ? [] : [
+          {
+            name      = "JWT_PRIVATE_KEY"
+            valueFrom = var.jwt_private_key_secret_arn
+          },
+      ])
       logConfiguration = {
         logDriver = "awslogs"
         options = {
