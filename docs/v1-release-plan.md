@@ -259,10 +259,23 @@ zeroed rows must be fixed with a real amount.
 
 ### 6. Money-path smoke test
 
-Against production, with a throwaway customer account: add to cart → create a checkout
-session → complete it → pay by card → order reaches `paid` → `POST /orders/{id}/ship`
-returns `in_transit` → stock decremented and `soldCount` incremented on the PDP. Confirm
-the `order.paid` Telegram alert arrived.
+[`scripts/smoke-money-path.sh`](../scripts/smoke-money-path.sh) walks the whole path —
+catalog → cart → checkout session → payment → `paid` → ship → `fulfilled` — and asserts
+the launch-critical invariants: the cart and session prices come from the catalog and not
+from the client, stock is reserved at checkout and committed on ship, `soldCount` follows
+the commit, `method=bypass` is refused for a plain customer, and `confirmed` is rejected.
+
+```bash
+# against a real product, so nothing test-shaped is created in the catalog
+BASE=https://dupli1.com SKU_ID=<existing skuId> scripts/smoke-money-path.sh
+```
+
+It registers a throwaway customer and creates a real order. With live Stripe keys the
+script prints the Checkout URL and waits while you complete the card payment; without them
+it drives the dev simulate endpoint itself. Omitting `SKU_ID` makes it seed its own
+`SMK`-brand product, which is what you want locally but not in the live catalog.
+
+Finally confirm the `order.paid` Telegram alert arrived.
 
 ---
 
