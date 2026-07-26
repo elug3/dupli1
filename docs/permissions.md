@@ -110,7 +110,7 @@ Phase 1 introduces `shared/pkg/permissions` (Go module `github.com/elug3/dupli1/
 
 Tiers are derived from permissions inside auth only. Other services continue to use fine-grained permissions without this hierarchy.
 
-**Account types vs tiers:** stored `account_type` values are `customer` | `manager` | `service` only. The ABAC labels `admin` / `manager` / `owner` above are **permission-derived tiers** (`ClassAdmin`, etc.), not `account_type` strings. A human operator uses `account_type: manager`; whether they are ClassAdmin vs ClassManager depends on permissions (`admin.*`, …). Legacy write `account_type: "admin"` is accepted briefly and persisted as `"manager"` — manage-web should stop mapping manager→admin on the wire.
+**Account types vs tiers:** stored `account_type` values are `customer` | `manager` | `service` only. The ABAC labels `admin` / `manager` / `owner` above are **permission-derived tiers** (`ClassAdmin`, etc.), not `account_type` strings. A human operator uses `account_type: manager`; whether they are ClassAdmin vs ClassManager depends on permissions (`admin.*`, …). Write APIs **reject** `account_type: "admin"`.
 
 **ABAC (register):** callers with only `user.create` (and without `user.password.update`, `admin.*`, or `*`) may register **`account_type: customer`** only. Higher-privilege callers may set any valid `account_type` subject to the hierarchy above.
 
@@ -205,6 +205,8 @@ Stripe webhook and dev simulate endpoints are **unauthenticated** (signature / d
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` |
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `user.status.update` |
+
+**Temporary:** `AUTH_OPEN_REGISTER=true` allows unauthenticated customer signup (empty permissions). Re-lock with `AUTH_OPEN_REGISTER=false`.
 
 Login, refresh, logout, health, settings, JWKS — public.
 

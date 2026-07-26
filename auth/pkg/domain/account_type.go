@@ -2,35 +2,40 @@ package domain
 
 // Account type labels stored on User.AccountType.
 // Canonical values: customer | manager | service.
-// "admin" is not an account type — it is a permission/management tier (admin.*, ClassAdmin).
+//
+// "admin" is NOT an account type. It is a permission / management tier
+// (permission string admin.*, ABAC ClassAdmin). Clients must send manager
+// for human operators. Startup migrate rewrites any leftover DB rows from
+// account_type=admin → manager.
 const (
 	AccountTypeCustomer = "customer"
 	AccountTypeManager  = "manager"
 	AccountTypeService  = "service"
-
-	// AccountTypeAdminLegacy is accepted on write APIs during a short compat window.
-	// NormalizeAccountType maps it to AccountTypeManager before validation/persist.
-	// manage-web must stop sending manager→admin on the wire; remove this alias afterward.
-	AccountTypeAdminLegacy = "admin"
 )
 
-// AllAccountTypes lists supported account_type values in API order (canonical only).
+// AllAccountTypes lists supported account_type values in API order.
 var AllAccountTypes = []string{
 	AccountTypeCustomer,
 	AccountTypeManager,
 	AccountTypeService,
 }
 
-// NormalizeAccountType maps legacy wire values to canonical account types.
-// Empty string is left unchanged (callers apply DefaultAccountType separately).
+// legacyAccountTypeAdmin is only recognized when reading stale DB rows
+// (pre-migrate). Write APIs must not accept it — use ValidAccountType.
+const legacyAccountTypeAdmin = "admin"
+
+// NormalizeAccountType maps legacy stored values to canonical account types
+// for ABAC classification. Empty string is left unchanged.
+// Do not use this to accept "admin" on write APIs.
 func NormalizeAccountType(t string) string {
-	if t == AccountTypeAdminLegacy {
+	if t == legacyAccountTypeAdmin {
 		return AccountTypeManager
 	}
 	return t
 }
 
 // ValidAccountType reports whether t is a supported canonical account type.
+// "admin" is invalid — use manager.
 func ValidAccountType(t string) bool {
 	switch t {
 	case AccountTypeCustomer, AccountTypeManager, AccountTypeService:

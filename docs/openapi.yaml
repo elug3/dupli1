@@ -38,7 +38,7 @@ components:
         account_type:
           type: string
           enum: [customer, manager, service]
-          description: Canonical account types (customer | manager | service). Legacy write value "admin" is accepted and stored as "manager".
+          description: Canonical account types (customer | manager | service). admin is a permission tier, not an account_type.
         permissions:
           type: array
           items:
@@ -64,7 +64,7 @@ components:
         account_type:
           type: string
           enum: [customer, manager, service]
-          description: Optional. Legacy "admin" is accepted and stored as "manager".
+          description: Optional. customer | manager | service. admin is a permission, not an account_type.
 
     Error:
       type: object
@@ -98,7 +98,7 @@ paths:
                 account_type:
                   type: string
                   enum: [customer, manager, service]
-                  description: Optional. Legacy "admin" is accepted and stored as "manager".
+                  description: Optional. customer | manager | service. admin is a permission, not an account_type.
       responses:
         '201':
           description: User created

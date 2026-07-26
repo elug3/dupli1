@@ -45,7 +45,7 @@ See [service-layout.md](service-layout.md) for details.
   - Fine-grained **permissions** stored on users (`users.permissions TEXT[]`); JWT access tokens include `permissions` claim only
   - Permission constants and evaluation in `shared/pkg/permissions` (`github.com/elug3/dupli1/shared`)
   - Wildcards: `*`, `admin.*`, `{resource}.*` (e.g. `product.*`)
-  - Account types: `customer`, `manager`, `service` (JSON field `account_type`; distinct from permissions). Legacy write value `admin` is accepted and stored as `manager`.
+  - Account types: `customer`, `manager`, `service` only (`account_type`). `admin` is a permission tier (`admin.*`), not an account type — write APIs reject it.
   - Register: **temporary open customer signup** via `AUTH_OPEN_REGISTER` (default on); anonymous callers create `customer` only. Set `AUTH_OPEN_REGISTER=false` to require `user.create` again. Authenticated `user.create` still follows ABAC for other account types.
   - Auth ABAC hierarchy governs who may manage whom
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`

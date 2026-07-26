@@ -45,7 +45,7 @@ Every user has an `account_type` field (JSON key `account_type`) separate from *
 | `manager` | Human operator | job-function permissions (`product.*`, `user.*`, …) or `admin.*` / `*` (owner) |
 | `service` | Machine / integration account | `user.create`, `order.ship`, … per job function |
 
-`admin` is **not** an account type — it is a permission/management tier (`admin.*`, auth ABAC `ClassAdmin`). Write APIs briefly accept legacy `account_type: "admin"` and persist `"manager"`. **manage-web should stop mapping manager→admin on the wire**; remove the alias once clients send `manager`.
+`admin` is **not** an account type — it is a permission/management tier (`admin.*`, auth ABAC `ClassAdmin`). Write APIs reject `account_type: "admin"`; use `manager` for operators. Startup migrate rewrites any leftover DB `account_type=admin` → `manager`.
 
 Seeded accounts: owner (`OWNER_EMAIL`) → `permissions: ["*"]`, `account_type: manager`; `dupli1-web` → `["user.create"]`; `dupli1-order` → `["order.ship", "order.status.update", "inventory.reservation.manage"]`. `POST /register` defaults to `customer` when `account_type` is omitted.
 
@@ -104,7 +104,7 @@ Create a new user account. Requires `user.create`.
 |-------|------|-------------|
 | `email` | string | required, valid email |
 | `password` | string | required, min 8 chars |
-| `account_type` | string | optional; one of `customer`, `manager`, `service`; defaults to `customer`. Legacy `"admin"` is accepted and stored as `"manager"`. Callers with only `user.create` (no `admin.*` or `*`) may register `customer` only |
+| `account_type` | string | optional; one of `customer`, `manager`, `service`; defaults to `customer`. Do not send `admin` (permission tier — use `manager`). Callers with only `user.create` (no `admin.*` or `*`) may register `customer` only |
 
 **Response `201`**
 ```json
@@ -285,7 +285,7 @@ Replace the permission list for a user. Requires `user.permissions.update`. Subj
 | Field | Type | Constraints |
 |-------|------|-------------|
 | `permissions` | string[] | required |
-| `account_type` | string | optional; one of `customer`, `manager`, `service`. Legacy `"admin"` is accepted and stored as `"manager"` |
+| `account_type` | string | optional; one of `customer`, `manager`, `service`. Do not send `admin` (permission tier — use `manager`) |
 
 **Response `200`** — updated user object (includes `account_type`, `permissions`)
 

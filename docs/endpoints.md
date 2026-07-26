@@ -48,7 +48,7 @@ Each service also registers `/health` and `/settings` directly for internal/side
 
 **dupli1-web service account:** set `DUPLI1_WEB_SERVICE_EMAIL` and `DUPLI1_WEB_SERVICE_PASSWORD` on `dupli1-auth` to seed a machine user with `permissions: ["user.create"]` and `account_type` `service`. That account may register customers only (`account_type` `customer`).
 
-**Account types:** `customer`, `manager`, `service` — returned on user objects as `account_type`. Distinct from **permissions** (fine-grained authorization strings). Legacy write value `admin` is accepted and stored as `manager`; manage-web should stop mapping manager→admin on the wire.
+**Account types:** `customer`, `manager`, `service` — returned on user objects as `account_type`. Distinct from **permissions** (fine-grained authorization strings). `admin` is a permission (`admin.*`), not an `account_type` — use `manager` for operators.
 
 See [permissions.md](permissions.md) for the full catalog, JWT claim shape, and auth ABAC hierarchy.
 
@@ -73,7 +73,7 @@ Request:
 }
 ```
 
-`account_type` is optional (`customer`, `manager`, or `service`); defaults to `customer`. Legacy `"admin"` is accepted and stored as `"manager"`. Callers with only `user.create` may register `customer` accounts only. Unauthenticated open-register always forces `customer`.
+`account_type` is optional (`customer`, `manager`, or `service`); defaults to `customer`. Do not send `admin` — that is a permission tier; use `manager` for operators. Callers with only `user.create` may register `customer` accounts only. Unauthenticated open-register always forces `customer`.
 
 Response `201`:
 ```json

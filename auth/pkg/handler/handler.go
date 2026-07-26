@@ -166,7 +166,6 @@ func (h *Handler) Register(c *gin.Context) {
 	if accountType == "" {
 		accountType = domain.DefaultAccountType
 	}
-	accountType = domain.NormalizeAccountType(accountType)
 	caller := callerFromContext(c)
 	if caller == nil {
 		if !h.openRegister {
@@ -294,8 +293,9 @@ func (h *Handler) SetUserPermissions(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "permissions is required"})
 		return
 	}
-	if body.AccountType != "" {
-		body.AccountType = domain.NormalizeAccountType(body.AccountType)
+	if body.AccountType != "" && !domain.ValidAccountType(body.AccountType) {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid account_type: use customer, manager, or service (admin is a permission, not an account_type)"})
+		return
 	}
 
 	caller := callerFromContext(c)

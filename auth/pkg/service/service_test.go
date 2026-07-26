@@ -190,16 +190,11 @@ func TestRegisterRejectsInvalidAccountType(t *testing.T) {
 	}
 }
 
-func TestRegisterNormalizesLegacyAdminAccountType(t *testing.T) {
-	repo := &fakeUserRepository{}
-	svc := NewService(repo, fakeTokenGenerator{})
+func TestRegisterRejectsAdminAccountType(t *testing.T) {
+	svc := NewService(&fakeUserRepository{}, fakeTokenGenerator{})
 
-	user, err := svc.Register(context.Background(), "ops@example.com", "supersecret", domain.AccountTypeAdminLegacy)
-	if err != nil {
-		t.Fatalf("Register returned error: %v", err)
-	}
-	if user.AccountType != domain.AccountTypeManager {
-		t.Fatalf("Register account_type = %q, want %q", user.AccountType, domain.AccountTypeManager)
+	if _, err := svc.Register(context.Background(), "ops@example.com", "supersecret", "admin"); !errors.Is(err, autherrors.ErrInvalidAccountType) {
+		t.Fatalf("Register(admin) error = %v, want ErrInvalidAccountType (admin is a permission, not account_type)", err)
 	}
 }
 

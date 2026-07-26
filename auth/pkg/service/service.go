@@ -93,7 +93,7 @@ func (s *Service) Register(ctx context.Context, email, password, accountType str
 	if accountType == "" {
 		accountType = domain.DefaultAccountType
 	}
-	accountType = domain.NormalizeAccountType(accountType)
+	// Do not NormalizeAccountType here — "admin" must be rejected (use manager).
 	if !domain.ValidAccountType(accountType) {
 		return nil, autherrors.ErrInvalidAccountType
 	}
@@ -266,7 +266,7 @@ func (s *Service) SetUserPermissions(ctx context.Context, userID string, perms [
 		return nil, autherrors.ErrUserNotFound
 	}
 	if accountType != "" {
-		accountType = domain.NormalizeAccountType(accountType)
+		// Reject legacy "admin" — admin is a permission tier, not account_type.
 		if !domain.ValidAccountType(accountType) {
 			return nil, autherrors.ErrInvalidAccountType
 		}
