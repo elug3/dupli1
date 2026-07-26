@@ -151,7 +151,11 @@ def update_product(base_url: str, token: str, product: dict) -> dict:
         "name": product.get("name") or "",
         "description": product.get("description") or "",
         "price": product.get("price") or 0,
-        "sellingPrice": product.get("sellingPrice") or product.get("selling_price") or 0,
+        "officialPrice": product.get("officialPrice")
+        or product.get("official_price")
+        or product.get("sellingPrice")
+        or product.get("selling_price")
+        or 0,
         "brand": product.get("brand") or "",
         "color": product.get("color") or "",
         "material": product.get("material") or "",

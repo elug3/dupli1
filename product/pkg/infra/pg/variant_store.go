@@ -195,8 +195,8 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 
 	var createdAt time.Time
 	err = s.pool.QueryRow(ctx,
-		`INSERT INTO product_variants (sku_id, sku, product_id, color, size, color_code, edition_code, size_code, selling_price, price, status, image_urls)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, $9, $10)
+		`INSERT INTO product_variants (sku_id, sku, product_id, color, size, color_code, edition_code, size_code, status, image_urls)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 RETURNING created_at`,
 		v.SkuID, v.SKU, v.ProductID, v.Color, v.Size,
 		nullEmpty(v.ColorCode), nullEmpty(v.EditionCode), nullEmpty(v.SizeCode),
