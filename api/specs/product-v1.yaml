@@ -899,6 +899,17 @@ components:
           type: array
           items:
             type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Free-form string key/value memo for PDP display (condition, care, authenticity, etc.).
+            Not used for search, pricing, or checkout. Managers write via create/update;
+            storefront treats as read-only. Max 32 entries; key ≤64 / value ≤512 chars.
+          example:
+            condition: excellent
+            care: wipe with dry cloth
         viewCount:
           type: integer
           format: int64
@@ -1049,6 +1060,13 @@ components:
             format: uri
         capacity:
           type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Free-form string key/value memo. Omitted on PUT keeps current map;
+            `{}` clears. Not used for search/pricing/checkout.
 
     ProductSearchResponse:
       type: object

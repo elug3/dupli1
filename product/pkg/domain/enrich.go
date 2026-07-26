@@ -75,6 +75,9 @@ func (existing Product) MergeUpdate(incoming Product) Product {
 	if incoming.Tags != nil {
 		merged.Tags = incoming.Tags
 	}
+	if incoming.Attributes != nil {
+		merged.Attributes = incoming.Attributes
+	}
 	if incoming.Price != 0 {
 		merged.Price = incoming.Price
 	}

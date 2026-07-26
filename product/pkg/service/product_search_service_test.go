@@ -96,6 +96,46 @@ func TestUpdateProduct_StyleOnlyKeepsPrice(t *testing.T) {
 	}
 }
 
+func TestUpdateProduct_AttributesMemo(t *testing.T) {
+	store := memory.NewProductStore()
+	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "BOT", Code: "CAS001", Name: "Cassette"}); err != nil {
+		t.Fatal(err)
+	}
+	store.Products = []domain.Product{
+		{
+			ID: "BOT-001", Name: "Cassette", Brand: "Bottega", BrandCode: "BOT", StyleCode: "CAS001",
+			Category: "bags", Price: 2500, Status: "active",
+			Attributes: map[string]string{"condition": "good"},
+		},
+	}
+	svc := service.NewProductSearchService(store, nil)
+
+	updated, err := svc.UpdateProduct(domain.Product{ID: "BOT-001", Style: "evening"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Attributes["condition"] != "good" {
+		t.Fatalf("attributes wiped on style-only update: %#v", updated.Attributes)
+	}
+
+	updated, err = svc.UpdateProduct(domain.Product{
+		ID: "BOT-001",
+		Attributes: map[string]string{
+			" condition ": " excellent ",
+			"care":        "wipe dry",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Attributes["condition"] != "excellent" || updated.Attributes["care"] != "wipe dry" {
+		t.Fatalf("want normalized attributes, got %#v", updated.Attributes)
+	}
+	if updated.Style != "evening" {
+		t.Fatalf("style wiped: %q", updated.Style)
+	}
+}
+
 func TestUpdateVariant_PartialBodyDoesNotClearOtherFields(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
