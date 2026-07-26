@@ -201,7 +201,11 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 	if err != nil {
 		return nil, err
 	}
-	if order.Status == domain.StatusPaid && order.PaymentID == paymentID {
+	// Payment's reconcile worker republishes payment.succeeded for two hours as a
+	// guard against lost Core NATS deliveries, so replays arrive long after the order
+	// has shipped. Any order already carrying this payment id is done, whatever its
+	// current status — re-running the transition would only fail.
+	if order.PaymentID == paymentID && order.Status != domain.StatusPending {
 		return cloneOrder(order), nil
 	}
 	if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {

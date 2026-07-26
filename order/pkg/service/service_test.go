@@ -193,6 +193,66 @@ func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 	}
 }
 
+// Payment republishes payment.succeeded for two hours, so the consumer sees replays
+// after the order has already shipped or been fulfilled.
+func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-123"}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+
+	for _, status := range []struct {
+		name    string
+		advance func() error
+		want    domain.OrderStatus
+	}{
+		{"in_transit", func() error { _, err := svc.ShipOrder(ctx, order.ID, "manager-1"); return err }, domain.StatusInTransit},
+		{"fulfilled", func() error { _, err := svc.FulfillOrder(ctx, order.ID); return err }, domain.StatusFulfilled},
+	} {
+		if err := status.advance(); err != nil {
+			t.Fatalf("advance to %s: %v", status.name, err)
+		}
+		replayed, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents)
+		if err != nil {
+			t.Fatalf("replayed payment.succeeded while %s returned error: %v", status.name, err)
+		}
+		if replayed.Status != status.want {
+			t.Fatalf("status after replay = %q, want %q", replayed.Status, status.want)
+		}
+	}
+}
+
+func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
+	ctx := context.Background()
+	svc := newSvc(&fakeStock{reservationID: "res-123"}, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+
+	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-2", order.TotalCents)
+	if !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Fatalf("second payment error = %v, want ErrInvalidTransition", err)
+	}
+}
+
 func TestCancelPaidOrderReleasesStock(t *testing.T) {
 	ctx := context.Background()
 	stock := &fakeStock{reservationID: "res-123"}
