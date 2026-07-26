@@ -169,10 +169,11 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Per
 ## Known gaps
 
 1. **Local TLS** — certs in `certs/` are not wired into nginx; gateway is HTTP only
-2. **Notification** — no outbound messaging
+2. **Notification** — Telegram ops alerts only; no email/SMS
 3. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
 4. **Planned packages not started** — user, chat, analytics (beyond `shared/pkg/permissions`)
-5. **Quality/performance** — see [quality-performance-review.md](quality-performance-review.md) (2026-07-15); top remaining risk is client-trusted order prices
+5. **Quality/performance** — see [quality-performance-review.md](quality-performance-review.md); money-path Criticals (C1 pricing, H7 JWT) are fixed — remaining items in [TODO.md](TODO.md)
+6. **v1.0 vs v1.1** — launch cut vs postponed work: [v1-release-plan.md](v1-release-plan.md)
 
 ## Running and testing
 

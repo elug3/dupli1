@@ -1,5 +1,7 @@
 # TODO
 
+**Release boundary:** [v1-release-plan.md](v1-release-plan.md) — what must ship for **v1.0** vs postpone to **v1.1**.
+
 ## Quality / performance (reviewed 2026-07-15)
 
 Full write-up: [quality-performance-review.md](quality-performance-review.md).
