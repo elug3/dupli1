@@ -34,7 +34,7 @@ Each service also registers `/health` and `/settings` directly for internal/side
 |---|---|---|---|
 | `GET` | `/api/v1/auth/health` | — | Health check |
 | `GET` | `/api/v1/auth/settings` | — | Non-secret service settings |
-| `POST` | `/api/v1/auth/register` | `user.create` | Create a new user account |
+| `POST` | `/api/v1/auth/register` | `user.create` *or open register* | Create a new user account |
 | `POST` | `/api/v1/auth/login` | — | Login and receive a refresh token |
 | `POST` | `/api/v1/auth/logout` | — | Invalidate the current session |
 | `POST` | `/api/v1/auth/refresh` | — | Exchange a refresh token for a new access token |
@@ -43,6 +43,8 @@ Each service also registers `/health` and `/settings` directly for internal/side
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` | Replace a user's permissions (optional `account_type`) |
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` | Set a new password for a user |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `user.status.update` | Activate or deactivate a user |
+
+**Temporary open register:** when `AUTH_OPEN_REGISTER=true` (current default), `POST /register` accepts unauthenticated requests and always creates `account_type: customer` with empty permissions. Set `AUTH_OPEN_REGISTER=false` to require Bearer + `user.create` again.
 
 **dupli1-web service account:** set `DUPLI1_WEB_SERVICE_EMAIL` and `DUPLI1_WEB_SERVICE_PASSWORD` on `dupli1-auth` to seed a machine user with `permissions: ["user.create"]` and `account_type` `service`. That account may register customers only (`account_type` `customer`).
 
@@ -60,7 +62,7 @@ Response `200` JSON with non-secret operational settings (`service`, `api_versio
 
 ### POST /api/v1/auth/register
 
-Header: `Authorization: Bearer <access_token>` (requires `user.create`)
+Header: `Authorization: Bearer <access_token>` (requires `user.create`) — **optional** while `AUTH_OPEN_REGISTER=true` (anonymous → customer only).
 
 Request:
 ```json
@@ -71,7 +73,7 @@ Request:
 }
 ```
 
-`account_type` is optional (`customer`, `manager`, or `service`); defaults to `customer`. Legacy `"admin"` is accepted and stored as `"manager"`. Callers with only `user.create` may register `customer` accounts only.
+`account_type` is optional (`customer`, `manager`, or `service`); defaults to `customer`. Legacy `"admin"` is accepted and stored as `"manager"`. Callers with only `user.create` may register `customer` accounts only. Unauthenticated open-register always forces `customer`.
 
 Response `201`:
 ```json

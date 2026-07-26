@@ -149,6 +149,7 @@ services:
       NATS_URL: nats://nats:4222
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
       DUPLI1_AUTH_ADDR: :8080
+      AUTH_OPEN_REGISTER: "true"
       OWNER_EMAIL: admin@dupli1.com
       OWNER_PASSWORD: password
       DUPLI1_WEB_SERVICE_EMAIL: dupli1-web@web.dupli1.com

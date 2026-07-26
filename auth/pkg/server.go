@@ -58,9 +58,14 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		WebServicePassword: opts.WebServicePassword,
 		OrderServiceEmail:    opts.OrderServiceEmail,
 		OrderServicePassword: opts.OrderServicePassword,
+		OpenRegister:         opts.OpenRegister,
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if opts.OpenRegister {
+		log.Warn().Str("event", "open_register_enabled").Msg("TEMPORARY: unauthenticated customer register is enabled; set AUTH_OPEN_REGISTER=false to re-lock")
 	}
 
 	srv := &http.Server{

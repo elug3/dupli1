@@ -23,6 +23,7 @@ func BuildSettings(cfg Config) settings.Response {
 		"debug":             cfg.Debug,
 		"ephemeral_jwt_key": ephemeralKey,
 		"cors_enabled":      len(cfg.CORSOrigins) > 0,
+		"open_register":     cfg.OpenRegister,
 	}
 	resp.Limits = map[string]any{
 		"token_expiry_seconds":         settings.TimeoutSeconds(cfg.TokenExpiry),
