@@ -35,6 +35,64 @@ func (existing Variant) MergeUpdate(incoming Variant) Variant {
 	return merged
 }
 
+// MergeUpdate returns a copy of the product with non-zero / non-empty fields
+// from incoming applied on top. Used by UpdateProduct so a partial body
+// (e.g. style-only) cannot wipe price, name, or other omitted fields with
+// JSON zero values. BrandCode / StyleCode / counters / timestamps are never
+// taken from incoming.
+func (existing Product) MergeUpdate(incoming Product) Product {
+	merged := existing
+	if incoming.Name != "" {
+		merged.Name = incoming.Name
+	}
+	if incoming.Description != "" {
+		merged.Description = incoming.Description
+	}
+	if incoming.Brand != "" {
+		merged.Brand = incoming.Brand
+	}
+	if incoming.Material != "" {
+		merged.Material = incoming.Material
+	}
+	if incoming.Category != "" {
+		merged.Category = incoming.Category
+	}
+	if incoming.SubCategory != "" {
+		merged.SubCategory = incoming.SubCategory
+	}
+	if incoming.Style != "" {
+		merged.Style = incoming.Style
+	}
+	if incoming.Target != "" {
+		merged.Target = incoming.Target
+	}
+	if incoming.Status != "" {
+		merged.Status = incoming.Status
+	}
+	if incoming.Capacity != "" {
+		merged.Capacity = incoming.Capacity
+	}
+	if incoming.Tags != nil {
+		merged.Tags = incoming.Tags
+	}
+	if incoming.Price != 0 {
+		merged.Price = incoming.Price
+	}
+	if incoming.SellingPrice != 0 {
+		merged.SellingPrice = incoming.SellingPrice
+	}
+	// Identity / denormalized counters stay on the existing row.
+	merged.ID = existing.ID
+	merged.BrandCode = existing.BrandCode
+	merged.StyleCode = existing.StyleCode
+	merged.CreatedAt = existing.CreatedAt
+	merged.CreatedBy = existing.CreatedBy
+	merged.ViewCount = existing.ViewCount
+	merged.SoldCount = existing.SoldCount
+	merged.WishlistCount = existing.WishlistCount
+	return merged
+}
+
 // ApplyParentPrice copies the parent product's price onto a variant for API
 // responses (cart/order still read price from the variant JSON).
 func (v *Variant) ApplyParentPrice(p Product) {

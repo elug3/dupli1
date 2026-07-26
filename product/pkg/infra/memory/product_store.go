@@ -365,11 +365,14 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 func (s *ProductStore) UpdateProduct(p domain.Product) (*domain.Product, error) {
 	for i, existing := range s.Products {
 		if existing.ID == p.ID {
+			// Caller (service) already merges; still lock immutable codes/audit.
 			p.CreatedAt = existing.CreatedAt
 			p.CreatedBy = existing.CreatedBy
-			// Brand/style codes are immutable after creation.
 			p.BrandCode = existing.BrandCode
 			p.StyleCode = existing.StyleCode
+			p.ViewCount = existing.ViewCount
+			p.SoldCount = existing.SoldCount
+			p.WishlistCount = existing.WishlistCount
 			s.Products[i] = p
 			return s.GetProduct(p.ID)
 		}

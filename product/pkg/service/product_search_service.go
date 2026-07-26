@@ -260,10 +260,15 @@ func (s *ProductSearchService) UpdateProduct(p domain.Product) (*domain.Product,
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	if err := domain.NormalizeProductTaxonomy(&p); err != nil {
+	existing, err := s.store.GetProduct(p.ID)
+	if err != nil {
+		return nil, err
+	}
+	merged := existing.MergeUpdate(p)
+	if err := domain.NormalizeProductTaxonomy(&merged); err != nil {
 		return nil, ports.Invalid(err.Error())
 	}
-	updated, err := s.store.UpdateProduct(p)
+	updated, err := s.store.UpdateProduct(merged)
 	if err != nil {
 		return nil, err
 	}

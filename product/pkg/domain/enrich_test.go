@@ -97,3 +97,34 @@ func TestVariantMergeUpdate_FullBodyReplacesEverything(t *testing.T) {
 		t.Fatalf("imageUrls = %v", merged.ImageURLs)
 	}
 }
+
+func TestProductMergeUpdate_StyleOnlyKeepsPrice(t *testing.T) {
+	existing := domain.Product{
+		ID: "BOT-001", Name: "Cassette", Brand: "Bottega", BrandCode: "BOT", StyleCode: "CAS001",
+		Category: "bags", Style: "casual", Target: "women",
+		Price: 2500, SellingPrice: 3000, Status: "active",
+		ViewCount: 7, SoldCount: 2, WishlistCount: 1,
+		CreatedAt: "2026-01-01T00:00:00Z", CreatedBy: "admin",
+	}
+	merged := existing.MergeUpdate(domain.Product{Style: "evening"})
+	if merged.Style != "evening" {
+		t.Fatalf("style = %q, want evening", merged.Style)
+	}
+	if merged.Price != 2500 || merged.SellingPrice != 3000 {
+		t.Fatalf("price wiped by style-only update: price=%v selling=%v", merged.Price, merged.SellingPrice)
+	}
+	if merged.Name != "Cassette" || merged.BrandCode != "BOT" || merged.StyleCode != "CAS001" {
+		t.Fatalf("identity/name cleared: %+v", merged)
+	}
+	if merged.ViewCount != 7 || merged.CreatedBy != "admin" {
+		t.Fatalf("counters/audit cleared: %+v", merged)
+	}
+}
+
+func TestProductMergeUpdate_ExplicitPriceChange(t *testing.T) {
+	existing := domain.Product{ID: "BOT-001", Price: 2500, SellingPrice: 3000, Name: "Cassette"}
+	merged := existing.MergeUpdate(domain.Product{Price: 2800})
+	if merged.Price != 2800 || merged.SellingPrice != 3000 || merged.Name != "Cassette" {
+		t.Fatalf("got price=%v selling=%v name=%q", merged.Price, merged.SellingPrice, merged.Name)
+	}
+}
