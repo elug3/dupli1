@@ -175,7 +175,7 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Per
 3. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
 4. **Planned packages not started** — user, chat, analytics (beyond `shared/pkg/permissions`)
 5. **Quality/performance** — see [quality-performance-review.md](quality-performance-review.md); money-path Criticals (C1 pricing, H7 JWT) are fixed — remaining items in [TODO.md](TODO.md)
-6. **v1.0 vs v1.1** — launch cut vs postponed work: [v1-release-plan.md](v1-release-plan.md)
+6. **v1.0 vs v1.1** — launch cut: [v1-release-plan.md](v1-release-plan.md); post-launch plan: [v1.1-release-plan.md](v1.1-release-plan.md)
 
 ## Running and testing
 

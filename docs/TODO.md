@@ -1,6 +1,12 @@
 # TODO
 
-**Release boundary:** [v1-release-plan.md](v1-release-plan.md) — what must ship for **v1.0** vs postpone to **v1.1**.
+**Release boundary:** [v1-release-plan.md](v1-release-plan.md) (v1.0 launch cut) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch themes & slices).
+
+## v1.1 (post-launch)
+
+See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criteria.
+
+- [ ] **Structured API errors + log messages** — stable machine `code` on all services (not HTTP status int); structured `slog` fields on error paths. Product sentinels done — [product-error-wrapping.md](product-error-wrapping.md); extend to auth/order/cart/payment + shared helper.
 
 ## Temporary / ops
 

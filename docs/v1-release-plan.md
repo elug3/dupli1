@@ -4,7 +4,7 @@
 **Scope:** Backend repo `dupli1` + production ops needed for a KRW fashion-bag marketplace launch.  
 **Sibling frontends:** `dupli1-web`, `dupli1-manage-web` (called out where they block launch).
 
-**Related:** [current-state.md](current-state.md), [TODO.md](TODO.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [payment-methods-plan.md](payment-methods-plan.md).
+**Related:** [current-state.md](current-state.md), [TODO.md](TODO.md), [v1.1-release-plan.md](v1.1-release-plan.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [payment-methods-plan.md](payment-methods-plan.md).
 
 ---
 
@@ -151,22 +151,26 @@ Ship when all are true:
 - [ ] Frontends use canonical paths + parent pricing (+ `skuId` preferred)
 - [ ] Runbook: [deployment-aws.md](deployment-aws.md) followed for secrets/JWT/Stripe
 
-Then tag **v1.0** and open a v1.1 board from the postpone table above.
+Then tag **v1.0** and execute **v1.1** from [v1.1-release-plan.md](v1.1-release-plan.md) (themes, slices, exit criteria). The postpone table above remains the inventory of deferred items.
 
 ---
 
 ## Suggested v1.1 first slice (after launch)
 
-1. Guest cart + merge (`dupli1_guest`)  
-2. Refunds on paid cancel  
-3. Remove legacy API aliases once clients are clean  
-4. Co-view recommendations  
-5. H6 context + Redis cache  
-6. Manager settings + SKU master admin UI  
+Authoritative plan: [v1.1-release-plan.md](v1.1-release-plan.md).
+
+1. Guest cart + merge (`dupli1_guest`) — **P0**  
+2. Refunds on paid cancel — **P0**  
+3. Remove legacy API aliases once clients are clean — **P1**  
+4. Co-view recommendations — **P1**  
+5. H6 context + Redis cache — **P2**  
+6. Structured API errors + log messages — **P1**  
+7. Manager settings + SKU master admin UI — **P2** / sibling  
 
 ---
 
 ## Doc maintenance in this cut
 
-- Keep [TODO.md](TODO.md) as the checklist; this file is the **release boundary**.
+- Keep [TODO.md](TODO.md) as the checklist; this file is the **v1.0 release boundary**.
+- Post-launch scope: [v1.1-release-plan.md](v1.1-release-plan.md).
 - Update [current-state.md](current-state.md) “Known gaps” when v1.0 ships (remove stale “client-trusted prices” risk — fixed).
