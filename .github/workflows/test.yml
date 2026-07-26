@@ -61,6 +61,22 @@ jobs:
   order:
     name: order
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dupli1
+          POSTGRES_PASSWORD: dupli1_dev
+          POSTGRES_DB: orders
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dupli1 -d orders"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_URL: postgres://dupli1:dupli1_dev@localhost:5432/orders?sslmode=disable
     steps:
       - name: Checkout
         uses: actions/checkout@v4
