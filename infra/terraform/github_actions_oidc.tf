@@ -73,6 +73,12 @@ resource "aws_iam_role_policy" "github_actions_ecs_deploy" {
         Action   = "iam:PassRole"
         Resource = data.aws_iam_role.ecs_task_execution.arn
       },
+      {
+        Sid    = "DescribeWebServiceSecret"
+        Effect = "Allow"
+        Action = "secretsmanager:DescribeSecret"
+        Resource = aws_secretsmanager_secret.web_service.arn
+      },
     ]
   })
 }
