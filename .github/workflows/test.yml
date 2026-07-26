@@ -105,3 +105,19 @@ jobs:
       - name: Test payment module
         working-directory: payment
         run: go test ./... -count=1
+
+  notification:
+    name: notification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: notification/go.mod
+
+      - name: Test notification module
+        working-directory: notification
+        run: go test ./... -count=1
