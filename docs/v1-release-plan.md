@@ -164,7 +164,8 @@ Authoritative plan: [v1.1-release-plan.md](v1.1-release-plan.md).
 3. Remove legacy API aliases once clients are clean — **P1**  
 4. Co-view recommendations — **P1**  
 5. H6 context + Redis cache — **P2**  
-6. Manager settings + SKU master admin UI — **P2** / sibling  
+6. Structured API errors + log messages — **P1**  
+7. Manager settings + SKU master admin UI — **P2** / sibling  
 
 ---
 
