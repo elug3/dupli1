@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -65,6 +66,7 @@ func (s *ProductSearchStore) migrate() error {
 		{"tags", "TEXT[] NOT NULL DEFAULT '{}'"},
 		{"created_by", "TEXT NOT NULL DEFAULT ''"},
 		{"official_price", "NUMERIC(10,2) NOT NULL DEFAULT 0"},
+		{"attributes", "JSONB NOT NULL DEFAULT '{}'::jsonb"},
 	} {
 		if _, err := s.pool.Exec(ctx, fmt.Sprintf(
 			"ALTER TABLE products ADD COLUMN IF NOT EXISTS %s %s", col.name, col.def,
@@ -372,7 +374,29 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price, official_price, status, capacity, tags, view_count, sold_count, wishlist_count, created_at, created_by`
+func attributesJSON(attrs map[string]string) []byte {
+	if attrs == nil {
+		return []byte("{}")
+	}
+	b, err := json.Marshal(attrs)
+	if err != nil {
+		return []byte("{}")
+	}
+	return b
+}
+
+func scanAttributesJSON(raw []byte) map[string]string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var out map[string]string
+	if err := json.Unmarshal(raw, &out); err != nil || len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price, official_price, status, capacity, tags, attributes, view_count, sold_count, wishlist_count, created_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -381,12 +405,13 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	var capacity string
 	var brandCode, styleCode *string
 	var subCategory, bagStyle, target string
+	var attrsRaw []byte
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
 		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category,
 		&subCategory, &bagStyle, &target,
 		&p.Price, &p.OfficialPrice,
-		&p.Status, &capacity, &tags, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &p.CreatedBy,
+		&p.Status, &capacity, &tags, &attrsRaw, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err
@@ -402,6 +427,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	p.Target = target
 	p.Capacity = capacity
 	p.Tags = scanTextArray(tags)
+	p.Attributes = scanAttributesJSON(attrsRaw)
 	p.CreatedAt = createdAt.Format(time.RFC3339)
 	return p, nil
 }
@@ -686,13 +712,13 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO products (id, name, description, price, official_price, brand, brand_code, style_code, color, material, stock, category, sub_category, bag_style, target, status, image_urls, capacity, tags, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+		`INSERT INTO products (id, name, description, price, official_price, brand, brand_code, style_code, color, material, stock, category, sub_category, bag_style, target, status, image_urls, capacity, tags, attributes, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description, p.Price, p.OfficialPrice,
 		p.Brand, nullEmpty(p.BrandCode), nullEmpty(p.StyleCode), p.Color, p.Material, p.Stock, p.Category,
 		p.SubCategory, p.Style, p.Target, p.Status,
-		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), p.CreatedBy,
+		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), attributesJSON(p.Attributes), p.CreatedBy,
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, wrapDB("create product", err)
@@ -731,13 +757,13 @@ func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, e
 		`UPDATE products
 		 SET name=$2, description=$3, brand=$4, material=$5, category=$6,
 		     sub_category=$7, bag_style=$8, target=$9, price=$10, official_price=$11,
-		     status=$12, capacity=$13, tags=$14
+		     status=$12, capacity=$13, tags=$14, attributes=$15
 		 WHERE id=$1
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description,
 		p.Brand, p.Material, p.Category,
 		p.SubCategory, p.Style, p.Target, p.Price, p.OfficialPrice,
-		p.Status, p.Capacity, toTextArray(p.Tags),
+		p.Status, p.Capacity, toTextArray(p.Tags), attributesJSON(p.Attributes),
 	).Scan(&createdAt)
 	if err != nil {
 		return nil, wrapDB("update product", err)

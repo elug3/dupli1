@@ -246,6 +246,11 @@ func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product,
 	if err := domain.NormalizeProductTaxonomy(&p); err != nil {
 		return nil, ports.Invalid(err.Error())
 	}
+	attrs, err := domain.NormalizeAttributes(p.Attributes)
+	if err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
+	p.Attributes = attrs
 	created, err := s.store.CreateProduct(p)
 	if err != nil {
 		return nil, err
@@ -268,6 +273,11 @@ func (s *ProductSearchService) UpdateProduct(p domain.Product) (*domain.Product,
 	if err := domain.NormalizeProductTaxonomy(&merged); err != nil {
 		return nil, ports.Invalid(err.Error())
 	}
+	attrs, err := domain.NormalizeAttributes(merged.Attributes)
+	if err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
+	merged.Attributes = attrs
 	updated, err := s.store.UpdateProduct(merged)
 	if err != nil {
 		return nil, err

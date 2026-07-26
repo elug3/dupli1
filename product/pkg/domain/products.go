@@ -56,6 +56,10 @@ type Product struct {
 	Status   string   `json:"status"` // "active" | "draft" | "archived"
 	Capacity string   `json:"capacity,omitempty"`
 	Tags     []string `json:"tags,omitempty"`
+	// Attributes is a free-form string key/value memo for PDP display
+	// (condition, care, authenticity notes, etc.). Not used for search,
+	// pricing, or checkout. Managers write; storefront treats as read-only.
+	Attributes map[string]string `json:"attributes,omitempty"`
 	// ViewCount is unique guest PDP views (denormalized). Public on PDP and recs.
 	ViewCount int64 `json:"viewCount"`
 	// SoldCount is units committed from inventory reservations (denormalized).

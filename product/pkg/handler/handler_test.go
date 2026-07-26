@@ -372,7 +372,11 @@ func TestCreateProductAssignsBrandAndStyleCodes(t *testing.T) {
 func TestPublicGetProduct(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active", Price: 2500, OfficialPrice: 3000},
+		{
+			ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active",
+			Price: 2500, OfficialPrice: 3000,
+			Attributes: map[string]string{"condition": "excellent", "care": "wipe dry"},
+		},
 	}
 	store.Variants = []domain.Variant{
 		{SKU: "BOT-001", ProductID: "BOT-001", Color: "Green", Status: "active"},
@@ -393,6 +397,9 @@ func TestPublicGetProduct(t *testing.T) {
 	}
 	if p.OfficialPrice != 3000 {
 		t.Fatalf("want officialPrice=3000, got %v", p.OfficialPrice)
+	}
+	if p.Attributes["condition"] != "excellent" || p.Attributes["care"] != "wipe dry" {
+		t.Fatalf("want attributes memo on PDP, got %#v", p.Attributes)
 	}
 	if len(p.Variants) != 1 {
 		t.Fatalf("want variants on PDP, got %d", len(p.Variants))
