@@ -92,6 +92,7 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		service.WithRefreshTokenGen(refreshTokenGen, cfg.RefreshTokenExpiry),
 		service.WithSessionStore(sessionStore),
 		service.WithEventPublisher(eventPublisher),
+		service.WithLogger(cfg.Logger),
 	)
 
 	h := handler.NewHandler(svc, cfg.Logger).WithOpenRegister(cfg.OpenRegister)

@@ -12,6 +12,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/rs/zerolog"
 )
 
 func newID() string {
@@ -35,6 +36,7 @@ type Service struct {
 	sessionStore       ports.SessionStore
 	refreshTokenExpiry time.Duration
 	eventPublisher     ports.EventPublisher
+	logger             zerolog.Logger
 }
 
 // ServiceOption configures a Service.
@@ -59,6 +61,13 @@ func WithSessionStore(store ports.SessionStore) ServiceOption {
 func WithEventPublisher(pub ports.EventPublisher) ServiceOption {
 	return func(s *Service) {
 		s.eventPublisher = pub
+	}
+}
+
+// WithLogger sets the logger used for background/best-effort failures.
+func WithLogger(logger zerolog.Logger) ServiceOption {
+	return func(s *Service) {
+		s.logger = logger
 	}
 }
 
@@ -105,9 +114,14 @@ func (s *Service) Register(ctx context.Context, email, password, accountType str
 	if err := s.userRepo.Save(ctx, u); err != nil {
 		return nil, fmt.Errorf("save user: %w", err)
 	}
+	// The account is already durable and usable at this point. user.registered has no
+	// critical consumer, so a broker outage must not undo a successful registration.
 	if err := s.publishUserRegistered(ctx, u); err != nil {
-		_ = s.userRepo.Delete(ctx, u.ID)
-		return nil, fmt.Errorf("publish event: %w", err)
+		s.logger.Error().
+			Str("event", "user_registered_publish_failed").
+			Str("user_id", u.ID).
+			Err(err).
+			Msg("registration succeeded but user.registered publish failed")
 	}
 	return u, nil
 }
