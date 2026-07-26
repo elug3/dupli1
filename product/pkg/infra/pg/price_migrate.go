@@ -8,8 +8,8 @@ import (
 // migrateParentPrices makes products.price + products.official_price the only
 // pricing columns:
 //  1. Ensure products.official_price exists
-//  2. Backfill parent prices from legacy variant columns when present
-//  3. Copy products.selling_price → official_price when needed
+//  2. Backfill parent sale price from legacy variant.price when parent price is 0
+//  3. Backfill parent official_price from variant/parent selling_price when still 0
 //  4. Drop legacy pricing columns from products and product_variants
 func (s *ProductSearchStore) migrateParentPrices(ctx context.Context) error {
 	if _, err := s.pool.Exec(ctx,
@@ -27,34 +27,40 @@ func (s *ProductSearchStore) migrateParentPrices(ctx context.Context) error {
 		return err
 	}
 
-	// Prefer min active variant price when the parent still has the default 0
-	// and variants carry a non-zero price (legacy rows).
+	// Sale price: cheapest active variant when parent still has default 0.
 	if hasVariantPrice {
-		sellingExpr := "0::numeric"
-		if hasVariantSelling {
-			sellingExpr = "selling_price"
-		}
-		sql := fmt.Sprintf(`
+		if _, err := s.pool.Exec(ctx, `
 			UPDATE products p
-			SET price = v.min_price,
-			    official_price = CASE
-			      WHEN p.official_price = 0 THEN v.selling_price
-			      ELSE p.official_price
-			    END
+			SET price = v.min_price
 			FROM (
-				SELECT DISTINCT ON (product_id)
-					product_id,
-					price AS min_price,
-					%s AS selling_price
+				SELECT product_id, MIN(price) AS min_price
 				FROM product_variants
 				WHERE status = 'active' AND price > 0
-				ORDER BY product_id, price ASC, created_at ASC
+				GROUP BY product_id
 			) v
 			WHERE p.id = v.product_id
-			  AND (p.price = 0 OR p.price IS NULL)
-		`, sellingExpr)
-		if _, err := s.pool.Exec(ctx, sql); err != nil {
-			return fmt.Errorf("backfill parent prices from variants: %w", err)
+			  AND p.price = 0
+		`); err != nil {
+			return fmt.Errorf("backfill parent price from variants: %w", err)
+		}
+	}
+
+	// Official / list price: highest active variant selling_price when parent
+	// official is still 0 — independent of whether sale price was already set.
+	if hasVariantSelling {
+		if _, err := s.pool.Exec(ctx, `
+			UPDATE products p
+			SET official_price = v.max_selling
+			FROM (
+				SELECT product_id, MAX(selling_price) AS max_selling
+				FROM product_variants
+				WHERE status = 'active' AND selling_price > 0
+				GROUP BY product_id
+			) v
+			WHERE p.id = v.product_id
+			  AND p.official_price = 0
+		`); err != nil {
+			return fmt.Errorf("backfill parent official_price from variants: %w", err)
 		}
 	}
 

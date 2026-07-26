@@ -358,7 +358,7 @@ Product service liveness check.
 
 ### `GET /api/v1/products`
 
-Search **parent styles** (one row per style; colors are not duplicated). No authentication required for the public catalog view (active parents only). With a valid Bearer token that includes `product.read` (or `product.*` / `*`), returns all statuses and includes cost.
+Search **parent styles** (one row per style; colors are not duplicated). No authentication required for the public catalog view (active parents only). With a valid Bearer token that includes `product.read` (or `product.*` / `*`), returns all statuses.
 
 | Filter / param | Match type |
 |----------------|-----------|
@@ -398,11 +398,15 @@ See [product-rich-search.md](product-rich-search.md) and [product-master-catalog
       "name": "Cassette Bag",
       "description": "...",
       "price": 2500.00,
+      "officialPrice": 3200.00,
       "brand": "Bottega Veneta",
       "color": "Green",
       "material": "Leather",
       "stock": 5,
       "category": "bags",
+      "subCategory": "handbags",
+      "style": "casual",
+      "target": "women",
       "capacity": "Medium",
       "tags": ["hot"],
       "viewCount": 12,
@@ -446,7 +450,7 @@ Redeem a coupon code. No authentication required.
 
 ### `GET /api/v1/products/{id}`
 
-Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Omits `cost`. Cart lines use each variant's `sku` (inventory key).
+Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Cart lines use each variant's `sku` (inventory key). Parent `price` is the charged amount; `officialPrice` is display-only.
 
 On success, the handler ensures a `dupli1_guest` cookie and records a unique view (one count per guest × product). Response includes public `viewCount` and `soldCount` (units committed on ship — [product-sold-count.md](product-sold-count.md)). View-store failures are logged and do not fail the PDP — see [product-guest-views-plan.md](product-guest-views-plan.md).
 

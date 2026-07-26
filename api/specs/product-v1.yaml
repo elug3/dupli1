@@ -288,6 +288,27 @@ paths:
           schema:
             type: string
           description: Exact match
+        - name: subcategory
+          in: query
+          schema:
+            type: string
+            enum: [handbags, tote, shoulder, cross, mini]
+          description: Bag subcategory (alias subCategory)
+        - name: style
+          in: query
+          schema:
+            type: string
+            enum: [casual, evening, business, weekend, statement]
+          description: Bag occasion/look (not SKU styleCode)
+        - name: target
+          in: query
+          schema:
+            type: string
+            enum: [all, men, women, kids]
+          description: >
+            Exact audience code stored on the product. Omit the param to leave
+            target unfiltered (sending target=all matches products tagged all,
+            not every audience).
         - name: tags
           in: query
           schema:
@@ -886,6 +907,15 @@ components:
           type: integer
         category:
           type: string
+        subCategory:
+          type: string
+          description: Bag type (handbags, tote, shoulder, cross, mini)
+        style:
+          type: string
+          description: Bag occasion/look (casual, evening, business, weekend, statement); not styleCode
+        target:
+          type: string
+          description: Audience (all, men, women, kids)
         status:
           $ref: '#/components/schemas/ProductStatus'
         imageUrls:
@@ -944,7 +974,7 @@ components:
 
     Variant:
       type: object
-      required: [sku, productId, color, price, status]
+      required: [sku, productId, color, status]
       properties:
         skuId:
           type: string
@@ -973,11 +1003,11 @@ components:
         officialPrice:
           type: number
           format: double
-          description: Reference / list price copied from parent (display only)
+          description: Reference / list price copied from parent (display only; read-only on variant)
         price:
           type: number
           format: double
-          description: Actual sale price copied from parent (charged)
+          description: Actual sale price copied from parent (charged; read-only on variant)
         status:
           $ref: '#/components/schemas/ProductStatus'
         imageUrls:
@@ -1050,6 +1080,13 @@ components:
         stock:
           type: integer
         category:
+          type: string
+        subCategory:
+          type: string
+        style:
+          type: string
+          description: Bag occasion/look; not styleCode
+        target:
           type: string
         status:
           $ref: '#/components/schemas/ProductStatus'

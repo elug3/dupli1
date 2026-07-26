@@ -43,7 +43,7 @@ Existing products were **backfilled**: each parent has at least one variant with
 | Removed | `GET /api/v1/products/{id}/manage` | Use PDP + manager Bearer on list, or load parent by id |
 | Images | `PUT /products/{id}/image` | `POST /products/{id}/images` (default variant) or `POST /products/{id}/variants/{sku}/images` |
 
-Legacy fields (`price`, `color`, `imageUrls`) may still appear on the parent as a **mirror of the default variant**. Prefer the new fields below; do not write new UI against legacy-only fields.
+Legacy fields (`color`, `imageUrls`, `stock`) may still appear on the parent as a **mirror of the default variant**. Prefer `availableColors` / `defaultImageUrl` for new UI. Parent `price` / `officialPrice` are source of truth (not derived).
 
 ---
 
@@ -71,7 +71,10 @@ interface Variant {
   productId: string;
   color: string;
   size?: string;
+  /** Echo of parent price (read-only on variant responses) */
   price: number;
+  /** Echo of parent officialPrice (read-only) */
+  officialPrice?: number;
   status: ProductStatus;
   imageUrls?: string[];
   createdAt?: string;
@@ -84,22 +87,25 @@ interface Product {
   brand: string;
   material: string;
   category: string;
+  subCategory?: string;       // handbags | tote | shoulder | cross | mini
+  style?: string;             // bag occasion (casual, evening, …); not styleCode
+  target?: string;            // all | men | women | kids
   status: ProductStatus;
-  cost?: number;              // managers only; public PDP omits / zeros cost
+  /** Actual sale price (discounts applied); charged at checkout */
+  price: number;
+  /** Reference / list price only; not charged */
+  officialPrice?: number;
   capacity?: string;
   tags?: string[];
   createdAt: string;
 
-  // Derived from variants (prefer these)
-  price: number;
-  officialPrice?: number;
+  // Derived from variants (prefer these for display)
   defaultImageUrl?: string;
   availableColors?: string[];
   availableSizes?: string[];
   variants?: Variant[];       // present on PDP; omitted on list/search cards
 
   // Legacy mirrors (optional; do not rely on for new UI)
-  price?: number;
   color?: string;
   stock?: number;
   imageUrls?: string[];
@@ -159,7 +165,7 @@ Do **not** render one card per variant.
 GET /api/v1/products/{id}
 ```
 
-Public PDP returns only `status === "active"` parents. Draft/archived → `404`. `cost` is not shown.
+Public PDP returns only `status === "active"` parents. Draft/archived → `404`.
 
 **UI flow**
 
@@ -235,7 +241,7 @@ GET /api/v1/products
 Authorization: Bearer <access_token>
 ```
 
-With a manager token you see **all statuses** and **cost**. Same `{ total, results }` shape. Optional `?status=draft`.
+With a manager token (`product.read`) you see **all statuses**. Same `{ total, results }` shape. Optional `?status=draft`.
 
 There is **no** `/manage` endpoint. Open a parent with:
 
@@ -259,13 +265,15 @@ Content-Type: application/json
   "material": "Leather",
   "description": "...",
   "status": "active",
+  "price": 2500,
+  "officialPrice": 3200,
   "tags": ["new"]
 }
 ```
 
 Parent id is auto-generated (`BOT-001`) if omitted.
 
-**Legacy shortcut:** if you also send `color`, `price`, and/or `imageUrls`, the API seeds **one default variant** with `sku === parent.id`. Prefer explicit variant APIs for multi-color products.
+**Legacy shortcut:** if you also send `color` and/or `imageUrls`, the API seeds **one default variant** with `sku === parent.id`. Prefer explicit variant APIs for multi-color products. Set `price` / `officialPrice` on the **parent**, not on variants.
 
 ### Add a variant to an existing parent
 
@@ -277,13 +285,13 @@ Content-Type: application/json
 {
   "color": "Black",
   "size": "",
-  "price": 2500,
   "status": "active"
 }
 ```
 
 - `sku` optional → auto (e.g. `BOT-001-BLA`). You may set `"sku": "BOT-001-BLK"`.
 - `(color, size)` must be unique per parent.
+- Price fields in the body are **ignored**; pricing lives on the parent.
 
 ### Update / delete a variant
 
@@ -295,7 +303,6 @@ Content-Type: application/json
 {
   "color": "Black",
   "size": "",
-  "price": 2600,
   "status": "active",
   "imageUrls": ["https://..."]
 }
@@ -348,13 +355,14 @@ Content-Type: application/json
   "material": "Leather",
   "category": "bags",
   "status": "active",
-  "cost": 900,
+  "price": 2500,
+  "officialPrice": 3200,
   "tags": ["hot"],
   "capacity": "Medium"
 }
 ```
 
-Do not send color/price/images on the parent for multi-variant styles; manage those on variants.
+Omitted fields keep their current values (merge-on-update). Set `price` / `officialPrice` on the parent. Manage color/images on variants.
 
 ### Delete parent
 

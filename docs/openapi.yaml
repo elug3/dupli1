@@ -178,7 +178,9 @@ paths:
           schema:
             type: string
             enum: [all, men, women, kids]
-          description: Audience target
+          description: >
+            Exact audience code on the product. Omit to leave unfiltered;
+            target=all matches products tagged all (not every audience).
         - name: status
           in: query
           schema:

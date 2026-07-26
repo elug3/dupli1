@@ -129,7 +129,7 @@ func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Produc
 		results = append(results, p)
 	}
 
-	// Enrich before sort so price_from is available for sort=price.
+	// Enrich summary fields before sort (sort=price uses parent Price).
 	s.enrich(results, false)
 	sortProducts(results, filter)
 

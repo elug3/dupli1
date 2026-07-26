@@ -209,7 +209,7 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 |---|---|---|---|
 | `GET` | `/api/v1/products/health` | — | Health check |
 | `GET` | `/api/v1/products/settings` | — | Non-secret service settings |
-| `GET` | `/api/v1/products` | optional `product.read` | Search **parent styles**; public active-only; `product.read` adds drafts/cost |
+| `GET` | `/api/v1/products` | optional `product.read` | Search **parent styles**; public active-only; `product.read` includes drafts |
 | `GET` | `/api/v1/products/{id}` | — | Parent PDP with `variants[]`, `availableColors`, `availableSizes` |
 | `GET` | `/api/v1/products/variants` | — | Batch public variants (`?sku_ids=id1,id2`, max 50) |
 | `GET` | `/api/v1/products/variants/by-sku/{sku}` | — | Public active variant by human SKU (legacy: `/api/v1/variants/{sku}`) |
@@ -293,7 +293,7 @@ List current owner's wishlisted public parents.
 
 ### GET /api/v1/products/{id}
 
-Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. `cost` is omitted. Cart/checkout use each variant's `sku`. Sets `dupli1_guest` when absent and increments unique `viewCount` — [product-guest-views-plan.md](product-guest-views-plan.md). Includes `soldCount` (units committed on ship) — [product-sold-count.md](product-sold-count.md). Includes `wishlistCount`.
+Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. Cart/checkout use each variant's `sku`. Sets `dupli1_guest` when absent and increments unique `viewCount` — [product-guest-views-plan.md](product-guest-views-plan.md). Includes `soldCount` (units committed on ship) — [product-sold-count.md](product-sold-count.md). Includes `wishlistCount`. Parent `price` / `officialPrice` are source of truth (also echoed on variants).
 
 ### GET /api/v1/products/{id}/recommendations
 

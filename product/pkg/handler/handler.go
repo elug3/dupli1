@@ -475,18 +475,22 @@ func (h *Handler) CreateCoupon(w http.ResponseWriter, r *http.Request) {
 		Discount    float64 `json:"discount"`
 		Description string  `json:"description"`
 		Expires     string  `json:"expires"`
-		Active      bool    `json:"active"`
+		Active      *bool   `json:"active"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+	active := true
+	if body.Active != nil {
+		active = *body.Active
 	}
 	created, err := h.couponSvc.Create(domain.Coupon{
 		Code:        body.Code,
 		Discount:    body.Discount,
 		Description: body.Description,
 		Expires:     body.Expires,
-		Active:      body.Active,
+		Active:      active,
 	})
 	if err != nil {
 		h.respondServiceError(w, err)
