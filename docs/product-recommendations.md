@@ -37,7 +37,8 @@ GET /api/v1/products/{id}/recommendations?limit=8
       "name": "…",
       "brand": "…",
       "category": "bags",
-      "priceFrom": 189.0,
+      "price": 189.0,
+      "officialPrice": 220.0,
       "defaultImageUrl": "…",
       "viewCount": 420,
       "availableColors": ["Black", "Green"]
@@ -73,7 +74,7 @@ Implemented in `domain.ScoreRecommendation`:
 | Same brand | +5 | Prefer `brandCode`; else case-insensitive `brand` |
 | Same material | +3 | Exact string match; empty seed material → no points |
 | Shared tags | +2 × overlap | Cap at 3 overlapping tags |
-| Price band | +2 | Candidate `priceFrom` within ±30% of seed `priceFrom` (both must be &gt; 0) |
+| Price band | +2 | Candidate `price` within ±30% of seed `price` (both must be &gt; 0) |
 | Popularity | `log10(view_count + 1)` | Soft boost; zero views still rank on attributes |
 
 **Final score** = sum of the above.
@@ -82,7 +83,7 @@ Same-category filtering is required when the seed has a `category` (avoids bags�
 
 ### Example
 
-Seed: brand `BOT`, material `leather`, tags `{tote, daily}`, `priceFrom` 200.
+Seed: brand `BOT`, material `leather`, tags `{tote, daily}`, `price` 200.
 
 | Candidate | Pieces | Approx score |
 |-----------|--------|--------------|

@@ -29,9 +29,9 @@ func (existing Variant) MergeUpdate(incoming Variant) Variant {
 	if len(incoming.ImageURLs) > 0 {
 		merged.ImageURLs = incoming.ImageURLs
 	}
-	// Price / SellingPrice stay on the parent product; clear any request values.
+	// Price / OfficialPrice stay on the parent product.
 	merged.Price = existing.Price
-	merged.SellingPrice = existing.SellingPrice
+	merged.OfficialPrice = existing.OfficialPrice
 	return merged
 }
 
@@ -78,8 +78,8 @@ func (existing Product) MergeUpdate(incoming Product) Product {
 	if incoming.Price != 0 {
 		merged.Price = incoming.Price
 	}
-	if incoming.SellingPrice != 0 {
-		merged.SellingPrice = incoming.SellingPrice
+	if incoming.OfficialPrice != 0 {
+		merged.OfficialPrice = incoming.OfficialPrice
 	}
 	// Identity / denormalized counters stay on the existing row.
 	merged.ID = existing.ID
@@ -100,16 +100,13 @@ func (v *Variant) ApplyParentPrice(p Product) {
 		return
 	}
 	v.Price = p.Price
-	v.SellingPrice = p.SellingPrice
+	v.OfficialPrice = p.OfficialPrice
 }
 
 // EnrichFromVariants fills summary and legacy display fields from variants.
-// Price stays on the parent (Price / SellingPrice); PriceFrom mirrors them for
-// older list-card clients. When includeVariants is false, Variants is left empty.
+// Price / OfficialPrice stay on the parent. When includeVariants is false,
+// Variants is left empty (list/search cards).
 func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
-	p.PriceFrom = p.Price
-	p.SellingPriceFrom = p.SellingPrice
-
 	if includeVariants {
 		stamped := make([]Variant, len(variants))
 		for i := range variants {

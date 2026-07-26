@@ -64,6 +64,7 @@ func (s *ProductSearchStore) migrate() error {
 		{"tags", "TEXT[] NOT NULL DEFAULT '{}'"},
 		{"created_by", "TEXT NOT NULL DEFAULT ''"},
 		{"selling_price", "NUMERIC(10,2) NOT NULL DEFAULT 0"},
+		{"official_price", "NUMERIC(10,2) NOT NULL DEFAULT 0"},
 	} {
 		if _, err := s.pool.Exec(ctx, fmt.Sprintf(
 			"ALTER TABLE products ADD COLUMN IF NOT EXISTS %s %s", col.name, col.def,
@@ -378,7 +379,7 @@ func toTextArray(ss []string) pgtype.TextArray {
 	}
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price, selling_price, status, capacity, tags, view_count, sold_count, wishlist_count, created_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price, official_price, status, capacity, tags, view_count, sold_count, wishlist_count, created_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -391,7 +392,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 		&p.ID, &p.Name, &p.Description,
 		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category,
 		&subCategory, &bagStyle, &target,
-		&p.Price, &p.SellingPrice,
+		&p.Price, &p.OfficialPrice,
 		&p.Status, &capacity, &tags, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &p.CreatedBy,
 	)
 	if err != nil {
@@ -409,8 +410,6 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	p.Capacity = capacity
 	p.Tags = scanTextArray(tags)
 	p.CreatedAt = createdAt.Format(time.RFC3339)
-	p.PriceFrom = p.Price
-	p.SellingPriceFrom = p.SellingPrice
 	return p, nil
 }
 
@@ -694,10 +693,10 @@ func (s *ProductSearchStore) CreateProduct(p domain.Product) (*domain.Product, e
 
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO products (id, name, description, price, selling_price, brand, brand_code, style_code, color, material, stock, category, sub_category, bag_style, target, status, image_urls, capacity, tags, created_by)
+		`INSERT INTO products (id, name, description, price, official_price, brand, brand_code, style_code, color, material, stock, category, sub_category, bag_style, target, status, image_urls, capacity, tags, created_by)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		 RETURNING created_at`,
-		p.ID, p.Name, p.Description, p.Price, p.SellingPrice,
+		p.ID, p.Name, p.Description, p.Price, p.OfficialPrice,
 		p.Brand, nullEmpty(p.BrandCode), nullEmpty(p.StyleCode), p.Color, p.Material, p.Stock, p.Category,
 		p.SubCategory, p.Style, p.Target, p.Status,
 		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), p.CreatedBy,
@@ -738,13 +737,13 @@ func (s *ProductSearchStore) UpdateProduct(p domain.Product) (*domain.Product, e
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE products
 		 SET name=$2, description=$3, brand=$4, material=$5, category=$6,
-		     sub_category=$7, bag_style=$8, target=$9, price=$10, selling_price=$11,
+		     sub_category=$7, bag_style=$8, target=$9, price=$10, official_price=$11,
 		     status=$12, capacity=$13, tags=$14
 		 WHERE id=$1
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description,
 		p.Brand, p.Material, p.Category,
-		p.SubCategory, p.Style, p.Target, p.Price, p.SellingPrice,
+		p.SubCategory, p.Style, p.Target, p.Price, p.OfficialPrice,
 		p.Status, p.Capacity, toTextArray(p.Tags),
 	).Scan(&createdAt)
 	if err != nil {

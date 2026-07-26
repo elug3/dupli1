@@ -90,7 +90,7 @@ No training. Score candidates in SQL (or memory store for tests) and return top-
 | Same `brand` / `brand_code` | +5 | Strong style affinity |
 | Shared `material` | +3 | Material match |
 | Tag overlap | +2 × min(shared tags, 3) | Cap so tag spam cannot dominate |
-| Price band | +2 | Seed `price_from` within ±30% of candidate `price_from` (use summary price) |
+| Price band | +2 | Seed `price` within ±30% of candidate `price` |
 | Popularity | +1 × log10(`view_count` + 1) | Soft boost; cold products still rank on attrs |
 
 **Final score** = sum of weights. Sort by score DESC, then `view_count` DESC, then `id` ASC (stable).
@@ -142,7 +142,8 @@ GET /api/v1/products/BOT-001/recommendations?limit=8
       "name": "…",
       "brand": "…",
       "category": "bags",
-      "priceFrom": 189.0,
+      "price": 189.0,
+      "officialPrice": 220.0,
       "defaultImageUrl": "…",
       "viewCount": 420,
       "availableColors": ["Black", "Green"]

@@ -12,7 +12,7 @@ const (
 	recommendWeightTag      = 2.0
 	recommendWeightPrice    = 2.0
 	recommendMaxTagOverlap  = 3
-	recommendPriceBand      = 0.30 // ±30% of seed PriceFrom
+	recommendPriceBand      = 0.30 // ±30% of seed Price
 )
 
 // ScoreRecommendation returns the deterministic related-product score for a candidate.
@@ -31,7 +31,7 @@ func ScoreRecommendation(seed, candidate Product) float64 {
 		overlap = recommendMaxTagOverlap
 	}
 	score += recommendWeightTag * float64(overlap)
-	if inPriceBand(seed.PriceFrom, candidate.PriceFrom) {
+	if inPriceBand(seed.Price, candidate.Price) {
 		score += recommendWeightPrice
 	}
 	score += math.Log10(float64(candidate.ViewCount) + 1)

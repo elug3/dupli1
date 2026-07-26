@@ -174,7 +174,7 @@ func sortProducts(results []domain.Product, filter map[string]string) {
 		case domain.SortWishlist:
 			less = a.WishlistCount < b.WishlistCount
 		case domain.SortPrice:
-			less = a.PriceFrom < b.PriceFrom
+			less = a.Price < b.Price
 		case domain.SortName:
 			less = strings.ToLower(a.Name) < strings.ToLower(b.Name)
 		default:
@@ -199,7 +199,7 @@ func aEqual(sortKey string, a, b domain.Product) bool {
 	case domain.SortWishlist:
 		return a.WishlistCount == b.WishlistCount
 	case domain.SortPrice:
-		return a.PriceFrom == b.PriceFrom
+		return a.Price == b.Price
 	case domain.SortName:
 		return strings.EqualFold(a.Name, b.Name)
 	default:
@@ -627,7 +627,7 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 	}
 	// Price lives on the parent product, not the SKU row.
 	v.Price = 0
-	v.SellingPrice = 0
+	v.OfficialPrice = 0
 	for _, existing := range s.Variants {
 		if existing.SKU == v.SKU {
 			return nil, ports.Conflict(fmt.Sprintf("variant already exists: %s", v.SKU))

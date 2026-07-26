@@ -133,9 +133,9 @@ func TestPublicGetProductViewFailureStillOK(t *testing.T) {
 func TestPublicGetRecommendations(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "SEED", Name: "Seed", BrandCode: "BOT", Brand: "Bottega", Material: "leather", Category: "bags", Status: "active", Tags: []string{"tote"}, PriceFrom: 200},
-		{ID: "BEST", Name: "Best", BrandCode: "BOT", Brand: "Bottega", Material: "leather", Category: "bags", Status: "active", Tags: []string{"tote"}, PriceFrom: 210, ViewCount: 5},
-		{ID: "OK", Name: "Ok", BrandCode: "BOT", Brand: "Bottega", Category: "bags", Status: "active", PriceFrom: 200, ViewCount: 20},
+		{ID: "SEED", Name: "Seed", BrandCode: "BOT", Brand: "Bottega", Material: "leather", Category: "bags", Status: "active", Tags: []string{"tote"}, Price: 200},
+		{ID: "BEST", Name: "Best", BrandCode: "BOT", Brand: "Bottega", Material: "leather", Category: "bags", Status: "active", Tags: []string{"tote"}, Price: 210, ViewCount: 5},
+		{ID: "OK", Name: "Ok", BrandCode: "BOT", Brand: "Bottega", Category: "bags", Status: "active", Price: 200, ViewCount: 20},
 		{ID: "OTHER", Name: "Other", Brand: "Gucci", Category: "bags", Status: "active", ViewCount: 999},
 		{ID: "DRAFT", Name: "Draft", BrandCode: "BOT", Category: "bags", Status: "draft"},
 		{ID: "SHOES", Name: "Shoes", BrandCode: "BOT", Category: "shoes", Status: "active"},

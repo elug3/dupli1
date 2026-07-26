@@ -154,8 +154,8 @@ func TestSearchProductsParentsOnly(t *testing.T) {
 	if len(products[0].AvailableColors) != 2 {
 		t.Fatalf("want 2 available colors, got %v", products[0].AvailableColors)
 	}
-	if products[0].PriceFrom != 2500 {
-		t.Fatalf("want priceFrom=2500, got %v", products[0].PriceFrom)
+	if products[0].Price != 2500 {
+		t.Fatalf("want price=2500, got %v", products[0].Price)
 	}
 }
 
@@ -372,7 +372,7 @@ func TestCreateProductAssignsBrandAndStyleCodes(t *testing.T) {
 func TestPublicGetProduct(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
-		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active", Price: 2500, SellingPrice: 3000},
+		{ID: "BOT-001", Name: "Mini Bag", Brand: "Bottega Veneta", Status: "active", Price: 2500, OfficialPrice: 3000},
 	}
 	store.Variants = []domain.Variant{
 		{SKU: "BOT-001", ProductID: "BOT-001", Color: "Green", Status: "active"},
@@ -391,8 +391,8 @@ func TestPublicGetProduct(t *testing.T) {
 	if p.Price != 2500 {
 		t.Fatalf("want price=2500, got %v", p.Price)
 	}
-	if p.SellingPrice != 3000 {
-		t.Fatalf("want sellingPrice=3000, got %v", p.SellingPrice)
+	if p.OfficialPrice != 3000 {
+		t.Fatalf("want officialPrice=3000, got %v", p.OfficialPrice)
 	}
 	if len(p.Variants) != 1 {
 		t.Fatalf("want variants on PDP, got %d", len(p.Variants))
