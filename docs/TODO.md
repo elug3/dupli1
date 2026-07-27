@@ -15,7 +15,7 @@ persistent JWT signing key. Operator steps: [launch runbook](v1-release-plan.md#
 Open highlights:
 
 - [ ] Create the JWT signing-key secret and set `jwt_private_key_secret_arn` — prod still signs with an ephemeral key (A6)
-- [ ] Product images CDN applied on prod (A2–A3)
+- [x] Product images CDN applied on prod (A2–A3) — `imageUrls` use CloudFront
 - [ ] Prod money-path smoke — `scripts/smoke-money-path.sh` (A10, B)
 - [ ] Frontends: canonical paths, parent pricing, `skuId` (D, E)
 - [ ] Tag `v1.0` (F4)
@@ -74,7 +74,7 @@ Implement in the order in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) (
     | `/api/v1/inventory/reservations/*` | `/api/v1/products/inventory/reservations/*` |
     | `/api/v1/checkout/*` | `/api/v1/orders/checkout/*` |
     | `/api/v1/carts/{id}` | `/api/v1/cart/customers/{id}` |
-- [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md)). Code path for private images via CloudFront OAC landed (#96); Terraform apply / host rewrite still open — steps in the [launch runbook](v1-release-plan.md#launch-runbook-section-a).
+- [x] **Product images CDN** — CloudFront + OAC in prod; `imageUrls` use CloudFront hosts ([product-images-browser-access.md](product-images-browser-access.md)). Checklist A2–A3 done.
 - [x] **Server-side order/checkout pricing (C1)** — ignore client `unit_price_cents`; resolve from product like cart ([quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)#1-c1--server-side-pricing-critical)
 - [x] Inventory service token refresh in order bootstrap
 - [x] **H1** Order create `Idempotency-Key` + transactional outbox (soft-success publish; worker drain)

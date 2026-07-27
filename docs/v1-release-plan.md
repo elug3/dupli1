@@ -13,7 +13,7 @@
 
 The **money path is implemented**: cart → checkout/order → Stripe/Bypass → `payment.succeeded` → `paid` → ship → stock commit. Critical money/auth bugs from the Jul review (server-side pricing, JWT fail-closed, outboxes) are done. Backend hardening (section C) is **done in the repo**.
 
-**v1.0 is postponed** until all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed — production images CDN, persistent JWT secret, prod smoke, and `dupli1-web` / `dupli1-manage-web` alignment remain open. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
+**v1.0 is postponed** until all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed — product images CDN is done; persistent JWT secret, prod smoke, and `dupli1-web` / `dupli1-manage-web` alignment remain open. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
 
 ---
 
@@ -36,7 +36,7 @@ The **money path is implemented**: cart → checkout/order → Stripe/Bypass →
 
 | Risk | Severity | v1.0 action |
 |------|----------|-------------|
-| Product image URLs still point at private S3 (browser 403) if CloudFront/`S3_PUBLIC_ENDPOINT` not applied | **Launch-blocker** | Apply CDN + rewrite hosts — [product-images-browser-access.md](product-images-browser-access.md) |
+| Product image URLs still point at private S3 (browser 403) if CloudFront/`S3_PUBLIC_ENDPOINT` not applied | Fixed | Prod `imageUrls` use CloudFront — [product-images-browser-access.md](product-images-browser-access.md) |
 | Frontends still on legacy paths / human `sku` only (not `skuId`) / old price fields | **Launch-blocker** | Migrate storefront + admin before cut |
 | Catalog prices wiped to `0` (historical partial-PUT bug) | **Data** | Verify prod prices; restore snapshot/PITR or re-enter if still zero |
 | `MergeUpdate` cannot deliberately set `price`/`officialPrice` to `0` | Low | **Documented** in [product-price-on-parent.md](product-price-on-parent.md) + [api.md](api.md); rare admin case |
@@ -56,7 +56,7 @@ Money-path Criticals **C1 / H1 / H3 / H7** are fixed in code — re-verify on th
 ### A. Launch ops (production)
 
 1. **Deploy latest product** so `official_price` migrate + drop of `selling_price` has run on RDS.
-2. **Product images CDN** — Terraform apply CloudFront + OAC; set `S3_PUBLIC_ENDPOINT`; rewrite existing `imageUrls` if hosts are stale.
+2. [x] **Product images CDN** — CloudFront + OAC live; prod `imageUrls` use CloudFront hosts.
 3. **Stripe live** — `STRIPE_SECRET_KEY` + webhook secret; confirm Bypass only for managers.
 4. **Persistent JWT signing key** — no ephemeral RSA on auth restart. Code + Terraform support landed (`JWT_PRIVATE_KEY`); the secret still has to be created and `jwt_private_key_secret_arn` set.
 5. **Telegram** — Secrets Manager wired if ops alerts are required.
