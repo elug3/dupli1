@@ -13,7 +13,7 @@
 
 The **money path is implemented**: cart → checkout/order → Stripe/Bypass → `payment.succeeded` → `paid` → ship → stock commit. Critical money/auth bugs from the Jul review (server-side pricing, JWT fail-closed, outboxes) are done. Backend hardening (section C) is **done in the repo**.
 
-**v1.0 is postponed** until all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed — product images CDN is done; persistent JWT secret, prod smoke, and `dupli1-web` / `dupli1-manage-web` alignment remain open. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
+**v1.0 is postponed** until all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed — product images CDN and persistent JWT key are done; remaining ops (Stripe/Telegram/prices/smoke), and `dupli1-web` / `dupli1-manage-web` alignment remain open. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
 
 ---
 
@@ -58,7 +58,7 @@ Money-path Criticals **C1 / H1 / H3 / H7** are fixed in code — re-verify on th
 1. **Deploy latest product** so `official_price` migrate + drop of `selling_price` has run on RDS.
 2. [x] **Product images CDN** — CloudFront + OAC live; prod `imageUrls` use CloudFront hosts.
 3. **Stripe live** — `STRIPE_SECRET_KEY` + webhook secret; confirm Bypass only for managers.
-4. **Persistent JWT signing key** — no ephemeral RSA on auth restart. Code + Terraform support landed (`JWT_PRIVATE_KEY`); the secret still has to be created and `jwt_private_key_secret_arn` set.
+4. [x] **Persistent JWT signing key** — secret `dupli1/production/jwt-private-key` wired; prod `ephemeral_jwt_key` is `false`.
 5. **Telegram** — Secrets Manager wired if ops alerts are required.
 6. **Smoke the money path on prod** — add to cart → checkout → pay → `paid` → ship → stock committed / `soldCount` up.
 7. **Confirm catalog prices** — spot-check non-zero `price` / `officialPrice` after earlier wipe + migrate.
@@ -180,9 +180,12 @@ Operator steps that cannot be done from the repo. Region `us-east-1`, ECS cluste
 `production`, Terraform in `infra/terraform/`. Architecture reference:
 [deployment-aws.md](deployment-aws.md).
 
-### 1. Persistent JWT signing key
+### 1. Persistent JWT signing key — **done**
 
-Without this, auth mints a new RSA key on every task start: all outstanding access and
+Prod auth injects `JWT_PRIVATE_KEY` from `dupli1/production/jwt-private-key` and reports
+`features.ephemeral_jwt_key: false`. Historical create/apply steps (kept for ops replay):
+
+Without a persistent key, auth mints a new RSA key on every task start: all outstanding access and
 refresh tokens break and the other services see a changed JWKS. Auth reads the PEM from
 `JWT_PRIVATE_KEY` (see [deployment-aws.md](deployment-aws.md#jwt-signing-key)).
 
@@ -203,11 +206,15 @@ curl -s https://dupli1.com/api/v1/auth/settings | jq .features.ephemeral_jwt_key
 curl -s https://dupli1.com/api/v1/auth/.well-known/jwks.json | jq -r '.keys[0].n' | sha256sum
 ```
 
-### 2. Product images CDN
+### 2. Product images CDN — **done**
+
+Prod `imageUrls` already use CloudFront. No further apply/rewrite required unless
+hosts regress to raw S3. Reference: [product-images-browser-access.md](product-images-browser-access.md).
+
+Historical apply / rewrite steps (kept for ops replay):
 
 Terraform already declares CloudFront + OAC, the bucket policy and the
-`S3_PUBLIC_ENDPOINT` task env. Apply it, then repoint any rows still holding raw S3 hosts
-([product-images-browser-access.md](product-images-browser-access.md)):
+`S3_PUBLIC_ENDPOINT` task env. Apply it, then repoint any rows still holding raw S3 hosts:
 
 ```bash
 terraform -chdir=infra/terraform apply

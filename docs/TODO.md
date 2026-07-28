@@ -14,7 +14,7 @@ persistent JWT signing key. Operator steps: [launch runbook](v1-release-plan.md#
 
 Open highlights:
 
-- [ ] Create the JWT signing-key secret and set `jwt_private_key_secret_arn` — prod still signs with an ephemeral key (A6)
+- [x] Create the JWT signing-key secret and set `jwt_private_key_secret_arn` — prod `ephemeral_jwt_key` is `false` (A6)
 - [x] Product images CDN applied on prod (A2–A3) — `imageUrls` use CloudFront
 - [ ] Prod money-path smoke — `scripts/smoke-money-path.sh` (A10, B)
 - [ ] Frontends: canonical paths, parent pricing, `skuId` (D, E)

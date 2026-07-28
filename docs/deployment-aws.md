@@ -50,7 +50,10 @@ validating and JWKS changes under the other services on each auth deploy or task
 replacement. Auth logs a warning at startup and reports
 `features.ephemeral_jwt_key: true` on `GET /api/v1/auth/settings`.
 
-Create the key and point Terraform at it:
+**Production (2026-07-28):** secret `dupli1/production/jwt-private-key` is injected as
+`JWT_PRIVATE_KEY` on `dupli1-auth`; live settings report `ephemeral_jwt_key: false`.
+
+Create/replace the key and point Terraform at it:
 
 ```bash
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out jwt-private-key.pem
