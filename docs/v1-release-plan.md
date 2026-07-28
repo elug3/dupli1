@@ -13,7 +13,7 @@
 
 The **money path is implemented**: cart → checkout/order → Stripe/Bypass → `payment.succeeded` → `paid` → ship → stock commit. Critical money/auth bugs from the Jul review (server-side pricing, JWT fail-closed, outboxes) are done. Backend hardening (section C) is **done in the repo**.
 
-**v1.0 is postponed** until all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed — product images CDN and persistent JWT key are done; remaining ops (Stripe/Telegram/prices/smoke), and `dupli1-web` / `dupli1-manage-web` alignment remain open. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
+**v1.0 is postponed** until all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed — product images CDN, persistent JWT, Telegram wiring, and gateway ECS conf are done; **Stripe/card PG is waived** (PG TBD). Remaining: disable prod simulate (A5), catalog prices (A9), prod smoke (Bypass path), and `dupli1-web` / `dupli1-manage-web` alignment. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, Bypass pay, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
 
 ---
 
@@ -55,13 +55,14 @@ Money-path Criticals **C1 / H1 / H3 / H7** are fixed in code — re-verify on th
 
 ### A. Launch ops (production)
 
-1. **Deploy latest product** so `official_price` migrate + drop of `selling_price` has run on RDS.
+1. [x] **Deploy latest product** so `official_price` migrate + drop of `selling_price` has run on RDS (API serves `officialPrice`).
 2. [x] **Product images CDN** — CloudFront + OAC live; prod `imageUrls` use CloudFront hosts.
-3. **Stripe live** — `STRIPE_SECRET_KEY` + webhook secret; confirm Bypass only for managers.
+3. [x] **Card PG** — **waived**: not contracting Stripe for v1.0; PG company TBD. Launch pay path = manager **Bypass**.
 4. [x] **Persistent JWT signing key** — secret `dupli1/production/jwt-private-key` wired; prod `ephemeral_jwt_key` is `false`.
-5. **Telegram** — Secrets Manager wired if ops alerts are required.
-6. **Smoke the money path on prod** — add to cart → checkout → pay → `paid` → ship → stock committed / `soldCount` up.
-7. **Confirm catalog prices** — spot-check non-zero `price` / `officialPrice` after earlier wipe + migrate.
+5. [x] **Telegram** — Secrets Manager wired into `dupli1-notification`.
+6. **Smoke the money path on prod** — add to cart → checkout → **Bypass pay** → `paid` → ship → stock committed / `soldCount` up. Confirm `dev_simulate_success` is `false`.
+7. **Confirm catalog prices** — spot-check non-zero `price` / `officialPrice` after earlier wipe + migrate (live catalog currently has `price: 0` on the sample bag — A9).
+8. **A5** — after deploying payment with `PAYMENT_ALLOW_DEV_SIMULATE` unset, confirm simulate is off.
 
 Step-by-step commands and verification for all of these: [launch runbook](#launch-runbook-section-a) below.
 
@@ -162,13 +163,13 @@ Grouped by theme. None of these should delay v1.0 launch or v1.1 platform work.
 
 Summary — ship when all are true:
 
-- [ ] Storefront can browse bags, see images, add to cart, checkout, pay with card, see order `paid`
+- [ ] Storefront can browse bags, see images, add to cart, checkout; pay via **Bypass** (or future PG) → order `paid`
 - [ ] Ops can ship → `in_transit` and stock commits
-- [ ] Bypass works for managers only; simulate-success off in prod
+- [ ] Bypass works for managers only; simulate-success off in prod (`PAYMENT_ALLOW_DEV_SIMULATE` unset)
 - [ ] Telegram (or accepted alternative) fires on `order.paid`
 - [ ] No known zeroed catalog prices on live products
 - [ ] Frontends use canonical paths + parent pricing (+ `skuId` preferred)
-- [ ] Runbook below executed for secrets / JWT / Stripe / images
+- [ ] Runbook below executed for secrets / JWT / images (Stripe N/A — PG TBD)
 
 Then tag **v1.0** and execute **v1.1** from [v1.1-release-plan.md](v1.1-release-plan.md) (themes, slices, exit criteria). The postpone table above remains the inventory of deferred items.
 
@@ -240,32 +241,33 @@ WHERE EXISTS (SELECT 1 FROM unnest(image_urls) AS u WHERE u LIKE '%s3.amazonaws.
 
 Verify a PDP image URL returns `200` from a plain browser fetch (no signature), not `403`.
 
-### 3. Stripe live keys
+### 3. Card PG / Stripe — **waived for v1.0**
 
-Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` from Secrets Manager on
-`dupli1-payment`, and register the endpoint
-`https://dupli1.com/api/v1/payments/webhooks/stripe` in the Stripe dashboard. Bypass stays
-gated on `payment.bypass` ([payment-service.md](payment-service.md),
-[payment-methods-plan.md](payment-methods-plan.md)). Verify:
+Dupli1 will **not** use Stripe for this launch; the company has not chosen a PG yet.
+Leave `STRIPE_SECRET_KEY` / webhook unset. Credit-card checkout stays unavailable until a
+provider is wired. Ops marks orders paid with **Bypass** (`payment.bypass`).
+
+**Important:** `simulate-success` used to turn on whenever Stripe was empty. It now requires
+an explicit `PAYMENT_ALLOW_DEV_SIMULATE=true` (Compose sets this for local). On ECS leave it
+**unset** so prod cannot simulate. Verify after deploying that payment build:
 
 ```bash
 curl -s https://dupli1.com/api/v1/payments/settings \
   | jq '{stripe_checkout: .features.stripe_checkout,
-         stripe_webhook: .features.stripe_webhook,
-         dev_simulate_success: .features.dev_simulate_success}'
-# want: stripe_checkout true, stripe_webhook true, dev_simulate_success false
+         dev_simulate_success: .features.dev_simulate_success,
+         checkout_provider: .limits.checkout_provider}'
+# want: stripe_checkout false, dev_simulate_success false, checkout_provider "none"
 ```
 
-`dev_simulate_success` is derived from an empty `STRIPE_SECRET_KEY`, so a `true` here means
-the live key never reached the task.
+Bypass stays gated on `payment.bypass` ([payment-service.md](payment-service.md),
+[payment-methods-plan.md](payment-methods-plan.md)).
 
-### 4. Telegram ops alerts
+### 4. Telegram ops alerts — **wired**
 
-Populate `dupli1/production/telegram` (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ORDER_CHAT_ID`,
-`TELEGRAM_PRODUCT_CHAT_ID`) and redeploy `dupli1-notification`. A missing token is not an
+Secret `dupli1/production/telegram` is injected into `dupli1-notification`. A missing token is not an
 error — messages are skipped and logged, so check the log line if nothing arrives. Handler
 failures are logged as `notification nats handler subject=… error=…`; core NATS does not
-redeliver, so a logged failure means that one alert was lost.
+redeliver, so a logged failure means that one alert was lost. Confirm delivery on the next paid-order smoke (B7).
 
 ### 5. Catalog price check
 

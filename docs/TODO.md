@@ -16,7 +16,11 @@ Open highlights:
 
 - [x] Create the JWT signing-key secret and set `jwt_private_key_secret_arn` — prod `ephemeral_jwt_key` is `false` (A6)
 - [x] Product images CDN applied on prod (A2–A3) — `imageUrls` use CloudFront
-- [ ] Prod money-path smoke — `scripts/smoke-money-path.sh` (A10, B)
+- [x] Card PG / Stripe (A4) — **waived**; PG TBD; launch pay = Bypass
+- [x] Telegram wired (A7); gateway uses `nginx.ecs.conf` (A8)
+- [ ] Deploy payment build so prod `dev_simulate_success` is `false` (A5 — needs `PAYMENT_ALLOW_DEV_SIMULATE` unset)
+- [ ] Catalog prices not zeroed (A9) — sample product currently `price: 0`
+- [ ] Prod money-path smoke — Bypass path via `scripts/smoke-money-path.sh` (A10, B)
 - [ ] Frontends: canonical paths, parent pricing, `skuId` (D, E)
 - [ ] Tag `v1.0` (F4)
 

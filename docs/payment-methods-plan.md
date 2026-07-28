@@ -1,6 +1,6 @@
 # Plan: Payment Methods
 
-**Status:** Design + Bypass implemented. Credit card remains Stripe Checkout; Bitcoin is still spec-only (do not implement yet).
+**Status:** Design + Bypass implemented. Credit-card adapter remains Stripe Checkout in code but **v1.0 does not plan to use Stripe** (PG company TBD). Bitcoin is still spec-only (do not implement yet).
 
 **Related:** [payment-service.md](payment-service.md), [permissions.md](permissions.md), [checkout-session.md](checkout-session.md), [current-state.md](current-state.md).
 
@@ -10,8 +10,8 @@ Offer three payment methods for pending orders, with a single confirmation path 
 
 | Method | Who can use it | Status |
 |--------|----------------|--------|
-| **Credit card** | Customer (own order) or `payment.create` | **Implemented** — Stripe Checkout redirect |
-| **Bypass** | Order manager only (`payment.bypass`) | **Implemented** — mark paid without a PG |
+| **Credit card** | Customer (own order) or `payment.create` | **Implemented** (Stripe Checkout adapter) — **not wired for v1.0**; PG TBD |
+| **Bypass** | Order manager only (`payment.bypass`) | **Implemented** — mark paid without a PG (**v1.0 launch path**) |
 | **Bitcoin** | Customer (own order) | **Planned — do not implement yet** |
 
 All successful methods must end the same way: payment record → **`succeeded`** → NATS **`payment.succeeded`** → order **`pending` → `paid`**. Order managers still ship via `POST /orders/{id}/ship`.

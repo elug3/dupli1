@@ -20,8 +20,9 @@
 #   SKU_ID          existing variant to buy; when unset a throwaway product is created
 #   QUANTITY        units to buy (default 1)
 #
-# The run creates a customer account and a real order. On production, prefer
-# SKU_ID against a low-value product and cancel/refund afterwards if needed.
+# The run creates a customer account and a real order. Without a card PG it pays via
+# manager Bypass and asserts simulate-success is disabled. With PAYMENT_ALLOW_DEV_SIMULATE
+# (local Compose) it uses the simulate URL; with Stripe configured it pauses for card pay.
 set -uo pipefail
 
 BASE=${BASE:-http://localhost:8080}
@@ -171,25 +172,40 @@ check "customer bypass rejected" \
   "$(status_of POST /api/v1/payments "$CUSTOMER" \
     "{\"order_id\":\"$ORDER_ID\",\"method\":\"bypass\",\"note\":\"smoke test\"}")" 403
 
-step "Pay by card"
-payment=$(api POST /api/v1/payments "$CUSTOMER" "{\"order_id\":\"$ORDER_ID\",\"method\":\"credit_card\"}")
-PAYMENT_ID=$(echo "$payment" | field 'd["id"]')
-CHECKOUT_URL=$(echo "$payment" | field 'd.get("checkout_url","")')
-[ -n "$PAYMENT_ID" ] && pass "payment $PAYMENT_ID" || { fail "create payment: $payment"; exit 1; }
+step "Pay"
+# Prefer card when a PG/simulate checkout URL is available; otherwise manager Bypass
+# (v1.0 launch without a contracted PG).
+SETTINGS=$(api GET /api/v1/payments/settings)
+SIMULATE=$(echo "$SETTINGS" | field 'd.get("features",{}).get("dev_simulate_success",False)')
+STRIPE=$(echo "$SETTINGS" | field 'd.get("features",{}).get("stripe_checkout",False)')
 
-case "$CHECKOUT_URL" in
-  *"/simulate-success")
-    pass "dev simulate endpoint in use (no Stripe key configured)"
-    check "simulate success" "$(curl -s -o /dev/null -w '%{http_code}' "$CHECKOUT_URL")" 200
-    ;;
-  *checkout.stripe.com*)
-    printf '  MANUAL Stripe Checkout: complete the payment at\n         %s\n' "$CHECKOUT_URL"
-    read -r -p "  press enter once the card payment succeeded... " _
-    ;;
-  *)
-    fail "unexpected checkout_url: $CHECKOUT_URL"
-    ;;
-esac
+if [ "$STRIPE" = "True" ] || [ "$SIMULATE" = "True" ]; then
+  payment=$(api POST /api/v1/payments "$CUSTOMER" "{\"order_id\":\"$ORDER_ID\",\"method\":\"credit_card\"}")
+  PAYMENT_ID=$(echo "$payment" | field 'd["id"]')
+  CHECKOUT_URL=$(echo "$payment" | field 'd.get("checkout_url","")')
+  [ -n "$PAYMENT_ID" ] && pass "payment $PAYMENT_ID" || { fail "create payment: $payment"; exit 1; }
+
+  case "$CHECKOUT_URL" in
+    *"/simulate-success")
+      pass "dev simulate endpoint in use (PAYMENT_ALLOW_DEV_SIMULATE)"
+      check "simulate success" "$(curl -s -o /dev/null -w '%{http_code}' "$CHECKOUT_URL")" 200
+      ;;
+    *checkout.stripe.com*)
+      printf '  MANUAL Stripe Checkout: complete the payment at\n         %s\n' "$CHECKOUT_URL"
+      read -r -p "  press enter once the card payment succeeded... " _
+      ;;
+    *)
+      fail "unexpected checkout_url: $CHECKOUT_URL"
+      ;;
+  esac
+else
+  pass "no card PG configured — paying with manager Bypass"
+  payment=$(api POST /api/v1/payments "$OWNER" \
+    "{\"order_id\":\"$ORDER_ID\",\"method\":\"bypass\",\"note\":\"smoke: no PG yet\"}")
+  PAYMENT_ID=$(echo "$payment" | field 'd["id"]')
+  [ -n "$PAYMENT_ID" ] && pass "bypass payment $PAYMENT_ID" || { fail "bypass payment: $payment"; exit 1; }
+  check "simulate-success disabled" "$(status_of GET /api/v1/payments/does-not-exist/simulate-success)" 404
+fi
 
 step "Order reaches paid (payment.succeeded consumer)"
 order_status=""

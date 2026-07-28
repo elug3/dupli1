@@ -14,6 +14,7 @@ type ServerOptions struct {
 	StripeSuccessURL    string
 	StripeCancelURL     string
 	PublicBaseURL       string
+	AllowDevSimulate    bool // PAYMENT_ALLOW_DEV_SIMULATE — local/dev only
 	ReadTimeout         time.Duration
 	WriteTimeout        time.Duration
 	IdleTimeout         time.Duration

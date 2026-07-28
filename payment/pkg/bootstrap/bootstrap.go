@@ -29,7 +29,12 @@ type Config struct {
 	StripeSuccessURL    string
 	StripeCancelURL     string
 	PublicBaseURL       string
-	HTTPClient          *http.Client
+	// AllowDevSimulate enables the local simulate-success checkout path and
+	// GET /api/v1/payments/{id}/simulate-success. It must be set explicitly
+	// (PAYMENT_ALLOW_DEV_SIMULATE); an empty Stripe key alone no longer implies
+	// simulate is on — production without a PG must keep this false and use Bypass.
+	AllowDevSimulate bool
+	HTTPClient       *http.Client
 }
 
 type App struct {
@@ -66,14 +71,19 @@ func Bootstrap(cfg Config) (*App, error) {
 	orders := httporder.NewClient(cfg.OrderURL, cfg.HTTPClient)
 
 	var checkoutProvider ports.CheckoutProvider
-	if cfg.StripeSecretKey != "" {
+	switch {
+	case cfg.StripeSecretKey != "":
 		checkoutProvider = checkout.NewStripeProvider(cfg.StripeSecretKey, cfg.StripeSuccessURL, cfg.StripeCancelURL)
-	} else {
+	case cfg.AllowDevSimulate:
 		publicURL := cfg.PublicBaseURL
 		if publicURL == "" {
 			publicURL = "http://localhost:8080"
 		}
 		checkoutProvider = checkout.NewDevProvider(publicURL)
+	default:
+		checkoutProvider = checkout.NewUnavailableProvider(
+			"credit card checkout is not configured; use method=bypass (payment.bypass) until a PG is wired",
+		)
 	}
 
 	var eventPublisher ports.EventPublisher
@@ -105,7 +115,7 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	h := handler.New(svc, jwtValidator, cfg.StripeWebhookSecret).
 		WithSettings(BuildSettings(cfg)).
-		WithDevSimulate(cfg.StripeSecretKey == "")
+		WithDevSimulate(cfg.AllowDevSimulate && cfg.StripeSecretKey == "")
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

@@ -11,15 +11,19 @@ func BuildSettings(cfg Config) settings.Response {
 	resp.Auth = settings.ConsumerAuth(cfg.JWKSURL, cfg.JWTSecret)
 	resp.Storage = settings.StorageMode(cfg.DatabaseConnString)
 
-	checkoutProvider := "dev"
-	if cfg.StripeSecretKey != "" {
+	checkoutProvider := "none"
+	devSimulate := cfg.AllowDevSimulate && cfg.StripeSecretKey == ""
+	switch {
+	case cfg.StripeSecretKey != "":
 		checkoutProvider = "stripe"
+	case devSimulate:
+		checkoutProvider = "dev"
 	}
 	resp.Features = map[string]bool{
 		"nats_events":          cfg.NATSURL != "",
 		"stripe_checkout":      cfg.StripeSecretKey != "",
 		"stripe_webhook":       cfg.StripeWebhookSecret != "",
-		"dev_simulate_success": cfg.StripeSecretKey == "",
+		"dev_simulate_success": devSimulate,
 		"method_credit_card":   true,
 		"method_bypass":        true,
 		"method_bitcoin":       false,

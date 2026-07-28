@@ -301,6 +301,8 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:8080/checkout/success}
       STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:8080/checkout/cancel}
+      # Local Compose only — leave unset on ECS so prod without a PG cannot simulate.
+      PAYMENT_ALLOW_DEV_SIMULATE: ${PAYMENT_ALLOW_DEV_SIMULATE:-true}
     depends_on:
       postgres-payment:
         condition: service_healthy
