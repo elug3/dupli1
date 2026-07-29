@@ -36,6 +36,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		StripeSuccessURL:    opts.StripeSuccessURL,
 		StripeCancelURL:     opts.StripeCancelURL,
 		PublicBaseURL:       opts.PublicBaseURL,
+		AllowDevSimulate:    opts.AllowDevSimulate,
 		HTTPClient:          bootstrap.DefaultHTTPClient(),
 	})
 	if err != nil {

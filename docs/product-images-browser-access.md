@@ -1,6 +1,8 @@
 # Product images — browser access (private S3)
 
-**Problem (production):** the product-images S3 bucket is **private** (Block Public Access on). `S3_PUBLIC_ENDPOINT` was set to the raw S3 regional domain, so `imageUrls` pointed at `https://<bucket>.s3.<region>.amazonaws.com/...`. Browsers cannot read those objects (403). ECS nginx (`api/nginx.ecs.conf`) has **no** `/product-images/` proxy, and the ALB does not route image paths to S3.
+**Status (2026-07-27):** **Done in production** — product `imageUrls` use CloudFront (the CDN). Checklist A2–A3 closed. Keep this doc as the architecture / ops reference.
+
+**Historical problem:** the product-images S3 bucket is **private** (Block Public Access on). When `S3_PUBLIC_ENDPOINT` pointed at the raw S3 regional domain, `imageUrls` were `https://<bucket>.s3.<region>.amazonaws.com/...` and browsers got 403. ECS nginx (`api/nginx.ecs.conf`) has **no** `/product-images/` proxy, and the ALB does not route image paths to S3.
 
 **Local:** MinIO + gateway `location /product-images/` works (`api/nginx.conf` / `api/nginx.prod.conf`).
 

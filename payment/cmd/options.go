@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/elug3/dupli1/payment/pkg"
@@ -78,6 +79,13 @@ func applyEnv(opts *payment.ServerOptions) {
 	}
 	if v := os.Getenv("STRIPE_WEBHOOK_SECRET"); v != "" {
 		opts.StripeWebhookSecret = v
+	}
+	// Explicit opt-in for local simulate-success. Prod without a PG must leave this unset.
+	if v := os.Getenv("PAYMENT_ALLOW_DEV_SIMULATE"); v != "" {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes", "on":
+			opts.AllowDevSimulate = true
+		}
 	}
 	if v := os.Getenv("STRIPE_SUCCESS_URL"); v != "" {
 		opts.StripeSuccessURL = v

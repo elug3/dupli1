@@ -3,10 +3,27 @@ info:
   title: Dupli1 API
   version: 1.0.0
   description: |
-    HTTP API for the Dupli1 fashion bag marketplace.
+    Cross-service index of the Dupli1 fashion bag marketplace API, annotated with the
+    permission each route requires (`x-required-permissions`).
+
+    **Scope:** this file is a gateway-level route index, not the full contract. Request and
+    response schemas live in the per-service specs, which are authoritative:
+    [auth](../api/specs/auth-v1.yaml), [product](../api/specs/product-v1.yaml)
+    (including inventory, catalog and coupons), [order](../api/specs/order-v1.yaml)
+    (including checkout sessions) and [notification](../api/specs/notification-v1.yaml).
+    Cart and payment have no dedicated spec yet — see [api.md](api.md) and
+    [payment-service.md](payment-service.md).
 
     **Authorization:** protected routes require `Authorization: Bearer <access_token>`.
     Access tokens include a `permissions` string array. See [permissions.md](permissions.md) for the catalog.
+    An empty `security` block with no `x-required-permissions` means any authenticated caller,
+    subject to ABAC on their own records.
+
+    **Paths:** routes are namespaced by owning service. Older top-level prefixes
+    (`/api/v1/inventory`, `/api/v1/catalog`, `/api/v1/coupons`, `/api/v1/variants`,
+    `/api/v1/checkout`, `/api/v1/carts`) remain registered as aliases but are omitted here.
+    Per-service `/health` and `/settings` routes are public and also omitted, except
+    notification's health check, which is the only route that service exposes.
 
     Gateway base URL (local): `http://localhost:8080`
 
@@ -24,226 +41,1188 @@ components:
         RS256 access token from `POST /api/v1/auth/refresh`.
         Claims: `sub`, `type: access`, `permissions` (string[]).
 
-  schemas:
-    User:
-      type: object
-      required: [user_id, email, account_type, permissions, is_active, failed_login_attempts]
-      properties:
-        user_id:
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        account_type:
-          type: string
-          enum: [customer, manager, service]
-          description: Canonical account types (customer | manager | service). admin is a permission tier, not an account_type.
-        permissions:
-          type: array
-          items:
-            type: string
-          description: Fine-grained permission strings (e.g. product.create, order.ship, *)
-        is_active:
-          type: boolean
-        locked_at:
-          type: string
-          format: date-time
-          nullable: true
-        failed_login_attempts:
-          type: integer
-
-    SetPermissionsRequest:
-      type: object
-      required: [permissions]
-      properties:
-        permissions:
-          type: array
-          items:
-            type: string
-        account_type:
-          type: string
-          enum: [customer, manager, service]
-          description: Optional. customer | manager | service. admin is a permission, not an account_type.
-
-    Error:
-      type: object
-      properties:
-        error:
-          type: string
-        code:
-          type: integer
-
 paths:
+  /api/v1/auth/login:
+    post:
+      summary: Exchange credentials for a refresh token
+      tags: [Auth]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Exchange a refresh token for an access token
+      tags: [Auth]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/auth/logout:
+    post:
+      summary: Revoke the current refresh token
+      tags: [Auth]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/auth/me:
+    get:
+      summary: Get the authenticated user profile
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/auth/.well-known/jwks.json:
+    get:
+      summary: Public JWKS for RS256 access tokens
+      tags: [Auth]
+      responses:
+        '200':
+          description: Success
+
   /api/v1/auth/register:
     post:
       summary: Register a user
+      tags: [Auth]
       security:
         - bearerAuth: []
-      tags: [Auth]
       x-required-permissions: [user.create]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [email, password]
-              properties:
-                email:
-                  type: string
-                password:
-                  type: string
-                  minLength: 8
-                account_type:
-                  type: string
-                  enum: [customer, manager, service]
-                  description: Optional. customer | manager | service. admin is a permission, not an account_type.
+      description: Open register allows unauthenticated customer signup when AUTH_OPEN_REGISTER=true.
       responses:
         '201':
-          description: User created
-        '403':
-          description: Insufficient permission
+          description: Created
 
   /api/v1/auth/users:
     get:
       summary: List users
+      tags: [Auth Admin]
       security:
         - bearerAuth: []
-      tags: [Auth Admin]
       x-required-permissions: [user.read]
       responses:
         '200':
-          description: User list
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  users:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/User'
+          description: Success
 
   /api/v1/auth/users/{id}/permissions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
     patch:
       summary: Replace user permissions
+      tags: [Auth Admin]
       security:
         - bearerAuth: []
-      tags: [Auth Admin]
       x-required-permissions: [user.permissions.update]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetPermissionsRequest'
       responses:
         '200':
-          description: Updated user
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
+          description: Success
+
+  /api/v1/auth/users/{id}/password:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    patch:
+      summary: Set a user password
+      tags: [Auth Admin]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [user.password.update]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/auth/users/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    patch:
+      summary: Activate or deactivate a user
+      tags: [Auth Admin]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [user.status.update]
+      responses:
+        '200':
+          description: Success
 
   /api/v1/products:
     get:
-      summary: Search products (public; optional product.read widens response)
+      summary: Search products
       tags: [Product]
-      parameters:
-        - name: category
-          in: query
-          schema:
-            type: string
-        - name: subcategory
-          in: query
-          schema:
-            type: string
-            enum: [handbags, tote, shoulder, cross, mini]
-          description: Bag subcategory (alias subCategory)
-        - name: style
-          in: query
-          schema:
-            type: string
-            enum: [casual, evening, business, weekend, statement]
-          description: Bag occasion/look style (not SKU styleCode)
-        - name: target
-          in: query
-          schema:
-            type: string
-            enum: [all, men, women, kids]
-          description: >
-            Exact audience code on the product. Omit to leave unfiltered;
-            target=all matches products tagged all (not every audience).
-        - name: status
-          in: query
-          schema:
-            type: string
-          description: Requires product.read when authenticated
+      description: Public; product.read widens the response for managers.
       responses:
         '200':
-          description: Search results
+          description: Success
     post:
-      summary: Create product
+      summary: Create a product
+      tags: [Product]
       security:
         - bearerAuth: []
-      tags: [Product]
       x-required-permissions: [product.create]
       responses:
         '201':
           description: Created
 
-  /api/v1/products/catalog/master:
+  /api/v1/products/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
     get:
-      summary: Bag merchandising master catalog
+      summary: Get product detail with variants
       tags: [Product]
       responses:
         '200':
-          description: subCategories, styles, and targets dictionaries
-
-  /api/v1/orders/{id}/ship:
-    post:
-      summary: Ship order
+          description: Success
+    put:
+      summary: Update a product
+      tags: [Product]
       security:
         - bearerAuth: []
-      tags: [Order]
-      x-required-permissions: [order.ship]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      x-required-permissions: [product.update]
       responses:
         '200':
-          description: Order shipped
+          description: Success
+    delete:
+      summary: Delete a product
+      tags: [Product]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.delete]
+      responses:
+        '200':
+          description: Success
 
-  /api/v1/carts/{customer_id}:
+  /api/v1/products/{id}/images:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Upload a parent product image
+      tags: [Product]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.image.upload]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/{id}/recommendations:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    get:
+      summary: Content-based recommendations for a product
+      tags: [Product]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/wishlist:
+    get:
+      summary: 'List the caller''s wishlist'
+      tags: [Product]
+      description: 'Optional auth: falls back to an anonymous session.'
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/{id}/wishlist:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    put:
+      summary: Add a product to the wishlist
+      tags: [Product]
+      responses:
+        '200':
+          description: Success
+    delete:
+      summary: Remove a product from the wishlist
+      tags: [Product]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/variants:
+    get:
+      summary: Batch public variants by skuId
+      tags: [Product]
+      description: Query ?sku_ids= (comma-separated, max 50).
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/variants/by-sku/{sku}:
+    parameters:
+      - name: sku
+        in: path
+        required: true
+        description: Human SKU
+        schema:
+          type: string
+    get:
+      summary: Public variant by human SKU
+      tags: [Product]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/variants/by-sku-id/{skuId}:
+    parameters:
+      - name: skuId
+        in: path
+        required: true
+        description: Canonical ULID variant id
+        schema:
+          type: string
+    get:
+      summary: Public variant by canonical skuId
+      tags: [Product]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/{id}/variants:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Create a variant
+      tags: [Product]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.variant.create]
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/products/{id}/variants/{sku}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+      - name: sku
+        in: path
+        required: true
+        description: Human SKU
+        schema:
+          type: string
+    put:
+      summary: Update a variant
+      tags: [Product]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.variant.update]
+      responses:
+        '200':
+          description: Success
+    delete:
+      summary: Delete a variant
+      tags: [Product]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.variant.delete]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/{id}/variants/{sku}/images:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+      - name: sku
+        in: path
+        required: true
+        description: Human SKU
+        schema:
+          type: string
+    post:
+      summary: Upload a variant image
+      tags: [Product]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.image.upload]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/coupons/redeem:
+    post:
+      summary: Validate and redeem a coupon code
+      tags: [Coupon]
+      description: Called by the order service during checkout.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/coupons:
+    get:
+      summary: List coupons
+      tags: [Coupon]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [coupon.read]
+      responses:
+        '200':
+          description: Success
+    post:
+      summary: Create a coupon
+      tags: [Coupon]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [coupon.create]
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/products/coupons/by-code/{code}:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        description: Master-data or coupon code
+        schema:
+          type: string
+    put:
+      summary: Update a coupon
+      tags: [Coupon]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [coupon.update]
+      responses:
+        '200':
+          description: Success
+    delete:
+      summary: Delete a coupon
+      tags: [Coupon]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [coupon.delete]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/inventory/items/{sku}:
+    parameters:
+      - name: sku
+        in: path
+        required: true
+        description: Human SKU
+        schema:
+          type: string
+    get:
+      summary: Get stock by human SKU
+      tags: [Inventory]
+      responses:
+        '200':
+          description: Success
+    put:
+      summary: Set stock quantity
+      tags: [Inventory]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.stock.write]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/inventory/items/{sku}/adjust:
+    parameters:
+      - name: sku
+        in: path
+        required: true
+        description: Human SKU
+        schema:
+          type: string
+    post:
+      summary: Adjust stock by a signed delta
+      tags: [Inventory]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.stock.write]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/inventory/items/by-sku-id/{skuId}:
+    parameters:
+      - name: skuId
+        in: path
+        required: true
+        description: Canonical ULID variant id
+        schema:
+          type: string
+    get:
+      summary: Get stock by canonical skuId
+      tags: [Inventory]
+      responses:
+        '200':
+          description: Success
+    put:
+      summary: Set stock quantity by canonical skuId
+      tags: [Inventory]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.stock.write]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/inventory/items/by-sku-id/{skuId}/adjust:
+    parameters:
+      - name: skuId
+        in: path
+        required: true
+        description: Canonical ULID variant id
+        schema:
+          type: string
+    post:
+      summary: Adjust stock by canonical skuId
+      tags: [Inventory]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.stock.write]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/inventory/reservations:
+    post:
+      summary: Reserve stock for an order
+      tags: [Inventory]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.reservation.manage]
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/products/inventory/reservations/{id}/commit:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Commit a reservation (deduct stock)
+      tags: [Inventory]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.reservation.manage]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/inventory/reservations/{id}/release:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Release a reservation (return stock)
+      tags: [Inventory]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [inventory.reservation.manage]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/catalog/brands:
+    get:
+      summary: List brands
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.read]
+      responses:
+        '200':
+          description: Success
+    post:
+      summary: Create a brand
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/products/catalog/brands/{code}:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        description: Master-data or coupon code
+        schema:
+          type: string
+    patch:
+      summary: Rename a brand
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '200':
+          description: Success
+    delete:
+      summary: Delete a brand
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '204':
+          description: No content
+
+  /api/v1/products/catalog/brands/{code}/styles:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        description: Master-data or coupon code
+        schema:
+          type: string
+    get:
+      summary: List styles for a brand
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.read]
+      responses:
+        '200':
+          description: Success
+    post:
+      summary: Create a style
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/products/catalog/brands/{code}/styles/{styleCode}:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        description: Master-data or coupon code
+        schema:
+          type: string
+      - name: styleCode
+        in: path
+        required: true
+        description: Style code within the brand
+        schema:
+          type: string
+    patch:
+      summary: Rename a style
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '200':
+          description: Success
+    delete:
+      summary: Delete a style
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '204':
+          description: No content
+
+  /api/v1/products/catalog/colors:
+    get:
+      summary: List colors
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.read]
+      responses:
+        '200':
+          description: Success
+    post:
+      summary: Create a color
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/products/catalog/colors/{code}:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        description: Master-data or coupon code
+        schema:
+          type: string
+    patch:
+      summary: Rename a color
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '200':
+          description: Success
+    delete:
+      summary: Delete a color
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '204':
+          description: No content
+
+  /api/v1/products/catalog/sizes:
+    get:
+      summary: List sizes
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.read]
+      responses:
+        '200':
+          description: Success
+    post:
+      summary: Create a size
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/products/catalog/sizes/{code}:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        description: Master-data or coupon code
+        schema:
+          type: string
+    patch:
+      summary: Rename a size
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '200':
+          description: Success
+    delete:
+      summary: Delete a size
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '204':
+          description: No content
+
+  /api/v1/products/catalog/editions:
+    get:
+      summary: List editions
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.read]
+      responses:
+        '200':
+          description: Success
+    post:
+      summary: Create an edition
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/products/catalog/editions/{code}:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        description: Master-data or coupon code
+        schema:
+          type: string
+    patch:
+      summary: Rename an edition
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '200':
+          description: Success
+    delete:
+      summary: Delete an edition
+      tags: [Catalog]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [product.master.write]
+      responses:
+        '204':
+          description: No content
+
+  /api/v1/products/catalog/master:
+    get:
+      summary: Bag merchandising taxonomy dictionaries
+      tags: [Catalog]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/catalog/subcategories:
+    get:
+      summary: List bag subcategories
+      tags: [Catalog]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/catalog/bag-styles:
+    get:
+      summary: List bag occasion styles
+      tags: [Catalog]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/products/catalog/targets:
+    get:
+      summary: List audience targets
+      tags: [Catalog]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/cart:
+    get:
+      summary: 'Get the caller''s cart'
+      tags: [Cart]
+      security:
+        - bearerAuth: []
+      description: Owner is the JWT sub claim.
+      responses:
+        '200':
+          description: Success
+    delete:
+      summary: 'Clear the caller''s cart'
+      tags: [Cart]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/cart/items:
+    put:
+      summary: Replace all cart lines
+      tags: [Cart]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+    post:
+      summary: Add or update one cart line
+      tags: [Cart]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/cart/items/{sku}:
+    parameters:
+      - name: sku
+        in: path
+        required: true
+        description: Human SKU
+        schema:
+          type: string
+    delete:
+      summary: Remove a cart line by human SKU
+      tags: [Cart]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/cart/items/by-sku-id/{skuId}:
+    parameters:
+      - name: skuId
+        in: path
+        required: true
+        description: Canonical ULID variant id
+        schema:
+          type: string
+    delete:
+      summary: Remove a cart line by canonical skuId
+      tags: [Cart]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/cart/customers/{customer_id}:
+    parameters:
+      - name: customer_id
+        in: path
+        required: true
+        description: Customer user id
+        schema:
+          type: string
     get:
       summary: Admin cart lookup
+      tags: [Cart]
       security:
         - bearerAuth: []
-      tags: [Cart]
       x-required-permissions: [cart.read]
-      parameters:
-        - name: customer_id
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '200':
-          description: Customer cart
+          description: Success
 
+  /api/v1/orders/checkout/sessions:
+    post:
+      summary: Create a checkout session
+      tags: [Checkout]
+      security:
+        - bearerAuth: []
+      description: ABAC on customer_id; order.create bypasses it.
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/orders/checkout/sessions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    get:
+      summary: Get a checkout session
+      tags: [Checkout]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/checkout/sessions/{id}/items:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    put:
+      summary: Replace session line items
+      tags: [Checkout]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+    post:
+      summary: Add or update one session line item
+      tags: [Checkout]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/checkout/sessions/{id}/items/{sku}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+      - name: sku
+        in: path
+        required: true
+        description: Human SKU
+        schema:
+          type: string
+    delete:
+      summary: Remove a session line by human SKU
+      tags: [Checkout]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/checkout/sessions/{id}/items/by-sku-id/{skuId}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+      - name: skuId
+        in: path
+        required: true
+        description: Canonical ULID variant id
+        schema:
+          type: string
+    delete:
+      summary: Remove a session line by canonical skuId
+      tags: [Checkout]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/checkout/sessions/{id}/coupon:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Apply a coupon to the session
+      tags: [Checkout]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/checkout/sessions/{id}/complete:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Complete checkout and create a pending order
+      tags: [Checkout]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders:
+    post:
+      summary: Create an order
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      description: ABAC on customer_id; order.create bypasses it. Prices resolved server-side.
+      responses:
+        '201':
+          description: Created
+    get:
+      summary: 'List a customer''s orders'
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      description: ABAC on customer_id; order.read.all bypasses it.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    get:
+      summary: Get an order
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      description: ABAC on owner; order.read.all bypasses it.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/{id}/ship:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Ship a paid order (paid to in_transit)
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [order.ship]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    put:
+      summary: Cancel or fulfil an order
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [order.status.update]
+      description: Accepts canceled and fulfilled only; paid is payment-driven and in_transit uses /ship.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/payments:
+    post:
+      summary: Start a payment for an order
+      tags: [Payment]
+      security:
+        - bearerAuth: []
+      description: ABAC on order owner; payment.create bypasses it. method=bypass requires payment.bypass.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/payments/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    get:
+      summary: Get a payment
+      tags: [Payment]
+      security:
+        - bearerAuth: []
+      description: ABAC on order owner; payment.read.all bypasses it.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/payments/webhooks/stripe:
+    post:
+      summary: Stripe webhook
+      tags: [Payment]
+      description: Authenticated by Stripe signature, not a Bearer token.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/payments/{id}/simulate-success:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    get:
+      summary: Development-only payment success simulation
+      tags: [Payment]
+      description: Registered only when the dev simulate endpoint is enabled; must stay off in production.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/notification/health:
+    get:
+      summary: Notification service health
+      tags: [Notification]
+      responses:
+        '200':
+          description: Success
 tags:
   - name: Auth
   - name: Auth Admin
   - name: Product
-  - name: Order
+  - name: Coupon
+  - name: Inventory
+  - name: Catalog
   - name: Cart
+  - name: Checkout
+  - name: Order
+  - name: Payment
+  - name: Notification

@@ -1,8 +1,8 @@
 # Payment Service
 
-**Status:** Implemented (`payment/`). Local dev without Stripe uses `GET /api/v1/payments/{id}/simulate-success`.
+**Status:** Implemented (`payment/`). Local Compose sets `PAYMENT_ALLOW_DEV_SIMULATE=true` so `GET /api/v1/payments/{id}/simulate-success` works without a PG. **Production must leave that env unset** — v1.0 is launching **without Stripe** (PG company TBD); ops marks orders paid via **Bypass** (`payment.bypass`).
 
-The **payment service** (`dupli1-payment`) collects money for **pending** orders via **Stripe Checkout** (hosted redirect). Dupli1 **never** handles card numbers, CVC, or card passwords.
+The **payment service** (`dupli1-payment`) can collect money for **pending** orders via an optional **Stripe Checkout** adapter (hosted redirect) **or** manager **Bypass**. Dupli1 **never** handles card numbers, CVC, or card passwords. Stripe is **not** planned for the v1.0 cut.
 
 On PG success, payment enqueues **`payment.succeeded`** in a transactional outbox (soft-success even if NATS is briefly down). The **order service** consumes it (queue group + logged handler errors), verifies amount, and moves the order to **`paid`**. A payment reconcile worker re-publishes recent succeeded payments so lost Core NATS deliveries still land (`MarkOrderPaid` is idempotent). The **notification service** sends a Telegram alert to ops. An **order manager** ships the order (`paid` → **`in_transit`**), which **commits** inventory (plan B).
 

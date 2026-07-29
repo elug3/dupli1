@@ -208,6 +208,11 @@ func applyEnv(opts *auth.ServerOptions) {
 	if v := os.Getenv("JWT_PRIVATE_KEY_FILE"); v != "" {
 		opts.JWTPrivateKeyFile = v
 	}
+	// JWT_PRIVATE_KEY carries the PEM itself, for platforms that deliver secrets as
+	// environment variables (ECS/Secrets Manager) rather than mounted files.
+	if v := os.Getenv("JWT_PRIVATE_KEY"); strings.TrimSpace(v) != "" {
+		opts.JWTPrivateKeyPEM = auth.NormalizePEM(v)
+	}
 	if v := os.Getenv("JWT_KEY_ID"); v != "" {
 		opts.JWTKeyID = v
 	}

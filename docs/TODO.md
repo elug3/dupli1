@@ -2,16 +2,26 @@
 
 **Release boundary:** [v1.0-release-spec.md](v1.0-release-spec.md) (v1.0 closeout checklist) · [v1-release-plan.md](v1-release-plan.md) (narrative) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch).
 
-## v1.0 closeout (not shipped)
+## v1.0 closeout (**postponed** — 2026-07-27)
+
+**Do not tag v1.0** until every open item below and in [v1.0-release-spec.md](v1.0-release-spec.md) is resolved.
 
 **Checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) — ops (A), smoke (B), backend (C), `dupli1-web` (D), `dupli1-manage-web` (E), sign-off (F).
 
+Backend section C is **done in the repo** (auth register soft-success, notification handler
+logging, `api.md` status machine, OpenAPI refresh), as is the code and Terraform for the
+persistent JWT signing key. Operator steps: [launch runbook](v1-release-plan.md#launch-runbook-section-a).
+
 Open highlights:
 
-- [ ] Product images CDN applied on prod (A2–A3)
-- [ ] Prod money-path smoke (A10, B)
+- [x] Create the JWT signing-key secret and set `jwt_private_key_secret_arn` — prod `ephemeral_jwt_key` is `false` (A6)
+- [x] Product images CDN applied on prod (A2–A3) — `imageUrls` use CloudFront
+- [x] Card PG / Stripe (A4) — **waived**; PG TBD; launch pay = Bypass
+- [x] Telegram wired (A7); gateway uses `nginx.ecs.conf` (A8)
+- [ ] Deploy payment build so prod `dev_simulate_success` is `false` (A5 — needs `PAYMENT_ALLOW_DEV_SIMULATE` unset)
+- [ ] Catalog prices not zeroed (A9) — sample product currently `price: 0`
+- [ ] Prod money-path smoke — Bypass path via `scripts/smoke-money-path.sh` (A10, B)
 - [ ] Frontends: canonical paths, parent pricing, `skuId` (D, E)
-- [ ] Auth register soft-success if open register in prod (C1)
 - [ ] Tag `v1.0` (F4)
 
 ## v1.1 (post-launch — logging, sessions, access control, deployment, automation)
@@ -68,7 +78,7 @@ Implement in the order in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) (
     | `/api/v1/inventory/reservations/*` | `/api/v1/products/inventory/reservations/*` |
     | `/api/v1/checkout/*` | `/api/v1/orders/checkout/*` |
     | `/api/v1/carts/{id}` | `/api/v1/cart/customers/{id}` |
-- [ ] **Product images CDN** — apply CloudFront + OAC Terraform; rewrite existing `imageUrls` hosts if needed ([product-images-browser-access.md](product-images-browser-access.md)). Code path for private images via CloudFront OAC landed (#96); Terraform apply / host rewrite still open.
+- [x] **Product images CDN** — CloudFront + OAC in prod; `imageUrls` use CloudFront hosts ([product-images-browser-access.md](product-images-browser-access.md)). Checklist A2–A3 done.
 - [x] **Server-side order/checkout pricing (C1)** — ignore client `unit_price_cents`; resolve from product like cart ([quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)#1-c1--server-side-pricing-critical)
 - [x] Inventory service token refresh in order bootstrap
 - [x] **H1** Order create `Idempotency-Key` + transactional outbox (soft-success publish; worker drain)

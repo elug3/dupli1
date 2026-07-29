@@ -167,7 +167,7 @@ Public `GET /api/v1/products` and `GET /api/v1/products/{id}` stay **unauthentic
 | `order.ship` | `POST /orders/{id}/ship` |
 | `order.status.update` | `PUT /orders/{id}/status` (cancel, fulfill) |
 
-Checkout session routes (`/api/v1/checkout/sessions/*`) follow the same rules as orders: authenticated customers use ABAC on `customer_id`; `order.create` / `order.read.all` bypass ABAC.
+Checkout session routes (`/api/v1/orders/checkout/sessions/*`) follow the same rules as orders: authenticated customers use ABAC on `customer_id`; `order.create` / `order.read.all` bypass ABAC.
 
 **Default storefront:** authenticated user with empty `permissions` may create/read/list **only their own** orders (ABAC on `sub` == `customer_id`).
 
@@ -175,7 +175,7 @@ Checkout session routes (`/api/v1/checkout/sessions/*`) follow the same rules as
 
 | Permission | Description |
 |------------|-------------|
-| `cart.read` | `GET /api/v1/carts/{customer_id}` (any customer) |
+| `cart.read` | `GET /api/v1/cart/customers/{customer_id}` (any customer) |
 
 Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
 
@@ -217,8 +217,8 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `GET` | `/api/v1/products` | optional: `product.read` widens response |
 | `GET` | `/api/v1/products/{id}` | — (public) |
 | `GET` | `/api/v1/products/variants` | — (public; `?sku_ids=` batch) |
-| `GET` | `/api/v1/variants/{sku}` | — (public) |
-| `GET` | `/api/v1/variants/by-sku-id/{skuId}` | — (public) |
+| `GET` | `/api/v1/products/variants/by-sku/{sku}` | — (public) |
+| `GET` | `/api/v1/products/variants/by-sku-id/{skuId}` | — (public) |
 | `POST` | `/api/v1/products` | `product.create` |
 | `PUT` | `/api/v1/products/{id}` | `product.update` |
 | `DELETE` | `/api/v1/products/{id}` | `product.delete` |
@@ -227,46 +227,50 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` |
 | `DELETE` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` |
 | `POST` | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` |
-| `GET` | `/api/v1/catalog/brands` | `product.master.read` |
-| `POST` | `/api/v1/catalog/brands` | `product.master.write` |
-| `PATCH` | `/api/v1/catalog/brands/{code}` | `product.master.write` |
-| `DELETE` | `/api/v1/catalog/brands/{code}` | `product.master.write` |
-| `GET` | `/api/v1/catalog/brands/{code}/styles` | `product.master.read` |
-| `POST` | `/api/v1/catalog/brands/{code}/styles` | `product.master.write` |
-| `PATCH` | `/api/v1/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` |
-| `DELETE` | `/api/v1/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` |
-| `GET` | `/api/v1/catalog/colors` | `product.master.read` |
-| `POST` | `/api/v1/catalog/colors` | `product.master.write` |
-| `PATCH` | `/api/v1/catalog/colors/{code}` | `product.master.write` |
-| `DELETE` | `/api/v1/catalog/colors/{code}` | `product.master.write` |
-| `GET` | `/api/v1/catalog/sizes` | `product.master.read` |
-| `POST` | `/api/v1/catalog/sizes` | `product.master.write` |
-| `PATCH` | `/api/v1/catalog/sizes/{code}` | `product.master.write` |
-| `DELETE` | `/api/v1/catalog/sizes/{code}` | `product.master.write` |
-| `GET` | `/api/v1/catalog/editions` | `product.master.read` |
-| `POST` | `/api/v1/catalog/editions` | `product.master.write` |
-| `PATCH` | `/api/v1/catalog/editions/{code}` | `product.master.write` |
-| `DELETE` | `/api/v1/catalog/editions/{code}` | `product.master.write` |
-| `GET` | `/api/v1/coupons` | `coupon.read` |
-| `POST` | `/api/v1/coupons` | `coupon.create` |
-| `PUT` | `/api/v1/coupons/{code}` | `coupon.update` |
-| `DELETE` | `/api/v1/coupons/{code}` | `coupon.delete` |
-| `POST` | `/api/v1/coupons/{code}/redeem` | — (public) |
+| `GET` | `/api/v1/products/catalog/brands` | `product.master.read` |
+| `POST` | `/api/v1/products/catalog/brands` | `product.master.write` |
+| `PATCH` | `/api/v1/products/catalog/brands/{code}` | `product.master.write` |
+| `DELETE` | `/api/v1/products/catalog/brands/{code}` | `product.master.write` |
+| `GET` | `/api/v1/products/catalog/brands/{code}/styles` | `product.master.read` |
+| `POST` | `/api/v1/products/catalog/brands/{code}/styles` | `product.master.write` |
+| `PATCH` | `/api/v1/products/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` |
+| `DELETE` | `/api/v1/products/catalog/brands/{code}/styles/{styleCode}` | `product.master.write` |
+| `GET` | `/api/v1/products/catalog/colors` | `product.master.read` |
+| `POST` | `/api/v1/products/catalog/colors` | `product.master.write` |
+| `PATCH` | `/api/v1/products/catalog/colors/{code}` | `product.master.write` |
+| `DELETE` | `/api/v1/products/catalog/colors/{code}` | `product.master.write` |
+| `GET` | `/api/v1/products/catalog/sizes` | `product.master.read` |
+| `POST` | `/api/v1/products/catalog/sizes` | `product.master.write` |
+| `PATCH` | `/api/v1/products/catalog/sizes/{code}` | `product.master.write` |
+| `DELETE` | `/api/v1/products/catalog/sizes/{code}` | `product.master.write` |
+| `GET` | `/api/v1/products/catalog/editions` | `product.master.read` |
+| `POST` | `/api/v1/products/catalog/editions` | `product.master.write` |
+| `PATCH` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` |
+| `DELETE` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` |
+| `GET` | `/api/v1/products/coupons` | `coupon.read` |
+| `POST` | `/api/v1/products/coupons` | `coupon.create` |
+| `PUT` | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` |
+| `DELETE` | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` |
+| `POST` | `/api/v1/products/coupons/redeem` | — (public) |
+
+Legacy top-level aliases (`/api/v1/variants/…`, `/api/v1/catalog/…`, `/api/v1/coupons/…`) are still registered with the same permissions; see [TODO.md](TODO.md) for the migration table.
 
 ### Inventory (served by the product service)
 
 Stock and reservations were merged from a standalone inventory service into
-`dupli1-product` after this spec was written; the permission names and route
-paths below are unchanged. Each route also has a `by-sku-id/{skuId}` sibling.
+`dupli1-product`; permission names are unchanged, and the routes moved under the
+`/api/v1/products/inventory` prefix. Each item route also has a
+`by-sku-id/{skuId}` sibling, and the legacy `/api/v1/inventory/…` prefix is still
+registered as an alias.
 
 | Method | Path | Permission |
 |--------|------|------------|
-| `GET` | `/api/v1/inventory/{sku}` | — (public) |
-| `PUT` | `/api/v1/inventory/{sku}` | `inventory.stock.write` |
-| `POST` | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` |
-| `POST` | `/api/v1/inventory/reservations` | `inventory.reservation.manage` |
-| `POST` | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` |
-| `POST` | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` |
+| `GET` | `/api/v1/products/inventory/items/{sku}` | — (public) |
+| `PUT` | `/api/v1/products/inventory/items/{sku}` | `inventory.stock.write` |
+| `POST` | `/api/v1/products/inventory/items/{sku}/adjust` | `inventory.stock.write` |
+| `POST` | `/api/v1/products/inventory/reservations` | `inventory.reservation.manage` |
+| `POST` | `/api/v1/products/inventory/reservations/{id}/commit` | `inventory.reservation.manage` |
+| `POST` | `/api/v1/products/inventory/reservations/{id}/release` | `inventory.reservation.manage` |
 
 ### Order service
 
@@ -277,7 +281,7 @@ paths below are unchanged. Each route also has a `by-sku-id/{skuId}` sibling.
 | `GET` | `/api/v1/orders/{id}` | ABAC or `order.read.all` |
 | `POST` | `/api/v1/orders/{id}/ship` | `order.ship` |
 | `PUT` | `/api/v1/orders/{id}/status` | `order.status.update` |
-| `*` | `/api/v1/checkout/sessions/*` | same as orders (ABAC on session owner) |
+| `*` | `/api/v1/orders/checkout/sessions/*` | same as orders (ABAC on session owner); legacy alias `/api/v1/checkout/sessions/*` |
 
 **ABAC:** caller lacks `order.create` / `order.read.all` / `admin.*` / `*` → `customer_id` (or session owner) must equal `sub`.
 
@@ -286,7 +290,7 @@ paths below are unchanged. Each route also has a `by-sku-id/{skuId}` sibling.
 | Method | Path | Permission / rule |
 |--------|------|-------------------|
 | `*` | `/api/v1/cart/*` | authenticated; scoped to `sub` |
-| `GET` | `/api/v1/carts/{customer_id}` | `cart.read` |
+| `GET` | `/api/v1/cart/customers/{customer_id}` | `cart.read`; legacy alias `/api/v1/carts/{customer_id}` |
 
 ### Payment service
 

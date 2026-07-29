@@ -27,17 +27,18 @@ data "aws_iam_policy_document" "ecs_execution_secrets" {
     actions = [
       "secretsmanager:GetSecretValue",
     ]
-    resources = [
+    resources = compact([
       var.auth_db_url_secret_arn,
       var.product_db_url_secret_arn,
       var.order_db_url_secret_arn,
       var.cart_db_url_secret_arn,
       var.payment_db_url_secret_arn,
       var.jwt_secret_arn,
+      var.jwt_private_key_secret_arn,
       var.telegram_secret_arn,
       aws_secretsmanager_secret.product_s3.arn,
       aws_secretsmanager_secret.web_service.arn,
-    ]
+    ])
   }
 }
 

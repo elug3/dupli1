@@ -182,6 +182,41 @@ func TestRefresh_FetchesFreshPermissionsFromDB(t *testing.T) {
 	}
 }
 
+type failingEventPublisher struct{}
+
+func (p failingEventPublisher) Publish(context.Context, string, any) error {
+	return errors.New("nats unavailable")
+}
+
+type deleteTrackingUserRepository struct {
+	fakeUserRepository
+	deleted []string
+}
+
+func (r *deleteTrackingUserRepository) Delete(_ context.Context, id string) error {
+	r.deleted = append(r.deleted, id)
+	return nil
+}
+
+func TestRegisterSucceedsWhenEventPublishFails(t *testing.T) {
+	repo := &deleteTrackingUserRepository{}
+	svc := NewService(repo, fakeTokenGenerator{}, WithEventPublisher(failingEventPublisher{}))
+
+	user, err := svc.Register(context.Background(), "customer@example.com", "supersecret", domain.AccountTypeCustomer)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+	if user == nil || user.ID != "user-123" {
+		t.Fatalf("Register returned user = %+v, want saved user", user)
+	}
+	if repo.saved == nil {
+		t.Fatal("Register did not save the user")
+	}
+	if len(repo.deleted) != 0 {
+		t.Fatalf("Register deleted users %v after publish failure, want none", repo.deleted)
+	}
+}
+
 func TestRegisterRejectsInvalidAccountType(t *testing.T) {
 	svc := NewService(&fakeUserRepository{}, fakeTokenGenerator{})
 

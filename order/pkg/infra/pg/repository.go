@@ -60,7 +60,6 @@ func (r *Repository) migrate() error {
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_orders_pending_payment_due_at ON orders(payment_due_at) WHERE status = 'pending'`,
 		`CREATE TABLE IF NOT EXISTS order_items (
 			order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
 			sku TEXT NOT NULL,
@@ -127,6 +126,17 @@ func (r *Repository) migrate() error {
 		_, _ = r.pool.Exec(ctx, stmt)
 	}
 	_, _ = r.pool.Exec(ctx, `UPDATE orders SET payment_due_at = created_at + INTERVAL '5 minutes' WHERE payment_due_at IS NULL`)
+
+	// Indexes over columns the ALTERs above add. Creating these alongside the base
+	// tables would fail on a fresh database, where orders has no payment_due_at yet.
+	postAlterStmts := []string{
+		`CREATE INDEX IF NOT EXISTS idx_orders_pending_payment_due_at ON orders(payment_due_at) WHERE status = 'pending'`,
+	}
+	for _, stmt := range postAlterStmts {
+		if _, err := r.pool.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("migrate order schema: %w", err)
+		}
+	}
 
 	if err := r.promoteSkuIDPrimaryKey(ctx, "order_items", "order_id"); err != nil {
 		return err

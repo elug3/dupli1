@@ -4,6 +4,8 @@ All traffic is routed through the nginx gateway. Locally use **HTTP** at `http:/
 
 **Currency:** the storefront uses **KRW only**. Product `price` values and cart/order/payment `*_cents` fields are **whole Korean won** (Stripe minor units for `krw` — do not multiply by 100). Settings expose `limits.currency: "krw"`.
 
+**Path convention:** every route is namespaced by its owning service — `/api/v1/products/…` (including inventory, catalog and coupons), `/api/v1/orders/…` (including checkout sessions), `/api/v1/cart/…`, `/api/v1/payments/…`, `/api/v1/auth/…`. The paths documented here are the canonical ones. Older top-level prefixes (`/api/v1/inventory`, `/api/v1/catalog`, `/api/v1/coupons`, `/api/v1/variants`, `/api/v1/checkout`, `/api/v1/carts`) are still registered as aliases and are called out where they differ; new clients should not use them. Migration table: [TODO.md](TODO.md).
+
 ---
 
 ## Authentication
@@ -503,43 +505,49 @@ Routes below require `Authorization: Bearer <access_token>`. Product validates R
 | PUT | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` |
 | DELETE | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` |
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` |
-| GET | `/api/v1/coupons` | `coupon.read` |
-| POST | `/api/v1/coupons` | `coupon.create` |
-| PUT | `/api/v1/coupons/{code}` | `coupon.update` |
-| DELETE | `/api/v1/coupons/{code}` | `coupon.delete` |
+| GET | `/api/v1/products/coupons` | `coupon.read` |
+| POST | `/api/v1/products/coupons` | `coupon.create` |
+| PUT | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` |
+| DELETE | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` |
 
-New parent `id`s are ULIDs (`domain.NewProductID()`); legacy brand-prefixed ids (e.g. `BOT-001`) remain valid. Human identity is `brandCode` + `styleCode`. Dual variant identity and master dictionaries: [product-sku-system.md](product-sku-system.md) — ULID `skuId` (canonical) + human `sku` (`Brand_Style_Color[_Edition]_Size`). Catalog CRUD at `/api/v1/catalog/…`. Product/variant create requires existing master codes (Phase C). See also [product-variants-plan.md](product-variants-plan.md).
+`PUT /api/v1/products/{id}` and variant updates **merge**: omitted JSON fields keep their current value, so a partial body cannot blank out data. The trade-off is that a zero value is indistinguishable from an omitted one — sending `price: 0` or `officialPrice: 0` is ignored rather than clearing the price. See [product-price-on-parent.md](product-price-on-parent.md).
+
+New parent `id`s are ULIDs (`domain.NewProductID()`); legacy brand-prefixed ids (e.g. `BOT-001`) remain valid. Human identity is `brandCode` + `styleCode`. Dual variant identity and master dictionaries: [product-sku-system.md](product-sku-system.md) — ULID `skuId` (canonical) + human `sku` (`Brand_Style_Color[_Edition]_Size`). Catalog CRUD at `/api/v1/products/catalog/…` (legacy alias `/api/v1/catalog/…`). Product/variant create requires existing master codes (Phase C). See also [product-variants-plan.md](product-variants-plan.md).
 
 ---
 
-## Inventory — `/api/v1/inventory` (served by the product service)
+## Inventory — `/api/v1/products/inventory` (served by the product service)
 
-Merged into the product service; same routes as the former standalone
-inventory service. Each route also has a `by-sku-id/{skuId}` sibling keyed by
-the variant's canonical ULID `skuId`. **Reads are public.** Writes require
+Merged into the product service. Each item route has a `by-sku-id/{skuId}` sibling
+keyed by the variant's canonical ULID `skuId`. **Reads are public.** Writes require
 Bearer JWT when `AUTH_JWKS_URL` is configured.
 
 | Method | Path | Permission |
 |--------|------|------------|
-| GET | `/api/v1/inventory/{sku}` | — (public) |
-| PUT | `/api/v1/inventory/{sku}` | `inventory.stock.write` |
-| POST | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` |
-| POST | `/api/v1/inventory/reservations` | `inventory.reservation.manage` |
-| POST | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` |
-| POST | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` |
+| GET | `/api/v1/products/inventory/items/{sku}` | — (public) |
+| PUT | `/api/v1/products/inventory/items/{sku}` | `inventory.stock.write` |
+| POST | `/api/v1/products/inventory/items/{sku}/adjust` | `inventory.stock.write` |
+| GET | `/api/v1/products/inventory/items/by-sku-id/{skuId}` | — (public) |
+| PUT | `/api/v1/products/inventory/items/by-sku-id/{skuId}` | `inventory.stock.write` |
+| POST | `/api/v1/products/inventory/items/by-sku-id/{skuId}/adjust` | `inventory.stock.write` |
+| POST | `/api/v1/products/inventory/reservations` | `inventory.reservation.manage` |
+| POST | `/api/v1/products/inventory/reservations/{id}/commit` | `inventory.reservation.manage` |
+| POST | `/api/v1/products/inventory/reservations/{id}/release` | `inventory.reservation.manage` |
 
-### `GET /api/v1/inventory/health`
+The legacy prefix `/api/v1/inventory/…` remains registered as an alias (item routes there are `/api/v1/inventory/{sku}`, without the `items` segment) and will be removed once clients migrate.
+
+### `GET /api/v1/products/inventory/health`
 
 **Response `200`**
 ```json
 { "status": "ok" }
 ```
 
-### `GET /api/v1/inventory/{sku}`
+### `GET /api/v1/products/inventory/items/{sku}`
 
 Get stock for a SKU.
 
-### `PUT /api/v1/inventory/{sku}`
+### `PUT /api/v1/products/inventory/items/{sku}`
 
 Set stock quantity.
 
@@ -548,7 +556,7 @@ Set stock quantity.
 { "quantity": 100 }
 ```
 
-### `POST /api/v1/inventory/{sku}/adjust`
+### `POST /api/v1/products/inventory/items/{sku}/adjust`
 
 Adjust stock by delta.
 
@@ -557,7 +565,7 @@ Adjust stock by delta.
 { "delta": -5 }
 ```
 
-### `POST /api/v1/inventory/reservations`
+### `POST /api/v1/products/inventory/reservations`
 
 Reserve stock for an order.
 
@@ -577,11 +585,11 @@ Reserve stock for an order.
 }
 ```
 
-### `POST /api/v1/inventory/reservations/{id}/commit`
+### `POST /api/v1/products/inventory/reservations/{id}/commit`
 
 Commit a reservation (deduct stock).
 
-### `POST /api/v1/inventory/reservations/{id}/release`
+### `POST /api/v1/products/inventory/reservations/{id}/release`
 
 Release a reservation (return stock).
 
@@ -610,7 +618,8 @@ See [cart-service.md](cart-service.md) for architecture, service boundaries, and
 | DELETE | `/api/v1/cart` | Clear my cart |
 | PUT | `/api/v1/cart/items` | Replace all items |
 | POST | `/api/v1/cart/items` | Add or update one item |
-| DELETE | `/api/v1/cart/items/{sku}` | Remove line |
+| DELETE | `/api/v1/cart/items/{sku}` | Remove line by human `sku` |
+| DELETE | `/api/v1/cart/items/by-sku-id/{skuId}` | Remove line by canonical `skuId` |
 
 **Add item request**
 ```json
@@ -640,21 +649,21 @@ See [cart-service.md](cart-service.md) for architecture, service boundaries, and
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/carts/{customer_id}` | Get a customer's cart (`cart.read`) |
+| GET | `/api/v1/cart/customers/{customer_id}` | Get a customer's cart (`cart.read`); legacy alias `/api/v1/carts/{customer_id}` |
 
 ### Product variant lookup (used by cart)
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/products/variants?sku_ids=` | Batch public active variants by canonical `skuId` (comma-separated, max 50). Response `{items, missing}`. |
-| GET | `/api/v1/variants/{sku}` | Public active variant by SKU |
-| GET | `/api/v1/variants/by-sku-id/{skuId}` | Public active variant by canonical ULID |
+| GET | `/api/v1/products/variants/by-sku/{sku}` | Public active variant by human SKU (legacy alias: `/api/v1/variants/{sku}`) |
+| GET | `/api/v1/products/variants/by-sku-id/{skuId}` | Public active variant by canonical ULID (legacy alias: `/api/v1/variants/by-sku-id/{skuId}`) |
 
 ---
 
-## Order Service — `/api/v1`
+## Order Service — `/api/v1/orders`
 
-In-memory store. Calls inventory to reserve stock and product to redeem coupons.
+PostgreSQL-backed (`DUPLI1_ORDER_DB`; in-memory fallback only when no DB URL is set, for tests). Calls inventory to reserve stock and product to redeem coupons.
 
 When `AUTH_JWKS_URL` or `JWT_SECRET` is set, order and checkout routes require `Authorization: Bearer <access_token>` (RS256 via auth JWKS when configured; HS256 fallback in dev).
 
@@ -673,13 +682,16 @@ See [checkout-session.md](checkout-session.md) for the full checkout flow.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/checkout/sessions` | Create checkout session |
-| GET | `/api/v1/checkout/sessions/{id}` | Get session |
-| PUT | `/api/v1/checkout/sessions/{id}/items` | Replace all items |
-| POST | `/api/v1/checkout/sessions/{id}/items` | Add or update one item |
-| DELETE | `/api/v1/checkout/sessions/{id}/items/{sku}` | Remove item |
-| POST | `/api/v1/checkout/sessions/{id}/coupon` | Apply coupon |
-| POST | `/api/v1/checkout/sessions/{id}/complete` | Complete checkout → order |
+| POST | `/api/v1/orders/checkout/sessions` | Create checkout session |
+| GET | `/api/v1/orders/checkout/sessions/{id}` | Get session |
+| PUT | `/api/v1/orders/checkout/sessions/{id}/items` | Replace all items |
+| POST | `/api/v1/orders/checkout/sessions/{id}/items` | Add or update one item |
+| DELETE | `/api/v1/orders/checkout/sessions/{id}/items/{sku}` | Remove item by human `sku` |
+| DELETE | `/api/v1/orders/checkout/sessions/{id}/items/by-sku-id/{skuId}` | Remove item by canonical `skuId` |
+| POST | `/api/v1/orders/checkout/sessions/{id}/coupon` | Apply coupon |
+| POST | `/api/v1/orders/checkout/sessions/{id}/complete` | Complete checkout → order |
+
+The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias for every route above and will be removed once the storefront and admin clients migrate.
 
 ### Orders
 
@@ -695,13 +707,23 @@ See [checkout-session.md](checkout-session.md) for the full checkout flow.
 ```json
 {
   "customer_id": "cust-1",
-  "items": [{ "sku": "BOT-001", "quantity": 1, "unit_price_cents": 250000 }]
+  "items": [{ "sku_id": "01J9Z…", "quantity": 1 }]
 }
 ```
 
-Supported status transitions: `pending` → `confirmed` | `canceled`; `confirmed` → `fulfilled`.
+Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices are **resolved server-side** from the catalog; `unit_price_cents` is not part of the request body and is ignored if sent.
 
-**Planned:** `pending` → `confirmed` will be **payment-service only** after Stripe Checkout succeeds. See [payment-service.md](payment-service.md).
+**Status machine**
+
+| From | To | Trigger |
+|------|----|---------|
+| — | `pending` | Order created |
+| `pending` | `paid` | `payment.succeeded` consumer or bypass payment — **payment-driven only**, no client route |
+| `paid` | `in_transit` | `POST /api/v1/orders/{id}/ship` (commits reserved stock) |
+| `in_transit` | `fulfilled` | `PUT /api/v1/orders/{id}/status` with `fulfilled` |
+| `pending`, `paid` | `canceled` | `PUT /api/v1/orders/{id}/status` with `canceled`, or the unpaid-expiry worker |
+
+`PUT /status` accepts only `canceled` and `fulfilled`; use `POST /ship` to reach `in_transit`. There is no `confirmed` status — it was replaced by `paid` and `in_transit`. See [payment-service.md](payment-service.md).
 
 ---
 
@@ -780,26 +802,27 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | GET | `/api/v1/products/settings` | — | product |
 | GET | `/api/v1/products` | optional `product.read` | product |
 | GET | `/api/v1/products/{id}` | — | product |
-| POST | `/api/v1/coupons/redeem` | — | product |
+| POST | `/api/v1/products/coupons/redeem` | — | product |
 | POST | `/api/v1/products` | `product.create` | product |
 | PUT/DELETE | `/api/v1/products/{id}` | `product.update` / `product.delete` | product |
 | POST | `/api/v1/products/{id}/images` | `product.image.upload` | product |
 | POST | `/api/v1/products/{id}/variants` | `product.variant.create` | product |
 | PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` / `product.variant.delete` | product |
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | product |
-| GET/POST/PUT/DELETE | `/api/v1/coupons` | `coupon.read` / `coupon.create` / `coupon.update` / `coupon.delete` | product |
-| GET | `/api/v1/inventory/health` | — | product |
-| GET | `/api/v1/inventory/settings` | — | product |
-| GET | `/api/v1/inventory/{sku}` | — | product |
-| PUT | `/api/v1/inventory/{sku}` | `inventory.stock.write` | product |
-| POST | `/api/v1/inventory/{sku}/adjust` | `inventory.stock.write` | product |
-| POST | `/api/v1/inventory/reservations` | `inventory.reservation.manage` | product |
-| POST | `/api/v1/inventory/reservations/{id}/commit` | `inventory.reservation.manage` | product |
-| POST | `/api/v1/inventory/reservations/{id}/release` | `inventory.reservation.manage` | product |
-| POST/GET | `/api/v1/checkout/sessions` | ABAC / `order.create` / `order.read.all` | order |
+| GET/POST | `/api/v1/products/coupons` | `coupon.read` / `coupon.create` | product |
+| PUT/DELETE | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` / `coupon.delete` | product |
+| GET | `/api/v1/products/inventory/health` | — | product |
+| GET | `/api/v1/products/inventory/settings` | — | product |
+| GET | `/api/v1/products/inventory/items/{sku}` | — | product |
+| PUT | `/api/v1/products/inventory/items/{sku}` | `inventory.stock.write` | product |
+| POST | `/api/v1/products/inventory/items/{sku}/adjust` | `inventory.stock.write` | product |
+| POST | `/api/v1/products/inventory/reservations` | `inventory.reservation.manage` | product |
+| POST | `/api/v1/products/inventory/reservations/{id}/commit` | `inventory.reservation.manage` | product |
+| POST | `/api/v1/products/inventory/reservations/{id}/release` | `inventory.reservation.manage` | product |
+| POST/GET | `/api/v1/orders/checkout/sessions` | ABAC / `order.create` / `order.read.all` | order |
 | GET | `/api/v1/orders/health` | — | order |
 | GET | `/api/v1/orders/settings` | — | order |
-| GET/PUT/POST/DELETE | `/api/v1/checkout/sessions/{id}/...` | ABAC (same as orders) | order |
+| GET/PUT/POST/DELETE | `/api/v1/orders/checkout/sessions/{id}/...` | ABAC (same as orders) | order |
 | POST/GET | `/api/v1/orders` | ABAC / `order.create` / `order.read.all` | order |
 | GET | `/api/v1/orders/{id}` | ABAC / `order.read.all` | order |
 | POST | `/api/v1/orders/{id}/ship` | `order.ship` | order |
@@ -807,7 +830,7 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | GET | `/api/v1/cart/health` | — | cart |
 | GET | `/api/v1/cart/settings` | — | cart |
 | GET/POST/PUT/DELETE | `/api/v1/cart/*` | Bearer (own `sub`) | cart |
-| GET | `/api/v1/carts/{customer_id}` | `cart.read` | cart |
+| GET | `/api/v1/cart/customers/{customer_id}` | `cart.read` | cart |
 | GET | `/api/v1/payments/health` | — | payment |
 | GET | `/api/v1/payments/settings` | — | payment |
 | POST/GET | `/api/v1/payments` | ABAC / `payment.create` / `payment.read.all` | payment |
