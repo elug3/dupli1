@@ -1,7 +1,7 @@
 # Reflection: Product as sale unit vs SKU
 
-**Status:** Reflection / decision plan (no code change yet).  
-**Related:** [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md), [product-variants-plan.md](product-variants-plan.md), [product-sku-system.md](product-sku-system.md), [product-price-on-parent.md](product-price-on-parent.md).
+**Status:** Reflection / decision background. **Option A was subsequently chosen** — the migration plan is [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md).  
+**Related:** [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md), [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md), [product-variants-plan.md](product-variants-plan.md), [product-sku-system.md](product-sku-system.md), [product-price-on-parent.md](product-price-on-parent.md).
 
 ## Premise
 
@@ -68,7 +68,7 @@ Style master CAS001       ← groups them for search/PDP (optional)
 | | Parent+variant APIs, docs, frontends rewritten |
 | | Human SKU format still needs color/size segments somewhere |
 
-**Verdict:** Only if you deliberately undo parent+variant and reintroduce a *Style* grouping layer for browse/PDP. High cost; same physics under new names.
+**Verdict: chosen direction.** It requires deliberately undoing parent+variant and reintroducing a *Style* grouping layer for browse/PDP. Note that per-color stock is **not** lost: each color/size becomes its own product with its own stock row, and keeping the sellable id equal to today's `skuId` means cart/order/reservation history stays valid. See [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md) for schema, phases, and compatibility.
 
 ### Option B — Style-only commerce: one stock pool per Product (no sellable color split)
 
@@ -129,24 +129,20 @@ See [product-multi-category-naming-plan.md](product-multi-category-naming-plan.m
 
 | Proposal | Decision |
 |----------|----------|
-| Use parent `Product` as cart/order/inventory key because variants share `styleCode` | **Reject** — style sharing ≠ interchangeable stock |
+| Use parent `Product` as cart/order/inventory key while variants stay separate options | **Reject** — style sharing ≠ interchangeable stock |
 | Drop color/size SKUs and sell one pool per style (Option B) | **Reject** unless business drops per-color inventory |
-| Flatten so each option is a Product (Option A) | **Defer / avoid** — reopens duplicate-search problem; huge migration |
-| Keep Variant/`skuId` as unit for sale; Product as PDP/style shell (Option C) | **Accept (current)** |
+| Flatten so each option is a Product, with Style as the grouping layer (Option A) | **Accept** — planned in [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md); listing must group by `styleCode` to avoid duplicate cards |
+| Keep parent/variant as-is (Option C) | Superseded by Option A |
 
-## If product-level selling is still desired later
+## Questions Option A still has to answer
 
-Require an explicit product decision first:
+1. Do black and green of the same style have **separate stock**? (Assumed yes — each becomes its own product with its own stock row.)
+2. Does search show **one card or many** per style? (Phase 0 decision in the migration plan.)
+3. Is price always identical across colors? (Today yes, on the parent; flattening allows per-color price and therefore needs style-level fan-out on edit.)
 
-1. Do black and green of the same style have **separate stock**? (If yes → SKU remains sale unit.)
-2. Does search show **one card or many** per style?
-3. Is price always identical across colors? (Already yes on parent.)
+## Checklist
 
-Only if (1) is “no separate stock” does Option B become viable. Only if (2) is “many cards” does Option A become viable.
-
-## Checklist (no work until business picks A/B)
-
-- [x] Document why shared `styleCode` does not move the sale unit to parent Product
-- [ ] Business confirms per-color (and per-size) stock is required
-- [ ] If confirmed: leave cart/order on `skuId`; treat Product as catalog/PDP only
-- [ ] If not: write a dedicated migration plan (Option A or B) before any rename
+- [x] Document why shared `styleCode` alone does not move the sale unit
+- [x] Choose a direction — Option A (flatten), planned in [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md)
+- [ ] Confirm listing semantics (one card per style vs one per color)
+- [ ] Execute the phased migration in the plan
