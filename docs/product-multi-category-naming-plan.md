@@ -2,7 +2,7 @@
 
 **Status:** Reflection / decision plan (no code change yet).  
 **Question:** Other product types may arrive later (wallets, clothing, …). Today the catalog is bag-shaped. Can we rename `Product{}` → `Bag{}` and `SKU{}` → `BagSku{}`?  
-**Related:** [product-variants-plan.md](product-variants-plan.md), [product-sku-system.md](product-sku-system.md), [product-master-catalog.md](product-master-catalog.md), [current-state.md](current-state.md).
+**Related:** [product-sale-unit-reflection.md](product-sale-unit-reflection.md), [product-variants-plan.md](product-variants-plan.md), [product-sku-system.md](product-sku-system.md), [product-master-catalog.md](product-master-catalog.md), [current-state.md](current-state.md).
 
 ## Short answer
 
