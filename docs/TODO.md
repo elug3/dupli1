@@ -130,6 +130,7 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 - [ ] **Co-view recommendations (phase 2)** — still open; see [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
 - [ ] **Flat sellable product model** — fold SKU/variant into `Product` (product becomes the unit of sale; style becomes the grouping); plan + phases in [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md). Blocked on the Phase 0 listing decision.
 - [ ] **Naming for multi-category catalog** — keep `Product` / `Variant` category-agnostic; do not rename to `Bag` / `BagSku`; see [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md).
+- [ ] **Wallets (multi-category types)** — category master + per-category taxonomy registry; `NormalizeProductTaxonomy` currently validates bag seeds regardless of `category`, so wallet subcategories are rejected today. Design in [product-wallets-category-design.md](product-wallets-category-design.md).
 
 ### Found in review (2026-07-08, size/color variants)
 
