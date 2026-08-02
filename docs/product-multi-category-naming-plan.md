@@ -125,7 +125,7 @@ Only useful as a *local* clarity rename inside bag-only packages — not the sha
 | Rename / introduce `BagSku{}` | **Reject** |
 | Keep `Product` + `Variant`; use `category` (+ bag masters) | **Accept (current direction)** |
 | Clean up unused `Bag`/`Shoes`/… stubs | Optional hygiene when touching `products.go` |
-| Multi-category extension plan | Defer implementation; use soft polymorphism when first non-bag category is scheduled |
+| Multi-category extension plan | Now scheduled (wallets, clothing) — concrete type design in [product-multi-category-design.md](product-multi-category-design.md) |
 
 ## Checklist (first non-bag category: **wallets**, scheduled — see [product-wallets-category-design.md](product-wallets-category-design.md))
 
