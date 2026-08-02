@@ -76,7 +76,7 @@ Variant (shared sellable SKU) ──► inventory / cart / order by skuId
 | Use `attributes` or a future `BagDetails` struct for bag-only PDP fields if the shared struct gets noisy | Prematurely split tables/services per category |
 | Delete or ignore unused `Shoes`/`Outerwear`/… stubs until a real design exists | Grow empty category wrappers “just in case” |
 
-**Wallets are the first concrete case** — the category-scoped design is worked out in [product-wallets-category-design.md](product-wallets-category-design.md).
+**Wallets and clothing are the first concrete cases** — the category-scoped design is worked out in [product-multi-category-design.md](product-multi-category-design.md).
 
 ### Optional later shapes (pick when needed, not now)
 
@@ -127,7 +127,7 @@ Only useful as a *local* clarity rename inside bag-only packages — not the sha
 | Clean up unused `Bag`/`Shoes`/… stubs | Optional hygiene when touching `products.go` |
 | Multi-category extension plan | Now scheduled (wallets, clothing) — concrete type design in [product-multi-category-design.md](product-multi-category-design.md) |
 
-## Checklist (first non-bag category: **wallets**, scheduled — see [product-wallets-category-design.md](product-wallets-category-design.md))
+## Checklist (first non-bag categories: **wallets, clothing**, scheduled — see [product-multi-category-design.md](product-multi-category-design.md))
 
 - [ ] Confirm shared vs category-only fields for the new type
 - [ ] Add category masters + search filters (mirror bag taxonomy pattern)
