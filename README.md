@@ -2,22 +2,26 @@
 
 Go microservice backend for a fashion bag marketplace. Services behind an nginx proxy, wired with Docker Compose for local dev and deployed to AWS ECS on EC2 (ALB, RDS, S3, CloudWatch Logs) in production.
 
+**Authoritative implementation snapshot:** [docs/current-state.md](docs/current-state.md). The tables below are a quick reference; when they diverge, trust `current-state.md` and [docs/api.md](docs/api.md).
+
 ## Services
 
 | Service | Local port | Description |
 |---------|------------|-------------|
-| `dupli1-auth` | 18080 | JWT login/refresh, RS256 tokens, JWKS, RBAC user admin |
+| `dupli1-auth` | 18080 | JWT login/refresh, RS256 tokens, JWKS, permission-based user admin |
 | `dupli1-product` | 8081 | Bag catalog, coupons, product CRUD, image upload, stock and reservation APIs |
 | `dupli1-order` | 8083 | Checkout sessions and order lifecycle (PostgreSQL) |
 | `dupli1-cart` | 8086 | Shopping cart (PostgreSQL) |
-| `dupli1-payment` | 8087 (planned) | Stripe Checkout payments |
-| `dupli1-notification` | 8084 | Notification stub (health only) |
+| `dupli1-payment` | 8087 | Payments — Bypass (v1.0 prod), optional Stripe Checkout, dev simulate when gated |
+| `dupli1-notification` | 8084 | NATS subscriber → Telegram ops alerts when configured |
 | `dupli1-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
 | `postgres-auth` | 5432 | Auth DB |
 | `postgres-product` | 5433 | Product DB (also stock/reservations) |
 | `postgres-order` | 5435 | Order DB |
 | `postgres-cart` | 5436 | Cart DB |
-| `redis` | 6379 | Rate limiter backing store |
+| `postgres-payment` | 5437 | Payment DB |
+| `redis` | 6379 | Rate limiter / session cache |
+| `nats` | 4222 | Event bus (order/payment/notification) |
 | `minio` | 9000 / 9001 | S3-compatible image storage (console on 9001) |
 
 ## Running
@@ -59,7 +63,8 @@ dupli1/
 ├── product/              # Product catalog (also stock/reservations)
 ├── order/                # Order + checkout
 ├── cart/                 # Shopping cart
-├── notification/         # Notification stub
+├── payment/              # Payments (Bypass / Stripe / dev simulate)
+├── notification/         # NATS → Telegram ops alerts
 ├── api/
 │   ├── nginx.conf        # Gateway routing
 │   └── Dockerfile
@@ -164,7 +169,7 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | GET | `/api/v1/orders/{id}` | Get order |
 | PUT | `/api/v1/orders/{id}/status` | Confirm, cancel, or fulfill order |
 
-See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow. See [docs/cart-service.md](docs/cart-service.md) for the persistent cart. See [docs/payment-service.md](docs/payment-service.md) for Stripe Checkout payment (planned).
+See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow. See [docs/cart-service.md](docs/cart-service.md) for the persistent cart. See [docs/payment-service.md](docs/payment-service.md) for payment (Bypass, optional Stripe, dev simulate).
 
 ### Cart (`dupli1-cart` :8086)
 
@@ -183,9 +188,9 @@ Full design (boundaries vs inventory/order, data model, checkout handoff): [docs
 | DELETE | `/api/v1/cart/items/{sku}` | Remove line |
 | GET | `/api/v1/carts/{customer_id}` | Admin: get user cart |
 
-### Payment (`dupli1-payment` :8087) — planned
+### Payment (`dupli1-payment` :8087)
 
-Stripe Checkout **redirect** — card numbers, CVC, and card passwords are entered only on Stripe's hosted page, never on Dupli1. Unpaid `pending` orders auto-cancel after **5 minutes**. [docs/payment-service.md](docs/payment-service.md).
+Stripe Checkout **redirect** when configured — card numbers, CVC, and card passwords are entered only on Stripe's hosted page, never on Dupli1. **v1.0 production** uses manager **Bypass** (`payment.bypass`) only; Stripe is not planned for the initial cut. Local dev simulate requires `PAYMENT_ALLOW_DEV_SIMULATE=true` (Compose default) and no `STRIPE_SECRET_KEY`. Unpaid `pending` orders auto-cancel after **5 minutes**. [docs/payment-service.md](docs/payment-service.md).
 
 ### Product IDs and variants
 

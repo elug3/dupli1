@@ -75,7 +75,7 @@ must log in again — do it during a quiet window.
 | `dupli1-product` | Product catalog + inventory |
 | `dupli1-order` | Order / checkout API |
 | `dupli1-cart` | Shopping cart API |
-| `dupli1-payment` | Payments (Stripe / dev simulate) |
+| `dupli1-payment` | Payments (Bypass in v1.0 prod; Stripe optional; dev simulate gated by `PAYMENT_ALLOW_DEV_SIMULATE`) |
 | `dupli1-notification` | NATS → Telegram ops alerts (`TELEGRAM_*` from Secrets Manager `dupli1/production/telegram`) |
 | `dupli1-proxy` | nginx gateway (ALB `/api/*`, `/gateway/*`) |
 | `dupli1-web` | Public storefront (ALB default) |

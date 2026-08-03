@@ -140,7 +140,7 @@ sequenceDiagram
 }
 ```
 
-Order consumer: idempotent on `payment_id`; reject if `amount_cents != order.total_cents`.
+Order consumer: idempotent on `payment_id`; reject if `amount_cents != order.total_cents`. If the order already carries the same `payment_id` and is no longer `pending` (e.g. `paid`, `in_transit`, or `fulfilled`), a replay is a no-op — the payment reconcile worker republishes for up to two hours after success, so late deliveries must not fail after ship.
 
 ### `order.paid` (order → notification)
 
@@ -226,6 +226,7 @@ Omit `method` (or send `credit_card`) for Stripe Checkout. Managers with `paymen
 | `STRIPE_WEBHOOK_SECRET` | payment | Webhook signing secret |
 | `STRIPE_SUCCESS_URL` | payment | Checkout success redirect |
 | `STRIPE_CANCEL_URL` | payment | Checkout cancel redirect |
+| `PAYMENT_ALLOW_DEV_SIMULATE` | payment | `true` enables `GET …/simulate-success` when Stripe is unset (local Compose only; **unset on ECS**) |
 | `DUPLI1_PAYMENT_ORDER_TTL` | order | `5m` pending payment window |
 | `NATS_URL` | all | Event bus |
 | `TELEGRAM_BOT_TOKEN` | notification | Bot token (prod: Secrets Manager `dupli1/production/telegram`) |
@@ -244,6 +245,7 @@ Local Postgres (payment): `postgres://dupli1:dupli1_dev@localhost:5437/payments?
 | Stripe failed / abandoned | stay `pending` until TTL, then cancel |
 | Paid, ops rejects | `canceled` + refund (payment phase 2) |
 | Duplicate webhook | idempotent — order stays `paid` |
+| Replayed `payment.succeeded` after ship | no-op when `payment_id` already set and status ≠ `pending` |
 
 ---
 
