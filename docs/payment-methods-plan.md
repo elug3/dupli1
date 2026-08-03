@@ -182,6 +182,10 @@ Add to `shared/pkg/permissions` catalog, fulfillment / order-manager bundles, an
 | Completion | Async confirmation → same `CompletePayment` / `payment.succeeded` path |
 | Hard problem | On-chain confirmation latency vs today’s **5-minute** unpaid cancel window |
 
+### PG integration (NANO)
+
+Customer **name and phone** for certified PG requests come from the **order snapshot** at checkout complete, not from the payment service. Optional prefill from auth profile: [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
+
 **Open questions (resolve before coding Bitcoin)**
 
 1. **TTL:** Extend unpaid window for Bitcoin-only payments (e.g. 30–60 min), or introduce `awaiting_crypto` without auto-cancel until invoice expiry?

@@ -171,7 +171,7 @@ Authenticate and receive a refresh token.
 
 ### `GET /api/v1/auth/me`
 
-Return the currently authenticated user's profile.
+Return the currently authenticated user's **account** (credentials tier — not commerce profile).
 
 **Headers** — `Authorization: Bearer <access_token>`
 
@@ -193,6 +193,23 @@ Return the currently authenticated user's profile.
 |--------|---------|
 | `401` | Missing, malformed, or expired access token |
 | `404` | User no longer exists |
+
+---
+
+### Customer profile — `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses`
+
+Commerce PII (display name, phone, saved addresses) for checkout prefill. Bearer access token; self-service only (no new permission). See [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/auth/me/profile` | Profile + embedded `addresses` |
+| `PATCH` | `/api/v1/auth/me/profile` | Merge-patch `display_name`, `phone` |
+| `GET` | `/api/v1/auth/me/addresses` | `{ "addresses": [ … ] }` |
+| `POST` | `/api/v1/auth/me/addresses` | Create (max 10) |
+| `GET` | `/api/v1/auth/me/addresses/{id}` | One address |
+| `PATCH` | `/api/v1/auth/me/addresses/{id}` | Partial update |
+| `DELETE` | `/api/v1/auth/me/addresses/{id}` | Remove |
+| `POST` | `/api/v1/auth/me/addresses/{id}/default` | Set sole default |
 
 ---
 

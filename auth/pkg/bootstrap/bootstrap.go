@@ -80,6 +80,7 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	}
 
 	userRepo := postgres.NewUserRepository(db)
+	profileRepo := postgres.NewProfileRepository(db)
 
 	var sessionStore ports.SessionStore
 	if redisClient != nil {
@@ -89,6 +90,7 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	svc := service.NewService(
 		userRepo,
 		accessTokenGen,
+		service.WithProfileRepository(profileRepo),
 		service.WithRefreshTokenGen(refreshTokenGen, cfg.RefreshTokenExpiry),
 		service.WithSessionStore(sessionStore),
 		service.WithEventPublisher(eventPublisher),

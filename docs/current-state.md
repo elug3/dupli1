@@ -17,7 +17,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Payments (Stripe Checkout) | Implemented — see [payment-service.md](payment-service.md) |
 | Payment methods | Credit card + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
 | Notifications | Implemented (NATS → Telegram when configured) |
-| User profiles, chat, analytics | Profile extension planned in auth first, extract to profile module later — [auth-profile-extension-plan.md](auth-profile-extension-plan.md); guest PDP views + recommendations in product — [product-guest-views-plan.md](product-guest-views-plan.md), [product-recommendations.md](product-recommendations.md); chat/analytics not started |
+| User profiles, chat, analytics | **Profile phase A** in auth (`/me/profile`, `/me/addresses`) — [auth-profile-extension-plan.md](auth-profile-extension-plan.md); guest PDP views + recommendations in product; chat/analytics not started |
 | Manager settings (mutable store policy) | Sketch — see [manager-settings-api.md](manager-settings-api.md) |
 
 ## Repository layout
@@ -49,6 +49,7 @@ See [service-layout.md](service-layout.md) for details.
   - Register: **temporary open customer signup** via `AUTH_OPEN_REGISTER` (default on); anonymous callers create `customer` only. Set `AUTH_OPEN_REGISTER=false` to require `user.create` again. Authenticated `user.create` still follows ABAC for other account types.
   - Auth ABAC hierarchy governs who may manage whom
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
+  - Customer commerce profile at `/api/v1/auth/me/profile` and saved addresses at `/api/v1/auth/me/addresses` — [auth-profile-extension-plan.md](auth-profile-extension-plan.md)
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `manager`)
   - Login lockout after 5 failed attempts for customers/managers; **admin and owner are never locked**
   - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`); seeded/synced on auth boot; ECS injects the shared Secrets Manager secret into auth + web (see [infra/terraform/README.md](../infra/terraform/README.md))

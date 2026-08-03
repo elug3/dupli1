@@ -1,6 +1,6 @@
 # Auth profile extension plan
 
-**Status:** Design — not implemented.
+**Status:** Phase A implemented in `auth/` (profile + addresses). Phase B (order snapshot) and profile module extraction remain planned.
 
 **Related:** [payment-service.md](payment-service.md), [payment-methods-plan.md](payment-methods-plan.md), [checkout-session.md](checkout-session.md), [permissions.md](permissions.md), [current-state.md](current-state.md).
 
@@ -307,13 +307,14 @@ Keep **`/api/v1/auth/me/profile`** as a gateway alias to profile service for one
 
 ### Phase A — Auth extension
 
-- [ ] Schema: `customer_profiles`, `customer_addresses`
-- [ ] Domain validation (KR phone, postal code)
-- [ ] Repository + service + handlers
-- [ ] Router: `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses/…`
-- [ ] Tests: ABAC, default address, max addresses, patch merge
-- [ ] Docs: [endpoints.md](endpoints.md), [api.md](api.md), [openapi.yaml](openapi.yaml)
-- [ ] [current-state.md](current-state.md) status bump
+- [x] Schema: `customer_profiles`, `customer_addresses`
+- [x] Domain validation (KR phone, postal code)
+- [x] Repository + service + handlers
+- [x] Router: `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses/…`
+- [x] Tests: ABAC, default address, max addresses, patch merge
+- [x] Docs: [endpoints.md](endpoints.md), [api.md](api.md)
+- [ ] [openapi.yaml](openapi.yaml) — paths TBD
+- [x] [current-state.md](current-state.md) status bump
 
 ### Phase B — Order snapshot (blocks NANO card)
 
