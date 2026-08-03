@@ -10,13 +10,14 @@ Go microservice backend for a fashion bag marketplace. Services behind an nginx 
 | `dupli1-product` | 8081 | Bag catalog, coupons, product CRUD, image upload, stock and reservation APIs |
 | `dupli1-order` | 8083 | Checkout sessions and order lifecycle (PostgreSQL) |
 | `dupli1-cart` | 8086 | Shopping cart (PostgreSQL) |
-| `dupli1-payment` | 8087 (planned) | Stripe Checkout payments |
-| `dupli1-notification` | 8084 | Notification stub (health only) |
+| `dupli1-payment` | 8087 | Stripe Checkout + manager Bypass (PostgreSQL) |
+| `dupli1-notification` | 8084 | NATS → Telegram ops alerts |
 | `dupli1-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
 | `postgres-auth` | 5432 | Auth DB |
 | `postgres-product` | 5433 | Product DB (also stock/reservations) |
 | `postgres-order` | 5435 | Order DB |
 | `postgres-cart` | 5436 | Cart DB |
+| `postgres-payment` | 5437 | Payment DB |
 | `redis` | 6379 | Rate limiter backing store |
 | `minio` | 9000 / 9001 | S3-compatible image storage (console on 9001) |
 
@@ -59,7 +60,8 @@ dupli1/
 ├── product/              # Product catalog (also stock/reservations)
 ├── order/                # Order + checkout
 ├── cart/                 # Shopping cart
-├── notification/         # Notification stub
+├── payment/              # Stripe Checkout + Bypass payments
+├── notification/         # NATS → Telegram alerts
 ├── api/
 │   ├── nginx.conf        # Gateway routing
 │   └── Dockerfile
@@ -75,7 +77,9 @@ Each service follows hexagonal architecture: `domain/`, `service/`, `ports/`, `i
 
 ## API
 
-Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](docs/endpoints.md).
+Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](docs/endpoints.md). Permission matrix: [docs/permissions.md](docs/permissions.md).
+
+**Path convention:** canonical routes are namespaced by service (`/api/v1/products/…`, `/api/v1/orders/…`, `/api/v1/cart/…`, `/api/v1/payments/…`). Legacy top-level aliases (`/api/v1/inventory`, `/api/v1/coupons`, `/api/v1/checkout`, `/api/v1/carts`, …) still work but are deprecated — see [docs/TODO.md](docs/TODO.md).
 
 ### Auth (`dupli1-auth` :18080)
 
@@ -88,17 +92,17 @@ Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](doc
 | POST | `/api/v1/auth/refresh` | — | Exchange refresh token for access token |
 | POST | `/api/v1/auth/logout` | — | Revoke refresh token |
 | GET | `/api/v1/auth/me` | Bearer | Current user profile |
-| POST | `/api/v1/auth/register` | `owner` / `admin` / `user_manager` / `customer_registrar` | Create user account (`account_type` optional) |
-| GET | `/api/v1/auth/users` | `owner` / `admin` | List users |
-| PATCH | `/api/v1/auth/users/{id}/roles` | `owner` / `admin` | Set user roles / `account_type` |
-| PATCH | `/api/v1/auth/users/{id}/password` | `admin` / `user_manager` | Set user password |
-| PATCH | `/api/v1/auth/users/{id}/status` | `admin` / `user_manager` | Activate / deactivate user |
+| POST | `/api/v1/auth/register` | open customer signup (`AUTH_OPEN_REGISTER`, default on) or `user.create` | Create user (`account_type`: `customer` \| `manager` \| `service`) |
+| GET | `/api/v1/auth/users` | `user.read` | List users |
+| PATCH | `/api/v1/auth/users/{id}/permissions` | `user.permissions.update` | Replace permissions / `account_type` |
+| PATCH | `/api/v1/auth/users/{id}/password` | `user.password.update` | Set user password |
+| PATCH | `/api/v1/auth/users/{id}/status` | `user.status.update` | Activate / deactivate user |
 
 **Token flow:** `POST /login` returns `{ "refresh_token": "..." }`. Call `POST /refresh` with that token to get `{ "token": "<access_jwt>" }`. Send the access token as `Authorization: Bearer <token>` on protected routes.
 
 Login and refresh are rate-limited per IP via Redis.
 
-Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on startup when `JWT_PRIVATE_KEY_FILE` is not set.
+Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on startup when neither `JWT_PRIVATE_KEY` nor `JWT_PRIVATE_KEY_FILE` is set. Production injects `JWT_PRIVATE_KEY` from Secrets Manager (see [docs/deployment-aws.md](docs/deployment-aws.md)).
 
 ### Products (`dupli1-product` :8081)
 
@@ -110,7 +114,7 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 | GET | `/api/v1/products/settings` | Non-secret service settings |
 | GET | `/api/v1/products` | Search **parent styles** (`?category=`, `?brand=`, `?color=`, `?size=`, `?tags=`) |
 | GET | `/api/v1/products/{id}` | PDP: parent + variants (colors/sizes/images per SKU) |
-| POST | `/api/v1/coupons/redeem` | Redeem a coupon code |
+| POST | `/api/v1/products/coupons/redeem` | Redeem a coupon code (alias: `/api/v1/coupons/redeem`) |
 
 **Requires `Authorization: Bearer <access_token>`** (validated via JWKS)
 
@@ -124,10 +128,10 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 | POST | `/api/v1/products/{id}/variants` | Create variant (SKU) |
 | PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | Update / delete variant |
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | Upload image for a variant |
-| GET | `/api/v1/coupons` | List coupons |
-| POST | `/api/v1/coupons` | Create coupon |
-| PUT | `/api/v1/coupons/{code}` | Update coupon |
-| DELETE | `/api/v1/coupons/{code}` | Delete coupon |
+| GET | `/api/v1/products/coupons` | List coupons |
+| POST | `/api/v1/products/coupons` | Create coupon |
+| PUT | `/api/v1/products/coupons/by-code/{code}` | Update coupon |
+| DELETE | `/api/v1/products/coupons/by-code/{code}` | Delete coupon |
 
 ### Inventory (served by `dupli1-product` :8081)
 
@@ -154,17 +158,18 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 |--------|------|-------------|
 | GET | `/api/v1/orders/health` | Health check |
 | GET | `/api/v1/orders/settings` | Non-secret service settings |
-| POST | `/api/v1/checkout/sessions` | Create checkout session |
-| GET | `/api/v1/checkout/sessions/{id}` | Get session |
-| PUT/POST/DELETE | `/api/v1/checkout/sessions/{id}/items` | Manage cart items |
-| POST | `/api/v1/checkout/sessions/{id}/coupon` | Apply coupon |
-| POST | `/api/v1/checkout/sessions/{id}/complete` | Complete checkout |
+| POST | `/api/v1/orders/checkout/sessions` | Create checkout session |
+| GET | `/api/v1/orders/checkout/sessions/{id}` | Get session |
+| PUT/POST/DELETE | `/api/v1/orders/checkout/sessions/{id}/items` | Manage cart items |
+| POST | `/api/v1/orders/checkout/sessions/{id}/coupon` | Apply coupon |
+| POST | `/api/v1/orders/checkout/sessions/{id}/complete` | Complete checkout |
 | POST | `/api/v1/orders` | Create order directly |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
-| PUT | `/api/v1/orders/{id}/status` | Confirm, cancel, or fulfill order |
+| POST | `/api/v1/orders/{id}/ship` | `order.ship` — `paid` → `in_transit`, commit stock |
+| PUT | `/api/v1/orders/{id}/status` | `order.status.update` — fulfill or cancel |
 
-See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow. See [docs/cart-service.md](docs/cart-service.md) for the persistent cart. See [docs/payment-service.md](docs/payment-service.md) for Stripe Checkout payment (planned).
+See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow. See [docs/cart-service.md](docs/cart-service.md) for the persistent cart. See [docs/payment-service.md](docs/payment-service.md) for payments (Stripe Checkout, manager Bypass, dev simulate).
 
 ### Cart (`dupli1-cart` :8086)
 
@@ -181,21 +186,22 @@ Full design (boundaries vs inventory/order, data model, checkout handoff): [docs
 | PUT | `/api/v1/cart/items` | Replace all items |
 | POST | `/api/v1/cart/items` | Add or update one item |
 | DELETE | `/api/v1/cart/items/{sku}` | Remove line |
-| GET | `/api/v1/carts/{customer_id}` | Admin: get user cart |
+| GET | `/api/v1/cart/customers/{customer_id}` | `cart.read` — admin read (alias: `/api/v1/carts/{customer_id}`) |
 
-### Payment (`dupli1-payment` :8087) — planned
+### Payment (`dupli1-payment` :8087)
 
-Stripe Checkout **redirect** — card numbers, CVC, and card passwords are entered only on Stripe's hosted page, never on Dupli1. Unpaid `pending` orders auto-cancel after **5 minutes**. [docs/payment-service.md](docs/payment-service.md).
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/v1/payments` | Bearer | Start Checkout or Bypass (`method`: `credit_card` \| `bypass`) |
+| GET | `/api/v1/payments/{id}` | Bearer | Payment status |
+| GET | `/api/v1/payments/{id}/simulate-success` | Bearer | Dev only when `PAYMENT_ALLOW_DEV_SIMULATE=true` |
+| POST | `/api/v1/payments/webhooks/stripe` | Stripe signature | Webhook handler |
+
+Stripe Checkout **redirect** — card data is entered only on Stripe's hosted page. v1.0 launches **without Stripe** in production; managers mark orders paid via **Bypass** (`payment.bypass`). Unpaid `pending` orders auto-cancel after **5 minutes**. Full flow: [docs/payment-service.md](docs/payment-service.md).
 
 ### Product IDs and variants
 
-Parent style IDs are generated from the brand name: first 3 characters uppercased, followed by a sequential counter.
-
-```
-Bottega Veneta → BOT-001, BOT-002, …
-```
-
-Variants (sellable SKUs) hang under a parent, e.g. `BOT-001-GRN` / `BOT-001-BLK`. Search returns parents only so colors do not duplicate results. Checkout and inventory use the **variant SKU**.
+Parent products have a **ULID** `id` (API primary key). Human-readable variant SKUs follow the master-code system (`Brand_Style_Color[_Edition]_Size`) — see [docs/product-sku-system.md](docs/product-sku-system.md). Each variant also exposes a canonical ULID `skuId` for cart, order, and inventory. Search returns parent styles only (no color duplicates). Checkout and inventory accept either human `sku` or `skuId`.
 
 ### Image Upload
 
@@ -220,8 +226,10 @@ curl -X POST http://localhost:8080/api/v1/products/BOT-001/images \
 | `DB_URL` | — | Postgres connection string |
 | `REDIS_URL` | — | Redis URL for rate limiting |
 | `NATS_URL` | — | NATS URL (optional, for pub/sub) |
-| `JWT_PRIVATE_KEY_FILE` | — | Path to PEM-encoded RSA private key (RS256); ephemeral key used in dev if unset |
+| `JWT_PRIVATE_KEY` | — | PEM-encoded RSA private key (RS256); preferred on ECS via Secrets Manager |
+| `JWT_PRIVATE_KEY_FILE` | — | Path to PEM file (alternative to inline `JWT_PRIVATE_KEY`) |
 | `JWT_KEY_ID` | `default` | `kid` value in the JWKS document |
+| `AUTH_OPEN_REGISTER` | `true` | Temporary open customer signup; set `false` to require `user.create` again |
 | `JWT_EXPIRATION` | `15m` | Access token lifetime |
 | `DUPLI1_AUTH_ADDR` | `:8080` | Listen address |
 | `OWNER_EMAIL` | — | Seed owner email (skips seeding if empty) |
@@ -251,8 +259,19 @@ curl -X POST http://localhost:8080/api/v1/products/BOT-001/images \
 | `DUPLI1_ORDER_DB` | — | Postgres connection string |
 | `AUTH_JWKS_URL` | — | JWKS URL for RS256 token validation (set in Compose) |
 | `JWT_SECRET` | — | HS256 fallback when JWKS is unavailable |
-| `DUPLI1_INVENTORY_URL` | — | Inventory base URL (product service — stock/reservations were merged in) |
-| `DUPLI1_PRODUCT_URL` | — | Product service base URL (coupon redeem) |
+| `DUPLI1_GATEWAY_URL` | — | Internal gateway base URL for product stock/coupon calls (order service account) |
+| `DUPLI1_ORDER_SERVICE_EMAIL` | — | Seed order service account email |
+| `DUPLI1_ORDER_SERVICE_PASSWORD` | — | Seed order service account password |
+
+### Payment service
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DUPLI1_PAYMENT_DB` | — | Postgres connection string |
+| `AUTH_JWKS_URL` | — | JWKS URL for RS256 token validation |
+| `STRIPE_SECRET_KEY` | — | Stripe API key (optional locally) |
+| `STRIPE_WEBHOOK_SECRET` | — | Stripe webhook signing secret |
+| `PAYMENT_ALLOW_DEV_SIMULATE` | unset (prod) / `true` (Compose) | Enables `GET …/simulate-success` without Stripe |
 
 ### MinIO
 
