@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
 )
 
@@ -64,9 +65,28 @@ func (s *Service) expirePendingOrders(ctx context.Context) error {
 		return err
 	}
 	for _, order := range orders {
-		if _, err := s.CancelOrder(ctx, order.ID); err != nil {
+		if err := s.cancelExpiredPendingOrder(ctx, order.ID); err != nil {
 			log.Printf("cancel expired order %s: %v", order.ID, err)
 		}
 	}
 	return nil
+}
+
+// cancelExpiredPendingOrder cancels an unpaid pending order past payment_due_at.
+// It re-reads the row so a payment that completes after the expiry scan cannot be
+// undone — CancelOrder also allows paid orders (manager refunds), which must not
+// apply to the automatic expiry worker.
+func (s *Service) cancelExpiredPendingOrder(ctx context.Context, orderID string) error {
+	order, err := s.repo.Get(ctx, orderID)
+	if err != nil {
+		return err
+	}
+	if order.Status != domain.StatusPending {
+		return nil
+	}
+	if !order.IsPaymentExpired(s.now()) {
+		return nil
+	}
+	_, err = s.CancelOrder(ctx, orderID)
+	return err
 }
