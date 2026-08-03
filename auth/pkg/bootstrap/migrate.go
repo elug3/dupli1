@@ -62,6 +62,43 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
+	profileStmts := []string{
+		`CREATE TABLE IF NOT EXISTS id_sequences (
+			name TEXT PRIMARY KEY,
+			value BIGINT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS customer_profiles (
+			user_id      TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+			display_name TEXT NOT NULL DEFAULT '',
+			phone        TEXT NOT NULL DEFAULT '',
+			created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE TABLE IF NOT EXISTS customer_addresses (
+			id              TEXT PRIMARY KEY,
+			user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			label           TEXT NOT NULL DEFAULT '',
+			recipient_name  TEXT NOT NULL,
+			recipient_phone TEXT NOT NULL,
+			postal_code     TEXT NOT NULL,
+			address_line1   TEXT NOT NULL,
+			address_line2   TEXT NOT NULL DEFAULT '',
+			city            TEXT NOT NULL,
+			province        TEXT NOT NULL,
+			is_default      BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_customer_addresses_user_id ON customer_addresses (user_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_addresses_one_default
+			ON customer_addresses (user_id) WHERE is_default`,
+	}
+	for _, stmt := range profileStmts {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("migrate profile schema: %w", err)
+		}
+	}
+
 	return nil
 }
 

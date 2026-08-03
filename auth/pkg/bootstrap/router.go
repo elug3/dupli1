@@ -66,6 +66,14 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 		authed := v1.Group("", h.RequireAuth())
 		{
 			authed.GET("/me", h.Me)
+			authed.GET("/me/profile", h.GetProfile)
+			authed.PATCH("/me/profile", h.PatchProfile)
+			authed.GET("/me/addresses", h.ListAddresses)
+			authed.POST("/me/addresses", h.CreateAddress)
+			authed.POST("/me/addresses/:id/default", h.SetDefaultAddress)
+			authed.GET("/me/addresses/:id", h.GetAddress)
+			authed.PATCH("/me/addresses/:id", h.PatchAddress)
+			authed.DELETE("/me/addresses/:id", h.DeleteAddress)
 		}
 
 		userRead := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserRead))

@@ -38,7 +38,15 @@ Each service also registers `/health` and `/settings` directly for internal/side
 | `POST` | `/api/v1/auth/login` | — | Login and receive a refresh token |
 | `POST` | `/api/v1/auth/logout` | — | Invalidate the current session |
 | `POST` | `/api/v1/auth/refresh` | — | Exchange a refresh token for a new access token |
-| `GET` | `/api/v1/auth/me` | Bearer | Return the authenticated user's profile |
+| `GET` | `/api/v1/auth/me` | Bearer | Return the authenticated user's account (email, permissions) |
+| `GET` | `/api/v1/auth/me/profile` | Bearer | Customer commerce profile + saved addresses |
+| `PATCH` | `/api/v1/auth/me/profile` | Bearer | Update `display_name` / `phone` (merge patch) |
+| `GET` | `/api/v1/auth/me/addresses` | Bearer | List saved addresses |
+| `POST` | `/api/v1/auth/me/addresses` | Bearer | Create address (max 10; first is default) |
+| `GET` | `/api/v1/auth/me/addresses/:id` | Bearer | Get one address |
+| `PATCH` | `/api/v1/auth/me/addresses/:id` | Bearer | Update address |
+| `DELETE` | `/api/v1/auth/me/addresses/:id` | Bearer | Delete address |
+| `POST` | `/api/v1/auth/me/addresses/:id/default` | Bearer | Set default address |
 | `GET` | `/api/v1/auth/users` | `user.read` | List users (filtered by auth ABAC hierarchy) |
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` | Replace a user's permissions (optional `account_type`) |
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` | Set a new password for a user |
@@ -137,6 +145,20 @@ Response `200`:
 ```
 
 Errors: `401` missing or invalid token, `404` user not found.
+
+### GET /api/v1/auth/me/profile
+
+Header: `Authorization: Bearer <access_token>`
+
+Response `200` — commerce profile and saved addresses (empty when unset). See [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
+
+### PATCH /api/v1/auth/me/profile
+
+Merge-patch body: `{ "display_name": "…", "phone": "010-…" }` (KR mobile). Creates profile row on first update.
+
+### `/api/v1/auth/me/addresses`
+
+Bearer CRUD for saved shipping addresses (max **10** per user). `POST` body requires `recipient_name`, `recipient_phone`, `postal_code` (5 digits), `address_line1`, `city`, `province`; optional `label`, `address_line2`, `is_default`.
 
 ### GET /api/v1/auth/users
 

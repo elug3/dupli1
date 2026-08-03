@@ -2,7 +2,7 @@
 
 **Status:** Design + Bypass implemented. Credit-card adapter remains Stripe Checkout in code but **v1.0 does not plan to use Stripe** (PG company TBD). Bitcoin is still spec-only (do not implement yet).
 
-**Related:** [payment-service.md](payment-service.md), [permissions.md](permissions.md), [checkout-session.md](checkout-session.md), [current-state.md](current-state.md).
+**Related:** [payment-service.md](payment-service.md), [permissions.md](permissions.md), [checkout-session.md](checkout-session.md), [auth-profile-extension-plan.md](auth-profile-extension-plan.md), [current-state.md](current-state.md).
 
 ## Goals
 
@@ -181,6 +181,10 @@ Add to `shared/pkg/permissions` catalog, fulfillment / order-manager bundles, an
 | Provider candidates (TBD) | BTCPay Server, Coinbase Commerce, or equivalent — pick in the Bitcoin implementation PR |
 | Completion | Async confirmation → same `CompletePayment` / `payment.succeeded` path |
 | Hard problem | On-chain confirmation latency vs today’s **5-minute** unpaid cancel window |
+
+### PG integration (NANO)
+
+Customer **name and phone** for certified PG requests come from the **order snapshot** at checkout complete, not from the payment service. Optional prefill from auth profile: [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
 
 **Open questions (resolve before coding Bitcoin)**
 
