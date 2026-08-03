@@ -6,6 +6,8 @@ For a **persistent** shopping cart (saved across sessions), use the **cart servi
 
 For **payment** after checkout, see [payment-service.md](payment-service.md) (Stripe Checkout redirect; 5-minute unpaid window).
 
+Recipient name, phone, and shipping address are planned on checkout **complete** (order snapshot) with optional prefill from auth profile — see [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
+
 Direct order creation (`POST /api/v1/orders`) remains available for callers that already have a finalized cart.
 
 ## Flow

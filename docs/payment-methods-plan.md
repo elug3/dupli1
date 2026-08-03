@@ -2,7 +2,7 @@
 
 **Status:** Design + Bypass implemented. Credit-card adapter remains Stripe Checkout in code but **v1.0 does not plan to use Stripe** (PG company TBD). Bitcoin is still spec-only (do not implement yet).
 
-**Related:** [payment-service.md](payment-service.md), [permissions.md](permissions.md), [checkout-session.md](checkout-session.md), [current-state.md](current-state.md).
+**Related:** [payment-service.md](payment-service.md), [permissions.md](permissions.md), [checkout-session.md](checkout-session.md), [auth-profile-extension-plan.md](auth-profile-extension-plan.md), [current-state.md](current-state.md).
 
 ## Goals
 
