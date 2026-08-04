@@ -112,6 +112,83 @@ func TestCreateAddress_Limit(t *testing.T) {
 	}
 }
 
+func TestPatchAddress_PartialUpdate(t *testing.T) {
+	svc, _ := newProfileService(t)
+	ctx := context.Background()
+	userID := uuid.New().String()
+
+	created, err := svc.CreateAddress(ctx, userID, service.AddressInput{
+		RecipientName: "A", RecipientPhone: "01011112222", PostalCode: "06194",
+		AddressLine1: "One", City: "강남구", Province: "서울",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := svc.PatchAddress(ctx, userID, created.ID, service.AddressInput{
+		RecipientName: "Updated Name",
+		AddressLine2:  "Suite 9",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.RecipientName != "Updated Name" {
+		t.Fatalf("name = %q, want Updated Name", updated.RecipientName)
+	}
+	if updated.RecipientPhone != "01011112222" || updated.AddressLine2 != "Suite 9" {
+		t.Fatalf("unchanged fields mutated: %+v", updated)
+	}
+}
+
+func TestPatchAddress_NotFound(t *testing.T) {
+	svc, _ := newProfileService(t)
+	ctx := context.Background()
+	userID := uuid.New().String()
+
+	_, err := svc.PatchAddress(ctx, userID, "addr_missing", service.AddressInput{
+		RecipientName: "Nobody",
+	})
+	if err != ports.ErrAddressNotFound {
+		t.Fatalf("want ErrAddressNotFound, got %v", err)
+	}
+}
+
+func TestDeleteAddress(t *testing.T) {
+	svc, _ := newProfileService(t)
+	ctx := context.Background()
+	userID := uuid.New().String()
+
+	addr, err := svc.CreateAddress(ctx, userID, service.AddressInput{
+		RecipientName: "A", RecipientPhone: "01011112222", PostalCode: "06194",
+		AddressLine1: "One", City: "강남구", Province: "서울",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.DeleteAddress(ctx, userID, addr.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.GetAddress(ctx, userID, addr.ID); err != ports.ErrAddressNotFound {
+		t.Fatalf("deleted address should be missing, got %v", err)
+	}
+	if err := svc.DeleteAddress(ctx, userID, "addr_missing"); err != ports.ErrAddressNotFound {
+		t.Fatalf("second delete want ErrAddressNotFound, got %v", err)
+	}
+}
+
+func TestPatchProfile_InvalidPhone(t *testing.T) {
+	svc, _ := newProfileService(t)
+	ctx := context.Background()
+	userID := uuid.New().String()
+
+	bad := "not-a-phone"
+	_, err := svc.PatchProfile(ctx, userID, service.ProfilePatch{Phone: &bad})
+	if err != domain.ErrInvalidProfile {
+		t.Fatalf("want ErrInvalidProfile, got %v", err)
+	}
+}
+
 func TestSetDefaultAddress(t *testing.T) {
 	svc, _ := newProfileService(t)
 	ctx := context.Background()
