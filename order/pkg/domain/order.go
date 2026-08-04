@@ -41,6 +41,10 @@ type Order struct {
 	SubtotalCents int64       `json:"subtotal_cents"`
 	DiscountCents int64       `json:"discount_cents"`
 	TotalCents    int64       `json:"total_cents"`
+	RecipientName string      `json:"recipient_name,omitempty"`
+	RecipientPhone string     `json:"recipient_phone,omitempty"`
+	ShippingAddress ShippingAddress `json:"shipping_address,omitempty"`
+	SourceAddressID string    `json:"source_address_id,omitempty"`
 	PaymentID     string      `json:"payment_id,omitempty"`
 	PaidAt        *time.Time  `json:"paid_at,omitempty"`
 	PaymentDueAt  time.Time   `json:"payment_due_at"`

@@ -46,18 +46,36 @@ func (c *Client) GetOrder(ctx context.Context, bearerToken, orderID string) (*po
 	}
 
 	var body struct {
-		ID          string `json:"id"`
-		CustomerID  string `json:"customer_id"`
-		Status      string `json:"status"`
-		TotalCents  int64  `json:"total_cents"`
+		ID              string `json:"id"`
+		CustomerID      string `json:"customer_id"`
+		Status          string `json:"status"`
+		TotalCents      int64  `json:"total_cents"`
+		RecipientName   string `json:"recipient_name"`
+		RecipientPhone  string `json:"recipient_phone"`
+		ShippingAddress struct {
+			PostalCode   string `json:"postal_code"`
+			AddressLine1 string `json:"address_line1"`
+			AddressLine2 string `json:"address_line2"`
+			City         string `json:"city"`
+			Province     string `json:"province"`
+		} `json:"shipping_address"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return nil, err
 	}
 	return &ports.OrderSummary{
-		ID:         body.ID,
-		CustomerID: body.CustomerID,
-		Status:     body.Status,
-		TotalCents: body.TotalCents,
+		ID:              body.ID,
+		CustomerID:      body.CustomerID,
+		Status:          body.Status,
+		TotalCents:      body.TotalCents,
+		RecipientName:   body.RecipientName,
+		RecipientPhone:  body.RecipientPhone,
+		ShippingAddress: ports.ShippingAddress{
+			PostalCode:   body.ShippingAddress.PostalCode,
+			AddressLine1: body.ShippingAddress.AddressLine1,
+			AddressLine2: body.ShippingAddress.AddressLine2,
+			City:         body.ShippingAddress.City,
+			Province:     body.ShippingAddress.Province,
+		},
 	}, nil
 }

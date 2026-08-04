@@ -64,7 +64,7 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 		t.Fatalf("discounted totals = %d/%d, want 3000/7000", session.DiscountCents, session.TotalCents)
 	}
 
-	result, err := svc.CompleteCheckout(ctx, session.ID)
+	result, err := svc.CompleteCheckout(ctx, session.ID, testCompleteCheckoutInput())
 	if err != nil {
 		t.Fatalf("CompleteCheckout returned error: %v", err)
 	}
@@ -79,6 +79,9 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	}
 	if result.Order.CouponCode != "SUMMER30" {
 		t.Fatalf("order coupon = %q, want SUMMER30", result.Order.CouponCode)
+	}
+	if result.Order.RecipientName != "Test User" || result.Order.RecipientPhone != "01012345678" {
+		t.Fatalf("order fulfillment: %+v", result.Order)
 	}
 	if stock.reservationID != "res-checkout" {
 		t.Fatalf("stock reservation = %q, want res-checkout", stock.reservationID)
@@ -104,7 +107,7 @@ func TestCompleteCheckoutRequiresItems(t *testing.T) {
 		t.Fatalf("CreateCheckoutSession returned error: %v", err)
 	}
 
-	_, err = svc.CompleteCheckout(ctx, session.ID)
+	_, err = svc.CompleteCheckout(ctx, session.ID, service.CompleteCheckoutInput{})
 	if !errors.Is(err, domain.ErrEmptyCheckout) {
 		t.Fatalf("CompleteCheckout error = %v, want ErrEmptyCheckout", err)
 	}
@@ -130,5 +133,18 @@ func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
 	_, err = svc.ApplyCheckoutCoupon(ctx, session.ID, "SUMMER30")
 	if !errors.Is(err, ports.ErrCouponUnavailable) {
 		t.Fatalf("ApplyCheckoutCoupon error = %v, want ErrCouponUnavailable", err)
+	}
+}
+
+func testCompleteCheckoutInput() service.CompleteCheckoutInput {
+	return service.CompleteCheckoutInput{
+		RecipientName:  "Test User",
+		RecipientPhone: "01012345678",
+		ShippingAddress: domain.ShippingAddress{
+			PostalCode:   "06194",
+			AddressLine1: "테헤란로 78길 14-12",
+			City:         "강남구",
+			Province:     "서울특별시",
+		},
 	}
 }
