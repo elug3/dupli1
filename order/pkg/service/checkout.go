@@ -121,7 +121,7 @@ func (s *Service) ApplyCheckoutCoupon(ctx context.Context, sessionID, code strin
 	return s.saveCheckoutSession(ctx, session)
 }
 
-func (s *Service) CompleteCheckout(ctx context.Context, sessionID string) (*CompleteCheckoutResult, error) {
+func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input CompleteCheckoutInput) (*CompleteCheckoutResult, error) {
 	session, err := s.getOpenCheckoutSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -130,11 +130,20 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string) (*Comp
 		return nil, domain.ErrEmptyCheckout
 	}
 
+	snapshot, err := applyCompleteCheckoutInput(input)
+	if err != nil {
+		return nil, err
+	}
+
 	order, err := s.CreateOrder(ctx, CreateOrderInput{
-		CustomerID:    session.CustomerID,
-		Items:         cloneOrderItems(session.Items),
-		CouponCode:    session.CouponCode,
-		DiscountCents: session.DiscountCents,
+		CustomerID:      session.CustomerID,
+		Items:           cloneOrderItems(session.Items),
+		CouponCode:      session.CouponCode,
+		DiscountCents:   session.DiscountCents,
+		RecipientName:   snapshot.RecipientName,
+		RecipientPhone:  snapshot.RecipientPhone,
+		ShippingAddress: snapshot.ShippingAddress,
+		SourceAddressID: snapshot.SourceAddressID,
 	})
 	if err != nil {
 		return nil, err

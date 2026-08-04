@@ -14,10 +14,22 @@ var (
 )
 
 type OrderSummary struct {
-	ID           string
-	CustomerID   string
-	Status       string
-	TotalCents   int64
+	ID              string
+	CustomerID      string
+	Status          string
+	TotalCents      int64
+	RecipientName   string
+	RecipientPhone  string
+	ShippingAddress ShippingAddress
+}
+
+// ShippingAddress mirrors order fulfillment snapshot fields for PG adapters.
+type ShippingAddress struct {
+	PostalCode   string
+	AddressLine1 string
+	AddressLine2 string
+	City         string
+	Province     string
 }
 
 type OrderClient interface {

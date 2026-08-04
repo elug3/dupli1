@@ -1,6 +1,6 @@
 # Auth profile extension plan
 
-**Status:** Phase A implemented in `auth/` (profile + addresses). Phase B (order snapshot) and profile module extraction remain planned.
+**Status:** Phase A implemented in `auth/` (profile + addresses). **Phase B** implemented in `order/` (checkout snapshot). Profile module extraction remains planned.
 
 **Related:** [payment-service.md](payment-service.md), [payment-methods-plan.md](payment-methods-plan.md), [checkout-session.md](checkout-session.md), [permissions.md](permissions.md), [current-state.md](current-state.md).
 
@@ -313,14 +313,14 @@ Keep **`/api/v1/auth/me/profile`** as a gateway alias to profile service for one
 - [x] Router: `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses/…`
 - [x] Tests: ABAC, default address, max addresses, patch merge
 - [x] Docs: [endpoints.md](endpoints.md), [api.md](api.md)
-- [ ] [openapi.yaml](openapi.yaml) — paths TBD
+- [x] [openapi.yaml](openapi.yaml) — paths TBD
 - [x] [current-state.md](current-state.md) status bump
 
 ### Phase B — Order snapshot (blocks NANO card)
 
-- [ ] Order columns + checkout complete validation
-- [ ] Payment order client fields for NANO
-- [ ] See NANO integration plan (payment PG adapter)
+- [x] Order columns + checkout complete validation
+- [x] Payment order client fields for NANO
+- [ ] NANO PG adapter (separate PR)
 
 ### Phase C — Frontends
 

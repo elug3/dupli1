@@ -144,7 +144,25 @@ Requires `DUPLI1_PRODUCT_URL` to be configured. Returns `503` when the coupon cl
 
 ### `POST /api/v1/checkout/sessions/{id}/complete`
 
-Finalize checkout: reserve inventory, create a `pending` order, and mark the session `completed`.
+Finalize checkout: reserve inventory, create a `pending` order with **fulfillment snapshot**, and mark the session `completed`.
+
+**Request body** (required)
+```json
+{
+  "recipient_name": "윤라희",
+  "recipient_phone": "01041125167",
+  "shipping_address": {
+    "postal_code": "06194",
+    "address_line1": "테헤란로 78길 14-12",
+    "address_line2": "9층",
+    "city": "강남구",
+    "province": "서울특별시"
+  },
+  "address_id": "addr_000001"
+}
+```
+
+`address_id` is optional audit metadata when the client copied from auth profile; the order stores the snapshot fields, not a live reference.
 
 **Response `200`**
 ```json
@@ -162,6 +180,16 @@ Finalize checkout: reserve inventory, create a `pending` order, and mark the ses
     "id": "ord_000001",
     "customer_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
     "status": "pending",
+    "recipient_name": "윤라희",
+    "recipient_phone": "01041125167",
+    "shipping_address": {
+      "postal_code": "06194",
+      "address_line1": "테헤란로 78길 14-12",
+      "address_line2": "9층",
+      "city": "강남구",
+      "province": "서울특별시"
+    },
+    "source_address_id": "addr_000001",
     "coupon_code": "SUMMER30",
     "subtotal_cents": 10000,
     "discount_cents": 3000,
