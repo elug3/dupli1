@@ -122,6 +122,7 @@ func TestPublicGetProductViewFailureStillOK(t *testing.T) {
 		WithViewStore(failingViewStore{})
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
+	mux.Handle("GET "+handler.RoutePublicProduct, h.GetProductHandler())
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/products/BOT-001", nil))

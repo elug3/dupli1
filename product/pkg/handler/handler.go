@@ -103,7 +103,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+RouteSettings, h.Settings)
 	mux.HandleFunc("GET "+RouteProductRecommendations, h.PublicGetRecommendations)
 	mux.HandleFunc("GET "+RoutePublicVariants, h.PublicListVariants)
-	mux.HandleFunc("GET "+RoutePublicProduct, h.PublicGetProduct)
 
 	MountFunc(mux, "GET", RoutePublicVariant, h.PublicGetVariant, LegacyRoutePublicVariant)
 	MountFunc(mux, "GET", RoutePublicVariantBySkuID, h.PublicGetVariantBySkuID, LegacyRoutePublicVariantBySkuID)
@@ -118,6 +117,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // SearchProductsHandler returns an http.Handler for GET /api/v1/products.
 func (h *Handler) SearchProductsHandler() http.Handler {
 	return http.HandlerFunc(h.SearchProducts)
+}
+
+// GetProductHandler returns an http.Handler for GET /api/v1/products/{id}.
+func (h *Handler) GetProductHandler() http.Handler {
+	return http.HandlerFunc(h.GetProduct)
 }
 
 // UploadImageHandler returns an http.Handler for POST /api/v1/products/{id}/images.
@@ -281,7 +285,10 @@ func parseSearchPagination(r *http.Request) (limit, offset int) {
 	return limit, offset
 }
 
-func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {
+// GetProduct returns a single product by id.
+// Public callers see active products only.
+// Authenticated product managers see all statuses (including draft variants).
+func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -291,12 +298,22 @@ func (h *Handler) PublicGetProduct(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "missing product id")
 		return
 	}
-	product, err := h.svc.GetPublicProduct(id)
+	manager := false
+	var product *domain.Product
+	var err error
+	if claims, ok := authjwt.FromContext(r.Context()); ok && claims.HasPermission(permissions.ProductRead) {
+		manager = true
+		product, err = h.svc.GetProduct(id)
+	} else {
+		product, err = h.svc.GetPublicProduct(id)
+	}
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
-	h.recordProductView(w, r, product)
+	if !manager {
+		h.recordProductView(w, r, product)
+	}
 	h.respondJSON(w, http.StatusOK, product)
 }
 

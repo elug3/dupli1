@@ -97,6 +97,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	}
 
 	mux.Handle("GET "+handler.RouteProducts, middleware.OptionalAuth(validator, h.SearchProductsHandler()))
+	mux.Handle("GET "+handler.RoutePublicProduct, middleware.OptionalAuth(validator, h.GetProductHandler()))
 	mux.Handle("GET "+handler.RouteWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.ListWishlist)))
 	mux.Handle("PUT "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.AddWishlist)))
 	mux.Handle("POST "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.AddWishlist)))
