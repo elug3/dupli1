@@ -39,6 +39,7 @@ func TestRespondServiceErrorKeepsClientErrors(t *testing.T) {
 		{ports.ErrNotFound, http.StatusNotFound},
 		{ports.ErrIdempotencyConflict, http.StatusConflict},
 		{domain.ErrInvalidOrder, http.StatusBadRequest},
+		{domain.ErrInvalidFulfillment, http.StatusBadRequest},
 		{domain.ErrSessionNotOpen, http.StatusBadRequest},
 		{ports.ErrProductUnavailable, http.StatusBadGateway},
 	}
