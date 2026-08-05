@@ -120,8 +120,9 @@ See [service-layout.md](service-layout.md) for details.
 ### dupli1-notification
 
 - **Host port:** 8084
-- **Features:** NATS subscriber; Telegram alerts on order/product events when `TELEGRAM_*` is set. Handler failures (payload decode, Telegram send) are logged; core NATS does not redeliver, so a failed alert is dropped after the log line
-- **Production:** bot token + chat IDs from Secrets Manager `dupli1/production/telegram` (see [deployment-aws.md](deployment-aws.md) / Terraform README)
+- **Features:** NATS subscriber; Telegram ops alerts when `TELEGRAM_*` is set; allowlisted `/start` for chat ID discovery. See [notification-telegram-bot.md](notification-telegram-bot.md)
+- **Handler failures** (payload decode, Telegram send) are logged; core NATS does not redeliver, so a failed alert is dropped after the log line
+- **Production:** bot token from Secrets Manager `dupli1/production/telegram`; chat routing transitional via env (target: auth DB / Manager Settings)
 - **Status:** Health + event dispatch (no outbound email/SMS yet)
 
 ### dupli1-proxy
