@@ -71,6 +71,12 @@ const (
 	PaymentBypass  = "payment.bypass"
 )
 
+// Notification permissions (notification service).
+const (
+	NotificationTelegramRead   = "notification.telegram.read"
+	NotificationTelegramManage = "notification.telegram.manage"
+)
+
 // All lists every concrete (non-wildcard) permission in the catalog.
 var Catalog = []string{
 	UserCreate,
@@ -103,6 +109,8 @@ var Catalog = []string{
 	PaymentCreate,
 	PaymentReadAll,
 	PaymentBypass,
+	NotificationTelegramRead,
+	NotificationTelegramManage,
 }
 
 // known is the set of concrete permissions for O(1) lookup.
