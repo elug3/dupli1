@@ -11,10 +11,34 @@ const (
 	pollErrorBackoff = 5 * time.Second
 )
 
-// RunPoller long-polls Telegram for updates and handles bot commands.
-// It returns when ctx is cancelled.
-func RunPoller(ctx context.Context, client *Client) {
-	if client == nil || !client.Enabled() {
+// DrainUpdates fetches and processes pending updates once (used after webhook setup).
+func DrainUpdates(ctx context.Context, client *Client, processor *UpdateProcessor) error {
+	if client == nil || !client.Enabled() || processor == nil {
+		return nil
+	}
+	var offset int64
+	for {
+		updates, err := client.GetUpdates(ctx, offset, 0)
+		if err != nil {
+			return err
+		}
+		if len(updates) == 0 {
+			return nil
+		}
+		for _, update := range updates {
+			if update.UpdateID >= offset {
+				offset = update.UpdateID + 1
+			}
+			if err := processor.Handle(ctx, update); err != nil {
+				log.Printf("telegram drain update: %v", err)
+			}
+		}
+	}
+}
+
+// RunPoller long-polls Telegram when webhook mode is not configured.
+func RunPoller(ctx context.Context, client *Client, processor *UpdateProcessor) {
+	if client == nil || !client.Enabled() || processor == nil {
 		return
 	}
 
@@ -26,14 +50,14 @@ func RunPoller(ctx context.Context, client *Client) {
 	if err := pollClient.DeleteWebhook(ctx); err != nil {
 		log.Printf("telegram deleteWebhook: %v", err)
 	} else {
-		log.Println("telegram command poller started")
+		log.Println("telegram polling mode started")
 	}
 
 	var offset int64
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("telegram command poller stopped")
+			log.Println("telegram poller stopped")
 			return
 		default:
 		}
@@ -52,11 +76,8 @@ func RunPoller(ctx context.Context, client *Client) {
 			if update.UpdateID >= offset {
 				offset = update.UpdateID + 1
 			}
-			if update.Message == nil {
-				continue
-			}
-			if err := HandleMessage(ctx, client, update.Message); err != nil {
-				log.Printf("telegram handle message: %v", err)
+			if err := processor.Handle(ctx, update); err != nil {
+				log.Printf("telegram handle update: %v", err)
 			}
 		}
 	}

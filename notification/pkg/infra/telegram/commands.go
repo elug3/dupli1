@@ -1,7 +1,6 @@
 package telegram
 
 import (
-	"context"
 	"fmt"
 	"strings"
 )
@@ -20,6 +19,19 @@ func IsStartCommand(text string) bool {
 	return cmd == "/start"
 }
 
+// FormatPendingReply is sent when a user is registered but not yet accepted.
+func FormatPendingReply(chat Chat) string {
+	return fmt.Sprintf(
+		"⏳ <b>Registration received</b>\n\n"+
+			"%s\n"+
+			"Chat ID: <code>%s</code>\n\n"+
+			"A manager must approve this chat before alerts are enabled. "+
+			"You will be able to use /start again after approval.",
+		chatLabel(chat),
+		escapeHTML(chat.FormatID()),
+	)
+}
+
 // FormatStartReply returns the welcome message for /start, including the chat ID for ops setup.
 func FormatStartReply(chat Chat) string {
 	chatID := chat.FormatID()
@@ -30,9 +42,7 @@ func FormatStartReply(chat Chat) string {
 			"This bot sends order and product notifications from the Dupli1 marketplace.\n\n"+
 			"%s\n"+
 			"Chat ID: <code>%s</code>\n\n"+
-			"Add this ID to <code>TELEGRAM_ORDER_CHAT_ID</code> and/or "+
-			"<code>TELEGRAM_PRODUCT_CHAT_ID</code> in AWS Secrets Manager "+
-			"(<code>dupli1/production/telegram</code>) to receive alerts.",
+			"You are on the approved list and can receive ops alerts from this chat.",
 		chatLabel,
 		escapeHTML(chatID),
 	)
@@ -73,23 +83,4 @@ func escapeHTML(value string) string {
 		">", "&gt;",
 	)
 	return replacer.Replace(strings.TrimSpace(value))
-}
-
-// HandleMessage processes an incoming message and sends replies when needed.
-func HandleMessage(ctx context.Context, client *Client, msg *Message) error {
-	if client == nil || msg == nil {
-		return nil
-	}
-	if !IsStartCommand(msg.Text) {
-		return nil
-	}
-	if client.allowlist != nil && !client.allowlist.AllowsIncoming(msg.Chat, msg.From) {
-		return nil
-	}
-
-	reply := FormatStartReply(msg.Chat)
-	if err := client.Send(ctx, msg.Chat.FormatID(), reply); err != nil {
-		return fmt.Errorf("reply to /start: %w", err)
-	}
-	return nil
 }

@@ -8,8 +8,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/elug3/dupli1/notification/pkg/domain"
+	"github.com/elug3/dupli1/notification/pkg/infra/memory"
 	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
+	"github.com/elug3/dupli1/notification/pkg/service"
 )
+
+type stubLookup struct {
+	sub *domain.TelegramSubscription
+}
+
+func (s *stubLookup) RegisterFromMessage(ctx context.Context, in telegram.SubscriptionInput) (*domain.TelegramSubscription, error) {
+	return s.sub, nil
+}
+
+func (s *stubLookup) FindForMessage(ctx context.Context, chatID string, userID *int64) (*domain.TelegramSubscription, error) {
+	return s.sub, nil
+}
 
 func TestIsStartCommand(t *testing.T) {
 	tests := []struct {
@@ -45,7 +60,7 @@ func TestFormatStartReplyIncludesChatID(t *testing.T) {
 	}
 }
 
-func TestHandleMessageStartSendsReply(t *testing.T) {
+func TestUpdateProcessorStartAccepted(t *testing.T) {
 	var gotChatID, gotText string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/sendMessage") {
@@ -66,65 +81,89 @@ func TestHandleMessageStartSendsReply(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	token := "test-token"
-	client := telegram.NewTestClient(token, srv.Client(), srv.URL)
-	client.SetAllowlist(telegram.NewAllowlist("42", "", "42"))
+	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	access := service.NewTelegramAccess(service.NewTelegramSubscriptions(memory.NewTelegramRepository()), nil)
+	_ = access.Refresh(context.Background())
 
-	msg := &telegram.Message{
-		Text: "/start",
-		From: &telegram.User{ID: 42},
-		Chat: telegram.Chat{ID: 42, Type: "private", FirstName: "Alex"},
+	processor := &telegram.UpdateProcessor{
+		Client: client,
+		Policy: access,
+		Lookup: &stubLookup{sub: &domain.TelegramSubscription{
+			ChatID: "42",
+			Status: domain.SubscriptionStatusAccepted,
+		}},
 	}
-	if err := telegram.HandleMessage(context.Background(), client, msg); err != nil {
-		t.Fatalf("HandleMessage: %v", err)
+
+	update := telegram.Update{
+		Message: &telegram.Message{
+			Text: "/start",
+			From: &telegram.User{ID: 42},
+			Chat: telegram.Chat{ID: 42, Type: "private", FirstName: "Alex"},
+		},
+	}
+	if err := processor.Handle(context.Background(), update); err != nil {
+		t.Fatalf("Handle: %v", err)
 	}
 	if gotChatID != "42" {
 		t.Fatalf("chat id = %q, want 42", gotChatID)
 	}
-	if !strings.Contains(gotText, "<code>42</code>") {
-		t.Fatalf("expected chat id in reply text, got %q", gotText)
+	if !strings.Contains(gotText, "Welcome") {
+		t.Fatalf("expected welcome reply, got %q", gotText)
 	}
 }
 
-func TestHandleMessageStartDeniedWhenNotOnList(t *testing.T) {
-	called := false
+func TestUpdateProcessorStartPending(t *testing.T) {
+	var gotText string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusTeapot)
+		var body struct {
+			Text string `json:"text"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotText = body.Text
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 	t.Cleanup(srv.Close)
 
 	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
-	client.SetAllowlist(telegram.NewAllowlist("", "", "42"))
+	processor := &telegram.UpdateProcessor{
+		Client: client,
+		Lookup: &stubLookup{sub: &domain.TelegramSubscription{
+			ChatID: "42",
+			Status: domain.SubscriptionStatusPending,
+		}},
+	}
 
-	msg := &telegram.Message{
-		Text: "/start",
-		From: &telegram.User{ID: 99},
-		Chat: telegram.Chat{ID: 99, Type: "private"},
+	update := telegram.Update{
+		Message: &telegram.Message{
+			Text: "/start",
+			Chat: telegram.Chat{ID: 42, Type: "private"},
+		},
 	}
-	if err := telegram.HandleMessage(context.Background(), client, msg); err != nil {
-		t.Fatalf("HandleMessage: %v", err)
+	if err := processor.Handle(context.Background(), update); err != nil {
+		t.Fatalf("Handle: %v", err)
 	}
-	if called {
-		t.Fatal("expected no API call for user not on allowlist")
+	if !strings.Contains(gotText, "Registration received") {
+		t.Fatalf("expected pending reply, got %q", gotText)
 	}
 }
 
-func TestHandleMessageIgnoresOtherCommands(t *testing.T) {
+func TestUpdateProcessorIgnoresOtherCommands(t *testing.T) {
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		w.WriteHeader(http.StatusTeapot)
 	}))
 	t.Cleanup(srv.Close)
 
 	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
-	msg := &telegram.Message{
-		Text: "/help",
-		Chat: telegram.Chat{ID: 1, Type: "private"},
+	processor := &telegram.UpdateProcessor{Client: client}
+	update := telegram.Update{
+		Message: &telegram.Message{
+			Text: "/help",
+			Chat: telegram.Chat{ID: 1, Type: "private"},
+		},
 	}
-	if err := telegram.HandleMessage(context.Background(), client, msg); err != nil {
-		t.Fatalf("HandleMessage: %v", err)
+	if err := processor.Handle(context.Background(), update); err != nil {
+		t.Fatalf("Handle: %v", err)
 	}
 	if called {
 		t.Fatal("expected no API call for /help")

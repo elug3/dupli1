@@ -22,7 +22,13 @@ const (
 	SubjectProductImage      = "product.image_uploaded"
 )
 
+type ChatRouting interface {
+	OrderChatID(ctx context.Context) string
+	ProductChatID(ctx context.Context) string
+}
+
 type DispatcherConfig struct {
+	Routing       ChatRouting
 	OrderChatID   string
 	ProductChatID string
 }
@@ -94,9 +100,9 @@ func (d *Dispatcher) handleOrder(ctx context.Context, subject string, payload []
 		return fmt.Errorf("decode order event: %w", err)
 	}
 
-	chatID := strings.TrimSpace(d.cfg.OrderChatID)
+	chatID := strings.TrimSpace(d.orderChatID(ctx))
 	if chatID == "" {
-		log.Printf("order event %s for %s skipped: TELEGRAM_ORDER_CHAT_ID not set", subject, event.OrderID)
+		log.Printf("order event %s for %s skipped: order telegram chat not configured", subject, event.OrderID)
 		return nil
 	}
 
@@ -125,9 +131,9 @@ func (d *Dispatcher) handleProduct(ctx context.Context, subject string, payload 
 		return fmt.Errorf("decode product event: %w", err)
 	}
 
-	chatID := strings.TrimSpace(d.cfg.ProductChatID)
+	chatID := strings.TrimSpace(d.productChatID(ctx))
 	if chatID == "" {
-		log.Printf("product event %s for %s skipped: TELEGRAM_PRODUCT_CHAT_ID not set", subject, event.ProductID)
+		log.Printf("product event %s for %s skipped: product telegram chat not configured", subject, event.ProductID)
 		return nil
 	}
 
@@ -136,6 +142,24 @@ func (d *Dispatcher) handleProduct(ctx context.Context, subject string, payload 
 		return fmt.Errorf("notify product event: %w", err)
 	}
 	return nil
+}
+
+func (d *Dispatcher) orderChatID(ctx context.Context) string {
+	if d.cfg.Routing != nil {
+		if id := strings.TrimSpace(d.cfg.Routing.OrderChatID(ctx)); id != "" {
+			return id
+		}
+	}
+	return strings.TrimSpace(d.cfg.OrderChatID)
+}
+
+func (d *Dispatcher) productChatID(ctx context.Context) string {
+	if d.cfg.Routing != nil {
+		if id := strings.TrimSpace(d.cfg.Routing.ProductChatID(ctx)); id != "" {
+			return id
+		}
+	}
+	return strings.TrimSpace(d.cfg.ProductChatID)
 }
 
 func formatOrderMessage(subject string, event orderEvent) string {

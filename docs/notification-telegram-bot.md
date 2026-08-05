@@ -2,7 +2,7 @@
 
 Design and operations guide for the Dupli1 ops Telegram bot (`dupli1-notification`).
 
-**Status:** Bot token + allowlist + `/start` implemented (env/config). **Target:** chat IDs and routing stored in auth DB and managed via Manager Settings API (not Secrets Manager).
+**Status:** Webhook (or polling fallback), PostgreSQL subscriptions, manager accept API, and `/start` implemented. Global Manager Settings integration remains a follow-up.
 
 **Related:** [current-state.md](current-state.md), [deployment-aws.md](deployment-aws.md), [manager-settings-api.md](manager-settings-api.md), [payment-service.md](payment-service.md).
 
@@ -26,8 +26,9 @@ Product / Order / Payment services
         ▼
  dupli1-notification  ──►  Telegram Bot API  ──►  ops group / DM
         ▲
-        │ long-poll getUpdates (commands)
-        └── /start from allowlisted users
+        │ webhook POST /telegram/webhook  (prod)
+        │ or getUpdates drain/poll        (local / fallback)
+        └── stores chat_id in PostgreSQL; manager accepts users/chats
 ```
 
 ---
@@ -38,9 +39,9 @@ Product / Order / Payment services
 |-------|------|
 | `dupli1-notification` | Subscribes to NATS; formats HTML messages; sends via Bot API |
 | `dupli1-nats` | Event bus (`order.*`, `product.*`, `payment.succeeded` consumed indirectly via order) |
-| Telegram Bot API | Outbound `sendMessage`; inbound `getUpdates` for `/start` |
-| Secrets Manager `dupli1/production/telegram` | **Bot token only** (target). Transitional: also holds chat IDs via env |
-| Auth DB `dupli1_db` | **Target:** chat routing, allowlist, channel/event toggles |
+| Telegram Bot API | Outbound `sendMessage`; inbound webhook or `getUpdates` |
+| Secrets Manager `dupli1/production/telegram` | **Bot token** (+ transitional env chat IDs) |
+| PostgreSQL `notifications` | `telegram_subscriptions` — pending/accepted users and chat IDs |
 
 Production bot (2026-08): `@MHYM7_BOT` (`dupli1_notification`).
 
@@ -53,17 +54,54 @@ Production bot (2026-08): `@MHYM7_BOT` (`dupli1_notification`).
 | Data | Sensitivity | Store (target) | Store (today) |
 |------|-------------|----------------|---------------|
 | `TELEGRAM_BOT_TOKEN` | **Secret** — full send access as the bot | Secrets Manager | Secrets Manager |
-| Telegram **user IDs** (allowlist) | ACL — who may use bot commands | Auth DB | Env `TELEGRAM_ALLOWED_USER_IDS` |
-| **Chat IDs** (destinations) | Config — where alerts go; not credentials | Auth DB | Env / Secrets Manager (transitional) |
+| Telegram **user IDs** (allowlist) | ACL — who may use bot commands | PostgreSQL `telegram_subscriptions` | Env `TELEGRAM_ALLOWED_USER_IDS` (bootstrap) |
+| **Chat IDs** (destinations) | Config — where alerts go; not credentials | PostgreSQL `telegram_subscriptions` | Env `TELEGRAM_ORDER_CHAT_ID` / `PRODUCT` (fallback) |
 | Channel / event toggles | Policy | Auth DB (`settings.notifications`) | Not implemented |
 
 ### Access rules (implemented)
 
-1. **Outbound ops alerts** — sent only to configured `TELEGRAM_ORDER_CHAT_ID` and `TELEGRAM_PRODUCT_CHAT_ID` (allowlist enforces chat IDs on `Send`).
-2. **`/start` replies** — only for:
-   - Telegram users in `TELEGRAM_ALLOWED_USER_IDS`, or
-   - chats that already match a configured order/product chat ID.
-3. **Everyone else** — silently ignored (no reply, no error leaked to sender).
+1. **Inbound messages** (webhook or `getUpdates`) upsert a **pending** `telegram_subscriptions` row with `chat_id` and `telegram_user_id`.
+2. **Managers** accept or reject pending rows, or manually add a user ID / chat ID via the REST API (`notification.telegram.manage`).
+3. **Outbound ops alerts** — sent to env chat IDs, or to accepted subscriptions with `alert_order` / `alert_product` when env is unset.
+4. **`/start` replies** — pending users get a “registration received” message; accepted users (or env allowlist) get the welcome + chat ID.
+5. **Everyone else** — silently ignored on `/start`.
+
+### Manager API
+
+Requires Bearer JWT with `notification.telegram.read` (list) or `notification.telegram.manage` (create/accept/reject/delete).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/notification/telegram/subscriptions?status=pending` | List registrations |
+| `POST` | `/api/v1/notification/telegram/subscriptions` | Manually accept a user ID and/or chat ID |
+| `POST` | `/api/v1/notification/telegram/subscriptions/{id}/accept` | Accept pending registration (`alert_order`, `alert_product` in body) |
+| `POST` | `/api/v1/notification/telegram/subscriptions/{id}/reject` | Reject pending registration |
+| `DELETE` | `/api/v1/notification/telegram/subscriptions/{id}` | Remove subscription |
+
+Manual create body example:
+
+```json
+{
+  "telegram_user_id": 123456789,
+  "chat_id": "-1001234567890",
+  "chat_label": "Ops group",
+  "alert_order": true,
+  "alert_product": true
+}
+```
+
+Either `telegram_user_id` or `chat_id` is required (both may be set).
+
+### Webhook vs polling
+
+| Mode | When | Behaviour |
+|------|------|-----------|
+| **Webhook** | `TELEGRAM_WEBHOOK_URL` set (production) | `setWebhook` on startup; Telegram POSTs updates; service drains `getUpdates` once to store backlog chat IDs |
+| **Polling** | webhook URL empty (local dev) | `deleteWebhook` + long-poll `getUpdates` |
+
+Webhook URL (via gateway): `https://<host>/api/v1/notification/telegram/webhook`
+
+Set `TELEGRAM_WEBHOOK_SECRET`; Telegram sends it as `X-Telegram-Bot-Api-Secret-Token`.
 
 ### Why chat IDs should not live in Secrets Manager
 
@@ -73,21 +111,25 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 
 ## Configuration tiers
 
-### Today (v1 — env / Secrets Manager)
-
-Injected into `dupli1-notification` as environment variables (Compose or ECS secrets):
+### Environment variables
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
+| `DUPLI1_NOTIFICATION_DB` | Recommended (prod) | PostgreSQL `notifications` database |
 | `TELEGRAM_BOT_TOKEN` | Yes (for Telegram) | Bot API token from [@BotFather](https://t.me/BotFather) |
-| `TELEGRAM_ALLOWED_USER_IDS` | Recommended | Comma-separated Telegram **user** IDs allowed to use `/start` |
-| `TELEGRAM_ORDER_CHAT_ID` | For order alerts | Group/supergroup/channel or DM chat ID |
-| `TELEGRAM_PRODUCT_CHAT_ID` | For product alerts | Same; may equal order chat for a single ops channel |
+| `TELEGRAM_WEBHOOK_URL` | Production | Public HTTPS webhook URL |
+| `TELEGRAM_WEBHOOK_SECRET` | Recommended | Validates `X-Telegram-Bot-Api-Secret-Token` |
+| `AUTH_JWKS_URL` | For manager API | Auth JWKS for RS256 manager tokens |
+| `TELEGRAM_ALLOWED_USER_IDS` | Optional bootstrap | Comma-separated user IDs until DB entries exist |
+| `TELEGRAM_ORDER_CHAT_ID` | Fallback routing | Order alerts chat when no DB `alert_order` row |
+| `TELEGRAM_PRODUCT_CHAT_ID` | Fallback routing | Product alerts chat when no DB `alert_product` row |
 | `NATS_URL` | Yes (for dispatch) | e.g. `nats://nats.dupli1.local:4222` |
+
+Local DB: `postgres://dupli1:dupli1_dev@localhost:5438/notifications?sslmode=disable`
 
 If order/product chat IDs are empty, events are **logged and skipped** (no Telegram send). Core NATS does not redeliver — a missed alert is only visible in CloudWatch (`/ecs/dupli1-notification`).
 
-### Target (v1.1+ — database + Manager Settings)
+### Target (follow-up — global Manager Settings)
 
 Host mutable notification config in **auth** (`dupli1_db`), consistent with [manager-settings-api.md](manager-settings-api.md):
 
@@ -292,10 +334,9 @@ CloudWatch: `/ecs/dupli1-notification`
 
 | Step | Description |
 |------|-------------|
-| **Done** | NATS → Telegram dispatch; allowlist; `/start` with chat ID |
-| **Next** | Move chat IDs + allowlist to auth DB; `settings.notifications` section |
-| **Then** | Manage-web UI for destinations and event toggles |
-| **Later** | `/start` auto-registers chat in DB; optional per-user DM routing |
+| **Done** | NATS → Telegram dispatch; PostgreSQL subscriptions; webhook + getUpdates; manager accept API; `/start` |
+| **Next** | Manage-web UI; wire `settings.notifications` in auth for global toggles |
+| **Later** | Event-type mute flags per subscription |
 
 ---
 

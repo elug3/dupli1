@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,7 +13,9 @@ import (
 
 // User is a Telegram user who sent a message.
 type User struct {
-	ID int64 `json:"id"`
+	ID        int64  `json:"id"`
+	Username  string `json:"username"`
+	FirstName string `json:"first_name"`
 }
 
 // Chat is a Telegram chat from an incoming update.
@@ -106,4 +109,48 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeout int) ([]U
 	}
 
 	return result.Result, nil
+}
+
+// SetWebhook registers the bot webhook URL and optional secret token.
+func (c *Client) SetWebhook(ctx context.Context, webhookURL, secretToken string) error {
+	if c == nil || c.token == "" {
+		return nil
+	}
+	webhookURL = strings.TrimSpace(webhookURL)
+	if webhookURL == "" {
+		return fmt.Errorf("telegram webhook url is required")
+	}
+
+	payload := map[string]any{
+		"url":                  webhookURL,
+		"allowed_updates":      []string{"message"},
+		"drop_pending_updates": false,
+	}
+	if secret := strings.TrimSpace(secretToken); secret != "" {
+		payload["secret_token"] = secret
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal setWebhook request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/bot%s/setWebhook", c.baseURL(), c.token)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create setWebhook request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("set telegram webhook: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("telegram setWebhook status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	return nil
 }
