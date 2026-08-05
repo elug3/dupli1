@@ -145,6 +145,7 @@ func Bootstrap(cfg Config) (*App, error) {
 			Routing:       routing,
 			OrderChatID:   cfg.OrderChatID,
 			ProductChatID: cfg.ProductChatID,
+			ManageWebURL:  cfg.ManageWebURL,
 		})
 		if err := dispatcher.Register(subscriber, context.Background()); err != nil {
 			natsSubscriber.Close()

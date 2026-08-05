@@ -68,6 +68,7 @@ type orderEvent struct {
 	DiscountCents int64              `json:"discount_cents"`
 	TotalCents    int64              `json:"total_cents"`
 	Items         []orderItemEvent   `json:"items"`
+	CreatedAt     time.Time          `json:"created_at"`
 	Occurred      time.Time          `json:"occurred_at"`
 }
 
@@ -382,6 +383,7 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 		DiscountCents: order.DiscountCents,
 		TotalCents:    order.TotalCents,
 		Items:         items,
+		CreatedAt:     order.CreatedAt,
 		Occurred:      s.now(),
 	})
 	if err != nil {

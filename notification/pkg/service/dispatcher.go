@@ -31,6 +31,7 @@ type DispatcherConfig struct {
 	Routing       ChatRouting
 	OrderChatID   string
 	ProductChatID string
+	ManageWebURL  string
 }
 
 type Dispatcher struct {
@@ -85,6 +86,7 @@ type orderEvent struct {
 	DiscountCents int64           `json:"discount_cents"`
 	TotalCents    int64           `json:"total_cents"`
 	Items         []orderItemView `json:"items"`
+	CreatedAt     time.Time       `json:"created_at"`
 	Occurred      time.Time       `json:"occurred_at"`
 }
 
@@ -106,7 +108,7 @@ func (d *Dispatcher) handleOrder(ctx context.Context, subject string, payload []
 		return nil
 	}
 
-	message := formatOrderMessage(subject, event)
+	message := formatOrderMessage(subject, event, d.cfg.ManageWebURL)
 	if err := d.notifier.Send(ctx, chatID, message); err != nil {
 		return fmt.Errorf("notify order event: %w", err)
 	}
@@ -162,7 +164,7 @@ func (d *Dispatcher) productChatID(ctx context.Context) string {
 	return strings.TrimSpace(d.cfg.ProductChatID)
 }
 
-func formatOrderMessage(subject string, event orderEvent) string {
+func formatOrderMessage(subject string, event orderEvent, manageWebURL string) string {
 	items := make([]string, 0, len(event.Items))
 	for _, item := range event.Items {
 		items = append(items, fmt.Sprintf("%d× %s", item.Quantity, escapeHTML(item.SKU)))
@@ -173,19 +175,26 @@ func formatOrderMessage(subject string, event orderEvent) string {
 	}
 
 	total := formatMoney(event.TotalCents)
+	createdLine := formatOrderCreatedAt(event.CreatedAt, event.Occurred)
+	manageLink := formatManageOrderLink(manageWebURL, event.OrderID)
+
 	switch subject {
 	case SubjectOrderPaid:
 		return fmt.Sprintf(
-			"💳 <b>Order paid — action required</b> %s\nStatus: <b>paid</b>\nCustomer: %s\nItems: %s\nTotal: <b>%s</b>\nShip when ready.",
+			"💳 <b>Order paid — action required</b> %s\n%s%sStatus: <b>paid</b>\nCustomer: %s\nItems: %s\nTotal: <b>%s</b>\nShip when ready.",
 			escapeHTML(event.OrderID),
+			createdLine,
+			manageLink,
 			escapeHTML(event.CustomerID),
 			itemsLine,
 			total,
 		)
 	case SubjectOrderCreated:
 		return fmt.Sprintf(
-			"🛒 <b>New order</b> %s\nStatus: <b>%s</b>\nCustomer: %s\nItems: %s\nTotal: <b>%s</b>",
+			"🛒 <b>New order</b> %s\n%s%sStatus: <b>%s</b>\nCustomer: %s\nItems: %s\nTotal: <b>%s</b>",
 			escapeHTML(event.OrderID),
+			createdLine,
+			manageLink,
 			escapeHTML(event.Status),
 			escapeHTML(event.CustomerID),
 			itemsLine,
@@ -193,13 +202,40 @@ func formatOrderMessage(subject string, event orderEvent) string {
 		)
 	default:
 		return fmt.Sprintf(
-			"📦 <b>Order update</b> %s\nStatus: <b>%s</b>\nCustomer: %s\nTotal: <b>%s</b>",
+			"📦 <b>Order update</b> %s\n%s%sStatus: <b>%s</b>\nCustomer: %s\nTotal: <b>%s</b>",
 			escapeHTML(event.OrderID),
+			createdLine,
+			manageLink,
 			escapeHTML(event.Status),
 			escapeHTML(event.CustomerID),
 			total,
 		)
 	}
+}
+
+func formatOrderCreatedAt(createdAt, occurredAt time.Time) string {
+	t := createdAt
+	if t.IsZero() {
+		t = occurredAt
+	}
+	if t.IsZero() {
+		return ""
+	}
+	loc, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		loc = time.UTC
+	}
+	return fmt.Sprintf("Created: <b>%s</b>\n", escapeHTML(t.In(loc).Format("2006-01-02 15:04 KST")))
+}
+
+func formatManageOrderLink(manageWebURL, orderID string) string {
+	manageWebURL = strings.TrimRight(strings.TrimSpace(manageWebURL), "/")
+	orderID = strings.TrimSpace(orderID)
+	if manageWebURL == "" || orderID == "" {
+		return ""
+	}
+	url := fmt.Sprintf("%s/orders/%s", manageWebURL, escapeHTML(orderID))
+	return fmt.Sprintf("<a href=\"%s\">View order in manage-web</a>\n", url)
 }
 
 func formatProductMessage(subject string, event productEvent) string {

@@ -33,6 +33,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 		allowedUserIDs        = opts.AllowedUserIDs
 		orderChatID           = opts.OrderChatID
 		productChatID         = opts.ProductChatID
+		manageWebURL          = opts.ManageWebURL
 		readTimeoutSec        = int(opts.ReadTimeout / time.Second)
 		writeTimeoutSec       = int(opts.WriteTimeout / time.Second)
 		idleTimeoutSec        = int(opts.IdleTimeout / time.Second)
@@ -52,6 +53,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	fs.StringVar(&allowedUserIDs, "telegram-allowed-user-ids", allowedUserIDs, "Comma-separated Telegram user IDs allowed to use bot commands")
 	fs.StringVar(&orderChatID, "telegram-order-chat-id", orderChatID, "Telegram chat ID for order manager alerts")
 	fs.StringVar(&productChatID, "telegram-product-chat-id", productChatID, "Telegram chat ID for product manager alerts")
+	fs.StringVar(&manageWebURL, "manage-web-url", manageWebURL, "Base URL for manage-web order links in Telegram alerts")
 	fs.IntVar(&readTimeoutSec, "read-timeout", readTimeoutSec, "Read timeout in seconds")
 	fs.IntVar(&writeTimeoutSec, "write-timeout", writeTimeoutSec, "Write timeout in seconds")
 	fs.IntVar(&idleTimeoutSec, "idle-timeout", idleTimeoutSec, "Idle timeout in seconds")
@@ -76,6 +78,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	opts.AllowedUserIDs = allowedUserIDs
 	opts.OrderChatID = orderChatID
 	opts.ProductChatID = productChatID
+	opts.ManageWebURL = manageWebURL
 	opts.ReadTimeout = time.Duration(readTimeoutSec) * time.Second
 	opts.WriteTimeout = time.Duration(writeTimeoutSec) * time.Second
 	opts.IdleTimeout = time.Duration(idleTimeoutSec) * time.Second
@@ -119,6 +122,9 @@ func applyEnv(opts *notification.ServerOptions) {
 	}
 	if v := os.Getenv("TELEGRAM_PRODUCT_CHAT_ID"); v != "" {
 		opts.ProductChatID = v
+	}
+	if v := os.Getenv("MANAGE_WEB_URL"); v != "" {
+		opts.ManageWebURL = v
 	}
 }
 
