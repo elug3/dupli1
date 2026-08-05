@@ -229,6 +229,7 @@ Omit `method` (or send `credit_card`) for Stripe Checkout. Managers with `paymen
 | `DUPLI1_PAYMENT_ORDER_TTL` | order | `5m` pending payment window |
 | `NATS_URL` | all | Event bus |
 | `TELEGRAM_BOT_TOKEN` | notification | Bot token (prod: Secrets Manager `dupli1/production/telegram`) |
+| `TELEGRAM_ALLOWED_USER_IDS` | notification | Comma-separated Telegram user IDs allowed to use `/start` (same secret) |
 | `TELEGRAM_ORDER_CHAT_ID` | notification | Ops chat (same secret) |
 | `TELEGRAM_PRODUCT_CHAT_ID` | notification | Product ops chat (same secret) |
 

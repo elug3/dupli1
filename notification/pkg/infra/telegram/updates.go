@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+// User is a Telegram user who sent a message.
+type User struct {
+	ID int64 `json:"id"`
+}
+
 // Chat is a Telegram chat from an incoming update.
 type Chat struct {
 	ID        int64  `json:"id"`
@@ -24,6 +29,7 @@ type Message struct {
 	MessageID int64  `json:"message_id"`
 	Text      string `json:"text"`
 	Chat      Chat   `json:"chat"`
+	From      *User  `json:"from"`
 }
 
 // Update is a Telegram Bot API update.

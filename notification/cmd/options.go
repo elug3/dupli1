@@ -25,6 +25,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 		addr               string
 		natsURL            = opts.NATSURL
 		telegramToken      = opts.TelegramToken
+		allowedUserIDs     = opts.AllowedUserIDs
 		orderChatID        = opts.OrderChatID
 		productChatID      = opts.ProductChatID
 		readTimeoutSec     = int(opts.ReadTimeout / time.Second)
@@ -38,6 +39,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	fs.StringVar(&addr, "addr", "", "Server listen address (overrides host/port)")
 	fs.StringVar(&natsURL, "nats-url", natsURL, "NATS server URL")
 	fs.StringVar(&telegramToken, "telegram-token", telegramToken, "Telegram bot token")
+	fs.StringVar(&allowedUserIDs, "telegram-allowed-user-ids", allowedUserIDs, "Comma-separated Telegram user IDs allowed to use bot commands")
 	fs.StringVar(&orderChatID, "telegram-order-chat-id", orderChatID, "Telegram chat ID for order manager alerts")
 	fs.StringVar(&productChatID, "telegram-product-chat-id", productChatID, "Telegram chat ID for product manager alerts")
 	fs.IntVar(&readTimeoutSec, "read-timeout", readTimeoutSec, "Read timeout in seconds")
@@ -56,6 +58,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	}
 	opts.NATSURL = natsURL
 	opts.TelegramToken = telegramToken
+	opts.AllowedUserIDs = allowedUserIDs
 	opts.OrderChatID = orderChatID
 	opts.ProductChatID = productChatID
 	opts.ReadTimeout = time.Duration(readTimeoutSec) * time.Second
@@ -77,6 +80,9 @@ func applyEnv(opts *notification.ServerOptions) {
 	}
 	if v := os.Getenv("TELEGRAM_BOT_TOKEN"); v != "" {
 		opts.TelegramToken = v
+	}
+	if v := os.Getenv("TELEGRAM_ALLOWED_USER_IDS"); v != "" {
+		opts.AllowedUserIDs = v
 	}
 	if v := os.Getenv("TELEGRAM_ORDER_CHAT_ID"); v != "" {
 		opts.OrderChatID = v

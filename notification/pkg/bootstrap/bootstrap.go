@@ -56,6 +56,8 @@ func Bootstrap(cfg Config) (*App, error) {
 	var cancelTelegram context.CancelFunc
 
 	notifier := telegraminfra.NewClient(cfg.TelegramToken, nil)
+	allowlist := telegraminfra.NewAllowlist(cfg.OrderChatID, cfg.ProductChatID, cfg.AllowedUserIDs)
+	notifier.SetAllowlist(allowlist)
 	if notifier.Enabled() {
 		pollerCtx, cancel := context.WithCancel(context.Background())
 		cancelTelegram = cancel

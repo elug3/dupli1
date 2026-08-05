@@ -68,9 +68,11 @@ func TestHandleMessageStartSendsReply(t *testing.T) {
 
 	token := "test-token"
 	client := telegram.NewTestClient(token, srv.Client(), srv.URL)
+	client.SetAllowlist(telegram.NewAllowlist("42", "", "42"))
 
 	msg := &telegram.Message{
 		Text: "/start",
+		From: &telegram.User{ID: 42},
 		Chat: telegram.Chat{ID: 42, Type: "private", FirstName: "Alex"},
 	}
 	if err := telegram.HandleMessage(context.Background(), client, msg); err != nil {
@@ -81,6 +83,30 @@ func TestHandleMessageStartSendsReply(t *testing.T) {
 	}
 	if !strings.Contains(gotText, "<code>42</code>") {
 		t.Fatalf("expected chat id in reply text, got %q", gotText)
+	}
+}
+
+func TestHandleMessageStartDeniedWhenNotOnList(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	client.SetAllowlist(telegram.NewAllowlist("", "", "42"))
+
+	msg := &telegram.Message{
+		Text: "/start",
+		From: &telegram.User{ID: 99},
+		Chat: telegram.Chat{ID: 99, Type: "private"},
+	}
+	if err := telegram.HandleMessage(context.Background(), client, msg); err != nil {
+		t.Fatalf("HandleMessage: %v", err)
+	}
+	if called {
+		t.Fatal("expected no API call for user not on allowlist")
 	}
 }
 

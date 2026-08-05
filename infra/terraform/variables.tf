@@ -112,7 +112,7 @@ variable "jwt_private_key_secret_arn" {
 }
 
 variable "telegram_secret_arn" {
-  description = "Secrets Manager ARN for Telegram bot JSON (TELEGRAM_BOT_TOKEN, TELEGRAM_ORDER_CHAT_ID, TELEGRAM_PRODUCT_CHAT_ID)."
+  description = "Secrets Manager ARN for Telegram bot JSON (TELEGRAM_BOT_TOKEN, TELEGRAM_ORDER_CHAT_ID, TELEGRAM_PRODUCT_CHAT_ID, TELEGRAM_ALLOWED_USER_IDS)."
   type        = string
   default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/telegram-G9Oskq"
 }

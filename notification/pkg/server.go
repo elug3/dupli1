@@ -13,9 +13,10 @@ import (
 type ServerOptions struct {
 	Addr            string
 	NATSURL         string
-	TelegramToken   string
-	OrderChatID     string
-	ProductChatID   string
+	TelegramToken     string
+	AllowedUserIDs    string
+	OrderChatID       string
+	ProductChatID     string
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
@@ -48,6 +49,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		Addr:            opts.Addr,
 		NATSURL:         opts.NATSURL,
 		TelegramToken:   opts.TelegramToken,
+		AllowedUserIDs:  opts.AllowedUserIDs,
 		OrderChatID:     opts.OrderChatID,
 		ProductChatID:   opts.ProductChatID,
 		ReadTimeout:     opts.ReadTimeout,

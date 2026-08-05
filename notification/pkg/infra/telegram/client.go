@@ -18,6 +18,7 @@ type Client struct {
 	token      string
 	httpClient *http.Client
 	apiBase    string
+	allowlist  *Allowlist
 }
 
 // NewClient creates a Telegram notifier. When token is empty the client is a no-op.
@@ -49,6 +50,13 @@ func (c *Client) Enabled() bool {
 	return c != nil && c.token != ""
 }
 
+// SetAllowlist configures which chats may receive outbound messages.
+func (c *Client) SetAllowlist(allowlist *Allowlist) {
+	if c != nil {
+		c.allowlist = allowlist
+	}
+}
+
 // Send posts a text message to the given chat ID.
 func (c *Client) Send(ctx context.Context, chatID string, message string) error {
 	if c == nil || c.token == "" {
@@ -57,6 +65,9 @@ func (c *Client) Send(ctx context.Context, chatID string, message string) error 
 	chatID = strings.TrimSpace(chatID)
 	if chatID == "" {
 		return fmt.Errorf("telegram chat id is required")
+	}
+	if c.allowlist != nil && !c.allowlist.AllowsChat(chatID) {
+		return nil
 	}
 	message = strings.TrimSpace(message)
 	if message == "" {

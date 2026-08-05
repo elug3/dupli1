@@ -83,6 +83,9 @@ func HandleMessage(ctx context.Context, client *Client, msg *Message) error {
 	if !IsStartCommand(msg.Text) {
 		return nil
 	}
+	if client.allowlist != nil && !client.allowlist.AllowsIncoming(msg.Chat, msg.From) {
+		return nil
+	}
 
 	reply := FormatStartReply(msg.Chat)
 	if err := client.Send(ctx, msg.Chat.FormatID(), reply); err != nil {

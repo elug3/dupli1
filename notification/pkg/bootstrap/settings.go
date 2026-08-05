@@ -9,7 +9,8 @@ func BuildSettings(cfg Config) settings.Response {
 	resp := settings.NewResponse("notification")
 	resp.Features = map[string]bool{
 		"nats_dispatcher":    cfg.NATSURL != "",
-		"telegram_enabled":   cfg.TelegramToken != "",
+		"telegram_enabled":        cfg.TelegramToken != "",
+		"allowed_users_configured": cfg.AllowedUserIDs != "",
 		"order_chat_configured":   cfg.OrderChatID != "",
 		"product_chat_configured": cfg.ProductChatID != "",
 	}

@@ -18,23 +18,24 @@ Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `p
 
 ## Telegram (notification)
 
-Secret: `dupli1/production/telegram` (JSON keys `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ORDER_CHAT_ID`, `TELEGRAM_PRODUCT_CHAT_ID`).
+Secret: `dupli1/production/telegram` (JSON keys `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`, `TELEGRAM_ORDER_CHAT_ID`, `TELEGRAM_PRODUCT_CHAT_ID`).
 
 Injected into `dupli1-notification` as ECS secrets. After creating a bot with [@BotFather](https://t.me/BotFather):
 
-1. Put the token in Secrets Manager (never commit it).
-2. Message the bot (or add it to a group), then set chat IDs:
+1. Put the token and allowed Telegram user IDs in Secrets Manager (never commit them).
+2. Allowed users send `/start` to the bot to retrieve a chat ID, then set order/product chat IDs:
 
 ```bash
 aws secretsmanager put-secret-value --secret-id dupli1/production/telegram --secret-string '{
   "TELEGRAM_BOT_TOKEN":"<token>",
+  "TELEGRAM_ALLOWED_USER_IDS":"<user-id-1>,<user-id-2>",
   "TELEGRAM_ORDER_CHAT_ID":"<chat-id>",
   "TELEGRAM_PRODUCT_CHAT_ID":"<chat-id>"
 }'
 aws ecs update-service --cluster production --service dupli1-notification --force-new-deployment
 ```
 
-Chat IDs: open a DM with the bot, send any message, then `getUpdates` on the Bot API, or use a group id (often negative).
+Chat IDs: allowed users send `/start` to the bot, or use a group id (often negative). User IDs: message [@userinfobot](https://t.me/userinfobot) or read `from.id` from Bot API `getUpdates`.
 
 ## Web service account (customer registration)
 

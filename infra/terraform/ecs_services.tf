@@ -514,6 +514,10 @@ resource "aws_ecs_task_definition" "notification" {
           name      = "TELEGRAM_PRODUCT_CHAT_ID"
           valueFrom = "${var.telegram_secret_arn}:TELEGRAM_PRODUCT_CHAT_ID::"
         },
+        {
+          name      = "TELEGRAM_ALLOWED_USER_IDS"
+          valueFrom = "${var.telegram_secret_arn}:TELEGRAM_ALLOWED_USER_IDS::"
+        },
       ]
       logConfiguration = {
         logDriver = "awslogs"
