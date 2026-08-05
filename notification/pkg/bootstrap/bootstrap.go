@@ -16,9 +16,10 @@ import (
 
 // App holds wired notification dependencies.
 type App struct {
-	HTTP       *http.Server
-	subscriber ports.EventSubscriber
-	close      func() error
+	HTTP            *http.Server
+	subscriber      ports.EventSubscriber
+	cancelTelegram  context.CancelFunc
+	close           func() error
 }
 
 // Close releases infrastructure resources.
@@ -52,6 +53,14 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	var subscriber ports.EventSubscriber
 	var closeFns []func() error
+	var cancelTelegram context.CancelFunc
+
+	notifier := telegraminfra.NewClient(cfg.TelegramToken, nil)
+	if notifier.Enabled() {
+		pollerCtx, cancel := context.WithCancel(context.Background())
+		cancelTelegram = cancel
+		go telegraminfra.RunPoller(pollerCtx, notifier)
+	}
 
 	if cfg.NATSURL != "" {
 		natsSubscriber, err := natsinfra.NewSubscriber(cfg.NATSURL)
@@ -64,7 +73,6 @@ func Bootstrap(cfg Config) (*App, error) {
 			return nil
 		})
 
-		notifier := telegraminfra.NewClient(cfg.TelegramToken, nil)
 		if !notifier.Enabled() {
 			log.Println("TELEGRAM_BOT_TOKEN not set — Telegram messages will be skipped")
 		}
@@ -83,9 +91,13 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 
 	return &App{
-		HTTP:       httpSrv,
-		subscriber: subscriber,
+		HTTP:           httpSrv,
+		subscriber:     subscriber,
+		cancelTelegram: cancelTelegram,
 		close: func() error {
+			if cancelTelegram != nil {
+				cancelTelegram()
+			}
 			var errs []error
 			for _, fn := range closeFns {
 				errs = append(errs, fn())

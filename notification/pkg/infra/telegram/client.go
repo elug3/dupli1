@@ -17,6 +17,7 @@ const apiBase = "https://api.telegram.org"
 type Client struct {
 	token      string
 	httpClient *http.Client
+	apiBase    string
 }
 
 // NewClient creates a Telegram notifier. When token is empty the client is a no-op.
@@ -28,6 +29,20 @@ func NewClient(token string, httpClient *http.Client) *Client {
 		token:      strings.TrimSpace(token),
 		httpClient: httpClient,
 	}
+}
+
+// NewTestClient creates a client that talks to a custom API base (for unit tests).
+func NewTestClient(token string, httpClient *http.Client, apiBaseURL string) *Client {
+	c := NewClient(token, httpClient)
+	c.apiBase = strings.TrimRight(strings.TrimSpace(apiBaseURL), "/")
+	return c
+}
+
+func (c *Client) baseURL() string {
+	if c != nil && c.apiBase != "" {
+		return c.apiBase
+	}
+	return apiBase
 }
 
 func (c *Client) Enabled() bool {
@@ -57,7 +72,7 @@ func (c *Client) Send(ctx context.Context, chatID string, message string) error 
 		return fmt.Errorf("marshal telegram request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/bot%s/sendMessage", apiBase, c.token)
+	url := fmt.Sprintf("%s/bot%s/sendMessage", c.baseURL(), c.token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create telegram request: %w", err)
