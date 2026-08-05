@@ -22,6 +22,7 @@ type ServerOptions struct {
 	AllowedUserIDs        string
 	OrderChatID           string
 	ProductChatID         string
+	ManageWebURL          string
 	ReadTimeout           time.Duration
 	WriteTimeout          time.Duration
 	IdleTimeout           time.Duration
@@ -62,6 +63,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		AllowedUserIDs:        opts.AllowedUserIDs,
 		OrderChatID:           opts.OrderChatID,
 		ProductChatID:         opts.ProductChatID,
+		ManageWebURL:          opts.ManageWebURL,
 		ReadTimeout:           opts.ReadTimeout,
 		WriteTimeout:          opts.WriteTimeout,
 		IdleTimeout:           opts.IdleTimeout,

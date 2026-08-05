@@ -500,6 +500,7 @@ resource "aws_ecs_task_definition" "notification" {
       ]
       environment = [
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
+        { name = "MANAGE_WEB_URL", value = "https://manage.dupli1.com" },
       ]
       secrets = [
         {

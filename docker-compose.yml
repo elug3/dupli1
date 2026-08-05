@@ -356,6 +356,7 @@ services:
       TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-}
       TELEGRAM_ORDER_CHAT_ID: ${TELEGRAM_ORDER_CHAT_ID:-}
       TELEGRAM_PRODUCT_CHAT_ID: ${TELEGRAM_PRODUCT_CHAT_ID:-}
+      MANAGE_WEB_URL: ${MANAGE_WEB_URL:-https://manage.dupli1.com}
     depends_on:
       postgres-notification:
         condition: service_healthy
