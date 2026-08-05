@@ -23,8 +23,10 @@ func (r *recordedNotifier) Send(ctx context.Context, chatID string, message stri
 
 func TestDispatcherOrderCreated(t *testing.T) {
 	notifier := &recordedNotifier{}
+	createdAt := time.Date(2026, 8, 5, 10, 30, 0, 0, time.UTC)
 	dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{
-		OrderChatID: "-100123",
+		OrderChatID:  "-100123",
+		ManageWebURL: "https://manage.dupli1.com",
 	})
 
 	payload, err := json.Marshal(map[string]any{
@@ -38,7 +40,8 @@ func TestDispatcherOrderCreated(t *testing.T) {
 		"items": []map[string]any{
 			{"sku": "BAG-001", "quantity": 1, "unit_price_cents": 25000},
 		},
-		"occurred_at": time.Now().UTC(),
+		"created_at":  createdAt,
+		"occurred_at": createdAt,
 	})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
@@ -52,6 +55,12 @@ func TestDispatcherOrderCreated(t *testing.T) {
 	}
 	if !strings.Contains(notifier.message, "₩25,000") {
 		t.Fatalf("expected KRW formatting in message, got %q", notifier.message)
+	}
+	if !strings.Contains(notifier.message, "Created:") || !strings.Contains(notifier.message, "19:30 KST") {
+		t.Fatalf("expected created_at in message, got %q", notifier.message)
+	}
+	if !strings.Contains(notifier.message, `href="https://manage.dupli1.com/orders/ORD-001"`) {
+		t.Fatalf("expected manage-web link in message, got %q", notifier.message)
 	}
 }
 

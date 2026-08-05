@@ -124,6 +124,7 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 | `TELEGRAM_ORDER_CHAT_ID` | Fallback routing | Order alerts chat when no DB `alert_order` row |
 | `TELEGRAM_PRODUCT_CHAT_ID` | Fallback routing | Product alerts chat when no DB `alert_product` row |
 | `NATS_URL` | Yes (for dispatch) | e.g. `nats://nats.dupli1.local:4222` |
+| `MANAGE_WEB_URL` | Recommended | Base URL for “View order in manage-web” links (default `https://manage.dupli1.com`) |
 
 Local DB: `postgres://dupli1:dupli1_dev@localhost:5438/notifications?sslmode=disable`
 
@@ -192,7 +193,7 @@ CREATE TABLE notification_telegram_allowed_users (
 
 | NATS subject | Destination chat | Message summary |
 |--------------|------------------|-----------------|
-| `order.created` | Order | New order, status, customer, items, total (KRW) |
+| `order.created` | Order | New order, `created_at`, manage-web link, status, customer, items, total (KRW) |
 | `order.status_updated` | Order | Status change |
 | `order.paid` | Order | **Paid — action required** (ship when ready) |
 | `product.created` | Product | New product, brand, category, price |
@@ -201,6 +202,20 @@ CREATE TABLE notification_telegram_allowed_users (
 | `product.image_uploaded` | Product | Image URL |
 
 Messages use **HTML** (`parse_mode: HTML`). Amounts use KRW formatting via `shared/pkg/money`.
+
+**Example `order.created` message:**
+
+```text
+🛒 New order ORD-2026-0042
+Created: 2026-08-05 19:30 KST
+View order in manage-web
+Status: pending
+Customer: cust_01JAY6Z9K3F8QW1G7H2T5X0ABC
+Items: 1× BAG-BV-CASSETTE-BLACK, 2× BAG-CH-CLASSIC-TAN
+Total: ₩3,450,000
+```
+
+The manage-web link uses `MANAGE_WEB_URL` (default `https://manage.dupli1.com`) + `/orders/{order_id}`.
 
 Publishers: `order` and `product` services (payment success flows through order → `order.paid`).
 

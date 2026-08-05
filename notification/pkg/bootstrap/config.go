@@ -15,6 +15,7 @@ type Config struct {
 	AllowedUserIDs         string
 	OrderChatID            string
 	ProductChatID          string
+	ManageWebURL           string
 	ReadTimeout            time.Duration
 	WriteTimeout           time.Duration
 	IdleTimeout            time.Duration
