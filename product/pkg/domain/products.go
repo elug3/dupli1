@@ -22,6 +22,10 @@ type Variant struct {
 	ColorCode   string `json:"colorCode,omitempty"`
 	EditionCode string `json:"editionCode,omitempty"` // optional VariantCode segment
 	SizeCode    string `json:"sizeCode,omitempty"`
+	// Dimensions is the physical size of this SKU in millimeters
+	// (e.g. width 340 × height 220 × depth 80). Distinct from Size/SizeCode
+	// letter labels (S/M/L). Optional; omitted when unknown.
+	Dimensions *Dimensions `json:"dimensions,omitempty"`
 	// Price and OfficialPrice are filled from the parent product on read.
 	// They are not stored on the SKU row (price lives on Product).
 	OfficialPrice float64  `json:"officialPrice,omitempty"`

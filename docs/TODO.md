@@ -141,6 +141,7 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 - [x] **Luxury SKU naming system** — `Brand_Style_Color[_Edition]_Size` with master tables (`brands`, `colors`, `sizes`, `sku_editions`); see [product-sku-system.md](product-sku-system.md).
 - [x] **SKU master-data runtime CRUD** — Phase A+B+C: styles table, FKs, catalog APIs (`/api/v1/catalog/...`), `product.master.read|write`, ULID product `id`, strict master codes on product/variant create, read-name enrichment; see [product-sku-master-data-plan.md](product-sku-master-data-plan.md).
 - [x] **Bag merchandising master catalog** — subcategory / style / target seeds + public catalog APIs + `GET /products` filters; see [product-master-catalog.md](product-master-catalog.md).
+- [x] **SKU physical dimensions** — variant `dimensions` `{widthMm, heightMm, depthMm}` in millimeters, distinct from letter `size`/`sizeCode`; see [product-sku-dimensions.md](product-sku-dimensions.md).
 - [ ] **SKU master-data Phase D (admin UI)** — manage brands/styles/colors/sizes/editions in manage-web.
 
 ### Found while implementing SkuID + inventory merge (2026-07-10)
