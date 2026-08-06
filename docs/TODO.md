@@ -142,6 +142,8 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 - [x] **SKU master-data runtime CRUD** — Phase A+B+C: styles table, FKs, catalog APIs (`/api/v1/catalog/...`), `product.master.read|write`, ULID product `id`, strict master codes on product/variant create, read-name enrichment; see [product-sku-master-data-plan.md](product-sku-master-data-plan.md).
 - [x] **Bag merchandising master catalog** — subcategory / style / target seeds + public catalog APIs + `GET /products` filters; see [product-master-catalog.md](product-master-catalog.md).
 - [x] **SKU physical dimensions** — variant `dimensions` `{widthMm, heightMm, depthMm}` in millimeters, distinct from letter `size`/`sizeCode`; see [product-sku-dimensions.md](product-sku-dimensions.md).
+- [x] **Color × size matrix decision** — one SkuID per cell; admin pain fixed by sparse matrix / axis fan-out / bulk generate, not fewer SkuIDs — [product-variant-matrix.md](product-variant-matrix.md).
+- [ ] **Variant matrix manage UX** — manage-web color × size grid; optional bulk create + axis fan-out (dimensions by size, images by color).
 - [ ] **SKU master-data Phase D (admin UI)** — manage brands/styles/colors/sizes/editions in manage-web.
 
 ### Found while implementing SkuID + inventory merge (2026-07-10)

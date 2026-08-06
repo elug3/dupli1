@@ -36,6 +36,8 @@ sku    =  BOT_CAS001_BLK_V_MED            ← composed from master codes
 
 **Rule:** Prefer `skuId` for machine-to-machine calls. Accept either on lookup APIs (`/variants/{sku}`, `/variants/by-sku-id/{skuId}`, inventory siblings). Renaming a master **name** never changes `sku` or `skuId`.
 
+**Matrix:** one `skuId` per color × size cell (up to colors × sizes variants per style). Do not collapse cells to reduce admin work — manage via a sparse matrix / axis fan-out; see [product-variant-matrix.md](product-variant-matrix.md).
+
 ### Why both?
 
 - **skuId** is opaque and stable even if human naming conventions evolve; it is the primary key of `product_variants` and is what stock/cart/order store.

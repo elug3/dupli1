@@ -25,7 +25,7 @@ Letter size labels (`Size` / `SizeCode`: S, M, L, XL, MED, OS, …) identify the
 | Parent product | Rejected — would force one measurement for every size option. |
 | Parent `attributes` / `capacity` | Rejected — free-form, untyped, parent-only; not structured for PDP size charts. |
 
-Same letter size across colors of one style usually shares measurements; store them per SKU (simple) and let managers copy values. No automatic fan-out.
+Same letter size across colors of one style usually shares measurements; store them per SKU (simple) and let managers copy values. No automatic fan-out yet — axis fan-out is the intended manage path for the color × size matrix ([product-variant-matrix.md](product-variant-matrix.md)).
 
 ## API
 
@@ -70,3 +70,4 @@ Added on product-service migrate (`ADD COLUMN IF NOT EXISTS`). Not used for sear
 - [x] PG columns + memory store round-trip
 - [x] PDP and public variant responses include dimensions when set
 - [ ] Storefront / manage-web size chart UI (frontend repos)
+- [ ] Axis fan-out (dimensions by size across colors) — see [product-variant-matrix.md](product-variant-matrix.md)
