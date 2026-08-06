@@ -182,6 +182,55 @@ func TestUpdateVariant_PartialBodyDoesNotClearOtherFields(t *testing.T) {
 	}
 }
 
+func TestUpdateVariant_Dimensions(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", Status: "active", Price: 2500},
+	}
+	store.Variants = []domain.Variant{
+		{
+			SkuID: "SKUID-1", SKU: "BOT-001-GRN", ProductID: "BOT-001",
+			Color: "Green", Size: "M", Status: "active",
+			Dimensions: &domain.Dimensions{WidthMm: 340, HeightMm: 220, DepthMm: 80},
+		},
+	}
+	svc := service.NewProductSearchService(store, nil)
+
+	updated, err := svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{Color: "Black"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Dimensions == nil || updated.Dimensions.WidthMm != 340 {
+		t.Fatalf("omitted dimensions cleared: %+v", updated.Dimensions)
+	}
+
+	updated, err = svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{
+		Dimensions: &domain.Dimensions{WidthMm: 400, HeightMm: 250, DepthMm: 90},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Dimensions.WidthMm != 400 || updated.Dimensions.DepthMm != 90 {
+		t.Fatalf("replace failed: %+v", updated.Dimensions)
+	}
+
+	updated, err = svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{
+		Dimensions: &domain.Dimensions{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Dimensions != nil {
+		t.Fatalf("want cleared, got %+v", updated.Dimensions)
+	}
+
+	if _, err := svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{
+		Dimensions: &domain.Dimensions{WidthMm: -5},
+	}); err == nil {
+		t.Fatal("want error for negative dimensions")
+	}
+}
+
 func TestGetPublicVariantsBySkuIDs(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
