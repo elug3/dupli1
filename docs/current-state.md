@@ -56,6 +56,7 @@ See [service-layout.md](service-layout.md) for details.
   - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage` (`DUPLI1_ORDER_SERVICE_*`); order refreshes a Bearer access token and calls product stock/coupons via **`DUPLI1_GATEWAY_URL`** (`httpstock` / gateway paths)
   - Login/refresh rate-limited per IP via Redis
   - `user.registered` NATS publish is best-effort: a broker outage is logged and the account still registers
+  - Structured **zerolog** logging (`event` field) for session paths, internal errors, and bootstrap — [auth-logging.md](auth-logging.md)
 - **Tests:** `cd auth && go test ./...`
 
 ### dupli1-product
