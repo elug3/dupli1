@@ -95,4 +95,88 @@ func TestProfileAndAddresses_HTTP(t *testing.T) {
 			t.Fatalf("want 404, got %d", w.Code)
 		}
 	})
+
+	t.Run("patch address", func(t *testing.T) {
+		w := s.doWithAuth(t, http.MethodPatch, "/api/v1/auth/me/addresses/"+addressID, accessToken, map[string]string{
+			"recipient_name": "Updated Recipient",
+			"address_line2":  "10층",
+		})
+		if w.Code != http.StatusOK {
+			t.Fatalf("PATCH address: %d %s", w.Code, w.Body.String())
+		}
+		var addr domain.Address
+		if err := json.Unmarshal(w.Body.Bytes(), &addr); err != nil {
+			t.Fatal(err)
+		}
+		if addr.RecipientName != "Updated Recipient" || addr.AddressLine2 != "10층" {
+			t.Fatalf("patched address: %+v", addr)
+		}
+	})
+
+	t.Run("set default address", func(t *testing.T) {
+		w := s.doWithAuth(t, http.MethodPost, "/api/v1/auth/me/addresses", accessToken, map[string]string{
+			"recipient_name":  "Second",
+			"recipient_phone": "01022223333",
+			"postal_code":     "06194",
+			"address_line1":   "Other street",
+			"city":            "강남구",
+			"province":        "서울특별시",
+		})
+		if w.Code != http.StatusCreated {
+			t.Fatalf("POST second address: %d %s", w.Code, w.Body.String())
+		}
+		var second domain.Address
+		if err := json.Unmarshal(w.Body.Bytes(), &second); err != nil {
+			t.Fatal(err)
+		}
+
+		w = s.doWithAuth(t, http.MethodPost, "/api/v1/auth/me/addresses/"+second.ID+"/default", accessToken, nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("POST default: %d %s", w.Code, w.Body.String())
+		}
+		var defaulted domain.Address
+		if err := json.Unmarshal(w.Body.Bytes(), &defaulted); err != nil {
+			t.Fatal(err)
+		}
+		if !defaulted.IsDefault {
+			t.Fatal("second address should be default")
+		}
+
+		w = s.doWithAuth(t, http.MethodGet, "/api/v1/auth/me/profile", accessToken, nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET profile: %d %s", w.Code, w.Body.String())
+		}
+		var view domain.ProfileView
+		if err := json.Unmarshal(w.Body.Bytes(), &view); err != nil {
+			t.Fatal(err)
+		}
+		if view.DefaultAddressID != second.ID {
+			t.Fatalf("default_address_id = %q, want %q", view.DefaultAddressID, second.ID)
+		}
+	})
+
+	t.Run("invalid address validation", func(t *testing.T) {
+		w := s.doWithAuth(t, http.MethodPost, "/api/v1/auth/me/addresses", accessToken, map[string]string{
+			"recipient_name":  "Bad",
+			"recipient_phone": "12345",
+			"postal_code":     "06194",
+			"address_line1":   "Line",
+			"city":            "강남구",
+			"province":        "서울",
+		})
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("invalid phone: want 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("delete address", func(t *testing.T) {
+		w := s.doWithAuth(t, http.MethodDelete, "/api/v1/auth/me/addresses/"+addressID, accessToken, nil)
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("DELETE address: %d %s", w.Code, w.Body.String())
+		}
+		w = s.doWithAuth(t, http.MethodGet, "/api/v1/auth/me/addresses/"+addressID, accessToken, nil)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("deleted address GET: want 404, got %d", w.Code)
+		}
+	})
 }
