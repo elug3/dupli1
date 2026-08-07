@@ -84,7 +84,11 @@ func (h *Handler) telegramWebhook(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusServiceUnavailable, "telegram webhook not configured")
 		return
 	}
-	if h.webhookSecret != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != h.webhookSecret {
+	if h.webhookSecret == "" {
+		respondError(w, http.StatusServiceUnavailable, "webhook secret not configured")
+		return
+	}
+	if r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != h.webhookSecret {
 		respondError(w, http.StatusForbidden, "invalid webhook secret")
 		return
 	}
