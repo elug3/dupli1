@@ -96,6 +96,38 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestCompleteCheckoutRejectsInvalidFulfillment(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.NewRepository()
+	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultCents: 1000})
+
+	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
+		CustomerID: "customer-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession returned error: %v", err)
+	}
+	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
+		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1,
+	}); err != nil {
+		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
+	}
+
+	_, err = svc.CompleteCheckout(ctx, session.ID, service.CompleteCheckoutInput{
+		RecipientName:  "",
+		RecipientPhone: "01012345678",
+		ShippingAddress: domain.ShippingAddress{
+			PostalCode:   "06194",
+			AddressLine1: "테헤란로 78길 14-12",
+			City:         "강남구",
+			Province:     "서울특별시",
+		},
+	})
+	if !errors.Is(err, domain.ErrInvalidFulfillment) {
+		t.Fatalf("CompleteCheckout error = %v, want ErrInvalidFulfillment", err)
+	}
+}
+
 func TestCompleteCheckoutRequiresItems(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.NewRepository()
