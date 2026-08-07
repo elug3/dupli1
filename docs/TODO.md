@@ -39,6 +39,40 @@ See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criter
 
 Guest cart, refunds, co-view, legacy alias removal, manager settings, H6, Redis cache — see v1.1 plan “Deferred to v1.2” table.
 
+## Notification service (reviewed 2026-08-07)
+
+Completeness / code-quality follow-ups for `dupli1-notification`. Design: [notification-telegram-bot.md](notification-telegram-bot.md).
+
+### Bugs / correctness
+
+- [ ] **Pending `/start` reply silently dropped** — bootstrap sets `Client.SetAccessPolicy`; `Send` requires `AllowsChat`, but pending chats are not allowlisted, so “Registration received” never sends. Fix: bypass chat allowlist for command replies (or allow pending chats for inbound ack only). Add a regression test that sets Policy on the client (`TestUpdateProcessorStartPending` currently omits it).
+- [ ] **Any inbound Telegram message creates a pending subscription** — discoverable bots can fill `telegram_subscriptions`; consider registering only on `/start` (or rate-limit / require allowlisted user for upsert).
+
+### Production / ECS wiring
+
+- [ ] **Wire `DUPLI1_NOTIFICATION_DB` in ECS** — Terraform task def has no notification DB URL; service falls back to in-memory repo (subscriptions lost on restart). Add RDS `notifications` DB + Secrets Manager + task secret (mirror cart/payment).
+- [ ] **Wire `AUTH_JWKS_URL` on notification ECS task** — without JWKS, manager subscription API returns 503.
+- [ ] **Wire Telegram webhook in prod** — set `TELEGRAM_WEBHOOK_URL` + `TELEGRAM_WEBHOOK_SECRET` (today: polling only).
+
+### Reliability / product gaps
+
+- [ ] **NATS queue group for notification** — use `QueueSubscribe` so multi-replica ECS does not duplicate Telegram alerts (deferred in [v1-release-plan.md](v1-release-plan.md); log-first done).
+- [ ] **Fan-out to multiple accepted chats** — routing picks only the first accepted `alert_order` / `alert_product` chat.
+- [ ] **Manager Settings `notifications` section** — load/reload toggles + chat routing from auth settings on `settings.updated` ([manager-settings-api.md](manager-settings-api.md)); keep only `TELEGRAM_BOT_TOKEN` in Secrets Manager.
+- [ ] **Document `notification.telegram.read|manage` in permissions.md** — catalog constants exist; owner `*` works; manager seeds/docs lag.
+
+### Docs / API surface drift
+
+- [ ] **Refresh stale notification docs** — `service-layout.md` still says “Health endpoint only”; `current-state.md` API table and `api.md` omit webhook + subscriptions; reconcile webhook vs polling notes in [notification-telegram-bot.md](notification-telegram-bot.md).
+- [ ] **OpenAPI: telegram manager + webhook** — extend `api/specs/notification-v1.yaml` (and `docs/openapi.yaml` if needed) beyond health/settings.
+- [ ] **Fix CLI usage blurb** — `notification/cmd/main.go` claims “customer and admin messaging APIs”; service is ops Telegram only.
+
+### Tests / quality
+
+- [ ] **HTTP handler tests** — authz (read/manage), webhook secret, accept/reject/delete, 503 without JWT/DB.
+- [ ] **PG repository tests** — upsert pending, accept/reject, unique chat/user constraints.
+- [ ] **Structured logging (v1.1)** — replace `log.Printf` with shared zerolog (covered under v1.1 logging slice).
+
 ## Temporary / ops
 
 - [ ] **Re-lock auth register** — `AUTH_OPEN_REGISTER` is temporarily **true** (public customer signup). Set `false` / remove when storefront no longer needs open registration; restore Bearer + `user.create` only.
