@@ -87,7 +87,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Features:**
   - Checkout sessions at `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions` still aliased; see [checkout-session.md](checkout-session.md))
   - Order lifecycle at `/api/v1/orders` — statuses: `pending`, `paid`, `in_transit`, `fulfilled`, `canceled`
-  - Consumes **`payment.succeeded`** (NATS) → `paid`; 5-minute unpaid `pending` expiry worker
+  - Consumes **`payment.succeeded`** (NATS) → `paid` (idempotent on `payment_id`; replays after ship/fulfill are no-ops); 5-minute unpaid `pending` expiry worker
   - Publishes order events via transactional **outbox** (`order.created` / status updates); outbox drain worker
   - Optional `Idempotency-Key` on `POST /api/v1/orders` (replay-safe create)
   - `POST /api/v1/orders/{id}/ship` → `in_transit` + commit inventory (plan B)
@@ -113,7 +113,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Features:**
   - Stripe Checkout redirect at `POST /api/v1/payments` (see [payment-service.md](payment-service.md))
   - Default payment currency: **`krw` only** (whole won; `*_cents` fields are KRW minor units = won)
-  - Dev mode without `STRIPE_SECRET_KEY`: simulate URL `GET /api/v1/payments/{id}/simulate-success`
+  - Dev simulate URL `GET /api/v1/payments/{id}/simulate-success` only when **`PAYMENT_ALLOW_DEV_SIMULATE=true`** and no `STRIPE_SECRET_KEY` (Compose default); production leaves the env unset
   - Publishes **`payment.succeeded`** via transactional **outbox** (soft-success complete; drain + reconcile workers)
   - **Methods:** `method` on create — `credit_card` (default), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)
 - **Auth:** Bearer JWT on customer routes; ownership ABAC unless `payment.create` / `payment.read.all`. Bypass requires `payment.bypass`. Stripe signature on webhook
