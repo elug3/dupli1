@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -119,6 +120,10 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_due_at TIMESTAMPTZ`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_by TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMPTZ`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS recipient_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS recipient_phone TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address JSONB NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_address_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
 		`ALTER TABLE checkout_session_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
 	}
@@ -244,13 +249,19 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 	}
 	defer tx.Rollback(ctx)
 
+	shippingJSON, err := json.Marshal(order.ShippingAddress)
+	if err != nil {
+		return fmt.Errorf("marshal shipping address: %w", err)
+	}
+
 	_, err = tx.Exec(ctx, `
 		INSERT INTO orders (
 			id, customer_id, reservation_id, status, coupon_code,
 			subtotal_cents, discount_cents, total_cents,
+			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			reservation_id = EXCLUDED.reservation_id,
@@ -259,6 +270,10 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			subtotal_cents = EXCLUDED.subtotal_cents,
 			discount_cents = EXCLUDED.discount_cents,
 			total_cents = EXCLUDED.total_cents,
+			recipient_name = EXCLUDED.recipient_name,
+			recipient_phone = EXCLUDED.recipient_phone,
+			shipping_address = EXCLUDED.shipping_address,
+			source_address_id = EXCLUDED.source_address_id,
 			payment_id = EXCLUDED.payment_id,
 			paid_at = EXCLUDED.paid_at,
 			payment_due_at = EXCLUDED.payment_due_at,
@@ -267,6 +282,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			updated_at = EXCLUDED.updated_at
 	`, order.ID, order.CustomerID, order.ReservationID, order.Status, order.CouponCode,
 		order.SubtotalCents, order.DiscountCents, order.TotalCents,
+		order.RecipientName, order.RecipientPhone, shippingJSON, order.SourceAddressID,
 		order.PaymentID, order.PaidAt, order.PaymentDueAt, order.ShippedBy, order.ShippedAt,
 		order.CreatedAt, order.UpdatedAt)
 	if err != nil {
@@ -396,15 +412,18 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 
 	var order domain.Order
 	var paidAt, shippedAt *time.Time
+	var shippingJSON []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_cents, discount_cents, total_cents,
+			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id).Scan(
 		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
 		&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
@@ -412,6 +431,9 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 		return nil, ports.ErrNotFound
 	}
 	if err != nil {
+		return nil, err
+	}
+	if err := decodeShippingJSON(shippingJSON, &order.ShippingAddress); err != nil {
 		return nil, err
 	}
 	order.PaidAt = paidAt
@@ -483,6 +505,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_cents, discount_cents, total_cents,
+			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
 			created_at, updated_at
 		FROM orders WHERE customer_id = $1 ORDER BY created_at DESC
@@ -497,12 +520,17 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	for rows.Next() {
 		var order domain.Order
 		var paidAt, shippedAt *time.Time
+		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
 			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		if err := decodeShippingJSON(shippingJSON, &order.ShippingAddress); err != nil {
 			return nil, err
 		}
 		order.PaidAt = paidAt
@@ -531,6 +559,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_cents, discount_cents, total_cents,
+			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
 			created_at, updated_at
 		FROM orders
@@ -546,12 +575,17 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 	for rows.Next() {
 		var order domain.Order
 		var paidAt, shippedAt *time.Time
+		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
 			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		if err := decodeShippingJSON(shippingJSON, &order.ShippingAddress); err != nil {
 			return nil, err
 		}
 		order.PaidAt = paidAt
@@ -660,6 +694,17 @@ func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain
 		return nil, err
 	}
 	return &session, nil
+}
+
+func decodeShippingJSON(raw []byte, addr *domain.ShippingAddress) error {
+	if len(raw) == 0 {
+		*addr = domain.ShippingAddress{}
+		return nil
+	}
+	if err := json.Unmarshal(raw, addr); err != nil {
+		return fmt.Errorf("decode shipping address: %w", err)
+	}
+	return nil
 }
 
 var _ ports.Repository = (*Repository)(nil)

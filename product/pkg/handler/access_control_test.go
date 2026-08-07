@@ -55,6 +55,7 @@ func newAccessControlMux(store *memory.ProductStore) *http.ServeMux {
 	}
 
 	mux.Handle("GET "+handler.RouteProducts, middleware.OptionalAuth(validator, h.SearchProductsHandler()))
+	mux.Handle("GET "+handler.RoutePublicProduct, middleware.OptionalAuth(validator, h.GetProductHandler()))
 	mux.Handle("POST "+handler.RouteProducts, requirePerm(permissions.ProductCreate, h.CreateProductHandler()))
 	mux.Handle("PUT "+handler.RouteProductByID, requirePerm(permissions.ProductUpdate, h.SingleProductHandler()))
 	mux.Handle("DELETE "+handler.RouteProductByID, requirePerm(permissions.ProductDelete, h.SingleProductHandler()))
@@ -204,6 +205,39 @@ func TestProductManagerCanManageProducts(t *testing.T) {
 	w = serve(t, mux, http.MethodGet, handler.RouteCoupons, token, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("list coupons: status = %d, want 200", w.Code)
+	}
+}
+
+func TestProductManagerCanGetDraftProduct(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "DRAFT-001", Name: "Draft Bag", Brand: "Gucci", Status: "draft"},
+	}
+	store.Variants = []domain.Variant{
+		{SKU: "DRAFT-001-BLK", ProductID: "DRAFT-001", Color: "Black", Status: "draft"},
+		{SKU: "DRAFT-001-GRN", ProductID: "DRAFT-001", Color: "Green", Status: "active"},
+	}
+	mux := newAccessControlMux(store)
+	token := makeAccessToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleProductManager}))
+
+	w := serve(t, mux, http.MethodGet, "/api/v1/products/DRAFT-001", token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get draft product: status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var p domain.Product
+	if err := json.NewDecoder(w.Body).Decode(&p); err != nil {
+		t.Fatalf("decode product: %v", err)
+	}
+	if p.ID != "DRAFT-001" || p.Status != "draft" {
+		t.Fatalf("product = %+v, want draft DRAFT-001", p)
+	}
+	if len(p.Variants) != 2 {
+		t.Fatalf("variants = %d, want 2 (manager sees draft variants)", len(p.Variants))
+	}
+
+	w = serve(t, mux, http.MethodGet, "/api/v1/products/DRAFT-001", "", nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("public get draft: status = %d, want 404", w.Code)
 	}
 }
 

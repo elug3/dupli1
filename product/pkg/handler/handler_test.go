@@ -29,6 +29,7 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
+	mux.Handle("GET "+handler.RoutePublicProduct, h.GetProductHandler())
 	mux.HandleFunc("GET "+handler.RouteWishlist, h.ListWishlist)
 	mux.HandleFunc("PUT "+handler.RouteProductWishlist, h.AddWishlist)
 	mux.HandleFunc("POST "+handler.RouteProductWishlist, h.AddWishlist)
@@ -49,6 +50,7 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET "+handler.RouteProducts, h.SearchProductsHandler())
+	mux.Handle("GET "+handler.RoutePublicProduct, h.GetProductHandler())
 	mux.HandleFunc("GET "+handler.RouteWishlist, h.ListWishlist)
 	mux.HandleFunc("PUT "+handler.RouteProductWishlist, h.AddWishlist)
 	mux.HandleFunc("POST "+handler.RouteProductWishlist, h.AddWishlist)
@@ -331,6 +333,85 @@ func TestCreateVariantLuxurySKU(t *testing.T) {
 	}
 	if v.ColorCode != "BLK" || v.SizeCode != "MED" || v.EditionCode != "V" {
 		t.Fatalf("unexpected codes: %+v", v)
+	}
+}
+
+func TestCreateAndUpdateVariantDimensions(t *testing.T) {
+	store := memory.NewProductStore()
+	seedCatalogStyle(t, store.Catalog, "BOT", "CAS001", "Cassette")
+	store.Products = []domain.Product{{
+		ID: "BOT-001", Name: "Cassette", BrandCode: "BOT", StyleCode: "CAS001",
+		Status: "active", Price: 2500,
+	}}
+	mux, _ := newFullMux(store)
+
+	body, _ := json.Marshal(domain.Variant{
+		Color: "Black", SizeCode: "M",
+		Dimensions: &domain.Dimensions{WidthMm: 340, HeightMm: 220, DepthMm: 80},
+	})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/products/BOT-001/variants", bytes.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var v domain.Variant
+	json.NewDecoder(rec.Body).Decode(&v)
+	if v.Dimensions == nil || v.Dimensions.WidthMm != 340 || v.Dimensions.HeightMm != 220 || v.Dimensions.DepthMm != 80 {
+		t.Fatalf("dimensions not persisted: %+v", v.Dimensions)
+	}
+
+	// PDP includes dimensions on the variant.
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/products/BOT-001", nil))
+	var p domain.Product
+	json.NewDecoder(rec.Body).Decode(&p)
+	if len(p.Variants) != 1 || p.Variants[0].Dimensions == nil || p.Variants[0].Dimensions.WidthMm != 340 {
+		t.Fatalf("PDP missing dimensions: %+v", p.Variants)
+	}
+
+	// Partial update keeps dimensions; explicit replace changes them.
+	body, _ = json.Marshal(domain.Variant{Status: "active"})
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/v1/products/BOT-001/variants/"+v.SKU, bytes.NewReader(body)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	json.NewDecoder(rec.Body).Decode(&v)
+	if v.Dimensions == nil || v.Dimensions.WidthMm != 340 {
+		t.Fatalf("partial update cleared dimensions: %+v", v.Dimensions)
+	}
+
+	body, _ = json.Marshal(domain.Variant{
+		Dimensions: &domain.Dimensions{WidthMm: 400, HeightMm: 250, DepthMm: 90},
+	})
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/v1/products/BOT-001/variants/"+v.SKU, bytes.NewReader(body)))
+	v = domain.Variant{}
+	json.NewDecoder(rec.Body).Decode(&v)
+	if v.Dimensions == nil || v.Dimensions.WidthMm != 400 || v.Dimensions.DepthMm != 90 {
+		t.Fatalf("replace failed: %+v", v.Dimensions)
+	}
+	sku := v.SKU
+
+	// Clear via empty object.
+	body, _ = json.Marshal(domain.Variant{Dimensions: &domain.Dimensions{}})
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/v1/products/BOT-001/variants/"+sku, bytes.NewReader(body)))
+	v = domain.Variant{}
+	json.NewDecoder(rec.Body).Decode(&v)
+	if v.Dimensions != nil {
+		t.Fatalf("want cleared dimensions, got %+v", v.Dimensions)
+	}
+
+	// Negative rejected.
+	body, _ = json.Marshal(domain.Variant{
+		Color: "Green", SizeCode: "OS",
+		Dimensions: &domain.Dimensions{WidthMm: -1},
+	})
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/products/BOT-001/variants", bytes.NewReader(body)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 for negative dim, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

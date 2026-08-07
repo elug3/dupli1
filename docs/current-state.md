@@ -17,7 +17,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Payments (Stripe Checkout) | Implemented — see [payment-service.md](payment-service.md) |
 | Payment methods | Credit card + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
 | Notifications | Implemented (NATS → Telegram when configured) |
-| User profiles, chat, analytics | Guest cookie + unique PDP views + simple recommendations implemented in product — see [product-guest-views-plan.md](product-guest-views-plan.md), [product-recommendations.md](product-recommendations.md); broader analytics still not started |
+| User profiles, chat, analytics | **Profile phase A** in auth (`/me/profile`, `/me/addresses`) — [auth-profile-extension-plan.md](auth-profile-extension-plan.md); guest PDP views + recommendations in product; chat/analytics not started |
 | Manager settings (mutable store policy) | Sketch — see [manager-settings-api.md](manager-settings-api.md) |
 
 ## Repository layout
@@ -49,12 +49,14 @@ See [service-layout.md](service-layout.md) for details.
   - Register: **temporary open customer signup** via `AUTH_OPEN_REGISTER` (default on); anonymous callers create `customer` only. Set `AUTH_OPEN_REGISTER=false` to require `user.create` again. Authenticated `user.create` still follows ABAC for other account types.
   - Auth ABAC hierarchy governs who may manage whom
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
+  - Customer commerce profile at `/api/v1/auth/me/profile` and saved addresses at `/api/v1/auth/me/addresses` — [auth-profile-extension-plan.md](auth-profile-extension-plan.md)
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `manager`)
   - Login lockout after 5 failed attempts for customers/managers; **admin and owner are never locked**
   - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`); seeded/synced on auth boot; ECS injects the shared Secrets Manager secret into auth + web (see [infra/terraform/README.md](../infra/terraform/README.md))
   - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage` (`DUPLI1_ORDER_SERVICE_*`); order refreshes a Bearer access token and calls product stock/coupons via **`DUPLI1_GATEWAY_URL`** (`httpstock` / gateway paths)
   - Login/refresh rate-limited per IP via Redis
   - `user.registered` NATS publish is best-effort: a broker outage is logged and the account still registers
+  - Structured **zerolog** logging (`event` field) for session paths, internal errors, and bootstrap — [auth-logging.md](auth-logging.md)
 - **Tests:** `cd auth && go test ./...`
 
 ### dupli1-product
@@ -68,6 +70,7 @@ See [service-layout.md](service-layout.md) for details.
   - Price stored on parent product (`price` / `officialPrice`); variants inherit for cart JSON — [product-price-on-parent.md](product-price-on-parent.md)
   - Parent `attributes` string map (PDP memo; not searched) — [product-attributes.md](product-attributes.md)
   - Dual SKU identity + master dictionaries: [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`; human `sku`; `/api/v1/products/catalog/…`; Phase C enforces existing master codes on create)
+  - Variant physical dimensions (`dimensions.widthMm` / `heightMm` / `depthMm`) distinct from letter `size`/`sizeCode` — [product-sku-dimensions.md](product-sku-dimensions.md)
   - Error wrapping: store-boundary sentinels + sanitized 500s — [product-error-wrapping.md](product-error-wrapping.md)
   - Public: `GET /api/v1/products` (optional `product.read` widens view; filters `q`, `category`, `subcategory`, `style`, `target`, `brand`, `color`, `size`, `material`, `tags`; `sort`/`order` — [product-rich-search.md](product-rich-search.md), [product-master-catalog.md](product-master-catalog.md)), `GET /api/v1/products/{id}` (parent + variants; unique guest `viewCount` via `dupli1_guest` cookie; `soldCount` on reservation commit — [product-sold-count.md](product-sold-count.md); `wishlistCount`), wishlist add/remove/list, `GET /api/v1/products/{id}/recommendations` (content + popularity — [product-recommendations.md](product-recommendations.md)), `GET /api/v1/products/variants?sku_ids=` (batch public variant lookup), coupon redeem
   - Admin: per-route permissions (`product.create`, `coupon.read`, …) — see [permissions.md](permissions.md); parent CRUD, variant CRUD at `/api/v1/products/{id}/variants`, images on variant or default variant
@@ -119,9 +122,11 @@ See [service-layout.md](service-layout.md) for details.
 ### dupli1-notification
 
 - **Host port:** 8084
-- **Features:** NATS subscriber; Telegram alerts on order/product events when `TELEGRAM_*` is set. Handler failures (payload decode, Telegram send) are logged; core NATS does not redeliver, so a failed alert is dropped after the log line
-- **Production:** bot token + chat IDs from Secrets Manager `dupli1/production/telegram` (see [deployment-aws.md](deployment-aws.md) / Terraform README)
-- **Status:** Health + event dispatch (no outbound email/SMS yet)
+- **Features:** NATS subscriber; Telegram ops alerts; webhook or `getUpdates` stores `chat_id` in PostgreSQL; manager API to accept users/chats. See [notification-telegram-bot.md](notification-telegram-bot.md)
+- **Database:** PostgreSQL `notifications` (`DUPLI1_NOTIFICATION_DB`; local port 5438)
+- **Handler failures** (payload decode, Telegram send) are logged; core NATS does not redeliver, so a failed alert is dropped after the log line
+- **Production:** bot token from Secrets Manager; subscriptions and routing in notification DB
+- **Status:** Health + event dispatch + Telegram manager API (no outbound email/SMS yet)
 
 ### dupli1-proxy
 

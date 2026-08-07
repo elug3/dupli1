@@ -72,7 +72,22 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 		if err := h.withCheckoutSessionAccess(w, r, claims, sessionID, true); err != nil {
 			return
 		}
-		result, err := h.svc.CompleteCheckout(r.Context(), sessionID)
+		var req struct {
+			RecipientName   string                 `json:"recipient_name"`
+			RecipientPhone  string                 `json:"recipient_phone"`
+			ShippingAddress domain.ShippingAddress `json:"shipping_address"`
+			AddressID       string                 `json:"address_id"`
+		}
+		if err := decodeJSON(r, &req); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		result, err := h.svc.CompleteCheckout(r.Context(), sessionID, service.CompleteCheckoutInput{
+			RecipientName:   req.RecipientName,
+			RecipientPhone:  req.RecipientPhone,
+			ShippingAddress: req.ShippingAddress,
+			SourceAddressID: req.AddressID,
+		})
 		if err != nil {
 			respondServiceError(w, err)
 			return

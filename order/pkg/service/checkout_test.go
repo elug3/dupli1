@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
@@ -64,7 +65,7 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 		t.Fatalf("discounted totals = %d/%d, want 3000/7000", session.DiscountCents, session.TotalCents)
 	}
 
-	result, err := svc.CompleteCheckout(ctx, session.ID)
+	result, err := svc.CompleteCheckout(ctx, session.ID, testCompleteCheckoutInput())
 	if err != nil {
 		t.Fatalf("CompleteCheckout returned error: %v", err)
 	}
@@ -79,6 +80,9 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	}
 	if result.Order.CouponCode != "SUMMER30" {
 		t.Fatalf("order coupon = %q, want SUMMER30", result.Order.CouponCode)
+	}
+	if result.Order.RecipientName != "Test User" || result.Order.RecipientPhone != "01012345678" {
+		t.Fatalf("order fulfillment: %+v", result.Order)
 	}
 	if stock.reservationID != "res-checkout" {
 		t.Fatalf("stock reservation = %q, want res-checkout", stock.reservationID)
@@ -104,7 +108,7 @@ func TestCompleteCheckoutRequiresItems(t *testing.T) {
 		t.Fatalf("CreateCheckoutSession returned error: %v", err)
 	}
 
-	_, err = svc.CompleteCheckout(ctx, session.ID)
+	_, err = svc.CompleteCheckout(ctx, session.ID, service.CompleteCheckoutInput{})
 	if !errors.Is(err, domain.ErrEmptyCheckout) {
 		t.Fatalf("CompleteCheckout error = %v, want ErrEmptyCheckout", err)
 	}
@@ -131,4 +135,77 @@ func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
 	if !errors.Is(err, ports.ErrCouponUnavailable) {
 		t.Fatalf("ApplyCheckoutCoupon error = %v, want ErrCouponUnavailable", err)
 	}
+}
+
+func testCompleteCheckoutInput() service.CompleteCheckoutInput {
+	return service.CompleteCheckoutInput{
+		RecipientName:  "Test User",
+		RecipientPhone: "01012345678",
+		ShippingAddress: domain.ShippingAddress{
+			PostalCode:   "06194",
+			AddressLine1: "테헤란로 78길 14-12",
+			City:         "강남구",
+			Province:     "서울특별시",
+		},
+	}
+}
+
+func TestCompleteCheckoutRecomputesCouponDiscountAfterRepricing(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.NewRepository()
+	stock := &fakeStock{reservationID: "res-checkout"}
+	product := &mutableProduct{price: 10000}
+	svc := service.NewWithCheckout(repo, stock, &fakeCouponClient{
+		code:     "SUMMER30",
+		discount: 0.30,
+	}, 0).WithProduct(product)
+
+	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
+		CustomerID: "customer-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession returned error: %v", err)
+	}
+	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
+		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1,
+	}); err != nil {
+		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
+	}
+	session, err = svc.ApplyCheckoutCoupon(ctx, session.ID, "SUMMER30")
+	if err != nil {
+		t.Fatalf("ApplyCheckoutCoupon returned error: %v", err)
+	}
+	if session.DiscountCents != 3000 || session.TotalCents != 7000 {
+		t.Fatalf("session discounted totals = %d/%d, want 3000/7000", session.DiscountCents, session.TotalCents)
+	}
+
+	product.price = 3000
+
+	result, err := svc.CompleteCheckout(ctx, session.ID, testCompleteCheckoutInput())
+	if err != nil {
+		t.Fatalf("CompleteCheckout returned error: %v", err)
+	}
+	if result.Order.SubtotalCents != 3000 {
+		t.Fatalf("order subtotal = %d, want 3000", result.Order.SubtotalCents)
+	}
+	if result.Order.DiscountCents != 900 {
+		t.Fatalf("order discount = %d, want 900 (30%% of repriced subtotal)", result.Order.DiscountCents)
+	}
+	if result.Order.TotalCents != 2100 {
+		t.Fatalf("order total = %d, want 2100", result.Order.TotalCents)
+	}
+}
+
+type mutableProduct struct {
+	price int64
+}
+
+func (m *mutableProduct) GetVariant(_ context.Context, sku string) (*ports.VariantInfo, error) {
+	sku = strings.ToUpper(strings.TrimSpace(sku))
+	return &ports.VariantInfo{SkuID: "ID-" + sku, SKU: sku, UnitPriceCents: m.price}, nil
+}
+
+func (m *mutableProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports.VariantInfo, error) {
+	skuID = strings.TrimSpace(skuID)
+	return &ports.VariantInfo{SkuID: skuID, SKU: strings.ToUpper(skuID), UnitPriceCents: m.price}, nil
 }

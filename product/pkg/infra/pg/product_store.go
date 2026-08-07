@@ -101,6 +101,18 @@ func (s *ProductSearchStore) migrate() error {
 		return fmt.Errorf("migrate product_variants add sku_id: %w", err)
 	}
 
+	for _, col := range []struct{ name, def string }{
+		{"width_mm", "INTEGER"},
+		{"height_mm", "INTEGER"},
+		{"depth_mm", "INTEGER"},
+	} {
+		if _, err := s.pool.Exec(ctx, fmt.Sprintf(
+			"ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS %s %s", col.name, col.def,
+		)); err != nil {
+			return fmt.Errorf("migrate product_variants add column %s: %w", col.name, err)
+		}
+	}
+
 	for _, idx := range []struct{ name, sql string }{
 		{"idx_product_variants_product_id", `CREATE INDEX IF NOT EXISTS idx_product_variants_product_id ON product_variants(product_id)`},
 		{"idx_products_status_created_at", `CREATE INDEX IF NOT EXISTS idx_products_status_created_at ON products(status, created_at DESC)`},

@@ -343,6 +343,10 @@ Reads (public catalog) stay available unless `store.maintenance_mode` is on.
 
 ### `GET|PATCH /api/v1/settings/notifications`
 
+Global controls for outbound notifications. Telegram routing (chat IDs, allowlist) is **configuration** and belongs here — not in Secrets Manager. Only `TELEGRAM_BOT_TOKEN` stays in Secrets Manager.
+
+Full design: [notification-telegram-bot.md](notification-telegram-bot.md).
+
 ```json
 {
   "allow_outbound": true,
@@ -351,11 +355,19 @@ Reads (public catalog) stay available unless `store.maintenance_mode` is on.
     "email": false,
     "sms": false
   },
+  "telegram": {
+    "order_chat_id": "-1001234567890",
+    "product_chat_id": "-1001234567890",
+    "allowed_user_ids": [123456789]
+  },
   "events": {
+    "order.created": true,
+    "order.status_updated": true,
     "order.paid": true,
-    "order.in_transit": true,
-    "order.canceled": true,
-    "inventory.low_stock": false
+    "product.created": true,
+    "product.updated": true,
+    "product.deleted": true,
+    "product.image_uploaded": true
   },
   "etag": "…"
 }
@@ -365,6 +377,8 @@ Reads (public catalog) stay available unless `store.maintenance_mode` is on.
 |---------|---------------------|
 | `allow_outbound` | All notification sends |
 | `channels.*` | Channel-wide mute |
+| `telegram.order_chat_id` / `product_chat_id` | NATS → Telegram routing |
+| `telegram.allowed_user_ids` | Who may use bot `/start` |
 | `events.*` | Event-type mute |
 
 ---

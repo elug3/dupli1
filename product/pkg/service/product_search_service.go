@@ -310,6 +310,11 @@ func (s *ProductSearchService) CreateVariant(productID string, v domain.Variant)
 	if err != nil {
 		return nil, err
 	}
+	dims, err := domain.NormalizeDimensions(v.Dimensions)
+	if err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
+	v.Dimensions = dims
 	v.ProductID = productID
 	created, err := s.store.CreateVariant(v)
 	if err != nil {
@@ -336,6 +341,11 @@ func (s *ProductSearchService) UpdateVariant(productID, sku string, v domain.Var
 		return nil, fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 	}
 	merged := existing.MergeUpdate(v)
+	dims, err := domain.NormalizeDimensions(merged.Dimensions)
+	if err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
+	merged.Dimensions = dims
 	merged.SKU = sku
 	merged.ProductID = productID
 	updated, err := s.store.UpdateVariant(merged)

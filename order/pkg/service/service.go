@@ -34,11 +34,22 @@ type Service struct {
 }
 
 type CreateOrderInput struct {
-	CustomerID     string
-	Items          []domain.OrderItem
-	CouponCode     string
-	DiscountCents  int64
-	IdempotencyKey string
+	CustomerID      string
+	Items           []domain.OrderItem
+	CouponCode      string
+	DiscountCents   int64
+	IdempotencyKey  string
+	RecipientName   string
+	RecipientPhone  string
+	ShippingAddress domain.ShippingAddress
+	SourceAddressID string
+}
+
+type CompleteCheckoutInput struct {
+	RecipientName   string
+	RecipientPhone  string
+	ShippingAddress domain.ShippingAddress
+	SourceAddressID string
 }
 
 type orderItemEvent struct {
@@ -57,6 +68,7 @@ type orderEvent struct {
 	DiscountCents int64              `json:"discount_cents"`
 	TotalCents    int64              `json:"total_cents"`
 	Items         []orderItemEvent   `json:"items"`
+	CreatedAt     time.Time          `json:"created_at"`
 	Occurred      time.Time          `json:"occurred_at"`
 }
 
@@ -64,6 +76,10 @@ type idempotencyFingerprint struct {
 	CustomerID    string `json:"customer_id"`
 	CouponCode    string `json:"coupon_code,omitempty"`
 	DiscountCents int64  `json:"discount_cents,omitempty"`
+	RecipientName string `json:"recipient_name,omitempty"`
+	RecipientPhone string `json:"recipient_phone,omitempty"`
+	ShippingAddress domain.ShippingAddress `json:"shipping_address,omitempty"`
+	SourceAddressID string `json:"source_address_id,omitempty"`
 	Items         []struct {
 		SkuID    string `json:"sku_id,omitempty"`
 		SKU      string `json:"sku,omitempty"`
@@ -144,6 +160,10 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 
 	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountCents, s.now())
 	if err != nil {
+		_ = s.stock.ReleaseReservation(ctx, reservationID)
+		return nil, err
+	}
+	if err := applyFulfillmentToOrder(order, input); err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
@@ -293,9 +313,13 @@ func (s *Service) loadIdempotentOrder(ctx context.Context, customerID, key, reqH
 
 func hashCreateOrderInput(input CreateOrderInput) string {
 	fp := idempotencyFingerprint{
-		CustomerID:    strings.TrimSpace(input.CustomerID),
-		CouponCode:    strings.TrimSpace(input.CouponCode),
-		DiscountCents: input.DiscountCents,
+		CustomerID:      strings.TrimSpace(input.CustomerID),
+		CouponCode:      strings.TrimSpace(input.CouponCode),
+		DiscountCents:   input.DiscountCents,
+		RecipientName:   strings.TrimSpace(input.RecipientName),
+		RecipientPhone:  strings.TrimSpace(input.RecipientPhone),
+		ShippingAddress: input.ShippingAddress,
+		SourceAddressID: strings.TrimSpace(input.SourceAddressID),
 	}
 	fp.Items = make([]struct {
 		SkuID    string `json:"sku_id,omitempty"`
@@ -359,6 +383,7 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 		DiscountCents: order.DiscountCents,
 		TotalCents:    order.TotalCents,
 		Items:         items,
+		CreatedAt:     order.CreatedAt,
 		Occurred:      s.now(),
 	})
 	if err != nil {
@@ -490,7 +515,35 @@ func cloneOrder(order *domain.Order) *domain.Order {
 	copied := *order
 	copied.Items = make([]domain.OrderItem, len(order.Items))
 	copy(copied.Items, order.Items)
+	copied.ShippingAddress = order.ShippingAddress
 	return &copied
+}
+
+func applyFulfillmentToOrder(order *domain.Order, input CreateOrderInput) error {
+	if strings.TrimSpace(input.RecipientName) == "" &&
+		strings.TrimSpace(input.RecipientPhone) == "" &&
+		input.ShippingAddress == (domain.ShippingAddress{}) {
+		return nil
+	}
+	snap, err := domain.ValidateFulfillmentSnapshot(
+		input.RecipientName,
+		input.RecipientPhone,
+		input.ShippingAddress,
+		input.SourceAddressID,
+	)
+	if err != nil {
+		return err
+	}
+	return order.ApplyFulfillment(snap)
+}
+
+func applyCompleteCheckoutInput(input CompleteCheckoutInput) (*domain.FulfillmentSnapshot, error) {
+	return domain.ValidateFulfillmentSnapshot(
+		input.RecipientName,
+		input.RecipientPhone,
+		input.ShippingAddress,
+		input.SourceAddressID,
+	)
 }
 
 func cloneOrders(orders []domain.Order) []domain.Order {

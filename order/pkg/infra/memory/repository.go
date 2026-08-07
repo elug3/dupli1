@@ -273,6 +273,7 @@ func cloneOrder(order *domain.Order) *domain.Order {
 	copied := *order
 	copied.Items = make([]domain.OrderItem, len(order.Items))
 	copy(copied.Items, order.Items)
+	copied.ShippingAddress = order.ShippingAddress
 	return &copied
 }
 

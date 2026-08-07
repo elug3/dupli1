@@ -500,6 +500,7 @@ resource "aws_ecs_task_definition" "notification" {
       ]
       environment = [
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
+        { name = "MANAGE_WEB_URL", value = "https://manage.dupli1.com" },
       ]
       secrets = [
         {
@@ -513,6 +514,10 @@ resource "aws_ecs_task_definition" "notification" {
         {
           name      = "TELEGRAM_PRODUCT_CHAT_ID"
           valueFrom = "${var.telegram_secret_arn}:TELEGRAM_PRODUCT_CHAT_ID::"
+        },
+        {
+          name      = "TELEGRAM_ALLOWED_USER_IDS"
+          valueFrom = "${var.telegram_secret_arn}:TELEGRAM_ALLOWED_USER_IDS::"
         },
       ]
       logConfiguration = {
