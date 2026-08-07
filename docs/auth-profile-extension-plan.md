@@ -296,7 +296,7 @@ Keep **`/api/v1/auth/me/profile`** as a gateway alias to profile service for one
 ## Security & privacy
 
 1. **PII at rest** — same RDS/Postgres as auth today; production encryption via RDS. Profile DB split in phase D if required.
-2. **Logs** — never log full phone/address; mask in structured logs.
+2. **Logs** — never log full phone/address; mask in structured logs. Auth event catalog and rules: [auth-logging.md](auth-logging.md).
 3. **ABAC** — address `{id}` must belong to JWT `sub`; 404 not 403 to avoid id enumeration (match cart pattern).
 4. **Managers** — no profile read until explicit permission + audit requirement.
 5. **Deletion** — when `users` row deleted, cascade delete profile + addresses (FK `ON DELETE CASCADE`).
