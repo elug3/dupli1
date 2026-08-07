@@ -241,3 +241,43 @@ func (m *mutableProduct) GetVariantBySkuID(_ context.Context, skuID string) (*po
 	skuID = strings.TrimSpace(skuID)
 	return &ports.VariantInfo{SkuID: skuID, SKU: strings.ToUpper(skuID), UnitPriceCents: m.price}, nil
 }
+
+func TestCompleteCheckoutRejectsSecondComplete(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.NewRepository()
+	stock := &fakeStock{reservationID: "res-checkout"}
+	svc := service.NewWithCheckout(repo, stock, nil, 0).WithProduct(&fakeProduct{defaultCents: 5000})
+
+	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
+		CustomerID: "customer-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession returned error: %v", err)
+	}
+	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
+		SKU: "bag-1", Quantity: 1, UnitPriceCents: 5000,
+	}); err != nil {
+		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
+	}
+
+	first, err := svc.CompleteCheckout(ctx, session.ID, testCompleteCheckoutInput())
+	if err != nil {
+		t.Fatalf("first CompleteCheckout returned error: %v", err)
+	}
+
+	_, err = svc.CompleteCheckout(ctx, session.ID, testCompleteCheckoutInput())
+	if !errors.Is(err, domain.ErrSessionNotOpen) {
+		t.Fatalf("second CompleteCheckout error = %v, want ErrSessionNotOpen", err)
+	}
+
+	orders, err := repo.ListByCustomer(ctx, "customer-1")
+	if err != nil {
+		t.Fatalf("ListByCustomer returned error: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("customer order count = %d, want 1", len(orders))
+	}
+	if orders[0].ID != first.Order.ID {
+		t.Fatalf("order id = %q, want %q", orders[0].ID, first.Order.ID)
+	}
+}

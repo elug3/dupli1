@@ -171,13 +171,19 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 	if err != nil {
 		return nil, err
 	}
-	if err := session.Complete(order.ID, s.now()); err != nil {
+	now := s.now()
+	claimed, err := s.repo.CompleteCheckoutSessionIfOpen(ctx, session.ID, order.ID, now)
+	if err != nil {
 		_, _ = s.CancelOrder(ctx, order.ID)
 		return nil, err
 	}
-	if _, err := s.saveCheckoutSession(ctx, session); err != nil {
-		return nil, err
+	if !claimed {
+		_, _ = s.CancelOrder(ctx, order.ID)
+		return nil, domain.ErrSessionNotOpen
 	}
+	session.Status = domain.CheckoutStatusCompleted
+	session.OrderID = order.ID
+	session.UpdatedAt = now
 
 	return &CompleteCheckoutResult{
 		Session: cloneCheckoutSession(session),

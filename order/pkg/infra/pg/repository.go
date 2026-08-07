@@ -653,6 +653,22 @@ func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.Ch
 	return tx.Commit(ctx)
 }
 
+func (r *Repository) CompleteCheckoutSessionIfOpen(ctx context.Context, sessionID, orderID string, now time.Time) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE checkout_sessions
+		SET status = $3, order_id = $4, updated_at = $5
+		WHERE id = $1 AND status = $2
+	`, sessionID, domain.CheckoutStatusOpen, domain.CheckoutStatusCompleted, orderID, now)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain.CheckoutSession, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
