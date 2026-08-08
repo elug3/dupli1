@@ -86,22 +86,36 @@ func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInpu
 		return nil, err
 	}
 	now := s.now()
+	goodsName := "Dupli1 " + order.ID
 	session, err := s.checkout.CreateSession(ctx, ports.CheckoutSessionInput{
 		OrderID:     order.ID,
 		PaymentID:   paymentID,
 		AmountCents: order.TotalCents,
 		Currency:    domain.DefaultCurrency,
 		CustomerID:  order.CustomerID,
+		OrderName:   order.RecipientName,
+		OrderTel:    order.RecipientPhone,
+		GoodsName:   goodsName,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalCents, domain.DefaultCurrency, domain.ProviderDev, session.ProviderRef, session.CheckoutURL, now)
+	provider := session.Provider
+	if provider == "" {
+		provider = domain.ProviderDev
+		if strings.HasPrefix(session.ProviderRef, "nano_") {
+			provider = domain.ProviderNano
+		}
+	}
+
+	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalCents, domain.DefaultCurrency, provider, session.ProviderRef, session.CheckoutURL, now)
 	if err != nil {
 		return nil, err
 	}
 	payment.Method = domain.MethodCreditCard
+	payment.PayerName = strings.TrimSpace(order.RecipientName)
+	payment.PayerPhone = strings.TrimSpace(order.RecipientPhone)
 	if input.CreatedBy != "" {
 		payment.CreatedBy = input.CreatedBy
 	}
@@ -175,6 +189,63 @@ func (s *Service) CompletePayment(ctx context.Context, paymentID string) (*domai
 	payment, err := s.repo.Get(ctx, paymentID)
 	if err != nil {
 		return nil, err
+	}
+	if payment.Status != domain.StatusSucceeded {
+		payment.MarkSucceeded(s.now())
+	}
+	if err := s.persistSucceeded(ctx, payment); err != nil {
+		return nil, err
+	}
+	return payment, nil
+}
+
+// NanoResult is the verified approval payload from NANO receiveUrl / webhook.
+type NanoResult struct {
+	ResultCode  string `json:"resultCode"`
+	ResultMsg   string `json:"resultMsg"`
+	ShopCode    string `json:"shopcode"`
+	CompOrderNo string `json:"compOrderNo"` // our payment id
+	ReqPayAmt   string `json:"reqPayAmt"`
+	TranNo      string `json:"tranNo"`
+	PayWay      string `json:"payWay"`
+}
+
+// HandleNanoResult marks a NANO card payment succeeded or failed after PG callback.
+// Amount and shop code must match; browser redirect alone without resultCode=0000 does not pay.
+func (s *Service) HandleNanoResult(ctx context.Context, expectedShopCode string, result NanoResult) (*domain.Payment, error) {
+	paymentID := strings.TrimSpace(result.CompOrderNo)
+	if paymentID == "" {
+		return nil, domain.ErrInvalidPayment
+	}
+	payment, err := s.repo.Get(ctx, paymentID)
+	if err != nil {
+		return nil, err
+	}
+	if payment.Provider != domain.ProviderNano && !strings.HasPrefix(payment.ProviderRef, "nano_") {
+		return nil, domain.ErrInvalidPayment
+	}
+	if expectedShopCode != "" && strings.TrimSpace(result.ShopCode) != "" &&
+		strings.TrimSpace(result.ShopCode) != strings.TrimSpace(expectedShopCode) {
+		return nil, domain.ErrInvalidPayment
+	}
+	if amt := strings.TrimSpace(result.ReqPayAmt); amt != "" {
+		want := fmt.Sprintf("%d", payment.AmountCents)
+		if amt != want {
+			return nil, domain.ErrInvalidPayment
+		}
+	}
+	if strings.TrimSpace(result.ResultCode) != "0000" {
+		if payment.Status == domain.StatusSucceeded {
+			return payment, nil
+		}
+		payment.MarkFailed(s.now())
+		if err := s.repo.Save(ctx, payment); err != nil {
+			return nil, err
+		}
+		return payment, nil
+	}
+	if tran := strings.TrimSpace(result.TranNo); tran != "" {
+		payment.ProviderRef = tran
 	}
 	if payment.Status != domain.StatusSucceeded {
 		payment.MarkSucceeded(s.now())

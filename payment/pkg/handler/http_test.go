@@ -194,3 +194,50 @@ func (p *recordingPublisher) Publish(_ context.Context, subject string, event an
 	}
 	return nil
 }
+
+type nanoOrderClient struct{}
+
+func (s nanoOrderClient) GetOrder(_ context.Context, _, _ string) (*ports.OrderSummary, error) {
+	return &ports.OrderSummary{
+		ID: "ord-1", CustomerID: "u-1", Status: "pending", TotalCents: 1000,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}, nil
+}
+
+func TestNanoReturn_SucceedsAndRedirects(t *testing.T) {
+	repo := memory.NewRepository()
+	pub := &recordingPublisher{}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key",
+		PublicBaseURL: "http://localhost:8080",
+		SuccessURL:    "http://localhost:5173/checkout/confirmation",
+		FailureURL:    "http://localhost:5173/checkout",
+	})
+	svc := service.New(repo, nanoOrderClient{}, nano, pub)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret")).WithNano(nano)
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	form := "resultCode=0000&shopcode=240000005&compOrderNo=" + created.ID + "&reqPayAmt=1000&tranNo=tn_1"
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/nano/return", bytes.NewBufferString(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	loc := rec.Header().Get("Location")
+	if loc == "" || !bytes.Contains([]byte(loc), []byte("order_id=ord-1")) {
+		t.Fatalf("Location = %q", loc)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("events = %d", len(pub.events))
+	}
+}

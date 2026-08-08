@@ -14,8 +14,8 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Inventory (stock, reservations) | Implemented (PostgreSQL, owned by product) |
 | Orders + checkout sessions | Implemented (PostgreSQL) |
 | Shopping cart | Implemented (PostgreSQL) |
-| Payments (Bypass + local simulate) | Implemented — see [payment-service.md](payment-service.md) |
-| Payment methods | Credit card + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
+| Payments (NANO card + Bypass + local simulate) | Implemented — see [payment-service.md](payment-service.md) |
+| Payment methods | Credit card (NANO) + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
 | Notifications | Implemented (NATS → Telegram when configured) |
 | User profiles, chat, analytics | **Profile phase A** in auth (`/me/profile`, `/me/addresses`) — [auth-profile-extension-plan.md](auth-profile-extension-plan.md); guest PDP views + recommendations in product; chat/analytics not started |
 | Manager settings (mutable store policy) | Sketch — see [manager-settings-api.md](manager-settings-api.md) |
@@ -111,11 +111,11 @@ See [service-layout.md](service-layout.md) for details.
 - **Host port:** 8087
 - **Persistence:** PostgreSQL (`payments` on `postgres-payment`)
 - **Features:**
-  - No card PG — manager **Bypass** in prod; local **dev simulate** when `PAYMENT_ALLOW_DEV_SIMULATE=true` (see [payment-service.md](payment-service.md))
+  - **NANO** certified card PG when `NANO_*` credentials set; else manager **Bypass** / local **dev simulate** (see [payment-service.md](payment-service.md))
   - Default payment currency: **`krw` only** (whole won; `*_cents` fields are KRW minor units = won)
-  - Dev simulate URL `GET /api/v1/payments/{id}/simulate-success` only when **`PAYMENT_ALLOW_DEV_SIMULATE=true`** (Compose default); production leaves the env unset
+  - Dev simulate URL `GET /api/v1/payments/{id}/simulate-success` only when **`PAYMENT_ALLOW_DEV_SIMULATE=true`** and NANO unset (Compose default)
   - Publishes **`payment.succeeded`** via transactional **outbox** (soft-success complete; drain + reconcile workers)
-  - **Methods:** `method` on create — `credit_card` (local simulate only), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)
+  - **Methods:** `method` on create — `credit_card` (NANO or local simulate), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)
 - **Auth:** Bearer JWT on customer routes; ownership ABAC unless `payment.create` / `payment.read.all`. Bypass requires `payment.bypass`
 - **Tests:** `cd payment && go test ./...`
 

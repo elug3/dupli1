@@ -190,7 +190,7 @@ Full design (boundaries vs inventory/order, data model, checkout handoff): [docs
 
 ### Payment (`dupli1-payment` :8087)
 
-No card PG adapter in-tree. **v1.0 production** uses manager **Bypass** (`payment.bypass`) only; a PG company is TBD. Local Compose enables `PAYMENT_ALLOW_DEV_SIMULATE=true` for the simulate-success path. Unpaid `pending` orders auto-cancel after **5 minutes**. [docs/payment-service.md](docs/payment-service.md).
+Credit card uses **NANO Solution** certified payment when `NANO_*` is configured; otherwise manager **Bypass** (`payment.bypass`). Local Compose enables `PAYMENT_ALLOW_DEV_SIMULATE=true` for the simulate-success path when NANO is unset. Unpaid `pending` orders auto-cancel after **5 minutes**. [docs/payment-service.md](docs/payment-service.md).
 
 ### Product IDs and variants
 

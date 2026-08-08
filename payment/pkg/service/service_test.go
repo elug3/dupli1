@@ -385,3 +385,136 @@ func TestReconcileSucceededPaymentsRepublishes(t *testing.T) {
 		t.Fatalf("reconcile events = %+v", pub.events)
 	}
 }
+
+func TestCreatePayment_NanoCheckout(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		RecipientName: "윤라희", RecipientPhone: "010-4112-5167",
+	}}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		BaseURL: "https://dev3.nanopay.co.kr", Ver: "240000005", ShopCode: "240000005",
+		LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
+	})
+	svc := service.New(repo, orders, nano, nil)
+
+	payment, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	if payment.Provider != domain.ProviderNano {
+		t.Fatalf("provider = %s, want nano", payment.Provider)
+	}
+	if payment.PayerName != "윤라희" || payment.PayerPhone != "010-4112-5167" {
+		t.Fatalf("payer = %q / %q", payment.PayerName, payment.PayerPhone)
+	}
+	if payment.CheckoutURL != "http://localhost:8080/api/v1/payments/"+payment.ID+"/nano/checkout" {
+		t.Fatalf("checkout_url = %s", payment.CheckoutURL)
+	}
+}
+
+func TestCreatePayment_NanoRequiresRecipient(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+	}}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
+	})
+	svc := service.New(repo, orders, nano, nil)
+	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if !errors.Is(err, domain.ErrInvalidPayment) {
+		t.Fatalf("err = %v, want ErrInvalidPayment", err)
+	}
+}
+
+func TestHandleNanoResult_Success(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}}
+	pub := &recordingPublisher{}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
+	})
+	svc := service.New(repo, orders, nano, pub)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	paid, err := svc.HandleNanoResult(context.Background(), "240000005", service.NanoResult{
+		ResultCode: "0000", ShopCode: "240000005", CompOrderNo: created.ID,
+		ReqPayAmt: "70000", TranNo: "2409030071109",
+	})
+	if err != nil {
+		t.Fatalf("HandleNanoResult: %v", err)
+	}
+	if paid.Status != domain.StatusSucceeded {
+		t.Fatalf("status = %s", paid.Status)
+	}
+	if paid.ProviderRef != "2409030071109" {
+		t.Fatalf("provider_ref = %s", paid.ProviderRef)
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("events = %d", len(pub.events))
+	}
+}
+
+func TestHandleNanoResult_AmountMismatch(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
+	})
+	svc := service.New(repo, orders, nano, nil)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	_, err = svc.HandleNanoResult(context.Background(), "240000005", service.NanoResult{
+		ResultCode: "0000", ShopCode: "240000005", CompOrderNo: created.ID, ReqPayAmt: "1",
+	})
+	if !errors.Is(err, domain.ErrInvalidPayment) {
+		t.Fatalf("err = %v, want ErrInvalidPayment", err)
+	}
+}
+
+func TestHandleNanoResult_FailureMarksFailed(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
+	})
+	svc := service.New(repo, orders, nano, nil)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	paid, err := svc.HandleNanoResult(context.Background(), "240000005", service.NanoResult{
+		ResultCode: "9999", ShopCode: "240000005", CompOrderNo: created.ID, ReqPayAmt: "70000",
+	})
+	if err != nil {
+		t.Fatalf("HandleNanoResult: %v", err)
+	}
+	if paid.Status != domain.StatusFailed {
+		t.Fatalf("status = %s, want failed", paid.Status)
+	}
+}
