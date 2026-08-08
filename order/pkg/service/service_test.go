@@ -253,6 +253,36 @@ func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
 	}
 }
 
+func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-123"}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	_, err = svc.ShipOrder(ctx, order.ID, "manager-1")
+	if !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Fatalf("ShipOrder error = %v, want ErrInvalidTransition", err)
+	}
+	if stock.committed != "" {
+		t.Fatalf("committed = %q, want empty (stock must not commit on rejected ship)", stock.committed)
+	}
+
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusPending {
+		t.Fatalf("status = %q, want pending", got.Status)
+	}
+}
+
 func TestCancelPaidOrderReleasesStock(t *testing.T) {
 	ctx := context.Background()
 	stock := &fakeStock{reservationID: "res-123"}
