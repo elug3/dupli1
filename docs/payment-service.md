@@ -1,8 +1,8 @@
 # Payment Service
 
-**Status:** Implemented (`payment/`). Local Compose sets `PAYMENT_ALLOW_DEV_SIMULATE=true` so `GET /api/v1/payments/{id}/simulate-success` works without a PG. **Production must leave that env unset** — v1.0 is launching **without Stripe** (PG company TBD); ops marks orders paid via **Bypass** (`payment.bypass`).
+**Status:** Implemented (`payment/`). Local Compose sets `PAYMENT_ALLOW_DEV_SIMULATE=true` so `GET /api/v1/payments/{id}/simulate-success` works without a PG. **Production must leave that env unset** — v1.0 launches **without a card PG** (PG company TBD); ops marks orders paid via **Bypass** (`payment.bypass`).
 
-The **payment service** (`dupli1-payment`) can collect money for **pending** orders via an optional **Stripe Checkout** adapter (hosted redirect) **or** manager **Bypass**. Dupli1 **never** handles card numbers, CVC, or card passwords. Stripe is **not** planned for the v1.0 cut.
+The **payment service** (`dupli1-payment`) records money for **pending** orders via manager **Bypass** or (local only) **dev simulate**. There is **no Stripe (or other card PG) adapter** in the codebase. Dupli1 **never** handles card numbers, CVC, or card passwords.
 
 On PG success, payment enqueues **`payment.succeeded`** in a transactional outbox (soft-success even if NATS is briefly down). The **order service** consumes it (queue group + logged handler errors), verifies amount, and moves the order to **`paid`**. A payment reconcile worker re-publishes recent succeeded payments so lost Core NATS deliveries still land (`MarkOrderPaid` is idempotent). The **notification service** sends a Telegram alert to ops. An **order manager** ships the order (`paid` → **`in_transit`**), which **commits** inventory (plan B).
 
@@ -44,7 +44,6 @@ sequenceDiagram
     participant Cart as dupli1-cart
     participant Order as dupli1-order
     participant Pay as dupli1-payment
-    participant PG as Stripe Checkout
     participant Bus as NATS
     participant Notif as dupli1-notification
     participant Ops as order-manager
@@ -53,15 +52,12 @@ sequenceDiagram
     Client->>Order: checkout complete
     Order-->>Client: order_id (pending, stock reserved)
 
-    Client->>Pay: POST /api/v1/payments { order_id }
-    Pay->>Order: GET order (verify pending + total)
-    Pay->>PG: Create Checkout Session
-    Pay-->>Client: checkout_url
-    Client->>PG: redirect — pay on Stripe
+    Note over Client,Pay: Prod: manager Bypass · Local: credit_card + simulate-success
 
-    PG->>Pay: webhook checkout.session.completed
+    Client->>Pay: POST /api/v1/payments { order_id, method }
+    Pay->>Order: GET order (verify pending + total)
+    Pay->>Pay: mark succeeded (bypass) or return simulate URL (dev)
     Pay->>Bus: payment.succeeded { order_id, payment_id, amount_cents }
-    Pay-->>Client: success redirect (poll order status)
 
     Bus->>Order: consume payment.succeeded
     Order->>Order: pending → paid
@@ -81,10 +77,10 @@ sequenceDiagram
 
 | Topic | Choice |
 |-------|--------|
-| PG UI | **Stripe Checkout redirect** |
+| Card PG | **None** (removed; PG TBD) |
 | Card data on Dupli1 | **Never** |
 | Default currency | **`krw` only** (single currency; other codes rejected) |
-| Amount unit | Whole Korean won (`amount_cents` = Stripe minor units for KRW — **not** won×100) |
+| Amount unit | Whole Korean won (`amount_cents` = zero-decimal minor units for KRW — **not** won×100) |
 | Unpaid `pending` TTL | **5 minutes** → auto-cancel + release stock |
 | Inventory plan | **B** — reserve on checkout complete; **commit on `in_transit`** |
 | Payment → order | **`payment.succeeded` event** (not HTTP confirm from payment) |
@@ -101,10 +97,9 @@ sequenceDiagram
 
 ### Payment service owns
 
-- Payment records and Stripe Checkout Session creation
-- Stripe webhooks (signature verification, idempotency)
+- Payment records (Bypass + local/dev simulate)
 - Publishing **`payment.succeeded`** (transactional outbox + drain/reconcile workers)
-- Dev/simulate endpoints when Stripe is not configured (local only)
+- Dev/simulate endpoints when `PAYMENT_ALLOW_DEV_SIMULATE=true` (local only)
 
 ### Order service owns
 
@@ -156,32 +151,31 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
 |--------|------|------|-------------|
 | `GET` | `/api/v1/payments/health` | — | Health |
 | `GET` | `/api/v1/payments/settings` | — | Non-secret service settings |
-| `POST` | `/api/v1/payments` | Bearer | Start Checkout → `checkout_url` |
-| `GET` | `/api/v1/payments/{id}` | Bearer | Payment status (poll after redirect) |
-| `POST` | `/api/v1/payments/webhooks/stripe` | Stripe signature | Webhook handler |
+| `POST` | `/api/v1/payments` | Bearer | Create payment (`bypass` or local `credit_card` simulate) |
+| `GET` | `/api/v1/payments/{id}` | Bearer | Payment status |
+| `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (`PAYMENT_ALLOW_DEV_SIMULATE`) |
 
-**Create payment**
+**Create payment (local simulate)**
 ```json
 { "order_id": "ord_000001", "method": "credit_card" }
 ```
 
-Omit `method` (or send `credit_card`) for Stripe Checkout. Managers with `payment.bypass` may send `method: "bypass"` (+ optional `note`) to mark paid without a PG.
+`credit_card` works only when `PAYMENT_ALLOW_DEV_SIMULATE=true` (returns a simulate URL). Managers with `payment.bypass` may send `method: "bypass"` (+ optional `note`) to mark paid without a PG.
 
-**Response**
+**Bypass response**
 ```json
 {
   "id": "pay_000001",
   "order_id": "ord_000001",
-  "method": "credit_card",
+  "method": "bypass",
   "amount_cents": 70000,
   "currency": "krw",
-  "status": "requires_payment",
-  "checkout_url": "https://checkout.stripe.com/...",
+  "status": "succeeded",
   "expires_at": "2026-07-05T12:05:00Z"
 }
 ```
 
-**Customer UX after redirect:** show *"Payment received — we're preparing your order"* while status is `paid`; poll `GET /api/v1/orders/{id}` or `GET /api/v1/payments/{id}`.
+**Customer UX:** show *"Payment received — we're preparing your order"* while status is `paid`; poll `GET /api/v1/orders/{id}` or `GET /api/v1/payments/{id}`.
 
 ### Order (changes)
 
@@ -207,11 +201,12 @@ Omit `method` (or send `credit_card`) for Stripe Checkout. Managers with `paymen
 
 ## Security
 
-1. Webhook is source of truth — not the browser redirect alone
+1. `payment.succeeded` (outbox) is source of truth for marking orders paid
 2. Verify `amount_cents` on `payment.succeeded`
-3. Idempotent webhook handling (`event_id`, `payment_id`)
+3. Idempotent complete / replay handling (`payment_id`)
 4. Customer may only pay own orders
 5. Ship endpoint requires elevated role; writes `shipped_by` from JWT `sub`
+6. Bypass requires `payment.bypass`
 
 ---
 
@@ -222,11 +217,7 @@ Omit `method` (or send `credit_card`) for Stripe Checkout. Managers with `paymen
 | `DUPLI1_PAYMENT_ADDR` | payment | Listen `:8087` |
 | `DUPLI1_PAYMENT_DB` | payment | Postgres `payments` |
 | `DUPLI1_ORDER_URL` | payment | Fetch order for validation |
-| `STRIPE_SECRET_KEY` | payment | Stripe API key |
-| `STRIPE_WEBHOOK_SECRET` | payment | Webhook signing secret |
-| `STRIPE_SUCCESS_URL` | payment | Checkout success redirect |
-| `STRIPE_CANCEL_URL` | payment | Checkout cancel redirect |
-| `PAYMENT_ALLOW_DEV_SIMULATE` | payment | `true` enables `GET …/simulate-success` when Stripe is unset (local Compose only; **unset on ECS**) |
+| `PAYMENT_ALLOW_DEV_SIMULATE` | payment | `true` enables `GET …/simulate-success` (local Compose only; **unset on ECS**) |
 | `DUPLI1_PAYMENT_ORDER_TTL` | order | `5m` pending payment window |
 | `NATS_URL` | all | Event bus |
 | `TELEGRAM_BOT_TOKEN` | notification | Bot token (prod: Secrets Manager `dupli1/production/telegram`) — **only secret**; see [notification-telegram-bot.md](notification-telegram-bot.md) |
@@ -243,9 +234,9 @@ Local Postgres (payment): `postgres://dupli1:dupli1_dev@localhost:5437/payments?
 | Case | Result |
 |------|--------|
 | Unpaid > 5 min | `canceled`, release stock |
-| Stripe failed / abandoned | stay `pending` until TTL, then cancel |
+| Simulate abandoned / never completed | stay `pending` until TTL, then cancel |
 | Paid, ops rejects | `canceled` + refund (payment phase 2) |
-| Duplicate webhook | idempotent — order stays `paid` |
+| Duplicate `payment.succeeded` | idempotent — order stays `paid` |
 | Replayed `payment.succeeded` after ship | no-op when `payment_id` already set and status ≠ `pending` |
 
 ---
@@ -259,7 +250,7 @@ payment/
     ├── domain/
     ├── service/
     ├── ports/
-    ├── infra/pg/, stripe/, httporder/, nats/
+    ├── infra/pg/, checkout/, httporder/, nats/
     ├── handler/
     └── bootstrap/
 ```

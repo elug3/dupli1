@@ -11,22 +11,19 @@ func TestBuildSettingsDevSimulateRequiresExplicitOptIn(t *testing.T) {
 	if got := resp.Limits["checkout_provider"]; got != "none" {
 		t.Fatalf("checkout_provider = %v, want none", got)
 	}
+	if resp.Features["method_credit_card"] {
+		t.Fatal("method_credit_card should be false when simulate is off")
+	}
 
 	cfg.AllowDevSimulate = true
 	resp = BuildSettings(cfg)
 	if !resp.Features["dev_simulate_success"] {
-		t.Fatal("dev_simulate_success should be true when AllowDevSimulate is set and Stripe is empty")
+		t.Fatal("dev_simulate_success should be true when AllowDevSimulate is set")
 	}
 	if got := resp.Limits["checkout_provider"]; got != "dev" {
 		t.Fatalf("checkout_provider = %v, want dev", got)
 	}
-
-	cfg.StripeSecretKey = "sk_test"
-	resp = BuildSettings(cfg)
-	if resp.Features["dev_simulate_success"] {
-		t.Fatal("dev_simulate_success should be false when Stripe is configured")
-	}
-	if got := resp.Limits["checkout_provider"]; got != "stripe" {
-		t.Fatalf("checkout_provider = %v, want stripe", got)
+	if !resp.Features["method_credit_card"] {
+		t.Fatal("method_credit_card should be true when simulate is on")
 	}
 }

@@ -26,7 +26,7 @@ The **money path is implemented**: cart → checkout/order → Stripe/Bypass →
 | Inventory | Stock + reserve/commit/release in product service |
 | Cart | JWT cart; server-sourced prices |
 | Order | Checkout sessions; idempotency; unpaid expiry; ship + stock commit |
-| Payment | Stripe Checkout + webhook; Bypass; KRW; outbox/reconcile |
+| Payment | Bypass + local simulate; KRW; outbox/reconcile (no Stripe) |
 | Notification | Telegram on order/product events |
 | AWS | ECS/ALB/RDS/Secrets; cart + payment on ECS; HTTPS on ALB |
 
@@ -241,22 +241,21 @@ WHERE EXISTS (SELECT 1 FROM unnest(image_urls) AS u WHERE u LIKE '%s3.amazonaws.
 
 Verify a PDP image URL returns `200` from a plain browser fetch (no signature), not `403`.
 
-### 3. Card PG / Stripe — **waived for v1.0**
+### 3. Card PG — **waived for v1.0** (Stripe adapter removed)
 
-Dupli1 will **not** use Stripe for this launch; the company has not chosen a PG yet.
-Leave `STRIPE_SECRET_KEY` / webhook unset. Credit-card checkout stays unavailable until a
-provider is wired. Ops marks orders paid with **Bypass** (`payment.bypass`).
+Dupli1 has **no card PG adapter** in-tree; the company has not chosen a PG yet.
+Credit-card checkout stays unavailable in production until a provider is wired.
+Ops marks orders paid with **Bypass** (`payment.bypass`).
 
-**Important:** `simulate-success` used to turn on whenever Stripe was empty. It now requires
-an explicit `PAYMENT_ALLOW_DEV_SIMULATE=true` (Compose sets this for local). On ECS leave it
-**unset** so prod cannot simulate. Verify after deploying that payment build:
+**Important:** `simulate-success` requires an explicit `PAYMENT_ALLOW_DEV_SIMULATE=true`
+(Compose sets this for local). On ECS leave it **unset** so prod cannot simulate.
+Verify after deploying that payment build:
 
 ```bash
 curl -s https://dupli1.com/api/v1/payments/settings \
-  | jq '{stripe_checkout: .features.stripe_checkout,
-         dev_simulate_success: .features.dev_simulate_success,
+  | jq '{dev_simulate_success: .features.dev_simulate_success,
          checkout_provider: .limits.checkout_provider}'
-# want: stripe_checkout false, dev_simulate_success false, checkout_provider "none"
+# want: dev_simulate_success false, checkout_provider "none"
 ```
 
 Bypass stays gated on `payment.bypass` ([payment-service.md](payment-service.md),

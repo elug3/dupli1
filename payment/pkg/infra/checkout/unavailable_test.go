@@ -2,6 +2,7 @@ package checkout
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/elug3/dupli1/payment/pkg/ports"
@@ -13,7 +14,7 @@ func TestUnavailableProviderRejectsSession(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if err.Error() != "no pg" {
-		t.Fatalf("err = %v", err)
+	if !errors.Is(err, ports.ErrMethodUnavailable) {
+		t.Fatalf("err = %v, want ErrMethodUnavailable", err)
 	}
 }

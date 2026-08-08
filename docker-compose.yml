@@ -313,10 +313,6 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
       AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
       NATS_URL: nats://nats:4222
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:8080/checkout/success}
-      STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:8080/checkout/cancel}
       # Local Compose only — leave unset on ECS so prod without a PG cannot simulate.
       PAYMENT_ALLOW_DEV_SIMULATE: ${PAYMENT_ALLOW_DEV_SIMULATE:-true}
     depends_on:

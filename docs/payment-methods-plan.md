@@ -1,6 +1,6 @@
 # Plan: Payment Methods
 
-**Status:** Design + Bypass implemented. Credit-card adapter remains Stripe Checkout in code but **v1.0 does not plan to use Stripe** (PG company TBD). Bitcoin is still spec-only (do not implement yet).
+**Status:** Design + Bypass implemented. **Stripe Checkout adapter removed** from the codebase; card PG is TBD. Local `credit_card` uses **dev simulate** only (`PAYMENT_ALLOW_DEV_SIMULATE`). Bitcoin is still spec-only (do not implement yet).
 
 **Related:** [payment-service.md](payment-service.md), [permissions.md](permissions.md), [checkout-session.md](checkout-session.md), [auth-profile-extension-plan.md](auth-profile-extension-plan.md), [current-state.md](current-state.md).
 
@@ -10,7 +10,7 @@ Offer three payment methods for pending orders, with a single confirmation path 
 
 | Method | Who can use it | Status |
 |--------|----------------|--------|
-| **Credit card** | Customer (own order) or `payment.create` | **Implemented** (Stripe Checkout adapter) — **not wired for v1.0**; PG TBD |
+| **Credit card** | Customer (own order) or `payment.create` | **Local/dev simulate only** — no card PG adapter; PG TBD |
 | **Bypass** | Order manager only (`payment.bypass`) | **Implemented** — mark paid without a PG (**v1.0 launch path**) |
 | **Bitcoin** | Customer (own order) | **Planned — do not implement yet** |
 
@@ -28,10 +28,11 @@ All successful methods must end the same way: payment record → **`succeeded`**
 
 | Piece | Today |
 |-------|--------|
-| Create payment | `POST /api/v1/payments` with `{ "order_id" }` only — no `method` field |
-| Provider | Implicit: `stripe` when `STRIPE_SECRET_KEY` set, else `dev` |
-| Checkout | Single `CheckoutProvider` (Stripe or in-process simulate URL) |
-| Permissions | `payment.create`, `payment.read.all` — no staff “mark paid” method |
+| Create payment | `POST /api/v1/payments` with `{ "order_id", "method" }` |
+| Card PG | **Removed** — no Stripe adapter |
+| Provider | `dev` (local simulate) or `bypass` |
+| Checkout | `CheckoutProvider` = DevProvider when `PAYMENT_ALLOW_DEV_SIMULATE`, else UnavailableProvider |
+| Permissions | `payment.create`, `payment.read.all`, `payment.bypass` |
 | Order paid | Only via `payment.succeeded` consumer (not manual `PUT …/status`) |
 | Naming collision | Service input `BypassABAC` means “skip customer ownership check” — **not** the Bypass payment method |
 
@@ -42,7 +43,8 @@ POST /api/v1/payments
   { "order_id": "ord_…", "method": "credit_card" | "bypass" | "bitcoin" }
 
                     ┌─────────────────┐
-  credit_card  ───► │ Stripe Checkout │ ── webhook ──► CompletePayment
+  credit_card  ───► │ Dev simulate    │ ── simulate-success ──► CompletePayment
+                    │ (local only)    │     else 501 Unavailable
                     └─────────────────┘
                     ┌─────────────────┐
   bypass       ───► │ Immediate mark  │ ──► CompletePayment (no PG)
@@ -60,7 +62,7 @@ POST /api/v1/payments
                      order pending → paid
 ```
 
-Default when `method` is omitted: **`credit_card`** (preserves today’s clients).
+Default when `method` is omitted: **`credit_card`** (local simulate when enabled; 501 in prod).
 
 ---
 
@@ -68,25 +70,25 @@ Default when `method` is omitted: **`credit_card`** (preserves today’s clients
 
 ### 1. Credit card (`credit_card`)
 
-**Status:** Implemented (behavior unchanged; name becomes explicit).
+**Status:** Local/dev simulate only — **no card PG adapter**.
 
 | Topic | Choice |
 |-------|--------|
-| API `method` | `credit_card` (alias none for now; omit → this) |
-| Provider value | `stripe` (prod) / `dev` (local simulate) |
-| UI | Stripe Checkout **redirect** — Dupli1 never sees card data |
+| API `method` | `credit_card` (omit → this) |
+| Provider value | `dev` (local simulate only) |
+| UI | Storefront “credit card” → simulate URL when Compose enables simulate |
 | Auth | Own order (ABAC) or `payment.create` |
-| Completion | Stripe webhook `checkout.session.completed` (or local `simulate-success`) |
+| Completion | Local `simulate-success` (gated by `PAYMENT_ALLOW_DEV_SIMULATE`) |
 | TTL | Existing 5-minute unpaid window |
 | Currency | KRW only (`amount_cents` = whole won) |
 
-**API shape (unchanged response, plus method):**
+**API shape (local simulate):**
 
 ```json
 // Request
 { "order_id": "ord_000001", "method": "credit_card" }
 
-// Response (existing fields + method)
+// Response
 {
   "id": "pay_000001",
   "order_id": "ord_000001",
@@ -94,13 +96,11 @@ Default when `method` is omitted: **`credit_card`** (preserves today’s clients
   "amount_cents": 70000,
   "currency": "krw",
   "status": "requires_payment",
-  "provider": "stripe",
-  "checkout_url": "https://checkout.stripe.com/...",
+  "provider": "dev",
+  "checkout_url": "http://localhost:8080/api/v1/payments/pay_000001/simulate-success",
   "expires_at": "..."
 }
 ```
-
-No change to Stripe webhook path or event payload beyond optional `method` on the payment record for audit.
 
 ---
 

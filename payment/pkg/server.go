@@ -26,18 +26,14 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	}
 
 	app, err := bootstrap.Bootstrap(bootstrap.Config{
-		OrderURL:            opts.OrderURL,
-		DatabaseConnString:  opts.DatabaseConnString,
-		JWTSecret:           opts.JWTSecret,
-		JWKSURL:             opts.JWKSURL,
-		NATSURL:             opts.NATSURL,
-		StripeSecretKey:     opts.StripeSecretKey,
-		StripeWebhookSecret: opts.StripeWebhookSecret,
-		StripeSuccessURL:    opts.StripeSuccessURL,
-		StripeCancelURL:     opts.StripeCancelURL,
-		PublicBaseURL:       opts.PublicBaseURL,
-		AllowDevSimulate:    opts.AllowDevSimulate,
-		HTTPClient:          bootstrap.DefaultHTTPClient(),
+		OrderURL:           opts.OrderURL,
+		DatabaseConnString: opts.DatabaseConnString,
+		JWTSecret:          opts.JWTSecret,
+		JWKSURL:            opts.JWKSURL,
+		NATSURL:            opts.NATSURL,
+		PublicBaseURL:      opts.PublicBaseURL,
+		AllowDevSimulate:   opts.AllowDevSimulate,
+		HTTPClient:         bootstrap.DefaultHTTPClient(),
 	})
 	if err != nil {
 		return nil, err

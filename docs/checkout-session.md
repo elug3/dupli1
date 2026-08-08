@@ -4,7 +4,7 @@ Checkout sessions provide a multi-step purchase flow inside the **order service*
 
 For a **persistent** shopping cart (saved across sessions), use the **cart service** first — see [cart-service.md](cart-service.md).
 
-For **payment** after checkout, see [payment-service.md](payment-service.md) (Stripe Checkout redirect; 5-minute unpaid window).
+For **payment** after checkout, see [payment-service.md](payment-service.md) (Bypass / local simulate; 5-minute unpaid window).
 
 Recipient name, phone, and shipping address are planned on checkout **complete** (order snapshot) with optional prefill from auth profile — see [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
 
@@ -201,7 +201,7 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
 }
 ```
 
-After completion, the order is **`pending`** with inventory reserved. The customer must pay within **5 minutes** via the payment service (Stripe Checkout redirect); see [payment-service.md](payment-service.md). Only `dupli1-payment` confirms the order after a successful webhook — not manual status updates.
+After completion, the order is **`pending`** with inventory reserved. The customer must pay within **5 minutes** via the payment service (manager Bypass, or local simulate); see [payment-service.md](payment-service.md). Only `dupli1-payment` confirms the order after a successful payment — not manual status updates.
 
 ## Configuration
 

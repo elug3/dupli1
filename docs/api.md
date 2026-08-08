@@ -2,7 +2,7 @@
 
 All traffic is routed through the nginx gateway. Locally use **HTTP** at `http://localhost:8080` or `http://localhost` (port 80). Production terminates TLS at the load balancer or gateway.
 
-**Currency:** the storefront uses **KRW only**. Product `price` values and cart/order/payment `*_cents` fields are **whole Korean won** (Stripe minor units for `krw` — do not multiply by 100). Settings expose `limits.currency: "krw"`.
+**Currency:** the storefront uses **KRW only**. Product `price` values and cart/order/payment `*_cents` fields are **whole Korean won** (zero-decimal minor units for `krw` — do not multiply by 100). Settings expose `limits.currency: "krw"`.
 
 **Path convention:** every route is namespaced by its owning service — `/api/v1/products/…` (including inventory, catalog and coupons), `/api/v1/orders/…` (including checkout sessions), `/api/v1/cart/…`, `/api/v1/payments/…`, `/api/v1/auth/…`. The paths documented here are the canonical ones. Older top-level prefixes (`/api/v1/inventory`, `/api/v1/catalog`, `/api/v1/coupons`, `/api/v1/variants`, `/api/v1/checkout`, `/api/v1/carts`) are still registered as aliases and are called out where they differ; new clients should not use them. Migration table: [TODO.md](TODO.md).
 
@@ -746,9 +746,9 @@ Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices
 
 ## Payment Service — `/api/v1/payments`
 
-Stripe Checkout **redirect** for credit cards — Dupli1 never handles card numbers, CVC, or card passwords.
+No card PG adapter — production pays via manager **Bypass**; local Compose uses **dev simulate** (`PAYMENT_ALLOW_DEV_SIMULATE`). Dupli1 never handles card numbers, CVC, or card passwords.
 
-**Methods:** create body accepts `method`: `credit_card` (default), `bypass` (order manager / `payment.bypass`), `bitcoin` (501 until implemented). See [payment-methods-plan.md](payment-methods-plan.md).
+**Methods:** create body accepts `method`: `credit_card` (local simulate only when enabled), `bypass` (order manager / `payment.bypass`), `bitcoin` (501 until implemented). See [payment-methods-plan.md](payment-methods-plan.md).
 
 When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront callers may only pay for / read their own orders unless they hold `payment.create` or `payment.read.all`.
 
@@ -756,7 +756,6 @@ When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront calle
 |--------|------|-------------------|
 | POST | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | GET | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
-| POST | `/api/v1/payments/webhooks/stripe` | — (Stripe signature) |
 | GET | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
 
 **Create payment**

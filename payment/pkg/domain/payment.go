@@ -29,7 +29,6 @@ const (
 
 // Provider identifiers stored on the payment row.
 const (
-	ProviderStripe = "stripe"
 	ProviderDev    = "dev"
 	ProviderBypass = "bypass"
 )
@@ -43,7 +42,7 @@ type Payment struct {
 	ID             string        `json:"id"`
 	OrderID        string        `json:"order_id"`
 	CustomerID     string        `json:"customer_id"`
-	AmountCents    int64         `json:"amount_cents"` // whole KRW won (Stripe minor units for krw)
+	AmountCents    int64         `json:"amount_cents"` // whole KRW won (zero-decimal minor units)
 	Currency       string        `json:"currency"`
 	Status         PaymentStatus `json:"status"`
 	Method         string        `json:"method"`

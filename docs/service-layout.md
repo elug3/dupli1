@@ -118,7 +118,7 @@ Owns shopping carts at `/api/v1/cart` (current user) and `/api/v1/carts/{custome
 **Module:** `github.com/elug3/dupli1/payment`  
 **Storage:** PostgreSQL (`payments` table set), in-memory fallback when no DB URL is configured (tests)
 
-Stripe Checkout redirect; publishes `payment.succeeded` on NATS. See [payment-service.md](payment-service.md).
+Bypass + local/dev simulate; publishes `payment.succeeded` on NATS. See [payment-service.md](payment-service.md).
 
 ### Notification (`notification/pkg`)
 

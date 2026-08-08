@@ -3,22 +3,18 @@ package payment
 import "time"
 
 type ServerOptions struct {
-	Addr                string
-	OrderURL            string
-	DatabaseConnString  string
-	JWTSecret           string
-	JWKSURL             string
-	NATSURL             string
-	StripeSecretKey     string
-	StripeWebhookSecret string
-	StripeSuccessURL    string
-	StripeCancelURL     string
-	PublicBaseURL       string
-	AllowDevSimulate    bool // PAYMENT_ALLOW_DEV_SIMULATE — local/dev only
-	ReadTimeout         time.Duration
-	WriteTimeout        time.Duration
-	IdleTimeout         time.Duration
-	ShutdownTimeout     time.Duration
+	Addr               string
+	OrderURL           string
+	DatabaseConnString string
+	JWTSecret          string
+	JWKSURL            string
+	NATSURL            string
+	PublicBaseURL      string
+	AllowDevSimulate   bool // PAYMENT_ALLOW_DEV_SIMULATE — local/dev only
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
+	ShutdownTimeout    time.Duration
 }
 
 func NewServerOptions() *ServerOptions {

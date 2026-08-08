@@ -21,5 +21,5 @@ func NewUnavailableProvider(reason string) *UnavailableProvider {
 }
 
 func (p *UnavailableProvider) CreateSession(_ context.Context, _ ports.CheckoutSessionInput) (*ports.CheckoutSessionResult, error) {
-	return nil, fmt.Errorf("%s", p.Reason)
+	return nil, fmt.Errorf("%w: %s", ports.ErrMethodUnavailable, p.Reason)
 }

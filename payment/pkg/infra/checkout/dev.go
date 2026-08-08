@@ -8,7 +8,7 @@ import (
 	"github.com/elug3/dupli1/payment/pkg/ports"
 )
 
-// DevProvider returns a local simulate URL when Stripe is not configured.
+// DevProvider returns a local simulate-success URL (PAYMENT_ALLOW_DEV_SIMULATE).
 type DevProvider struct {
 	publicBaseURL string
 }

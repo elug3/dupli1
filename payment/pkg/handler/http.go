@@ -3,18 +3,16 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"log"
 	"net/http"
 	"strings"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/payment/pkg/domain"
 	"github.com/elug3/dupli1/payment/pkg/ports"
 	"github.com/elug3/dupli1/payment/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
-	"github.com/stripe/stripe-go/v81/webhook"
 )
 
 type AccessTokenValidator interface {
@@ -24,17 +22,15 @@ type AccessTokenValidator interface {
 type Handler struct {
 	svc              *service.Service
 	jwtValidator     AccessTokenValidator
-	webhookSecret    string
 	allowDevSimulate bool
 	settings         settings.Response
 }
 
-func New(svc *service.Service, jwtValidator AccessTokenValidator, webhookSecret string) *Handler {
+func New(svc *service.Service, jwtValidator AccessTokenValidator) *Handler {
 	return &Handler{
-		svc:           svc,
-		jwtValidator:  jwtValidator,
-		webhookSecret: webhookSecret,
-		settings:      settings.NewResponse("payment"),
+		svc:          svc,
+		jwtValidator: jwtValidator,
+		settings:     settings.NewResponse("payment"),
 	}
 }
 
@@ -140,11 +136,6 @@ func (h *Handler) paymentRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if parts[0] == "webhooks" && len(parts) == 2 && parts[1] == "stripe" && r.Method == http.MethodPost {
-		h.stripeWebhook(w, r)
-		return
-	}
-
 	if len(parts) == 2 && parts[1] == "simulate-success" && r.Method == http.MethodGet {
 		if !h.allowDevSimulate {
 			respondError(w, http.StatusNotFound, "not found")
@@ -188,41 +179,6 @@ func (h *Handler) simulateSuccess(w http.ResponseWriter, r *http.Request, paymen
 		"message": "Payment received — we're preparing your order.",
 		"payment": payment,
 	})
-}
-
-func (h *Handler) stripeWebhook(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid body")
-		return
-	}
-	if h.webhookSecret == "" {
-		respondError(w, http.StatusServiceUnavailable, "stripe webhook not configured")
-		return
-	}
-	event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), h.webhookSecret)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid signature")
-		return
-	}
-	if event.Type != "checkout.session.completed" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	var sess struct {
-		ID          string            `json:"id"`
-		Metadata    map[string]string `json:"metadata"`
-		AmountTotal int64             `json:"amount_total"`
-	}
-	if err := json.Unmarshal(event.Data.Raw, &sess); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid session payload")
-		return
-	}
-	if err := h.svc.HandleStripeCheckoutCompleted(r.Context(), sess.ID, sess.Metadata["order_id"], sess.Metadata["payment_id"], sess.AmountTotal); err != nil {
-		respondServiceError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
 }
 
 func respondServiceError(w http.ResponseWriter, err error) {
