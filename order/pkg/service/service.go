@@ -252,10 +252,13 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string) (*do
 	if err != nil {
 		return nil, err
 	}
-	if err := s.stock.CommitReservation(ctx, order.ReservationID); err != nil {
+	// Validate the transition before committing stock — CommitReservation is
+	// irreversible, and shipping a non-paid order would permanently decrement
+	// inventory while leaving the order pending/canceled.
+	if err := order.Ship(shippedBy, s.now()); err != nil {
 		return nil, err
 	}
-	if err := order.Ship(shippedBy, s.now()); err != nil {
+	if err := s.stock.CommitReservation(ctx, order.ReservationID); err != nil {
 		return nil, err
 	}
 	return s.saveStatusChange(ctx, order)

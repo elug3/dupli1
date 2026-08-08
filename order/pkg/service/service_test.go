@@ -253,9 +253,9 @@ func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
 	}
 }
 
-func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
+func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
 	ctx := context.Background()
-	stock := &fakeStock{reservationID: "res-original"}
+	stock := &fakeStock{reservationID: "res-123"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
