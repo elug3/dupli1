@@ -165,9 +165,6 @@ func (h *Handler) paymentRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(parts) == 2 && parts[1] == "checkout" && parts[0] != "" && r.Method == http.MethodGet {
-		// /{id}/nano/checkout is three parts — handled below
-	}
 	if len(parts) == 3 && parts[1] == "nano" && parts[2] == "checkout" && r.Method == http.MethodGet {
 		h.nanoCheckout(w, r, parts[0])
 		return
