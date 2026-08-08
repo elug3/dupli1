@@ -298,7 +298,6 @@ registered as an alias.
 |--------|------|-------------------|
 | `POST` | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | `GET` | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
-| `POST` | `/api/v1/payments/webhooks/stripe` | — (Stripe signature) |
 | `GET` | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
 
 ---

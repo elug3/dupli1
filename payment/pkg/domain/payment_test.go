@@ -9,11 +9,11 @@ import (
 
 func TestNewPaymentRejectsNonKRW(t *testing.T) {
 	now := time.Now().UTC()
-	_, err := domain.NewPayment("pay-1", "ord-1", "cust-1", 1000, "usd", "stripe", "ref", "https://example", now)
+	_, err := domain.NewPayment("pay-1", "ord-1", "cust-1", 1000, "usd", "dev", "ref", "https://example", now)
 	if err != domain.ErrInvalidPayment {
 		t.Fatalf("usd: err=%v, want ErrInvalidPayment", err)
 	}
-	p, err := domain.NewPayment("pay-1", "ord-1", "cust-1", 1000, "", "stripe", "ref", "https://example", now)
+	p, err := domain.NewPayment("pay-1", "ord-1", "cust-1", 1000, "", "dev", "ref", "https://example", now)
 	if err != nil {
 		t.Fatal(err)
 	}

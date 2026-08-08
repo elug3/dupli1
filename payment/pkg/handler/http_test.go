@@ -45,7 +45,7 @@ func makeToken(t *testing.T, secret, userID string, perms []string) string {
 func TestSettingsDoesNotRequireAuth(t *testing.T) {
 	repo := memory.NewRepository()
 	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
-	h := handler.New(svc, authjwt.NewHMACValidator("test-secret"), "")
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret"))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
@@ -68,7 +68,7 @@ func TestSettingsDoesNotRequireAuth(t *testing.T) {
 func TestSimulateSuccess_DisabledWhenNotDev(t *testing.T) {
 	repo := memory.NewRepository()
 	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
-	h := handler.New(svc, authjwt.NewHMACValidator("test-secret"), "").WithDevSimulate(false)
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret")).WithDevSimulate(false)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
@@ -89,7 +89,7 @@ func TestSimulateSuccess_EnabledInDev(t *testing.T) {
 		t.Fatalf("CreatePayment: %v", err)
 	}
 
-	h := handler.New(svc, authjwt.NewHMACValidator("test-secret"), "").WithDevSimulate(true)
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret")).WithDevSimulate(true)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
@@ -103,7 +103,7 @@ func TestSimulateSuccess_EnabledInDev(t *testing.T) {
 func TestRequireAuthFailsClosedWithoutValidator(t *testing.T) {
 	repo := memory.NewRepository()
 	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
-	h := handler.New(svc, nil, "")
+	h := handler.New(svc, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
@@ -121,7 +121,7 @@ func TestCreatePayment_BypassRequiresPermission(t *testing.T) {
 	repo := memory.NewRepository()
 	pub := &recordingPublisher{}
 	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), pub)
-	h := handler.New(svc, authjwt.NewHMACValidator(secret), "")
+	h := handler.New(svc, authjwt.NewHMACValidator(secret))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
@@ -169,7 +169,7 @@ func TestCreatePayment_BitcoinNotImplemented(t *testing.T) {
 	const secret = "test-secret"
 	repo := memory.NewRepository()
 	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
-	h := handler.New(svc, authjwt.NewHMACValidator(secret), "")
+	h := handler.New(svc, authjwt.NewHMACValidator(secret))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

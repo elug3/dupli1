@@ -97,12 +97,7 @@ func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInpu
 		return nil, err
 	}
 
-	provider := domain.ProviderStripe
-	if strings.HasPrefix(session.ProviderRef, "dev_") {
-		provider = domain.ProviderDev
-	}
-
-	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalCents, domain.DefaultCurrency, provider, session.ProviderRef, session.CheckoutURL, now)
+	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalCents, domain.DefaultCurrency, domain.ProviderDev, session.ProviderRef, session.CheckoutURL, now)
 	if err != nil {
 		return nil, err
 	}
@@ -188,21 +183,6 @@ func (s *Service) CompletePayment(ctx context.Context, paymentID string) (*domai
 		return nil, err
 	}
 	return payment, nil
-}
-
-func (s *Service) HandleStripeCheckoutCompleted(ctx context.Context, sessionID, orderID, paymentID string, amountTotal int64) error {
-	payment, err := s.repo.Get(ctx, paymentID)
-	if err != nil {
-		payment, err = s.repo.GetByProviderRef(ctx, sessionID)
-		if err != nil {
-			return err
-		}
-	}
-	if amountTotal > 0 && amountTotal != payment.AmountCents {
-		return domain.ErrInvalidPayment
-	}
-	_, err = s.CompletePayment(ctx, payment.ID)
-	return err
 }
 
 // persistSucceeded saves the payment and enqueues payment.succeeded in one transaction,

@@ -19,20 +19,16 @@ import (
 )
 
 type Config struct {
-	OrderURL            string
-	DatabaseConnString  string
-	JWTSecret           string
-	JWKSURL             string
-	NATSURL             string
-	StripeSecretKey     string
-	StripeWebhookSecret string
-	StripeSuccessURL    string
-	StripeCancelURL     string
-	PublicBaseURL       string
+	OrderURL           string
+	DatabaseConnString string
+	JWTSecret          string
+	JWKSURL            string
+	NATSURL            string
+	PublicBaseURL      string
 	// AllowDevSimulate enables the local simulate-success checkout path and
 	// GET /api/v1/payments/{id}/simulate-success. It must be set explicitly
-	// (PAYMENT_ALLOW_DEV_SIMULATE); an empty Stripe key alone no longer implies
-	// simulate is on — production without a PG must keep this false and use Bypass.
+	// (PAYMENT_ALLOW_DEV_SIMULATE). Production must leave this unset and use
+	// manager Bypass (payment.bypass) until a PG is contracted.
 	AllowDevSimulate bool
 	HTTPClient       *http.Client
 }
@@ -71,18 +67,15 @@ func Bootstrap(cfg Config) (*App, error) {
 	orders := httporder.NewClient(cfg.OrderURL, cfg.HTTPClient)
 
 	var checkoutProvider ports.CheckoutProvider
-	switch {
-	case cfg.StripeSecretKey != "":
-		checkoutProvider = checkout.NewStripeProvider(cfg.StripeSecretKey, cfg.StripeSuccessURL, cfg.StripeCancelURL)
-	case cfg.AllowDevSimulate:
+	if cfg.AllowDevSimulate {
 		publicURL := cfg.PublicBaseURL
 		if publicURL == "" {
 			publicURL = "http://localhost:8080"
 		}
 		checkoutProvider = checkout.NewDevProvider(publicURL)
-	default:
+	} else {
 		checkoutProvider = checkout.NewUnavailableProvider(
-			"credit card checkout is not configured; use method=bypass (payment.bypass) until a PG is wired",
+			"card checkout is not configured; use method=bypass (payment.bypass) until a PG is wired",
 		)
 	}
 
@@ -113,9 +106,9 @@ func Bootstrap(cfg Config) (*App, error) {
 		return nil, fmt.Errorf("auth validator: %w", err)
 	}
 
-	h := handler.New(svc, jwtValidator, cfg.StripeWebhookSecret).
+	h := handler.New(svc, jwtValidator).
 		WithSettings(BuildSettings(cfg)).
-		WithDevSimulate(cfg.AllowDevSimulate && cfg.StripeSecretKey == "")
+		WithDevSimulate(cfg.AllowDevSimulate)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

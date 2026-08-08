@@ -454,8 +454,6 @@ resource "aws_ecs_task_definition" "payment" {
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
         { name = "DUPLI1_ORDER_URL", value = "http://order.dupli1.local:8080" },
         { name = "DUPLI1_PAYMENT_PUBLIC_URL", value = "https://dupli1.com" },
-        { name = "STRIPE_SUCCESS_URL", value = "https://dupli1.com/checkout/success" },
-        { name = "STRIPE_CANCEL_URL", value = "https://dupli1.com/checkout/cancel" },
       ]
       secrets = [
         {

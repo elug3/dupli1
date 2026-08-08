@@ -1266,15 +1266,6 @@ paths:
         '200':
           description: Success
 
-  /api/v1/payments/webhooks/stripe:
-    post:
-      summary: Stripe webhook
-      tags: [Payment]
-      description: Authenticated by Stripe signature, not a Bearer token.
-      responses:
-        '200':
-          description: Success
-
   /api/v1/payments/{id}/simulate-success:
     parameters:
       - name: id

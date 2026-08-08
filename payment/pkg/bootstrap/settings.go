@@ -12,19 +12,14 @@ func BuildSettings(cfg Config) settings.Response {
 	resp.Storage = settings.StorageMode(cfg.DatabaseConnString)
 
 	checkoutProvider := "none"
-	devSimulate := cfg.AllowDevSimulate && cfg.StripeSecretKey == ""
-	switch {
-	case cfg.StripeSecretKey != "":
-		checkoutProvider = "stripe"
-	case devSimulate:
+	if cfg.AllowDevSimulate {
 		checkoutProvider = "dev"
 	}
+	cardEnabled := cfg.AllowDevSimulate
 	resp.Features = map[string]bool{
 		"nats_events":          cfg.NATSURL != "",
-		"stripe_checkout":      cfg.StripeSecretKey != "",
-		"stripe_webhook":       cfg.StripeWebhookSecret != "",
-		"dev_simulate_success": devSimulate,
-		"method_credit_card":   true,
+		"dev_simulate_success": cfg.AllowDevSimulate,
+		"method_credit_card":   cardEnabled,
 		"method_bypass":        true,
 		"method_bitcoin":       false,
 	}
@@ -32,19 +27,13 @@ func BuildSettings(cfg Config) settings.Response {
 		"checkout_provider": checkoutProvider,
 		"currency":          money.Currency, // only KRW; amount_cents is whole won
 		"methods": map[string]bool{
-			"credit_card": true,
-			"bypass":      true, // requires payment.bypass; storefront must hide
+			"credit_card": cardEnabled, // local/dev simulate only
+			"bypass":      true,        // requires payment.bypass; storefront must hide
 			"bitcoin":     false,
 		},
 	}
 	if cfg.PublicBaseURL != "" {
 		resp.Limits["public_base_url"] = cfg.PublicBaseURL
-	}
-	if cfg.StripeSuccessURL != "" {
-		resp.Limits["stripe_success_url"] = cfg.StripeSuccessURL
-	}
-	if cfg.StripeCancelURL != "" {
-		resp.Limits["stripe_cancel_url"] = cfg.StripeCancelURL
 	}
 	resp.Dependencies = map[string]settings.Dependency{
 		"order": settings.Dep(cfg.OrderURL),

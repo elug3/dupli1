@@ -7,7 +7,6 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v4 v4.18.3
 	github.com/nats-io/nats.go v1.52.0
-	github.com/stripe/stripe-go/v81 v81.4.0
 )
 
 require (

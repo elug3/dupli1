@@ -23,12 +23,12 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	}
 
 	var (
-		addr                string
-		orderURL            = opts.OrderURL
-		readTimeoutSec      = int(opts.ReadTimeout / time.Second)
-		writeTimeoutSec     = int(opts.WriteTimeout / time.Second)
-		idleTimeoutSec      = int(opts.IdleTimeout / time.Second)
-		shutdownTimeoutSec  = int(opts.ShutdownTimeout / time.Second)
+		addr               string
+		orderURL           = opts.OrderURL
+		readTimeoutSec     = int(opts.ReadTimeout / time.Second)
+		writeTimeoutSec    = int(opts.WriteTimeout / time.Second)
+		idleTimeoutSec     = int(opts.IdleTimeout / time.Second)
+		shutdownTimeoutSec = int(opts.ShutdownTimeout / time.Second)
 	)
 
 	fs.StringVar(&host, "host", host, "Server host address")
@@ -74,24 +74,12 @@ func applyEnv(opts *payment.ServerOptions) {
 	if v := os.Getenv("NATS_URL"); v != "" {
 		opts.NATSURL = v
 	}
-	if v := os.Getenv("STRIPE_SECRET_KEY"); v != "" {
-		opts.StripeSecretKey = v
-	}
-	if v := os.Getenv("STRIPE_WEBHOOK_SECRET"); v != "" {
-		opts.StripeWebhookSecret = v
-	}
-	// Explicit opt-in for local simulate-success. Prod without a PG must leave this unset.
+	// Explicit opt-in for local simulate-success. Prod must leave this unset.
 	if v := os.Getenv("PAYMENT_ALLOW_DEV_SIMULATE"); v != "" {
 		switch strings.ToLower(strings.TrimSpace(v)) {
 		case "1", "true", "yes", "on":
 			opts.AllowDevSimulate = true
 		}
-	}
-	if v := os.Getenv("STRIPE_SUCCESS_URL"); v != "" {
-		opts.StripeSuccessURL = v
-	}
-	if v := os.Getenv("STRIPE_CANCEL_URL"); v != "" {
-		opts.StripeCancelURL = v
 	}
 	if v := os.Getenv("DUPLI1_PAYMENT_PUBLIC_URL"); v != "" {
 		opts.PublicBaseURL = v
