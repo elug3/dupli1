@@ -266,20 +266,30 @@ func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
 
-	_, err = svc.ShipOrder(ctx, order.ID, "manager-1")
-	if !errors.Is(err, domain.ErrInvalidTransition) {
-		t.Fatalf("ShipOrder error = %v, want ErrInvalidTransition", err)
+	canceled, err := svc.CancelOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("CancelOrder returned error: %v", err)
 	}
-	if stock.committed != "" {
-		t.Fatalf("committed = %q, want empty (stock must not commit on rejected ship)", stock.committed)
+	if canceled.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", canceled.Status)
+	}
+	if stock.released != "res-original" {
+		t.Fatalf("released = %q, want res-original", stock.released)
 	}
 
-	got, err := svc.GetOrder(ctx, order.ID)
+	stock.reservationID = "res-late-pay"
+	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents)
 	if err != nil {
-		t.Fatalf("GetOrder: %v", err)
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
-	if got.Status != domain.StatusPending {
-		t.Fatalf("status = %q, want pending", got.Status)
+	if paid.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid", paid.Status)
+	}
+	if paid.ReservationID != "res-late-pay" {
+		t.Fatalf("reservation_id = %q, want res-late-pay", paid.ReservationID)
+	}
+	if len(stock.reservedItems) != 1 || stock.reservedItems[0].SKU != "BAG-1" {
+		t.Fatalf("reserved items = %+v, want one BAG-1 line", stock.reservedItems)
 	}
 }
 

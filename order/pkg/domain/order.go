@@ -138,6 +138,24 @@ func (o *Order) Cancel(now time.Time) error {
 	return nil
 }
 
+// ReinstateForLatePayment moves an auto-canceled pending order back to pending
+// with a fresh stock reservation so a payment that completes after expiry can
+// still be applied.
+func (o *Order) ReinstateForLatePayment(reservationID string, now time.Time) error {
+	if o.Status != StatusCanceled {
+		return ErrInvalidTransition
+	}
+	reservationID = strings.TrimSpace(reservationID)
+	if reservationID == "" {
+		return ErrInvalidOrder
+	}
+	o.Status = StatusPending
+	o.ReservationID = reservationID
+	o.PaymentDueAt = now.Add(DefaultPaymentTTL)
+	o.UpdatedAt = now
+	return nil
+}
+
 func (o *Order) Fulfill(now time.Time) error {
 	if o.Status != StatusInTransit {
 		return ErrInvalidTransition

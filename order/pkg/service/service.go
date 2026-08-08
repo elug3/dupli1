@@ -228,6 +228,11 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 	if order.PaymentID == paymentID && order.Status != domain.StatusPending {
 		return cloneOrder(order), nil
 	}
+	if order.Status == domain.StatusCanceled {
+		if err := s.reinstateCanceledOrder(ctx, order); err != nil {
+			return nil, err
+		}
+	}
 	if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {
 		return nil, err
 	}
@@ -509,6 +514,26 @@ func (s *Service) resolveVariant(ctx context.Context, item domain.OrderItem) (*p
 		return nil, ports.ErrProductUnavailable
 	}
 	return info, nil
+}
+
+func (s *Service) reinstateCanceledOrder(ctx context.Context, order *domain.Order) error {
+	stockItems := make([]ports.StockItem, len(order.Items))
+	for i, item := range order.Items {
+		stockItems[i] = ports.StockItem{
+			SkuID:    item.SkuID,
+			SKU:      item.SKU,
+			Quantity: item.Quantity,
+		}
+	}
+	reservationID, err := s.stock.Reserve(ctx, order.ID, stockItems)
+	if err != nil {
+		return fmt.Errorf("reinstate canceled order %s: %w", order.ID, err)
+	}
+	if err := order.ReinstateForLatePayment(reservationID, s.now()); err != nil {
+		_ = s.stock.ReleaseReservation(ctx, reservationID)
+		return err
+	}
+	return nil
 }
 
 func cloneOrder(order *domain.Order) *domain.Order {
