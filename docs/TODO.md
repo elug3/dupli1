@@ -39,6 +39,40 @@ See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criter
 
 Guest cart, refunds, co-view, legacy alias removal, manager settings, H6, Redis cache — see v1.1 plan “Deferred to v1.2” table.
 
+## Notification service (reviewed 2026-08-07)
+
+Completeness / code-quality follow-ups for `dupli1-notification`. Design: [notification-telegram-bot.md](notification-telegram-bot.md).
+
+### Bugs / correctness
+
+- [ ] **Pending `/start` reply silently dropped** — bootstrap sets `Client.SetAccessPolicy`; `Send` requires `AllowsChat`, but pending chats are not allowlisted, so “Registration received” never sends. Fix: bypass chat allowlist for command replies (or allow pending chats for inbound ack only). Add a regression test that sets Policy on the client (`TestUpdateProcessorStartPending` currently omits it).
+- [ ] **Any inbound Telegram message creates a pending subscription** — discoverable bots can fill `telegram_subscriptions`; consider registering only on `/start` (or rate-limit / require allowlisted user for upsert).
+
+### Production / ECS wiring
+
+- [ ] **Wire `DUPLI1_NOTIFICATION_DB` in ECS** — Terraform task def has no notification DB URL; service falls back to in-memory repo (subscriptions lost on restart). Add RDS `notifications` DB + Secrets Manager + task secret (mirror cart/payment).
+- [ ] **Wire `AUTH_JWKS_URL` on notification ECS task** — without JWKS, manager subscription API returns 503.
+- [ ] **Wire Telegram webhook in prod** — set `TELEGRAM_WEBHOOK_URL` + `TELEGRAM_WEBHOOK_SECRET` (today: polling only).
+
+### Reliability / product gaps
+
+- [ ] **NATS queue group for notification** — use `QueueSubscribe` so multi-replica ECS does not duplicate Telegram alerts (deferred in [v1-release-plan.md](v1-release-plan.md); log-first done).
+- [ ] **Fan-out to multiple accepted chats** — routing picks only the first accepted `alert_order` / `alert_product` chat.
+- [ ] **Manager Settings `notifications` section** — load/reload toggles + chat routing from auth settings on `settings.updated` ([manager-settings-api.md](manager-settings-api.md)); keep only `TELEGRAM_BOT_TOKEN` in Secrets Manager.
+- [ ] **Document `notification.telegram.read|manage` in permissions.md** — catalog constants exist; owner `*` works; manager seeds/docs lag.
+
+### Docs / API surface drift
+
+- [ ] **Refresh stale notification docs** — `service-layout.md` still says “Health endpoint only”; `current-state.md` API table and `api.md` omit webhook + subscriptions; reconcile webhook vs polling notes in [notification-telegram-bot.md](notification-telegram-bot.md).
+- [ ] **OpenAPI: telegram manager + webhook** — extend `api/specs/notification-v1.yaml` (and `docs/openapi.yaml` if needed) beyond health/settings.
+- [ ] **Fix CLI usage blurb** — `notification/cmd/main.go` claims “customer and admin messaging APIs”; service is ops Telegram only.
+
+### Tests / quality
+
+- [ ] **HTTP handler tests** — authz (read/manage), webhook secret, accept/reject/delete, 503 without JWT/DB.
+- [ ] **PG repository tests** — upsert pending, accept/reject, unique chat/user constraints.
+- [ ] **Structured logging (v1.1)** — replace `log.Printf` with shared zerolog (covered under v1.1 logging slice).
+
 ## Temporary / ops
 
 - [ ] **Re-lock auth register** — `AUTH_OPEN_REGISTER` is temporarily **true** (public customer signup). Set `false` / remove when storefront no longer needs open registration; restore Bearer + `user.create` only.
@@ -128,6 +162,9 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 - [x] **Rich product search + wishlist** — implemented; see [product-rich-search.md](product-rich-search.md). `sort`/`order`/`q`; wishlist add/remove/list with `wishlistCount`.
 - [x] **Simple PDP recommendations** — implemented; see [product-recommendations.md](product-recommendations.md). `GET /api/v1/products/{id}/recommendations`; content similarity + `view_count` boost.
 - [ ] **Co-view recommendations (phase 2)** — still open; see [product-views-recommendations-plan.md](product-views-recommendations-plan.md).
+- [ ] **Flat sellable product model** — fold SKU/variant into `Product` (product becomes the unit of sale; style becomes the grouping); plan + phases in [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md). Blocked on the Phase 0 listing decision.
+- [ ] **Naming for multi-category catalog** — keep `Product` / `Variant` category-agnostic; do not rename to `Bag` / `BagSku`; see [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md).
+- [ ] **Wallets + clothing categories** — category master, per-category taxonomy, and validated `details` facets instead of per-category Go types. `NormalizeProductTaxonomy` currently validates bag seeds regardless of `category`, so wallet/clothing subcategories are rejected today while bag terms leak onto non-bags. Design + phases in [product-multi-category-design.md](product-multi-category-design.md); phases 1–2 unblock non-bag products.
 
 ### Found in review (2026-07-08, size/color variants)
 
@@ -138,6 +175,7 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 - [x] **Luxury SKU naming system** — `Brand_Style_Color[_Edition]_Size` with master tables (`brands`, `colors`, `sizes`, `sku_editions`); see [product-sku-system.md](product-sku-system.md).
 - [x] **SKU master-data runtime CRUD** — Phase A+B+C: styles table, FKs, catalog APIs (`/api/v1/catalog/...`), `product.master.read|write`, ULID product `id`, strict master codes on product/variant create, read-name enrichment; see [product-sku-master-data-plan.md](product-sku-master-data-plan.md).
 - [x] **Bag merchandising master catalog** — subcategory / style / target seeds + public catalog APIs + `GET /products` filters; see [product-master-catalog.md](product-master-catalog.md).
+- [x] **SKU physical dimensions** — variant `dimensions` `{widthMm, heightMm, depthMm}` in millimeters, distinct from letter `size`/`sizeCode`; see [product-sku-dimensions.md](product-sku-dimensions.md).
 - [ ] **SKU master-data Phase D (admin UI)** — manage brands/styles/colors/sizes/editions in manage-web.
 
 ### Found while implementing SkuID + inventory merge (2026-07-10)

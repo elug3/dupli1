@@ -29,6 +29,11 @@ func (existing Variant) MergeUpdate(incoming Variant) Variant {
 	if len(incoming.ImageURLs) > 0 {
 		merged.ImageURLs = incoming.ImageURLs
 	}
+	// Dimensions: nil means omit (keep existing); non-nil replaces
+	// (including {} which NormalizeDimensions treats as clear).
+	if incoming.Dimensions != nil {
+		merged.Dimensions = incoming.Dimensions
+	}
 	// Price / OfficialPrice stay on the parent product.
 	merged.Price = existing.Price
 	merged.OfficialPrice = existing.OfficialPrice

@@ -157,7 +157,7 @@ No silent invent-on-create. Reads enrich blank `brand` / `color` / `size` displa
 ## API fields (product / variant JSON)
 
 **Product (parent):** `id` (ULID), `brand`, `brandCode`, `styleCode`, …  
-**Variant:** `skuId`, `sku`, `color`, `size`, `colorCode`, `editionCode`, `sizeCode`, …
+**Variant:** `skuId`, `sku`, `color`, `size`, `colorCode`, `editionCode`, `sizeCode`, optional `dimensions` `{widthMm, heightMm, depthMm}` (mm; see [product-sku-dimensions.md](product-sku-dimensions.md)), …
 
 Lookup:
 
@@ -184,4 +184,5 @@ On product DB migrate, common rows are seeded (idempotent): brands (`PR`, `BOT`,
 | Migrate masters, styles, FKs | `product/pkg/infra/pg/sku_master.go` |
 | Require masters + enrich names | `product/pkg/infra/pg/master_require.go` |
 | Catalog store / HTTP | `product/pkg/infra/pg/catalog_store.go`, `handler/catalog_handler.go` |
+| Physical dimensions (mm) | `product/pkg/domain/dimensions.go`; columns on `product_variants` — [product-sku-dimensions.md](product-sku-dimensions.md) |
 | Inventory keyed by `sku_id` | `product/pkg/infra/pg/inventory_store.go`, `service/inventory_service.go` |

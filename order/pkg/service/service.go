@@ -34,11 +34,22 @@ type Service struct {
 }
 
 type CreateOrderInput struct {
-	CustomerID     string
-	Items          []domain.OrderItem
-	CouponCode     string
-	DiscountCents  int64
-	IdempotencyKey string
+	CustomerID      string
+	Items           []domain.OrderItem
+	CouponCode      string
+	DiscountCents   int64
+	IdempotencyKey  string
+	RecipientName   string
+	RecipientPhone  string
+	ShippingAddress domain.ShippingAddress
+	SourceAddressID string
+}
+
+type CompleteCheckoutInput struct {
+	RecipientName   string
+	RecipientPhone  string
+	ShippingAddress domain.ShippingAddress
+	SourceAddressID string
 }
 
 type orderItemEvent struct {
@@ -57,6 +68,7 @@ type orderEvent struct {
 	DiscountCents int64              `json:"discount_cents"`
 	TotalCents    int64              `json:"total_cents"`
 	Items         []orderItemEvent   `json:"items"`
+	CreatedAt     time.Time          `json:"created_at"`
 	Occurred      time.Time          `json:"occurred_at"`
 }
 
@@ -64,6 +76,10 @@ type idempotencyFingerprint struct {
 	CustomerID    string `json:"customer_id"`
 	CouponCode    string `json:"coupon_code,omitempty"`
 	DiscountCents int64  `json:"discount_cents,omitempty"`
+	RecipientName string `json:"recipient_name,omitempty"`
+	RecipientPhone string `json:"recipient_phone,omitempty"`
+	ShippingAddress domain.ShippingAddress `json:"shipping_address,omitempty"`
+	SourceAddressID string `json:"source_address_id,omitempty"`
 	Items         []struct {
 		SkuID    string `json:"sku_id,omitempty"`
 		SKU      string `json:"sku,omitempty"`
@@ -147,6 +163,10 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
+	if err := applyFulfillmentToOrder(order, input); err != nil {
+		_ = s.stock.ReleaseReservation(ctx, reservationID)
+		return nil, err
+	}
 
 	var idem *ports.IdempotencyRecord
 	if idemKey != "" {
@@ -208,6 +228,11 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 	if order.PaymentID == paymentID && order.Status != domain.StatusPending {
 		return cloneOrder(order), nil
 	}
+	if order.Status == domain.StatusCanceled {
+		if err := s.reinstateCanceledOrder(ctx, order); err != nil {
+			return nil, err
+		}
+	}
 	if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {
 		return nil, err
 	}
@@ -227,10 +252,13 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string) (*do
 	if err != nil {
 		return nil, err
 	}
-	if err := s.stock.CommitReservation(ctx, order.ReservationID); err != nil {
+	// Validate the transition before committing stock — CommitReservation is
+	// irreversible, and shipping a non-paid order would permanently decrement
+	// inventory while leaving the order pending/canceled.
+	if err := order.Ship(shippedBy, s.now()); err != nil {
 		return nil, err
 	}
-	if err := order.Ship(shippedBy, s.now()); err != nil {
+	if err := s.stock.CommitReservation(ctx, order.ReservationID); err != nil {
 		return nil, err
 	}
 	return s.saveStatusChange(ctx, order)
@@ -293,9 +321,13 @@ func (s *Service) loadIdempotentOrder(ctx context.Context, customerID, key, reqH
 
 func hashCreateOrderInput(input CreateOrderInput) string {
 	fp := idempotencyFingerprint{
-		CustomerID:    strings.TrimSpace(input.CustomerID),
-		CouponCode:    strings.TrimSpace(input.CouponCode),
-		DiscountCents: input.DiscountCents,
+		CustomerID:      strings.TrimSpace(input.CustomerID),
+		CouponCode:      strings.TrimSpace(input.CouponCode),
+		DiscountCents:   input.DiscountCents,
+		RecipientName:   strings.TrimSpace(input.RecipientName),
+		RecipientPhone:  strings.TrimSpace(input.RecipientPhone),
+		ShippingAddress: input.ShippingAddress,
+		SourceAddressID: strings.TrimSpace(input.SourceAddressID),
 	}
 	fp.Items = make([]struct {
 		SkuID    string `json:"sku_id,omitempty"`
@@ -359,6 +391,7 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 		DiscountCents: order.DiscountCents,
 		TotalCents:    order.TotalCents,
 		Items:         items,
+		CreatedAt:     order.CreatedAt,
 		Occurred:      s.now(),
 	})
 	if err != nil {
@@ -483,6 +516,26 @@ func (s *Service) resolveVariant(ctx context.Context, item domain.OrderItem) (*p
 	return info, nil
 }
 
+func (s *Service) reinstateCanceledOrder(ctx context.Context, order *domain.Order) error {
+	stockItems := make([]ports.StockItem, len(order.Items))
+	for i, item := range order.Items {
+		stockItems[i] = ports.StockItem{
+			SkuID:    item.SkuID,
+			SKU:      item.SKU,
+			Quantity: item.Quantity,
+		}
+	}
+	reservationID, err := s.stock.Reserve(ctx, order.ID, stockItems)
+	if err != nil {
+		return fmt.Errorf("reinstate canceled order %s: %w", order.ID, err)
+	}
+	if err := order.ReinstateForLatePayment(reservationID, s.now()); err != nil {
+		_ = s.stock.ReleaseReservation(ctx, reservationID)
+		return err
+	}
+	return nil
+}
+
 func cloneOrder(order *domain.Order) *domain.Order {
 	if order == nil {
 		return nil
@@ -490,7 +543,35 @@ func cloneOrder(order *domain.Order) *domain.Order {
 	copied := *order
 	copied.Items = make([]domain.OrderItem, len(order.Items))
 	copy(copied.Items, order.Items)
+	copied.ShippingAddress = order.ShippingAddress
 	return &copied
+}
+
+func applyFulfillmentToOrder(order *domain.Order, input CreateOrderInput) error {
+	if strings.TrimSpace(input.RecipientName) == "" &&
+		strings.TrimSpace(input.RecipientPhone) == "" &&
+		input.ShippingAddress == (domain.ShippingAddress{}) {
+		return nil
+	}
+	snap, err := domain.ValidateFulfillmentSnapshot(
+		input.RecipientName,
+		input.RecipientPhone,
+		input.ShippingAddress,
+		input.SourceAddressID,
+	)
+	if err != nil {
+		return err
+	}
+	return order.ApplyFulfillment(snap)
+}
+
+func applyCompleteCheckoutInput(input CompleteCheckoutInput) (*domain.FulfillmentSnapshot, error) {
+	return domain.ValidateFulfillmentSnapshot(
+		input.RecipientName,
+		input.RecipientPhone,
+		input.ShippingAddress,
+		input.SourceAddressID,
+	)
 }
 
 func cloneOrders(orders []domain.Order) []domain.Order {

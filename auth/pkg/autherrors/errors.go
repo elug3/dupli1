@@ -16,4 +16,5 @@ var (
 	ErrInvalidAccountType  = errors.New("invalid account type")
 	ErrInvalidPermission   = errors.New("invalid permission")
 	ErrManagementForbidden = errors.New("management forbidden")
+	ErrAddressLimitReached = errors.New("address limit reached")
 )

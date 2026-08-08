@@ -254,6 +254,34 @@ func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.Ch
 	return nil
 }
 
+func (r *Repository) CompleteCheckoutSessionIfOpen(ctx context.Context, sessionID, orderID string, now time.Time) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	session, ok := r.sessions[sessionID]
+	if !ok {
+		return false, nil
+	}
+	if session.Status != domain.CheckoutStatusOpen {
+		return false, nil
+	}
+	if now.After(session.ExpiresAt) {
+		session.Status = domain.CheckoutStatusExpired
+		r.sessions[sessionID] = session
+		return false, nil
+	}
+
+	session.Status = domain.CheckoutStatusCompleted
+	session.OrderID = orderID
+	session.UpdatedAt = now
+	r.sessions[sessionID] = session
+	return true, nil
+}
+
 func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain.CheckoutSession, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -273,6 +301,7 @@ func cloneOrder(order *domain.Order) *domain.Order {
 	copied := *order
 	copied.Items = make([]domain.OrderItem, len(order.Items))
 	copy(copied.Items, order.Items)
+	copied.ShippingAddress = order.ShippingAddress
 	return &copied
 }
 

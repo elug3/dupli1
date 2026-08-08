@@ -68,7 +68,91 @@ paths:
 
   /api/v1/auth/me:
     get:
-      summary: Get the authenticated user profile
+      summary: Get the authenticated user account
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/auth/me/profile:
+    get:
+      summary: Get customer commerce profile and addresses
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+    patch:
+      summary: Update display name and phone
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/auth/me/addresses:
+    get:
+      summary: List saved addresses
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+    post:
+      summary: Create a saved address
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Created
+
+  /api/v1/auth/me/addresses/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get one address
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+    patch:
+      summary: Update an address
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+    delete:
+      summary: Delete an address
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: No content
+
+  /api/v1/auth/me/addresses/{id}/default:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Set default address
       tags: [Auth]
       security:
         - bearerAuth: []

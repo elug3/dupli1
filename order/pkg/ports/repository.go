@@ -21,6 +21,9 @@ type Repository interface {
 	NextCheckoutSessionID(ctx context.Context) (string, error)
 	SaveCheckoutSession(ctx context.Context, session *domain.CheckoutSession) error
 	GetCheckoutSession(ctx context.Context, id string) (*domain.CheckoutSession, error)
+	// CompleteCheckoutSessionIfOpen atomically marks an open session completed.
+	// Returns false when the session is not open (already completed, expired, or missing).
+	CompleteCheckoutSessionIfOpen(ctx context.Context, sessionID, orderID string, now time.Time) (bool, error)
 
 	FindByIdempotencyKey(ctx context.Context, customerID, key string) (*IdempotencyRecord, error)
 	ListPendingOutbox(ctx context.Context, limit int) ([]OutboxMessage, error)

@@ -2,11 +2,13 @@
 
 Go microservice backend for a fashion bag marketplace. Services behind an nginx proxy, wired with Docker Compose for local dev and deployed to AWS ECS on EC2 (ALB, RDS, S3, CloudWatch Logs) in production.
 
+**Authoritative implementation snapshot:** [docs/current-state.md](docs/current-state.md). The tables below are a quick reference; when they diverge, trust `current-state.md` and [docs/api.md](docs/api.md).
+
 ## Services
 
 | Service | Local port | Description |
 |---------|------------|-------------|
-| `dupli1-auth` | 18080 | JWT login/refresh, RS256 tokens, JWKS, RBAC user admin |
+| `dupli1-auth` | 18080 | JWT login/refresh, RS256 tokens, JWKS, permission-based user admin |
 | `dupli1-product` | 8081 | Bag catalog, coupons, product CRUD, image upload, stock and reservation APIs |
 | `dupli1-order` | 8083 | Checkout sessions and order lifecycle (PostgreSQL) |
 | `dupli1-cart` | 8086 | Shopping cart (PostgreSQL) |
@@ -60,8 +62,8 @@ dupli1/
 ├── product/              # Product catalog (also stock/reservations)
 ├── order/                # Order + checkout
 ├── cart/                 # Shopping cart
-├── payment/              # Stripe Checkout + Bypass payments
-├── notification/         # NATS → Telegram alerts
+├── payment/              # Payments (Bypass / Stripe / dev simulate)
+├── notification/         # NATS → Telegram ops alerts
 ├── api/
 │   ├── nginx.conf        # Gateway routing
 │   └── Dockerfile

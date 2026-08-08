@@ -500,3 +500,39 @@ func TestCheckoutDeleteBySkuID_OwnerSuccess(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestCompleteCheckoutRejectsInvalidFulfillment(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	ownerToken := makeToken(t, "u-1", nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/checkout/sessions", ownerToken, map[string]any{"customer_id": "u-1"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+	var session domain.CheckoutSession
+	if err := json.NewDecoder(w.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+
+	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
+	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+		t.Fatalf("seed checkout item: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/v1/checkout/sessions/%s/complete", session.ID)
+	body := map[string]any{
+		"recipient_name":  "",
+		"recipient_phone": "01012345678",
+		"shipping_address": map[string]string{
+			"postal_code":   "06194",
+			"address_line1": "테헤란로 78길 14-12",
+			"city":          "강남구",
+			"province":      "서울특별시",
+		},
+	}
+	w = do(t, mux, http.MethodPost, path, ownerToken, body)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+}

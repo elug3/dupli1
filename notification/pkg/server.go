@@ -11,15 +11,22 @@ import (
 )
 
 type ServerOptions struct {
-	Addr            string
-	NATSURL         string
-	TelegramToken   string
-	OrderChatID     string
-	ProductChatID   string
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
-	ShutdownTimeout time.Duration
+	Addr                  string
+	NATSURL               string
+	DatabaseConnString    string
+	JWTSecret             string
+	JWKSURL               string
+	TelegramToken         string
+	TelegramWebhookURL    string
+	TelegramWebhookSecret string
+	AllowedUserIDs        string
+	OrderChatID           string
+	ProductChatID         string
+	ManageWebURL          string
+	ReadTimeout           time.Duration
+	WriteTimeout          time.Duration
+	IdleTimeout           time.Duration
+	ShutdownTimeout       time.Duration
 }
 
 func NewServerOptions() *ServerOptions {
@@ -45,15 +52,22 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	}
 
 	app, err := bootstrap.Bootstrap(bootstrap.Config{
-		Addr:            opts.Addr,
-		NATSURL:         opts.NATSURL,
-		TelegramToken:   opts.TelegramToken,
-		OrderChatID:     opts.OrderChatID,
-		ProductChatID:   opts.ProductChatID,
-		ReadTimeout:     opts.ReadTimeout,
-		WriteTimeout:    opts.WriteTimeout,
-		IdleTimeout:     opts.IdleTimeout,
-		ShutdownTimeout: opts.ShutdownTimeout,
+		Addr:                  opts.Addr,
+		NATSURL:               opts.NATSURL,
+		DatabaseConnString:    opts.DatabaseConnString,
+		JWTSecret:             opts.JWTSecret,
+		JWKSURL:               opts.JWKSURL,
+		TelegramToken:         opts.TelegramToken,
+		TelegramWebhookURL:    opts.TelegramWebhookURL,
+		TelegramWebhookSecret: opts.TelegramWebhookSecret,
+		AllowedUserIDs:        opts.AllowedUserIDs,
+		OrderChatID:           opts.OrderChatID,
+		ProductChatID:         opts.ProductChatID,
+		ManageWebURL:          opts.ManageWebURL,
+		ReadTimeout:           opts.ReadTimeout,
+		WriteTimeout:          opts.WriteTimeout,
+		IdleTimeout:           opts.IdleTimeout,
+		ShutdownTimeout:       opts.ShutdownTimeout,
 	})
 	if err != nil {
 		return nil, err

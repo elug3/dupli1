@@ -31,6 +31,7 @@ const (
 // Service holds all auth business logic.
 type Service struct {
 	userRepo           ports.UserRepository
+	profileRepo        ports.ProfileRepository
 	tokenGen           ports.TokenGenerator
 	refreshTokenGen    ports.TokenGenerator
 	sessionStore       ports.SessionStore
@@ -41,6 +42,13 @@ type Service struct {
 
 // ServiceOption configures a Service.
 type ServiceOption func(*Service)
+
+// WithProfileRepository enables customer profile and address APIs.
+func WithProfileRepository(repo ports.ProfileRepository) ServiceOption {
+	return func(s *Service) {
+		s.profileRepo = repo
+	}
+}
 
 // WithRefreshTokenGen sets the token generator and expiry used for refresh tokens.
 func WithRefreshTokenGen(gen ports.TokenGenerator, expiry time.Duration) ServiceOption {
