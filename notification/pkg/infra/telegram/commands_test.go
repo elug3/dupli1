@@ -147,6 +147,39 @@ func TestUpdateProcessorStartPending(t *testing.T) {
 	}
 }
 
+func TestUpdateProcessorStartDeniedForUnknownUser(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	t.Cleanup(srv.Close)
+
+	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	access := service.NewTelegramAccess(service.NewTelegramSubscriptions(memory.NewTelegramRepository()), nil)
+	if err := access.Refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	processor := &telegram.UpdateProcessor{
+		Client: client,
+		Policy: access,
+		Lookup: &stubLookup{},
+	}
+	update := telegram.Update{
+		Message: &telegram.Message{
+			Text: "/start",
+			From: &telegram.User{ID: 999},
+			Chat: telegram.Chat{ID: 999, Type: "private", FirstName: "Stranger"},
+		},
+	}
+	if err := processor.Handle(context.Background(), update); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if called {
+		t.Fatal("expected no Telegram reply for unknown /start user")
+	}
+}
+
 func TestUpdateProcessorIgnoresOtherCommands(t *testing.T) {
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

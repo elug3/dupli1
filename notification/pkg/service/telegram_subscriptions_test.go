@@ -75,4 +75,70 @@ func TestTelegramSubscriptionsManualChatID(t *testing.T) {
 	}
 }
 
+func TestTelegramSubscriptionsRejectAndLookup(t *testing.T) {
+	repo := memory.NewTelegramRepository()
+	subs := service.NewTelegramSubscriptions(repo)
+	ctx := context.Background()
+
+	pending, err := subs.RegisterFromMessage(ctx, ports.TelegramSubscriptionInput{
+		TelegramUserID: int64Ptr(55),
+		ChatID:         "55",
+		ChatType:       "private",
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	rejected, err := subs.Reject(ctx, pending.ID, "manager-1")
+	if err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	if rejected.Status != domain.SubscriptionStatusRejected {
+		t.Fatalf("status = %q, want rejected", rejected.Status)
+	}
+
+	sub, err := subs.LookupForMessage(ctx, "55", int64Ptr(55))
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if sub == nil || sub.Status != domain.SubscriptionStatusRejected {
+		t.Fatalf("lookup after reject: %+v", sub)
+	}
+
+	env := &ports.TelegramEnvAllowlist{}
+	if subs.IsAllowedIncoming(ctx, "55", int64Ptr(55), env) {
+		t.Fatal("rejected subscription should not allow incoming")
+	}
+}
+
+func TestTelegramSubscriptionsIsAllowedIncomingEnvAllowlist(t *testing.T) {
+	subs := service.NewTelegramSubscriptions(memory.NewTelegramRepository())
+	ctx := context.Background()
+	env := &ports.TelegramEnvAllowlist{
+		AllowedUserIDs: "123",
+		OrderChatID:    "-100777",
+	}
+
+	if !subs.IsAllowedIncoming(ctx, "999", int64Ptr(123), env) {
+		t.Fatal("expected env user allowlist to permit incoming")
+	}
+	if !subs.IsAllowedIncoming(ctx, "-100777", nil, env) {
+		t.Fatal("expected env order chat allowlist to permit incoming")
+	}
+	if subs.IsAllowedIncoming(ctx, "999", int64Ptr(456), env) {
+		t.Fatal("expected unknown user to be denied")
+	}
+}
+
+func TestTelegramAccessDeniesUnknownAfterRefresh(t *testing.T) {
+	subs := service.NewTelegramSubscriptions(memory.NewTelegramRepository())
+	access := service.NewTelegramAccess(subs, &ports.TelegramEnvAllowlist{})
+	if err := access.Refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if access.AllowsIncoming(telegram.Chat{ID: 404, Type: "private"}, &telegram.User{ID: 404}) {
+		t.Fatal("expected unknown user to be denied")
+	}
+}
+
 func int64Ptr(v int64) *int64 { return &v }
