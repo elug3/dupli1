@@ -253,6 +253,46 @@ func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
 	}
 }
 
+func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-original"}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	canceled, err := svc.CancelOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("CancelOrder returned error: %v", err)
+	}
+	if canceled.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", canceled.Status)
+	}
+	if stock.released != "res-original" {
+		t.Fatalf("released = %q, want res-original", stock.released)
+	}
+
+	stock.reservationID = "res-late-pay"
+	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents)
+	if err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+	if paid.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid", paid.Status)
+	}
+	if paid.ReservationID != "res-late-pay" {
+		t.Fatalf("reservation_id = %q, want res-late-pay", paid.ReservationID)
+	}
+	if len(stock.reservedItems) != 1 || stock.reservedItems[0].SKU != "BAG-1" {
+		t.Fatalf("reserved items = %+v, want one BAG-1 line", stock.reservedItems)
+	}
+}
+
 func TestCancelPaidOrderReleasesStock(t *testing.T) {
 	ctx := context.Background()
 	stock := &fakeStock{reservationID: "res-123"}
