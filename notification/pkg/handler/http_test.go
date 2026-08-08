@@ -100,6 +100,18 @@ func TestTelegramWebhookRejectsInvalidSecret(t *testing.T) {
 	}
 }
 
+func TestTelegramWebhookRejectsInvalidJSON(t *testing.T) {
+	h, _ := newTestHandler(t, "")
+	mux := newMux(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/notification/telegram/webhook", bytes.NewReader([]byte(`not-json`)))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestTelegramSubscriptionsRequireAuth(t *testing.T) {
 	h, _ := newTestHandler(t, "")
 	mux := newMux(h)
