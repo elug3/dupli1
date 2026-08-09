@@ -82,6 +82,16 @@ func doJSON(t *testing.T, mux http.Handler, method, path, auth string, body any)
 	return rec
 }
 
+func TestTelegramWebhookFailsClosedWithoutSecret(t *testing.T) {
+	h, _ := newTestHandler(t, "")
+	mux := newMux(h)
+
+	rec := doJSON(t, mux, http.MethodPost, "/api/v1/notification/telegram/webhook", "", map[string]any{"update_id": 1})
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestTelegramWebhookRejectsInvalidSecret(t *testing.T) {
 	h, _ := newTestHandler(t, "expected-secret")
 	mux := newMux(h)
@@ -101,10 +111,11 @@ func TestTelegramWebhookRejectsInvalidSecret(t *testing.T) {
 }
 
 func TestTelegramWebhookRejectsInvalidJSON(t *testing.T) {
-	h, _ := newTestHandler(t, "")
+	h, _ := newTestHandler(t, "expected-secret")
 	mux := newMux(h)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notification/telegram/webhook", bytes.NewReader([]byte(`not-json`)))
+	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "expected-secret")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {

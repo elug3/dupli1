@@ -128,6 +128,22 @@ func TestCreatePayment_BypassForbiddenWithoutPermission(t *testing.T) {
 	}
 }
 
+func TestCreatePayment_CardUnavailableWhenNoDevSimulate(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+	}}
+	checkout := checkout.NewUnavailableProvider("card checkout is not configured")
+	svc := service.New(repo, orders, checkout, nil)
+
+	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if !errors.Is(err, ports.ErrMethodUnavailable) {
+		t.Fatalf("err = %v, want ErrMethodUnavailable", err)
+	}
+}
+
 func TestCreatePayment_BitcoinUnavailable(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
