@@ -1,6 +1,10 @@
 package bootstrap
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/elug3/dupli1/payment/pkg/infra/checkout"
+)
 
 func TestBuildSettingsDevSimulateRequiresExplicitOptIn(t *testing.T) {
 	cfg := Config{OrderURL: "http://order"}
@@ -25,5 +29,30 @@ func TestBuildSettingsDevSimulateRequiresExplicitOptIn(t *testing.T) {
 	}
 	if !resp.Features["method_credit_card"] {
 		t.Fatal("method_credit_card should be true when simulate is on")
+	}
+}
+
+func TestBuildSettingsNanoTakesPrecedence(t *testing.T) {
+	cfg := Config{
+		OrderURL:         "http://order",
+		AllowDevSimulate: true,
+		Nano: checkout.NanoConfig{
+			ShopCode: "240000005",
+			LoginID:  "shoptest",
+			APIKey:   "test-key",
+		},
+	}
+	resp := BuildSettings(cfg)
+	if resp.Features["dev_simulate_success"] {
+		t.Fatal("dev_simulate_success should be false when nano is configured")
+	}
+	if !resp.Features["nano_checkout"] {
+		t.Fatal("nano_checkout should be true")
+	}
+	if got := resp.Limits["checkout_provider"]; got != "nano" {
+		t.Fatalf("checkout_provider = %v, want nano", got)
+	}
+	if !resp.Features["method_credit_card"] {
+		t.Fatal("method_credit_card should be true with nano")
 	}
 }

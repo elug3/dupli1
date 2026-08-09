@@ -11,10 +11,19 @@ type ServerOptions struct {
 	NATSURL            string
 	PublicBaseURL      string
 	AllowDevSimulate   bool // PAYMENT_ALLOW_DEV_SIMULATE — local/dev only
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
-	IdleTimeout        time.Duration
-	ShutdownTimeout    time.Duration
+	// NANO Solution certified payment (인증결제). When API key + shop are set,
+	// credit_card uses NANO instead of dev simulate / unavailable.
+	NanoBaseURL     string
+	NanoVer         string
+	NanoShopCode    string
+	NanoLoginID     string
+	NanoAPIKey      string
+	NanoSuccessURL  string
+	NanoFailureURL  string
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	IdleTimeout     time.Duration
+	ShutdownTimeout time.Duration
 }
 
 func NewServerOptions() *ServerOptions {
@@ -22,7 +31,7 @@ func NewServerOptions() *ServerOptions {
 		Addr:            ":8087",
 		OrderURL:        "http://localhost:8083",
 		ReadTimeout:     5 * time.Second,
-		WriteTimeout:    15 * time.Second,
+		WriteTimeout:    30 * time.Second, // NANO checkout bridge may wait on upstream
 		IdleTimeout:     120 * time.Second,
 		ShutdownTimeout: 10 * time.Second,
 	}

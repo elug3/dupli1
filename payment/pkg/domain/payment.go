@@ -31,6 +31,7 @@ const (
 const (
 	ProviderDev    = "dev"
 	ProviderBypass = "bypass"
+	ProviderNano   = "nano"
 )
 
 const DefaultPaymentTTL = 5 * time.Minute
@@ -39,22 +40,32 @@ const DefaultPaymentTTL = 5 * time.Minute
 const DefaultCurrency = money.Currency
 
 type Payment struct {
-	ID             string        `json:"id"`
-	OrderID        string        `json:"order_id"`
-	CustomerID     string        `json:"customer_id"`
-	AmountCents    int64         `json:"amount_cents"` // whole KRW won (zero-decimal minor units)
-	Currency       string        `json:"currency"`
-	Status         PaymentStatus `json:"status"`
-	Method         string        `json:"method"`
-	Provider       string        `json:"provider"`
-	ProviderRef    string        `json:"provider_ref"`
-	CheckoutURL    string        `json:"checkout_url,omitempty"`
-	CreatedBy      string        `json:"created_by,omitempty"`
-	Note           string        `json:"note,omitempty"`
-	IdempotencyKey string        `json:"-"`
-	ExpiresAt      time.Time     `json:"expires_at"`
-	CreatedAt      time.Time     `json:"created_at"`
-	UpdatedAt      time.Time     `json:"updated_at"`
+	ID          string        `json:"id"`
+	OrderID     string        `json:"order_id"`
+	CustomerID  string        `json:"customer_id"`
+	AmountCents int64         `json:"amount_cents"` // whole KRW won (zero-decimal minor units)
+	Currency    string        `json:"currency"`
+	Status      PaymentStatus `json:"status"`
+	Method      string        `json:"method"`
+	Provider    string        `json:"provider"`
+	ProviderRef string        `json:"provider_ref"`
+	CheckoutURL string        `json:"checkout_url,omitempty"`
+	CreatedBy   string        `json:"created_by,omitempty"`
+	Note        string        `json:"note,omitempty"`
+	// PayerName / PayerPhone are snapshotted from the order for NANO cert requests.
+	// Omitted from API JSON — not needed by clients.
+	PayerName      string    `json:"-"`
+	PayerPhone     string    `json:"-"`
+	PayerEmail     string    `json:"-"`
+	IdempotencyKey string    `json:"-"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+func (p *Payment) MarkFailed(now time.Time) {
+	p.Status = StatusFailed
+	p.UpdatedAt = now
 }
 
 func NewPayment(id, orderID, customerID string, amountCents int64, currency, provider, providerRef, checkoutURL string, now time.Time) (*Payment, error) {

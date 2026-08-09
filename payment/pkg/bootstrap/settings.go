@@ -11,14 +11,20 @@ func BuildSettings(cfg Config) settings.Response {
 	resp.Auth = settings.ConsumerAuth(cfg.JWKSURL, cfg.JWTSecret)
 	resp.Storage = settings.StorageMode(cfg.DatabaseConnString)
 
+	nanoOn := cfg.Nano.Enabled()
+	devSimulate := cfg.AllowDevSimulate && !nanoOn
 	checkoutProvider := "none"
-	if cfg.AllowDevSimulate {
+	switch {
+	case nanoOn:
+		checkoutProvider = "nano"
+	case devSimulate:
 		checkoutProvider = "dev"
 	}
-	cardEnabled := cfg.AllowDevSimulate
+	cardEnabled := nanoOn || devSimulate
 	resp.Features = map[string]bool{
 		"nats_events":          cfg.NATSURL != "",
-		"dev_simulate_success": cfg.AllowDevSimulate,
+		"nano_checkout":        nanoOn,
+		"dev_simulate_success": devSimulate,
 		"method_credit_card":   cardEnabled,
 		"method_bypass":        true,
 		"method_bitcoin":       false,
@@ -27,8 +33,8 @@ func BuildSettings(cfg Config) settings.Response {
 		"checkout_provider": checkoutProvider,
 		"currency":          money.Currency, // only KRW; amount_cents is whole won
 		"methods": map[string]bool{
-			"credit_card": cardEnabled, // local/dev simulate only
-			"bypass":      true,        // requires payment.bypass; storefront must hide
+			"credit_card": cardEnabled,
+			"bypass":      true, // requires payment.bypass; storefront must hide
 			"bitcoin":     false,
 		},
 	}

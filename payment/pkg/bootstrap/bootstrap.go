@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/payment/pkg/handler"
 	"github.com/elug3/dupli1/payment/pkg/infra/checkout"
 	"github.com/elug3/dupli1/payment/pkg/infra/httporder"
@@ -16,6 +15,7 @@ import (
 	"github.com/elug3/dupli1/payment/pkg/infra/pg"
 	"github.com/elug3/dupli1/payment/pkg/ports"
 	"github.com/elug3/dupli1/payment/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 )
 
 type Config struct {
@@ -27,9 +27,9 @@ type Config struct {
 	PublicBaseURL      string
 	// AllowDevSimulate enables the local simulate-success checkout path and
 	// GET /api/v1/payments/{id}/simulate-success. It must be set explicitly
-	// (PAYMENT_ALLOW_DEV_SIMULATE). Production must leave this unset and use
-	// manager Bypass (payment.bypass) until a PG is contracted.
+	// (PAYMENT_ALLOW_DEV_SIMULATE). Ignored when NANO credentials are configured.
 	AllowDevSimulate bool
+	Nano             checkout.NanoConfig
 	HTTPClient       *http.Client
 }
 
@@ -66,16 +66,28 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 	orders := httporder.NewClient(cfg.OrderURL, cfg.HTTPClient)
 
+	nanoCfg := cfg.Nano
+	if nanoCfg.PublicBaseURL == "" {
+		nanoCfg.PublicBaseURL = cfg.PublicBaseURL
+	}
+	if nanoCfg.HTTPClient == nil {
+		nanoCfg.HTTPClient = cfg.HTTPClient
+	}
+	var nanoProvider *checkout.NanoProvider
 	var checkoutProvider ports.CheckoutProvider
-	if cfg.AllowDevSimulate {
+	switch {
+	case nanoCfg.Enabled():
+		nanoProvider = checkout.NewNanoProvider(nanoCfg)
+		checkoutProvider = nanoProvider
+	case cfg.AllowDevSimulate:
 		publicURL := cfg.PublicBaseURL
 		if publicURL == "" {
 			publicURL = "http://localhost:8080"
 		}
 		checkoutProvider = checkout.NewDevProvider(publicURL)
-	} else {
+	default:
 		checkoutProvider = checkout.NewUnavailableProvider(
-			"card checkout is not configured; use method=bypass (payment.bypass) until a PG is wired",
+			"card checkout is not configured; set NANO_* credentials or use method=bypass (payment.bypass)",
 		)
 	}
 
@@ -108,7 +120,10 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	h := handler.New(svc, jwtValidator).
 		WithSettings(BuildSettings(cfg)).
-		WithDevSimulate(cfg.AllowDevSimulate)
+		WithDevSimulate(cfg.AllowDevSimulate && !nanoCfg.Enabled())
+	if nanoProvider != nil {
+		h = h.WithNano(nanoProvider)
+	}
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

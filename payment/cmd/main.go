@@ -13,7 +13,7 @@ import (
 var usageStr = `
 Usage: dupli1-payment [OPTIONS]
 
-A payment server that records Bypass/dev-simulate payments and publishes payment events.
+A payment server that records NANO card / Bypass / dev-simulate payments and publishes payment events.
 
 Options:
   -host string

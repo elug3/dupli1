@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/elug3/dupli1/payment/pkg/domain"
 	"github.com/elug3/dupli1/payment/pkg/ports"
 )
 
@@ -21,6 +22,7 @@ func (p *DevProvider) CreateSession(_ context.Context, input ports.CheckoutSessi
 	ref := "dev_cs_" + input.PaymentID
 	url := fmt.Sprintf("%s/api/v1/payments/%s/simulate-success", p.publicBaseURL, input.PaymentID)
 	return &ports.CheckoutSessionResult{
+		Provider:    domain.ProviderDev,
 		ProviderRef: ref,
 		CheckoutURL: url,
 	}, nil

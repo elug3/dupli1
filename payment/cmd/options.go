@@ -74,7 +74,7 @@ func applyEnv(opts *payment.ServerOptions) {
 	if v := os.Getenv("NATS_URL"); v != "" {
 		opts.NATSURL = v
 	}
-	// Explicit opt-in for local simulate-success. Prod must leave this unset.
+	// Explicit opt-in for local simulate-success. Prod must leave this unset when NANO is live.
 	if v := os.Getenv("PAYMENT_ALLOW_DEV_SIMULATE"); v != "" {
 		switch strings.ToLower(strings.TrimSpace(v)) {
 		case "1", "true", "yes", "on":
@@ -88,6 +88,28 @@ func applyEnv(opts *payment.ServerOptions) {
 		opts.DatabaseConnString = v
 	} else if v := os.Getenv("DB_URL"); v != "" {
 		opts.DatabaseConnString = v
+	}
+
+	if v := os.Getenv("NANO_BASE_URL"); v != "" {
+		opts.NanoBaseURL = v
+	}
+	if v := os.Getenv("NANO_VER"); v != "" {
+		opts.NanoVer = v
+	}
+	if v := os.Getenv("NANO_SHOPCODE"); v != "" {
+		opts.NanoShopCode = v
+	}
+	if v := os.Getenv("NANO_LOGIN_ID"); v != "" {
+		opts.NanoLoginID = v
+	}
+	if v := os.Getenv("NANO_API_KEY"); v != "" {
+		opts.NanoAPIKey = v
+	}
+	if v := os.Getenv("NANO_SUCCESS_URL"); v != "" {
+		opts.NanoSuccessURL = v
+	}
+	if v := os.Getenv("NANO_FAILURE_URL"); v != "" {
+		opts.NanoFailureURL = v
 	}
 }
 

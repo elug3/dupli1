@@ -1,6 +1,6 @@
 # Plan: Payment Methods
 
-**Status:** Design + Bypass implemented. **Stripe Checkout adapter removed** from the codebase; card PG is TBD. Local `credit_card` uses **dev simulate** only (`PAYMENT_ALLOW_DEV_SIMULATE`). Bitcoin is still spec-only (do not implement yet).
+**Status:** Design + Bypass + **NANO certified card** implemented. Local `credit_card` uses **dev simulate** when NANO credentials are unset (`PAYMENT_ALLOW_DEV_SIMULATE`). Bitcoin is still spec-only (do not implement yet).
 
 **Related:** [payment-service.md](payment-service.md), [permissions.md](permissions.md), [checkout-session.md](checkout-session.md), [auth-profile-extension-plan.md](auth-profile-extension-plan.md), [current-state.md](current-state.md).
 
@@ -10,7 +10,7 @@ Offer three payment methods for pending orders, with a single confirmation path 
 
 | Method | Who can use it | Status |
 |--------|----------------|--------|
-| **Credit card** | Customer (own order) or `payment.create` | **Local/dev simulate only** — no card PG adapter; PG TBD |
+| **Credit card** | Customer (own order) or `payment.create` | **NANO Solution 인증결제** when `NANO_*` configured; else local simulate |
 | **Bypass** | Order manager only (`payment.bypass`) | **Implemented** — mark paid without a PG (**v1.0 launch path**) |
 | **Bitcoin** | Customer (own order) | **Planned — do not implement yet** |
 
@@ -18,7 +18,7 @@ All successful methods must end the same way: payment record → **`succeeded`**
 
 ## Non-goals (this plan)
 
-- Handling card PAN / CVC / card passwords on Dupli1 (still Stripe-hosted only)
+- Handling card PAN / CVC / card passwords on Dupli1 (NANO-hosted certified window only; do not use 수기결제)
 - Refunds / chargebacks UI (still payment phase 2 in [payment-service.md](payment-service.md))
 - Multi-currency storefront (KRW only stays locked)
 - Implementing Bitcoin rails, wallets, or FX settlement in this phase
@@ -29,9 +29,9 @@ All successful methods must end the same way: payment record → **`succeeded`**
 | Piece | Today |
 |-------|--------|
 | Create payment | `POST /api/v1/payments` with `{ "order_id", "method" }` |
-| Card PG | **Removed** — no Stripe adapter |
-| Provider | `dev` (local simulate) or `bypass` |
-| Checkout | `CheckoutProvider` = DevProvider when `PAYMENT_ALLOW_DEV_SIMULATE`, else UnavailableProvider |
+| Card PG | **NANO** certified adapter (`infra/checkout/nano.go`) |
+| Provider | `nano` \| `dev` (local simulate) \| `bypass` |
+| Checkout | NANO when credentials set; else DevProvider when `PAYMENT_ALLOW_DEV_SIMULATE`; else UnavailableProvider |
 | Permissions | `payment.create`, `payment.read.all`, `payment.bypass` |
 | Order paid | Only via `payment.succeeded` consumer (not manual `PUT …/status`) |
 | Naming collision | Service input `BypassABAC` means “skip customer ownership check” — **not** the Bypass payment method |
@@ -43,8 +43,8 @@ POST /api/v1/payments
   { "order_id": "ord_…", "method": "credit_card" | "bypass" | "bitcoin" }
 
                     ┌─────────────────┐
-  credit_card  ───► │ Dev simulate    │ ── simulate-success ──► CompletePayment
-                    │ (local only)    │     else 501 Unavailable
+  credit_card  ───► │ NANO cert PG    │ ── receiveUrl/webhook ──► HandleNanoResult
+                    │ or Dev simulate │     else 501 Unavailable
                     └─────────────────┘
                     ┌─────────────────┐
   bypass       ───► │ Immediate mark  │ ──► CompletePayment (no PG)
@@ -62,7 +62,7 @@ POST /api/v1/payments
                      order pending → paid
 ```
 
-Default when `method` is omitted: **`credit_card`** (local simulate when enabled; 501 in prod).
+Default when `method` is omitted: **`credit_card`** (NANO when configured; else local simulate; else 501).
 
 ---
 
@@ -70,19 +70,20 @@ Default when `method` is omitted: **`credit_card`** (local simulate when enabled
 
 ### 1. Credit card (`credit_card`)
 
-**Status:** Local/dev simulate only — **no card PG adapter**.
+**Status:** **NANO Solution 인증결제** (PC/mobile `payWay=card`). Local simulate when NANO unset.
 
 | Topic | Choice |
 |-------|--------|
 | API `method` | `credit_card` (omit → this) |
-| Provider value | `dev` (local simulate only) |
-| UI | Storefront “credit card” → simulate URL when Compose enables simulate |
+| Provider value | `nano` (or `dev` for local simulate) |
+| UI | Storefront “credit card” → redirect to `checkout_url` (NANO bridge or simulate) |
 | Auth | Own order (ABAC) or `payment.create` |
-| Completion | Local `simulate-success` (gated by `PAYMENT_ALLOW_DEV_SIMULATE`) |
+| Payer fields | Order snapshot `recipient_name` / `recipient_phone` (required for NANO) |
+| Completion | NANO `receiveUrl` form + optional JSON webhook → `HandleNanoResult`; local `simulate-success` when NANO unset |
 | TTL | Existing 5-minute unpaid window |
 | Currency | KRW only (`amount_cents` = whole won) |
 
-**API shape (local simulate):**
+**API shape (NANO):**
 
 ```json
 // Request
@@ -96,8 +97,8 @@ Default when `method` is omitted: **`credit_card`** (local simulate when enabled
   "amount_cents": 70000,
   "currency": "krw",
   "status": "requires_payment",
-  "provider": "dev",
-  "checkout_url": "http://localhost:8080/api/v1/payments/pay_000001/simulate-success",
+  "provider": "nano",
+  "checkout_url": "https://dupli1.com/api/v1/payments/pay_000001/nano/checkout",
   "expires_at": "..."
 }
 ```
@@ -182,9 +183,11 @@ Add to `shared/pkg/permissions` catalog, fulfillment / order-manager bundles, an
 | Completion | Async confirmation → same `CompletePayment` / `payment.succeeded` path |
 | Hard problem | On-chain confirmation latency vs today’s **5-minute** unpaid cancel window |
 
-### PG integration (NANO)
+### PG integration (NANO) — implemented
 
-Customer **name and phone** for certified PG requests come from the **order snapshot** at checkout complete, not from the payment service. Optional prefill from auth profile: [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
+Customer **name and phone** for certified PG requests come from the **order snapshot** at checkout complete (copied onto the payment row as `payer_*` for the checkout bridge). Optional prefill from auth profile: [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
+
+Hash: `SHA256(ver+loginId+shopcode+reqPayAmt+timestamp+API_KEY+"NANO")`. Do **not** integrate 수기결제 (key-in) — that would put PAN on Dupli1.
 
 **Open questions (resolve before coding Bitcoin)**
 
@@ -208,7 +211,7 @@ Extend `payments` (additive; card rows remain valid with defaults):
 | `created_by` | `TEXT NULL` | JWT `sub` for Bypass (and optionally all creates) |
 | `note` | `TEXT NULL` | Bypass reason / ops note; ignore for card |
 
-`provider` stays: `stripe` \| `dev` \| `bypass` \| (future bitcoin provider id).
+`provider` stays: `nano` \| `dev` \| `bypass` \| (future bitcoin provider id).
 
 Indexes: none required beyond existing `provider_ref` / idempotency for MVP.
 
@@ -291,10 +294,10 @@ Bypass should **not** go through Stripe or the `simulate-success` URL. It calls 
 
 1. **Bypass is privileged.** Missing `payment.bypass` → 403 even if the caller owns the order.
 2. **Never trust client amount** for any method.
-3. **Webhook remains source of truth for card** — browser success redirect alone does not mark paid.
-4. **Bitcoin (later):** verify provider signatures / IPN authenticity the same way Stripe signatures are verified.
+3. **NANO return/webhook is source of truth for card** — verify `resultCode`, `shopcode`, and `reqPayAmt` before succeeding; browser landing without a valid callback does not mark paid.
+4. **Bitcoin (later):** verify provider signatures / IPN authenticity the same way NANO result fields are checked.
 5. **Audit:** Bypass always stores `created_by`; manage-web should show who marked paid.
-6. Keep **dev `simulate-success`** gated (Stripe unset only) — distinct from Bypass (Bypass is intentional prod ops tooling).
+6. Keep **dev `simulate-success`** gated (NANO unset only) — distinct from Bypass (Bypass is intentional prod ops tooling).
 
 ---
 

@@ -320,7 +320,7 @@ Keep **`/api/v1/auth/me/profile`** as a gateway alias to profile service for one
 
 - [x] Order columns + checkout complete validation
 - [x] Payment order client fields for NANO
-- [ ] NANO PG adapter (separate PR)
+- [x] NANO PG adapter (separate PR)
 
 ### Phase C — Frontends
 

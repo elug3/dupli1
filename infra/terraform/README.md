@@ -34,6 +34,26 @@ aws ecs update-service --cluster production --service dupli1-notification --forc
 
 Chat IDs: allowlisted users send `/start` to the bot. User IDs: [@userinfobot](https://t.me/userinfobot).
 
+## NANO payment (credit card)
+
+Secret: `dupli1/production/nano-payment` (JSON keys `NANO_API_KEY`, `NANO_LOGIN_ID`, `NANO_SHOPCODE`, `NANO_VER`).
+
+Terraform creates an empty shell and injects keys into `dupli1-payment`. Card checkout stays disabled until the secret is filled (empty `NANO_API_KEY` → UnavailableProvider; managers still use Bypass).
+
+```bash
+aws secretsmanager put-secret-value --secret-id dupli1/production/nano-payment --secret-string '{
+  "NANO_API_KEY":"<from-nano-contract>",
+  "NANO_LOGIN_ID":"<loginId>",
+  "NANO_SHOPCODE":"<shopcode>",
+  "NANO_VER":"<ver>"
+}'
+aws ecs update-service --cluster production --service dupli1-payment --force-new-deployment
+```
+
+Also ask NANO to allowlist the production NAT egress IP and register the webhook URL `https://dupli1.com/api/v1/payments/webhooks/nano` if JSON callbacks are needed. Browser return URL is `https://dupli1.com/api/v1/payments/nano/return`.
+
+See [docs/payment-service.md](../../docs/payment-service.md).
+
 ## Web service account (customer registration)
 
 Secret: `dupli1/production/web-service-account` (JSON keys `DUPLI1_WEB_SERVICE_EMAIL`, `DUPLI1_WEB_SERVICE_PASSWORD`).

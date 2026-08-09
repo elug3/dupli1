@@ -1,8 +1,8 @@
 # Payment Service
 
-**Status:** Implemented (`payment/`). Local Compose sets `PAYMENT_ALLOW_DEV_SIMULATE=true` so `GET /api/v1/payments/{id}/simulate-success` works without a PG. **Production must leave that env unset** — v1.0 launches **without a card PG** (PG company TBD); ops marks orders paid via **Bypass** (`payment.bypass`).
+**Status:** Implemented (`payment/`). Credit card uses **NANO Solution certified payment (인증결제)** when `NANO_API_KEY` + shop credentials are set. Local Compose defaults to `PAYMENT_ALLOW_DEV_SIMULATE=true` (simulate URL) when NANO is unset. Ops can still mark paid via **Bypass** (`payment.bypass`).
 
-The **payment service** (`dupli1-payment`) records money for **pending** orders via manager **Bypass** or (local only) **dev simulate**. There is **no Stripe (or other card PG) adapter** in the codebase. Dupli1 **never** handles card numbers, CVC, or card passwords.
+The **payment service** (`dupli1-payment`) records money for **pending** orders via **NANO card**, manager **Bypass**, or (local only) **dev simulate**. Dupli1 **never** handles card numbers, CVC, or card passwords — NANO hosts the payment window.
 
 On PG success, payment enqueues **`payment.succeeded`** in a transactional outbox (soft-success even if NATS is briefly down). The **order service** consumes it (queue group + logged handler errors), verifies amount, and moves the order to **`paid`**. A payment reconcile worker re-publishes recent succeeded payments so lost Core NATS deliveries still land (`MarkOrderPaid` is idempotent). The **notification service** sends a Telegram alert to ops. An **order manager** ships the order (`paid` → **`in_transit`**), which **commits** inventory (plan B).
 
@@ -52,11 +52,11 @@ sequenceDiagram
     Client->>Order: checkout complete
     Order-->>Client: order_id (pending, stock reserved)
 
-    Note over Client,Pay: Prod: manager Bypass · Local: credit_card + simulate-success
+    Note over Client,Pay: Prod: NANO card or manager Bypass · Local: simulate-success when NANO unset
 
     Client->>Pay: POST /api/v1/payments { order_id, method }
-    Pay->>Order: GET order (verify pending + total)
-    Pay->>Pay: mark succeeded (bypass) or return simulate URL (dev)
+    Pay->>Order: GET order (verify pending + total + recipient for NANO)
+    Pay->>Pay: NANO checkout URL / bypass succeed / simulate URL (dev)
     Pay->>Bus: payment.succeeded { order_id, payment_id, amount_cents }
 
     Bus->>Order: consume payment.succeeded
@@ -77,7 +77,7 @@ sequenceDiagram
 
 | Topic | Choice |
 |-------|--------|
-| Card PG | **None** (removed; PG TBD) |
+| Card PG | **NANO Solution** certified payment (`payWay=card`) when configured |
 | Card data on Dupli1 | **Never** |
 | Default currency | **`krw` only** (single currency; other codes rejected) |
 | Amount unit | Whole Korean won (`amount_cents` = zero-decimal minor units for KRW — **not** won×100) |
@@ -97,9 +97,10 @@ sequenceDiagram
 
 ### Payment service owns
 
-- Payment records (Bypass + local/dev simulate)
+- Payment records (NANO card + Bypass + local/dev simulate)
+- NANO checkout bridge + `receiveUrl` / webhook completion
 - Publishing **`payment.succeeded`** (transactional outbox + drain/reconcile workers)
-- Dev/simulate endpoints when `PAYMENT_ALLOW_DEV_SIMULATE=true` (local only)
+- Dev/simulate endpoints when `PAYMENT_ALLOW_DEV_SIMULATE=true` and NANO is unset (local only)
 
 ### Order service owns
 
@@ -151,16 +152,19 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
 |--------|------|------|-------------|
 | `GET` | `/api/v1/payments/health` | — | Health |
 | `GET` | `/api/v1/payments/settings` | — | Non-secret service settings |
-| `POST` | `/api/v1/payments` | Bearer | Create payment (`bypass` or local `credit_card` simulate) |
+| `POST` | `/api/v1/payments` | Bearer | Create payment (`credit_card` or `bypass`) |
 | `GET` | `/api/v1/payments/{id}` | Bearer | Payment status |
-| `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (`PAYMENT_ALLOW_DEV_SIMULATE`) |
+| `GET` | `/api/v1/payments/{id}/nano/checkout` | — | Bridge into NANO cert checkout (when NANO configured) |
+| `POST` | `/api/v1/payments/nano/return` | — | NANO form `receiveUrl` callback → succeed/fail + redirect |
+| `POST` | `/api/v1/payments/webhooks/nano` | — | Optional JSON webhook (register URL with NANO) |
+| `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (`PAYMENT_ALLOW_DEV_SIMULATE`, NANO unset) |
 
-**Create payment (local simulate)**
+**Create payment (credit card)**
 ```json
 { "order_id": "ord_000001", "method": "credit_card" }
 ```
 
-`credit_card` works only when `PAYMENT_ALLOW_DEV_SIMULATE=true` (returns a simulate URL). Managers with `payment.bypass` may send `method: "bypass"` (+ optional `note`) to mark paid without a PG.
+`credit_card` requires order `recipient_name` + `recipient_phone` when NANO is configured (returns `checkout_url` to the NANO bridge). Locally without NANO, `PAYMENT_ALLOW_DEV_SIMULATE=true` returns a simulate URL. Managers with `payment.bypass` may send `method: "bypass"` (+ optional `note`) to mark paid without a PG.
 
 **Bypass response**
 ```json
@@ -217,7 +221,11 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
 | `DUPLI1_PAYMENT_ADDR` | payment | Listen `:8087` |
 | `DUPLI1_PAYMENT_DB` | payment | Postgres `payments` |
 | `DUPLI1_ORDER_URL` | payment | Fetch order for validation |
-| `PAYMENT_ALLOW_DEV_SIMULATE` | payment | `true` enables `GET …/simulate-success` (local Compose only; **unset on ECS**) |
+| `DUPLI1_PAYMENT_PUBLIC_URL` | payment | Public gateway base for NANO `receiveUrl` + checkout bridge |
+| `PAYMENT_ALLOW_DEV_SIMULATE` | payment | `true` enables simulate when NANO unset (local Compose; **unset on ECS**) |
+| `NANO_BASE_URL` | payment | `https://dev3.nanopay.co.kr` (test) or `https://pay.nanopay.co.kr` (prod) |
+| `NANO_VER` / `NANO_SHOPCODE` / `NANO_LOGIN_ID` / `NANO_API_KEY` | payment | Merchant credentials (prod: Secrets Manager `dupli1/production/nano-payment`) |
+| `NANO_SUCCESS_URL` / `NANO_FAILURE_URL` | payment | Storefront redirects after `nano/return` |
 | `DUPLI1_PAYMENT_ORDER_TTL` | order | `5m` pending payment window |
 | `NATS_URL` | all | Event bus |
 | `TELEGRAM_BOT_TOKEN` | notification | Bot token (prod: Secrets Manager `dupli1/production/telegram`) — **only secret**; see [notification-telegram-bot.md](notification-telegram-bot.md) |

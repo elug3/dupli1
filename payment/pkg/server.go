@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/elug3/dupli1/payment/pkg/bootstrap"
+	"github.com/elug3/dupli1/payment/pkg/infra/checkout"
 )
 
 type Server struct {
@@ -33,7 +34,17 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		NATSURL:            opts.NATSURL,
 		PublicBaseURL:      opts.PublicBaseURL,
 		AllowDevSimulate:   opts.AllowDevSimulate,
-		HTTPClient:         bootstrap.DefaultHTTPClient(),
+		Nano: checkout.NanoConfig{
+			BaseURL:       opts.NanoBaseURL,
+			Ver:           opts.NanoVer,
+			ShopCode:      opts.NanoShopCode,
+			LoginID:       opts.NanoLoginID,
+			APIKey:        opts.NanoAPIKey,
+			PublicBaseURL: opts.PublicBaseURL,
+			SuccessURL:    opts.NanoSuccessURL,
+			FailureURL:    opts.NanoFailureURL,
+		},
+		HTTPClient: bootstrap.DefaultHTTPClient(),
 	})
 	if err != nil {
 		return nil, err
