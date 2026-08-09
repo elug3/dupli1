@@ -1,6 +1,12 @@
 package ports
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrReservationClosed is returned when a reservation was already committed or released.
+var ErrReservationClosed = errors.New("reservation is not active")
 
 // StockItem is a line to reserve/commit against product stock.
 type StockItem struct {
