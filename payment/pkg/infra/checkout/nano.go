@@ -3,6 +3,7 @@ package checkout
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -163,9 +164,42 @@ func (p *NanoProvider) BuildRequest(paymentID, orderID, customerID, orderName, o
 }
 
 // NanoHash returns SHA256(ver+loginId+shopcode+reqPayAmt+timestamp+API_KEY+"NANO") hex digest.
+// Used for outbound cert requests and (until merchant docs specify otherwise) for
+// verifying receiveUrl / webhook hashValue with the callback timestamp.
 func NanoHash(ver, loginID, shopCode, reqPayAmt, timestamp, apiKey string) string {
 	sum := sha256.Sum256([]byte(ver + loginID + shopCode + reqPayAmt + timestamp + apiKey + "NANO"))
 	return hex.EncodeToString(sum[:])
+}
+
+// VerifyNanoCallbackHash reports whether hashValue matches the NANO request-style
+// hash over callback fields. Callers must fail closed on false for resultCode=0000.
+//
+// Formula (same as request until merchant return-hash spec is confirmed):
+//
+//	SHA256(ver+loginId+shopcode+reqPayAmt+timestamp+API_KEY+"NANO")
+//
+// ver/loginId come from merchant config (not client-supplied). shopcode, reqPayAmt,
+// and timestamp must be present on the callback. If NANO’s live return hash differs,
+// update this function to match the merchant API guide — do not disable verification.
+func VerifyNanoCallbackHash(cfg NanoConfig, shopCode, reqPayAmt, timestamp, hashValue string) bool {
+	got := strings.TrimSpace(hashValue)
+	ts := strings.TrimSpace(timestamp)
+	if got == "" || ts == "" || !cfg.Enabled() {
+		return false
+	}
+	ver := strings.TrimSpace(cfg.Ver)
+	if ver == "" {
+		ver = strings.TrimSpace(cfg.ShopCode)
+	}
+	want := NanoHash(
+		ver,
+		strings.TrimSpace(cfg.LoginID),
+		strings.TrimSpace(shopCode),
+		strings.TrimSpace(reqPayAmt),
+		ts,
+		cfg.APIKey,
+	)
+	return subtle.ConstantTimeCompare([]byte(strings.ToLower(got)), []byte(strings.ToLower(want))) == 1
 }
 
 func nanoTimestamp(now time.Time) string {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/elug3/dupli1/payment/pkg/domain"
+	"github.com/elug3/dupli1/payment/pkg/infra/checkout"
 	"github.com/elug3/dupli1/payment/pkg/ports"
 )
 
@@ -199,7 +200,17 @@ func (s *Service) CompletePayment(ctx context.Context, paymentID string) (*domai
 	return payment, nil
 }
 
-// NanoResult is the verified approval payload from NANO receiveUrl / webhook.
+// NanoCallbackAuth holds merchant credentials used to authenticate NANO callbacks.
+// ShopCode and APIKey must be set; Ver/LoginID are required to verify hashValue.
+type NanoCallbackAuth struct {
+	Ver      string
+	LoginID  string
+	ShopCode string
+	APIKey   string
+}
+
+// NanoResult is the approval payload from NANO receiveUrl / webhook.
+// Success (resultCode=0000) is accepted only after shopcode, amount, and hashValue checks.
 type NanoResult struct {
 	ResultCode  string `json:"resultCode"`
 	ResultMsg   string `json:"resultMsg"`
@@ -208,13 +219,26 @@ type NanoResult struct {
 	ReqPayAmt   string `json:"reqPayAmt"`
 	TranNo      string `json:"tranNo"`
 	PayWay      string `json:"payWay"`
+	Timestamp   string `json:"timestamp"`
+	HashValue   string `json:"hashValue"`
 }
 
 // HandleNanoResult marks a NANO card payment succeeded or failed after PG callback.
-// Amount and shop code must match; browser redirect alone without resultCode=0000 does not pay.
-func (s *Service) HandleNanoResult(ctx context.Context, expectedShopCode string, result NanoResult) (*domain.Payment, error) {
+//
+// Fail-closed rules:
+//   - shopcode must be present and match merchant config (always)
+//   - reqPayAmt must be present and match the payment amount (always)
+//   - on resultCode=0000, hashValue must verify against API_KEY (see checkout.VerifyNanoCallbackHash)
+//
+// Browser landing without a valid signed callback does not mark paid.
+func (s *Service) HandleNanoResult(ctx context.Context, auth NanoCallbackAuth, result NanoResult) (*domain.Payment, error) {
 	paymentID := strings.TrimSpace(result.CompOrderNo)
 	if paymentID == "" {
+		return nil, domain.ErrInvalidPayment
+	}
+	shop := strings.TrimSpace(result.ShopCode)
+	wantShop := strings.TrimSpace(auth.ShopCode)
+	if wantShop == "" || shop == "" || shop != wantShop {
 		return nil, domain.ErrInvalidPayment
 	}
 	payment, err := s.repo.Get(ctx, paymentID)
@@ -224,15 +248,9 @@ func (s *Service) HandleNanoResult(ctx context.Context, expectedShopCode string,
 	if payment.Provider != domain.ProviderNano && !strings.HasPrefix(payment.ProviderRef, "nano_") {
 		return nil, domain.ErrInvalidPayment
 	}
-	if expectedShopCode != "" && strings.TrimSpace(result.ShopCode) != "" &&
-		strings.TrimSpace(result.ShopCode) != strings.TrimSpace(expectedShopCode) {
+	amt := strings.TrimSpace(result.ReqPayAmt)
+	if amt == "" || amt != fmt.Sprintf("%d", payment.AmountCents) {
 		return nil, domain.ErrInvalidPayment
-	}
-	if amt := strings.TrimSpace(result.ReqPayAmt); amt != "" {
-		want := fmt.Sprintf("%d", payment.AmountCents)
-		if amt != want {
-			return nil, domain.ErrInvalidPayment
-		}
 	}
 	if strings.TrimSpace(result.ResultCode) != "0000" {
 		if payment.Status == domain.StatusSucceeded {
@@ -243,6 +261,15 @@ func (s *Service) HandleNanoResult(ctx context.Context, expectedShopCode string,
 			return nil, err
 		}
 		return payment, nil
+	}
+	if strings.TrimSpace(auth.APIKey) == "" ||
+		!checkout.VerifyNanoCallbackHash(checkout.NanoConfig{
+			Ver:      auth.Ver,
+			LoginID:  auth.LoginID,
+			ShopCode: auth.ShopCode,
+			APIKey:   auth.APIKey,
+		}, shop, amt, result.Timestamp, result.HashValue) {
+		return nil, domain.ErrInvalidPayment
 	}
 	if tran := strings.TrimSpace(result.TranNo); tran != "" {
 		payment.ProviderRef = tran

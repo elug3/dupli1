@@ -22,6 +22,29 @@ func TestNanoHashMatchesDocExampleShape(t *testing.T) {
 	}
 }
 
+func TestVerifyNanoCallbackHash(t *testing.T) {
+	cfg := NanoConfig{
+		Ver: "240000005", ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key",
+	}
+	ts := "1725440123456"
+	hash := NanoHash(cfg.Ver, cfg.LoginID, cfg.ShopCode, "70000", ts, cfg.APIKey)
+	if !VerifyNanoCallbackHash(cfg, cfg.ShopCode, "70000", ts, hash) {
+		t.Fatal("expected valid hash")
+	}
+	if VerifyNanoCallbackHash(cfg, cfg.ShopCode, "70000", ts, "00"+hash[2:]) {
+		t.Fatal("tampered hash must fail")
+	}
+	if VerifyNanoCallbackHash(cfg, cfg.ShopCode, "70000", "", hash) {
+		t.Fatal("missing timestamp must fail closed")
+	}
+	if VerifyNanoCallbackHash(cfg, cfg.ShopCode, "70000", ts, "") {
+		t.Fatal("missing hashValue must fail closed")
+	}
+	if VerifyNanoCallbackHash(NanoConfig{}, cfg.ShopCode, "70000", ts, hash) {
+		t.Fatal("disabled credentials must fail closed")
+	}
+}
+
 func TestNanoProviderCreateSession(t *testing.T) {
 	p := NewNanoProvider(NanoConfig{
 		BaseURL:       "https://dev3.nanopay.co.kr",
