@@ -241,3 +241,68 @@ func TestNanoReturn_SucceedsAndRedirects(t *testing.T) {
 		t.Fatalf("events = %d", len(pub.events))
 	}
 }
+
+func TestNanoReturn_InvalidPayload(t *testing.T) {
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key",
+		PublicBaseURL: "http://localhost:8080",
+	})
+	repo := memory.NewRepository()
+	svc := service.New(repo, nanoOrderClient{}, nano, nil)
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret")).WithNano(nano)
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/nano/return", bytes.NewBufferString(""))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestNanoWebhook_SucceedsAndReturnsResultCode00(t *testing.T) {
+	repo := memory.NewRepository()
+	pub := &recordingPublisher{}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key",
+		PublicBaseURL: "http://localhost:8080",
+	})
+	svc := service.New(repo, nanoOrderClient{}, nano, pub)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret")).WithNano(nano)
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	body, _ := json.Marshal(map[string]string{
+		"resultCode":  "0000",
+		"shopcode":    "240000005",
+		"compOrderNo": created.ID,
+		"reqPayAmt":   "1000",
+		"tranNo":      "tn_webhook_1",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/webhooks/nano", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp["resultCode"] != "00" {
+		t.Fatalf("resultCode = %q, want 00", resp["resultCode"])
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("events = %d, want 1", len(pub.events))
+	}
+}

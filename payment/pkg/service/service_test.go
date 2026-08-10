@@ -143,6 +143,21 @@ func TestCreatePayment_BitcoinUnavailable(t *testing.T) {
 	}
 }
 
+func TestCreatePayment_CardUnavailableWhenNoDevSimulate(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+	}}
+	svc := service.New(repo, orders, checkout.NewUnavailableProvider("no PG configured"), nil)
+
+	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if !errors.Is(err, ports.ErrMethodUnavailable) {
+		t.Fatalf("err = %v, want ErrMethodUnavailable", err)
+	}
+}
+
 func TestCreatePayment_UnknownMethod(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
@@ -516,5 +531,29 @@ func TestHandleNanoResult_FailureMarksFailed(t *testing.T) {
 	}
 	if paid.Status != domain.StatusFailed {
 		t.Fatalf("status = %s, want failed", paid.Status)
+	}
+}
+
+func TestHandleNanoResult_ShopCodeMismatch(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
+	})
+	svc := service.New(repo, orders, nano, nil)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	_, err = svc.HandleNanoResult(context.Background(), "240000005", service.NanoResult{
+		ResultCode: "0000", ShopCode: "wrong-shop", CompOrderNo: created.ID, ReqPayAmt: "70000",
+	})
+	if !errors.Is(err, domain.ErrInvalidPayment) {
+		t.Fatalf("err = %v, want ErrInvalidPayment", err)
 	}
 }
