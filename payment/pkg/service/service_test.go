@@ -492,6 +492,38 @@ func TestHandleNanoResult_AmountMismatch(t *testing.T) {
 	}
 }
 
+func TestHandleNanoResult_RejectsMinimalForgery(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
+	})
+	svc := service.New(repo, orders, nano, nil)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	_, err = svc.HandleNanoResult(context.Background(), "240000005", service.NanoResult{
+		ResultCode: "0000", CompOrderNo: created.ID,
+	})
+	if !errors.Is(err, domain.ErrInvalidPayment) {
+		t.Fatalf("minimal forgery err = %v, want ErrInvalidPayment", err)
+	}
+	paid, err := repo.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if paid.Status != domain.StatusRequiresPayment {
+		t.Fatalf("status = %s, want requires_payment", paid.Status)
+	}
+}
+
 func TestHandleNanoResult_FailureMarksFailed(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{

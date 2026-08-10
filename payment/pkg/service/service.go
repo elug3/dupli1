@@ -224,15 +224,23 @@ func (s *Service) HandleNanoResult(ctx context.Context, expectedShopCode string,
 	if payment.Provider != domain.ProviderNano && !strings.HasPrefix(payment.ProviderRef, "nano_") {
 		return nil, domain.ErrInvalidPayment
 	}
-	if expectedShopCode != "" && strings.TrimSpace(result.ShopCode) != "" &&
-		strings.TrimSpace(result.ShopCode) != strings.TrimSpace(expectedShopCode) {
+	if strings.TrimSpace(result.ResultCode) == "" {
 		return nil, domain.ErrInvalidPayment
 	}
-	if amt := strings.TrimSpace(result.ReqPayAmt); amt != "" {
-		want := fmt.Sprintf("%d", payment.AmountCents)
-		if amt != want {
+	gotShop := strings.TrimSpace(result.ShopCode)
+	if expectedShopCode != "" {
+		if gotShop == "" || gotShop != strings.TrimSpace(expectedShopCode) {
 			return nil, domain.ErrInvalidPayment
 		}
+	} else if gotShop == "" {
+		return nil, domain.ErrInvalidPayment
+	}
+	amt := strings.TrimSpace(result.ReqPayAmt)
+	if amt == "" {
+		return nil, domain.ErrInvalidPayment
+	}
+	if want := fmt.Sprintf("%d", payment.AmountCents); amt != want {
+		return nil, domain.ErrInvalidPayment
 	}
 	if strings.TrimSpace(result.ResultCode) != "0000" {
 		if payment.Status == domain.StatusSucceeded {
