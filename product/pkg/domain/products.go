@@ -1,16 +1,8 @@
 package domain
 
-// Consultation represents a service consultation offering
-type Consultation struct {
-	ID          string
-	Title       string
-	Description string
-	Duration    int // in minutes
-	Price       float64
-	Status      string
-}
-
 // Variant is a sellable option (SKU) under a parent product style.
+// There is no separate Sku{} type — dual identity lives here as SkuID + SKU.
+// Target model folds these fields onto Product; see docs/product-structure-final-review.md.
 type Variant struct {
 	// SkuID is the canonical, immutable cross-service identifier (ULID).
 	SkuID     string `json:"skuId,omitempty"`
@@ -36,6 +28,8 @@ type Variant struct {
 }
 
 // Product is a parent catalog style. Sellable options live on Variants.
+// After the accepted flatten migration, Product becomes the sellable unit and
+// shared copy moves to Style — see docs/product-structure-final-review.md.
 type Product struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
@@ -84,36 +78,4 @@ type Product struct {
 	Color     string   `json:"color,omitempty"`
 	Stock     int      `json:"stock,omitempty"`
 	ImageURLs []string `json:"imageUrls,omitempty"`
-}
-
-// Shoes represents footwear products
-type Shoes struct {
-	Product
-	Size   string
-	Gender string
-}
-
-// Outerwear represents jackets, coats, and similar items
-type Outerwear struct {
-	Product
-	Size   string
-	Gender string
-}
-
-// Bottoms represents trousers, pants, skirts, and similar items
-type Bottoms struct {
-	Product
-	Size   string
-	Gender string
-}
-
-// Bag represents bags, purses, backpacks, and similar items.
-type Bag struct {
-	Product
-}
-
-// Clock represents timepieces
-type Clock struct {
-	Product
-	Type string // Analog, Digital, Smart, etc.
 }

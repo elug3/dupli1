@@ -16,8 +16,7 @@ When wallets/clothing land, a bag-named core type would force a second rename (o
 |------------|------|---------------|
 | `domain.Product` | Parent style / PDP shell | Mostly no — but carries bag taxonomy fields (`subCategory`, `style`, `target`) and `capacity` |
 | `domain.Variant` | Sellable option (human `sku` + ULID `skuId`) | No — color/size/edition SKU segments are shared fashion patterns |
-| `domain.Bag` | Unused stub: `type Bag struct { Product }` | Yes — never referenced outside `products.go` |
-| `Shoes` / `Outerwear` / `Bottoms` / `Clock` | Unused stubs embedding `Product` | Yes — dead sketches |
+| `domain.Bag` / `Shoes` / … | Removed (were unused embeddings of `Product`) | — |
 | `SKU{}` type | **Does not exist** | Docs call variants “SKUs”; Go type is `Variant` |
 
 API, DB, and permissions already speak “product”, not “bag”:
@@ -124,7 +123,7 @@ Only useful as a *local* clarity rename inside bag-only packages — not the sha
 | Rename `Product{}` → `Bag{}` | **Reject** |
 | Rename / introduce `BagSku{}` | **Reject** |
 | Keep `Product` + `Variant`; use `category` (+ bag masters) | **Accept (current direction)** |
-| Clean up unused `Bag`/`Shoes`/… stubs | Optional hygiene when touching `products.go` |
+| Clean up unused `Bag`/`Shoes`/… stubs | **Done** — removed; see [product-structure-final-review.md](product-structure-final-review.md) |
 | Multi-category extension plan | Now scheduled (wallets, clothing) — concrete type design in [product-multi-category-design.md](product-multi-category-design.md) |
 
 ## Checklist (first non-bag categories: **wallets, clothing**, scheduled — see [product-multi-category-design.md](product-multi-category-design.md))
