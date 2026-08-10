@@ -118,12 +118,12 @@ Owns shopping carts at `/api/v1/cart` (current user) and `/api/v1/carts/{custome
 **Module:** `github.com/elug3/dupli1/payment`  
 **Storage:** PostgreSQL (`payments` table set), in-memory fallback when no DB URL is configured (tests)
 
-Bypass + local/dev simulate; publishes `payment.succeeded` on NATS. See [payment-service.md](payment-service.md).
+Bypass + NANO card + local/dev simulate; publishes `payment.succeeded` on NATS. See [payment-service.md](payment-service.md).
 
 ### Notification (`notification/pkg`)
 
 **Module:** `github.com/elug3/dupli1/notification`  
-**Status:** Health endpoint only
+**Status:** NATS → Telegram dispatch; PostgreSQL subscriptions; webhook or polling; manager subscription API. See [notification-telegram-bot.md](notification-telegram-bot.md).
 
 ## Gateway routing
 

@@ -185,7 +185,7 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | `paid` → `in_transit`, commit stock, audit |
+| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | `paid` → `in_transit`, commit stock, audit (transition validated **before** stock commit) |
 | `PUT` | `/api/v1/orders/{id}/status` | RBAC | `fulfilled` from `in_transit`; `canceled` from `pending`/`paid` |
 
 **Ship response** includes `shipped_by`, `shipped_at`.
@@ -246,6 +246,8 @@ Local Postgres (payment): `postgres://dupli1:dupli1_dev@localhost:5437/payments?
 | Paid, ops rejects | `canceled` + refund (payment phase 2) |
 | Duplicate `payment.succeeded` | idempotent — order stays `paid` |
 | Replayed `payment.succeeded` after ship | no-op when `payment_id` already set and status ≠ `pending` |
+| Payment succeeds after 5 min auto-cancel | order **reinstated** to `pending` with a fresh reservation and extended payment window, then marked `paid` |
+| Ship on non-`paid` order | rejected before stock commit — inventory unchanged |
 
 ---
 

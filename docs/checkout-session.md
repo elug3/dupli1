@@ -4,7 +4,7 @@ Checkout sessions provide a multi-step purchase flow inside the **order service*
 
 For a **persistent** shopping cart (saved across sessions), use the **cart service** first — see [cart-service.md](cart-service.md).
 
-For **payment** after checkout, see [payment-service.md](payment-service.md) (Bypass / local simulate; 5-minute unpaid window).
+For **payment** after checkout, see [payment-service.md](payment-service.md) (NANO card / Bypass / local simulate; 5-minute unpaid window).
 
 Recipient name, phone, and shipping address are planned on checkout **complete** (order snapshot) with optional prefill from auth profile — see [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
 
@@ -30,15 +30,16 @@ sequenceDiagram
     Order-->>Client: session with discount + total
 
     Client->>Order: POST /api/v1/checkout/sessions/{id}/complete
-    Order->>Product: reserve stock (/api/v1/inventory/reservations)
+    Order->>Product: reserve stock (/api/v1/products/inventory/reservations)
     Order-->>Client: completed session + pending order
 ```
 
 Stock and reservations are owned by the product service (merged in from the
 former standalone inventory service). Order calls them through the **internal
-API gateway** (`DUPLI1_GATEWAY_URL`) so paths stay `/api/v1/inventory/...`
-and `/api/v1/coupons/...`. Deprecated: `DUPLI1_PRODUCT_URL` / `DUPLI1_INVENTORY_URL`
-as direct product overrides.
+API gateway** (`DUPLI1_GATEWAY_URL`) using canonical paths
+`/api/v1/products/inventory/...` and `/api/v1/products/coupons/...` (legacy
+`/api/v1/inventory/...` and `/api/v1/coupons/...` still work via gateway aliases).
+Deprecated: `DUPLI1_PRODUCT_URL` / `DUPLI1_INVENTORY_URL` as direct product overrides.
 
 ## Session states
 
@@ -201,7 +202,19 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
 }
 ```
 
-After completion, the order is **`pending`** with inventory reserved. The customer must pay within **5 minutes** via the payment service (manager Bypass, or local simulate); see [payment-service.md](payment-service.md). Only `dupli1-payment` confirms the order after a successful payment — not manual status updates.
+After completion, the order is **`pending`** with inventory reserved. The customer must pay within **5 minutes** via the payment service (NANO card, manager Bypass, or local simulate); see [payment-service.md](payment-service.md). Only `dupli1-payment` confirms the order after a successful payment — not manual status updates.
+
+## Concurrency and idempotency
+
+`POST …/complete` tolerates concurrent or duplicate calls:
+
+1. The service creates a `pending` order and reserves stock.
+2. `CompleteCheckoutSessionIfOpen` atomically marks the session `completed` only when status is still `open`.
+3. If the claim fails (session already completed or no longer open), the new order is **canceled** and stock is released; the client gets **`400`** (`checkout session is not open`).
+
+After a successful complete, read `GET …/sessions/{id}` for the `order_id` — do not call `complete` again.
+
+Direct order create (`POST /api/v1/orders`) supports optional `Idempotency-Key` for replay-safe creates; checkout complete does not use that header.
 
 ## Configuration
 
@@ -217,7 +230,7 @@ After completion, the order is **`pending`** with inventory reserved. The custom
 
 | Status | Condition |
 |--------|-----------|
-| `400` | Invalid input, empty checkout, expired session, invalid coupon |
+| `400` | Invalid input, empty checkout, expired session, invalid coupon, duplicate `complete` on non-open session |
 | `404` | Session not found |
 | `503` | Coupon service not configured |
 | `500` | Inventory or persistence failure |
