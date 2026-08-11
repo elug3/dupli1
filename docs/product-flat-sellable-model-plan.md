@@ -1,8 +1,8 @@
 # Plan: Product as the sellable unit (SKU folded into Product)
 
-**Status:** Reflection / migration plan (no code change yet).  
+**Status:** Accepted migration plan (no schema cutover yet). Phase 0 decisions are **locked** in [product-structure-final-review.md](product-structure-final-review.md) §5.  
 **Intent:** Make **`Product` the unit of sale**. Every current variant (SKU) becomes a `Product` row; the human `sku` and its segment codes become **fields on `Product`**. The old parent keeps only what is genuinely shared across colors, under a new name (**style**).  
-**Related:** [product-variants-plan.md](product-variants-plan.md) (the model this revises), [product-sku-system.md](product-sku-system.md), [product-price-on-parent.md](product-price-on-parent.md), [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md), [current-state.md](current-state.md).
+**Related:** [product-structure-final-review.md](product-structure-final-review.md) (final field ownership), [product-variants-plan.md](product-variants-plan.md) (the model this revises), [product-sku-system.md](product-sku-system.md), [product-price-on-parent.md](product-price-on-parent.md), [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md), [current-state.md](current-state.md).
 
 ---
 
@@ -63,6 +63,8 @@ type Product struct {
 	Size        string `json:"size,omitempty"`
 	SizeCode    string `json:"sizeCode,omitempty"`
 	EditionCode string `json:"editionCode,omitempty"`
+	// Physical size in mm (see product-sku-dimensions.md); distinct from Size/SizeCode.
+	Dimensions *Dimensions `json:"dimensions,omitempty"`
 
 	// Merchandising (shared per style, denormalized or joined — see 4.2)
 	Name, Description, Material, Category string
@@ -74,7 +76,7 @@ type Product struct {
 	Status               string
 	ImageURLs            []string
 
-	ViewCount, SoldCount, WishlistCount int64
+	ViewCount, SoldCount, WishlistCount int64 // placement: final-review §5
 	CreatedAt, CreatedBy                string
 }
 ```
@@ -155,7 +157,7 @@ Under option B, all three move to the sellable product.
 
 ## 7. Phases
 
-**Phase 0 — decide.** Listing semantics (A vs B); counts placement; denormalize vs join. Nothing else starts until these are fixed.
+**Phase 0 — decide.** **Done** — see [product-structure-final-review.md](product-structure-final-review.md) §5: listing **A** (style-grouped), denormalize + fan-out, views/wishlist at style, `soldCount` on sellable + style rollup.
 
 **Phase 1 — schema, additive.** Create `product_styles` from current `products`. Add SKU/merchandising columns to `product_variants`. Backfill: copy parent fields down to every variant row; set `sku_id` as the row's identity. No reads change yet.
 
@@ -190,7 +192,7 @@ Naming stays category-agnostic — `Product` remains the right noun, per [produc
 
 ## 9. Checklist
 
-- [ ] Phase 0 decisions recorded (listing A/B, counts placement, denormalize vs join)
+- [x] Phase 0 decisions recorded (listing A/B, counts placement, denormalize vs join) — [product-structure-final-review.md](product-structure-final-review.md) §5
 - [ ] `product_styles` created + backfilled; sellable columns added
 - [ ] `domain.Product` (sellable) + `domain.Style`; `Variant` deprecated alias
 - [ ] Grouped search + PDP `siblings` (+ `variants` mirror) with tests

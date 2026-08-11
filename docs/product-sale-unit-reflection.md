@@ -144,5 +144,5 @@ See [product-multi-category-naming-plan.md](product-multi-category-naming-plan.m
 
 - [x] Document why shared `styleCode` alone does not move the sale unit
 - [x] Choose a direction — Option A (flatten), planned in [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md)
-- [ ] Confirm listing semantics (one card per style vs one per color)
+- [x] Confirm listing semantics (one card per style vs one per color) — **A: style-grouped**; [product-structure-final-review.md](product-structure-final-review.md) §5
 - [ ] Execute the phased migration in the plan

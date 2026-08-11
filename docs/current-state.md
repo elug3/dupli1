@@ -77,7 +77,8 @@ See [service-layout.md](service-layout.md) for details.
   - Stock and reservations at `/api/v1/products/inventory/*` (merged in from the former standalone `inventory` service; legacy `/api/v1/inventory/*` still aliased), keyed by a canonical ULID `SkuID` with `sku` and `by-sku-id/{skuId}` lookups both supported; reads are public, writes require `inventory.stock.write` or `inventory.reservation.manage`
   - Protected routes validate RS256 via `AUTH_JWKS_URL`; authorization from `permissions` claim
   - Inline schema migration + variant backfill on startup; brand/color/size/edition master tables seeded on migrate
-  - Plan: [product-variants-plan.md](product-variants-plan.md), [product-sku-system.md](product-sku-system.md)
+  - Structure review (Product vs sellable SKU, flatten Phase 0 locks): [product-structure-final-review.md](product-structure-final-review.md)
+  - Plan: [product-variants-plan.md](product-variants-plan.md), [product-sku-system.md](product-sku-system.md), [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md)
 - **Tests:** `cd product && go test ./...`
 
 ### dupli1-order
