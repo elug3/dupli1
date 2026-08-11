@@ -45,7 +45,7 @@ Completeness / code-quality follow-ups for `dupli1-notification`. Design: [notif
 
 ### Bugs / correctness
 
-- [ ] **Pending `/start` reply silently dropped** — bootstrap sets `Client.SetAccessPolicy`; `Send` requires `AllowsChat`, but pending chats are not allowlisted, so “Registration received” never sends. Fix: bypass chat allowlist for command replies (or allow pending chats for inbound ack only). Add a regression test that sets Policy on the client (`TestUpdateProcessorStartPending` currently omits it).
+- [x] **Pending `/start` reply silently dropped** — fixed: `Client.Reply` bypasses outbound `AllowsChat` for `/start` acks; `TestUpdateProcessorStartPending` sets access policy on the client.
 - [ ] **Any inbound Telegram message creates a pending subscription** — discoverable bots can fill `telegram_subscriptions`; consider registering only on `/start` (or rate-limit / require allowlisted user for upsert).
 
 ### Production / ECS wiring

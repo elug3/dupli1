@@ -66,7 +66,18 @@ func (c *Client) SetAllowlist(allowlist *Allowlist) {
 }
 
 // Send posts a text message to the given chat ID.
+// When an access policy is set, chats that are not allowlisted are skipped (no error).
 func (c *Client) Send(ctx context.Context, chatID string, message string) error {
+	return c.sendMessage(ctx, chatID, message, true)
+}
+
+// Reply posts a command reply (e.g. /start ack) without applying the outbound chat allowlist.
+// Pending registrations are not allowlisted yet, so ops acks must bypass AllowsChat.
+func (c *Client) Reply(ctx context.Context, chatID string, message string) error {
+	return c.sendMessage(ctx, chatID, message, false)
+}
+
+func (c *Client) sendMessage(ctx context.Context, chatID string, message string, enforcePolicy bool) error {
 	if c == nil || c.token == "" {
 		return nil
 	}
@@ -74,7 +85,7 @@ func (c *Client) Send(ctx context.Context, chatID string, message string) error 
 	if chatID == "" {
 		return fmt.Errorf("telegram chat id is required")
 	}
-	if c.policy != nil && !c.policy.AllowsChat(chatID) {
+	if enforcePolicy && c.policy != nil && !c.policy.AllowsChat(chatID) {
 		return nil
 	}
 	message = strings.TrimSpace(message)

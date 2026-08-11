@@ -125,8 +125,16 @@ func TestUpdateProcessorStartPending(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	// Empty access policy: pending chat is not allowlisted for outbound Send.
+	access := service.NewTelegramAccess(service.NewTelegramSubscriptions(memory.NewTelegramRepository()), nil)
+	if err := access.Refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	client.SetAccessPolicy(access)
+
 	processor := &telegram.UpdateProcessor{
 		Client: client,
+		Policy: access,
 		Lookup: &stubLookup{sub: &domain.TelegramSubscription{
 			ChatID: "42",
 			Status: domain.SubscriptionStatusPending,

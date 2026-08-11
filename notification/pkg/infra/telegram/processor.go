@@ -69,7 +69,8 @@ func (p *UpdateProcessor) replyStart(ctx context.Context, msg *Message, sub *dom
 	}
 
 	if sub != nil && sub.Status == domain.SubscriptionStatusPending {
-		return p.Client.Send(ctx, msg.Chat.FormatID(), FormatPendingReply(msg.Chat))
+		// Pending chats are not outbound-allowlisted yet; Reply bypasses AllowsChat.
+		return p.Client.Reply(ctx, msg.Chat.FormatID(), FormatPendingReply(msg.Chat))
 	}
 
 	allowed := sub != nil && sub.IsAccepted()
@@ -80,7 +81,7 @@ func (p *UpdateProcessor) replyStart(ctx context.Context, msg *Message, sub *dom
 		return nil
 	}
 
-	return p.Client.Send(ctx, msg.Chat.FormatID(), FormatStartReply(msg.Chat))
+	return p.Client.Reply(ctx, msg.Chat.FormatID(), FormatStartReply(msg.Chat))
 }
 
 func chatLabelText(chat Chat) string {
