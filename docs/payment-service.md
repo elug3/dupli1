@@ -159,6 +159,8 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
 | `POST` | `/api/v1/payments/webhooks/nano` | — | Optional JSON webhook (register URL with NANO) |
 | `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (`PAYMENT_ALLOW_DEV_SIMULATE`, NANO unset) |
 
+NANO success callbacks (`resultCode=0000`) fail closed unless `shopcode` and `reqPayAmt` match the payment and `hashValue` verifies with `NANO_API_KEY` (request-style digest over callback `timestamp`; confirm against merchant return-hash docs).
+
 **Create payment (credit card)**
 ```json
 { "order_id": "ord_000001", "method": "credit_card" }

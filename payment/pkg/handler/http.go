@@ -378,12 +378,12 @@ func (h *Handler) nanoReturn(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid nano return payload")
 		return
 	}
-	payment, err := h.svc.HandleNanoResult(r.Context(), h.nano.Config().ShopCode, result)
+	cfg := h.nano.Config()
+	payment, err := h.svc.HandleNanoResult(r.Context(), nanoCallbackAuth(cfg), result)
 	if err != nil {
 		respondServiceError(w, err)
 		return
 	}
-	cfg := h.nano.Config()
 	dest := cfg.SuccessURL
 	if payment.Status != domain.StatusSucceeded {
 		dest = cfg.FailureURL
@@ -411,12 +411,21 @@ func (h *Handler) nanoWebhook(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid nano webhook payload")
 		return
 	}
-	if _, err := h.svc.HandleNanoResult(r.Context(), h.nano.Config().ShopCode, result); err != nil {
+	if _, err := h.svc.HandleNanoResult(r.Context(), nanoCallbackAuth(h.nano.Config()), result); err != nil {
 		respondServiceError(w, err)
 		return
 	}
 	// NANO virtual-account NOTI expects resultCode "00"; card webhook ack is JSON OK.
 	respondJSON(w, http.StatusOK, map[string]string{"resultCode": "00"})
+}
+
+func nanoCallbackAuth(cfg checkout.NanoConfig) service.NanoCallbackAuth {
+	return service.NanoCallbackAuth{
+		Ver:      cfg.Ver,
+		LoginID:  cfg.LoginID,
+		ShopCode: cfg.ShopCode,
+		APIKey:   cfg.APIKey,
+	}
 }
 
 func parseNanoResult(r *http.Request) (service.NanoResult, error) {
@@ -448,6 +457,8 @@ func parseNanoResult(r *http.Request) (service.NanoResult, error) {
 		ReqPayAmt:   get("reqPayAmt", "req_pay_amt"),
 		TranNo:      get("tranNo", "tran_no"),
 		PayWay:      get("payWay", "pay_way"),
+		Timestamp:   get("timestamp"),
+		HashValue:   get("hashValue", "hash_value"),
 	}
 	if result.CompOrderNo == "" && result.ResultCode == "" {
 		return result, fmt.Errorf("empty nano payload")

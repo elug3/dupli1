@@ -208,7 +208,7 @@ func TestNanoReturn_SucceedsAndRedirects(t *testing.T) {
 	repo := memory.NewRepository()
 	pub := &recordingPublisher{}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{
-		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key",
+		Ver: "240000005", ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key",
 		PublicBaseURL: "http://localhost:8080",
 		SuccessURL:    "http://localhost:5173/checkout/confirmation",
 		FailureURL:    "http://localhost:5173/checkout",
@@ -225,7 +225,10 @@ func TestNanoReturn_SucceedsAndRedirects(t *testing.T) {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	form := "resultCode=0000&shopcode=240000005&compOrderNo=" + created.ID + "&reqPayAmt=1000&tranNo=tn_1"
+	ts := "1725440123456"
+	hash := checkout.NanoHash("240000005", "shoptest", "240000005", "1000", ts, "test-key")
+	form := "resultCode=0000&shopcode=240000005&compOrderNo=" + created.ID +
+		"&reqPayAmt=1000&tranNo=tn_1&timestamp=" + ts + "&hashValue=" + hash
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/nano/return", bytes.NewBufferString(form))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -239,5 +242,38 @@ func TestNanoReturn_SucceedsAndRedirects(t *testing.T) {
 	}
 	if len(pub.events) != 1 {
 		t.Fatalf("events = %d", len(pub.events))
+	}
+}
+
+func TestNanoReturn_RejectsForgedMinimalCallback(t *testing.T) {
+	repo := memory.NewRepository()
+	pub := &recordingPublisher{}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		Ver: "240000005", ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key",
+		PublicBaseURL: "http://localhost:8080",
+		SuccessURL:    "http://localhost:5173/checkout/confirmation",
+	})
+	svc := service.New(repo, nanoOrderClient{}, nano, pub)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret")).WithNano(nano)
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	form := "resultCode=0000&compOrderNo=" + created.ID
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/nano/return", bytes.NewBufferString(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code == http.StatusSeeOther {
+		t.Fatalf("forged callback must not redirect as success")
+	}
+	if len(pub.events) != 0 {
+		t.Fatalf("events = %d, want 0", len(pub.events))
 	}
 }
