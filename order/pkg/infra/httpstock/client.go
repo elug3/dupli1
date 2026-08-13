@@ -133,8 +133,15 @@ func (c *Client) doJSONOnce(ctx context.Context, method, path string, body any, 
 			}
 			return fmt.Errorf("product stock request failed: %w (%s)", ErrUnauthorized, msg)
 		}
-		if resp.StatusCode == http.StatusBadRequest && strings.Contains(msg, ports.ErrReservationClosed.Error()) {
-			return fmt.Errorf("product stock request failed: %w", ports.ErrReservationClosed)
+		if resp.StatusCode == http.StatusBadRequest {
+			switch {
+			case strings.Contains(msg, ports.ErrReservationAlreadyCommitted.Error()):
+				return fmt.Errorf("product stock request failed: %w", ports.ErrReservationAlreadyCommitted)
+			case strings.Contains(msg, ports.ErrReservationAlreadyReleased.Error()):
+				return fmt.Errorf("product stock request failed: %w", ports.ErrReservationAlreadyReleased)
+			case strings.Contains(msg, ports.ErrReservationClosed.Error()):
+				return fmt.Errorf("product stock request failed: %w", ports.ErrReservationClosed)
+			}
 		}
 		return fmt.Errorf("product stock request failed: %s", msg)
 	}

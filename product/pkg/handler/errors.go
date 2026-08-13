@@ -29,8 +29,12 @@ func (h *Handler) respondServiceError(w http.ResponseWriter, err error) {
 		errors.Is(err, service.ErrInvalidQuantity),
 		errors.Is(err, service.ErrInsufficientStock),
 		errors.Is(err, service.ErrReservationClosed),
+		errors.Is(err, service.ErrReservationAlreadyCommitted),
+		errors.Is(err, service.ErrReservationAlreadyReleased),
 		errors.Is(err, ports.ErrInsufficientStock),
-		errors.Is(err, ports.ErrReservationClosed):
+		errors.Is(err, ports.ErrReservationClosed),
+		errors.Is(err, ports.ErrReservationAlreadyCommitted),
+		errors.Is(err, ports.ErrReservationAlreadyReleased):
 		h.respondError(w, http.StatusBadRequest, err.Error())
 	default:
 		log.Printf("product: internal error: %v", err)

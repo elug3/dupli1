@@ -228,6 +228,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 	if order.PaymentID == paymentID && order.Status != domain.StatusPending {
 		return cloneOrder(order), nil
 	}
+	startedPending := order.Status == domain.StatusPending
 	var reinstatedReservation string
 	if order.Status == domain.StatusCanceled {
 		reservationID, err := s.reinstateCanceledOrder(ctx, order)
@@ -241,6 +242,36 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
 		}
 		return nil, err
+	}
+	// The expiry worker can cancel a still-pending order after our initial read.
+	// Re-read before persisting so we reinstate instead of saving paid with a
+	// released reservation_id.
+	if startedPending {
+		fresh, err := s.repo.Get(ctx, order.ID)
+		if err != nil {
+			if reinstatedReservation != "" {
+				_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
+			}
+			return nil, err
+		}
+		if fresh.PaymentID == paymentID && fresh.Status != domain.StatusPending {
+			if reinstatedReservation != "" {
+				_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
+			}
+			return cloneOrder(fresh), nil
+		}
+		if fresh.Status == domain.StatusCanceled {
+			order = fresh
+			reservationID, err := s.reinstateCanceledOrder(ctx, order)
+			if err != nil {
+				return nil, err
+			}
+			reinstatedReservation = reservationID
+			if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {
+				_ = s.stock.ReleaseReservation(ctx, reservationID)
+				return nil, err
+			}
+		}
 	}
 	events, err := s.outboxEvents(order, orderPaidSubject, orderUpdatedSubject)
 	if err != nil {
@@ -553,12 +584,12 @@ func (s *Service) reinstateCanceledOrder(ctx context.Context, order *domain.Orde
 	return reservationID, nil
 }
 
-// commitReservationForShip commits reserved stock when shipping. A closed
-// reservation is treated as success so ShipOrder can retry after a prior commit
-// succeeded but the order status save failed.
+// commitReservationForShip commits reserved stock when shipping. An already
+// committed reservation is treated as success so ShipOrder can retry after a
+// prior commit succeeded but the order status save failed.
 func (s *Service) commitReservationForShip(ctx context.Context, reservationID string) error {
 	err := s.stock.CommitReservation(ctx, reservationID)
-	if err == nil || errors.Is(err, ports.ErrReservationClosed) {
+	if err == nil || errors.Is(err, ports.ErrReservationAlreadyCommitted) {
 		return nil
 	}
 	return err

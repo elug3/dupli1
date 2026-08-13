@@ -167,8 +167,8 @@ func TestInventoryReleaseReservation(t *testing.T) {
 		t.Fatalf("release must not increment soldCount, got %d", got.SoldCount)
 	}
 
-	if _, err := svc.CommitReservation(ctx, reservation.ID); err != service.ErrReservationClosed {
-		t.Fatalf("want ErrReservationClosed committing a released reservation, got %v", err)
+	if _, err := svc.CommitReservation(ctx, reservation.ID); err != service.ErrReservationAlreadyReleased {
+		t.Fatalf("want ErrReservationAlreadyReleased committing a released reservation, got %v", err)
 	}
 }
 
@@ -197,8 +197,8 @@ func TestInventoryCommitReservation_IncrementsSoldCountIdempotent(t *testing.T) 
 		t.Fatalf("want soldCount=2, got %d", got.SoldCount)
 	}
 
-	if _, err := svc.CommitReservation(ctx, reservation.ID); err != service.ErrReservationClosed {
-		t.Fatalf("want ErrReservationClosed on double commit, got %v", err)
+	if _, err := svc.CommitReservation(ctx, reservation.ID); err != service.ErrReservationAlreadyCommitted {
+		t.Fatalf("want ErrReservationAlreadyCommitted on double commit, got %v", err)
 	}
 	got, err = products.GetProduct("BOT-001")
 	if err != nil {

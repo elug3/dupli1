@@ -33,8 +33,11 @@ func (f *fakeStock) CommitReservation(ctx context.Context, reservationID string)
 	if f.commitErr != nil {
 		return f.commitErr
 	}
+	if f.released == reservationID {
+		return ports.ErrReservationAlreadyReleased
+	}
 	if f.committed != "" && f.committed == reservationID {
-		return ports.ErrReservationClosed
+		return ports.ErrReservationAlreadyCommitted
 	}
 	f.committed = reservationID
 	return nil
@@ -273,36 +276,6 @@ func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
 
-	_, err = svc.ShipOrder(ctx, order.ID, "manager-1")
-	if !errors.Is(err, domain.ErrInvalidTransition) {
-		t.Fatalf("ShipOrder error = %v, want ErrInvalidTransition", err)
-	}
-	if stock.committed != "" {
-		t.Fatalf("committed = %q, want empty (stock must not commit on rejected ship)", stock.committed)
-	}
-
-	got, err := svc.GetOrder(ctx, order.ID)
-	if err != nil {
-		t.Fatalf("GetOrder: %v", err)
-	}
-	if got.Status != domain.StatusPending {
-		t.Fatalf("status = %q, want pending", got.Status)
-	}
-}
-
-func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
-	ctx := context.Background()
-	stock := &fakeStock{reservationID: "res-original"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
-
-	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
-		CustomerID: "customer-1",
-		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
-	})
-	if err != nil {
-		t.Fatalf("CreateOrder returned error: %v", err)
-	}
-
 	canceled, err := svc.CancelOrder(ctx, order.ID)
 	if err != nil {
 		t.Fatalf("CancelOrder returned error: %v", err)
@@ -419,6 +392,92 @@ func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
 	}
 	if shipped.Status != domain.StatusInTransit {
 		t.Fatalf("status = %q, want in_transit", shipped.Status)
+	}
+}
+
+func TestShipOrderRejectsReleasedReservation(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-123"}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+
+	// Simulate paid order rows that still reference a reservation released elsewhere
+	// (e.g. expiry race saved paid with a stale reservation_id).
+	stock.released = order.ReservationID
+
+	_, err = svc.ShipOrder(ctx, order.ID, "manager-1")
+	if !errors.Is(err, ports.ErrReservationAlreadyReleased) {
+		t.Fatalf("ShipOrder error = %v, want ErrReservationAlreadyReleased", err)
+	}
+	if stock.committed != "" {
+		t.Fatalf("committed = %q, want empty", stock.committed)
+	}
+}
+
+type expiryRaceRepo struct {
+	*memory.Repository
+	stock    *fakeStock
+	getCount map[string]int
+}
+
+func (r *expiryRaceRepo) Get(ctx context.Context, id string) (*domain.Order, error) {
+	r.getCount[id]++
+	order, err := r.Repository.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if r.getCount[id] == 2 && order.Status == domain.StatusPending {
+		_ = r.stock.ReleaseReservation(ctx, order.ReservationID)
+		order.Status = domain.StatusCanceled
+		if err := r.Repository.Save(ctx, order); err != nil {
+			return nil, err
+		}
+		return r.Repository.Get(ctx, id)
+	}
+	return order, nil
+}
+
+func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSave(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-original"}
+	repo := &expiryRaceRepo{
+		Repository: memory.NewRepository(),
+		stock:      stock,
+		getCount:   make(map[string]int),
+	}
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	stock.reservationID = "res-late-pay"
+	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents)
+	if err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+	if paid.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid", paid.Status)
+	}
+	if paid.ReservationID != "res-late-pay" {
+		t.Fatalf("reservation_id = %q, want res-late-pay", paid.ReservationID)
+	}
+	if stock.released != "res-original" {
+		t.Fatalf("released = %q, want res-original from simulated expiry", stock.released)
 	}
 }
 

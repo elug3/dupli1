@@ -9,9 +9,11 @@ import (
 )
 
 var (
-	ErrInventoryItemNotFound = errors.New("not found")
-	ErrInsufficientStock     = errors.New("insufficient stock")
-	ErrReservationClosed     = errors.New("reservation is not active")
+	ErrInventoryItemNotFound         = errors.New("not found")
+	ErrInsufficientStock             = errors.New("insufficient stock")
+	ErrReservationClosed             = errors.New("reservation is not active")
+	ErrReservationAlreadyCommitted   = errors.New("reservation already committed")
+	ErrReservationAlreadyReleased    = errors.New("reservation already released")
 )
 
 // InventoryStore persists stock and reservations, keyed by the canonical
