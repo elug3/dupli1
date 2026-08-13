@@ -64,7 +64,11 @@ Production bot (2026-08): `@MHYM7_BOT` (`dupli1_notification`).
 2. **Managers** accept or reject pending rows, or manually add a user ID / chat ID via the REST API (`notification.telegram.manage`).
 3. **Outbound ops alerts** — sent to env chat IDs, or to accepted subscriptions with `alert_order` / `alert_product` when env is unset.
 4. **`/start` replies** — pending users get a “registration received” message; accepted users (or env allowlist) get the welcome + chat ID.
-5. **Everyone else** — silently ignored on `/start`.
+5. **Everyone else** — silently ignored on `/start` (unknown users cannot register).
+
+### Webhook authentication (fail closed)
+
+When `TELEGRAM_WEBHOOK_URL` is set, **`TELEGRAM_WEBHOOK_SECRET` is required**. Requests to `POST /api/v1/notification/telegram/webhook` without a matching `X-Telegram-Bot-Api-Secret-Token` header receive **`403`**; if the secret is unset, the handler returns **`503`** (`webhook secret not configured`). Invalid JSON bodies return **`400`**.
 
 ### Manager API
 
@@ -101,7 +105,7 @@ Either `telegram_user_id` or `chat_id` is required (both may be set).
 
 Webhook URL (via gateway): `https://<host>/api/v1/notification/telegram/webhook`
 
-Set `TELEGRAM_WEBHOOK_SECRET`; Telegram sends it as `X-Telegram-Bot-Api-Secret-Token`.
+Set `TELEGRAM_WEBHOOK_SECRET` and register the same value with Telegram via `setWebhook`; Telegram sends it as `X-Telegram-Bot-Api-Secret-Token`. The handler rejects requests when the secret is missing or mismatched (see [Webhook authentication](#webhook-authentication-fail-closed)).
 
 ### Why chat IDs should not live in Secrets Manager
 
@@ -118,7 +122,7 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 | `DUPLI1_NOTIFICATION_DB` | Recommended (prod) | PostgreSQL `notifications` database |
 | `TELEGRAM_BOT_TOKEN` | Yes (for Telegram) | Bot API token from [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_WEBHOOK_URL` | Production | Public HTTPS webhook URL |
-| `TELEGRAM_WEBHOOK_SECRET` | Recommended | Validates `X-Telegram-Bot-Api-Secret-Token` |
+| `TELEGRAM_WEBHOOK_SECRET` | **Required** when webhook URL is set | Validates `X-Telegram-Bot-Api-Secret-Token`; handler is fail-closed without it |
 | `AUTH_JWKS_URL` | For manager API | Auth JWKS for RS256 manager tokens |
 | `TELEGRAM_ALLOWED_USER_IDS` | Optional bootstrap | Comma-separated user IDs until DB entries exist |
 | `TELEGRAM_ORDER_CHAT_ID` | Fallback routing | Order alerts chat when no DB `alert_order` row |
@@ -229,7 +233,7 @@ Publishers: `order` and `product` services (payment success flows through order 
 
 No other commands are implemented. Unknown commands are ignored.
 
-**Inbound transport:** long-polling `getUpdates` (no public webhook). On startup the service calls `deleteWebhook` so polling works.
+**Inbound transport:** webhook when `TELEGRAM_WEBHOOK_URL` is set (production); otherwise long-polling `getUpdates` (local dev). On startup with polling mode, the service calls `deleteWebhook` so `getUpdates` works.
 
 ---
 

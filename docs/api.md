@@ -775,7 +775,7 @@ Unpaid `pending` orders auto-cancel after **5 minutes**. Full design: [payment-s
 
 ## Notification Service
 
-Health and settings (`GET /health`, `GET /api/v1/notification/health`, `GET /settings`, `GET /api/v1/notification/settings`). Outbound messaging is driven by NATS subscriptions (Telegram when configured).
+Health and settings (`GET /health`, `GET /api/v1/notification/health`, `GET /settings`, `GET /api/v1/notification/settings`). Outbound ops alerts are driven by NATS subscriptions (Telegram when configured). Inbound Telegram uses `POST /api/v1/notification/telegram/webhook` (production, requires `TELEGRAM_WEBHOOK_SECRET`) or `getUpdates` polling (local). Managers manage subscriptions at `/api/v1/notification/telegram/subscriptions` (`notification.telegram.read` / `notification.telegram.manage`). Full runbook: [notification-telegram-bot.md](notification-telegram-bot.md).
 
 ---
 
@@ -852,3 +852,9 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | POST/GET | `/api/v1/payments` | ABAC / `payment.create` / `payment.read.all` | payment |
 | GET | `/api/v1/notification/health` | — | notification |
 | GET | `/api/v1/notification/settings` | — | notification |
+| POST | `/api/v1/notification/telegram/webhook` | webhook secret header | notification |
+| GET | `/api/v1/notification/telegram/subscriptions` | `notification.telegram.read` | notification |
+| POST | `/api/v1/notification/telegram/subscriptions` | `notification.telegram.manage` | notification |
+| POST | `/api/v1/notification/telegram/subscriptions/{id}/accept` | `notification.telegram.manage` | notification |
+| POST | `/api/v1/notification/telegram/subscriptions/{id}/reject` | `notification.telegram.manage` | notification |
+| DELETE | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` | notification |
