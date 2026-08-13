@@ -277,3 +277,77 @@ func TestNanoReturn_RejectsForgedMinimalCallback(t *testing.T) {
 		t.Fatalf("events = %d, want 0", len(pub.events))
 	}
 }
+
+func TestNanoWebhook_SucceedsAndReturnsResultCode00(t *testing.T) {
+	repo := memory.NewRepository()
+	pub := &recordingPublisher{}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		Ver: "240000005", ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key",
+		PublicBaseURL: "http://localhost:8080",
+	})
+	svc := service.New(repo, nanoOrderClient{}, nano, pub)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret")).WithNano(nano)
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	ts := "1725440123456"
+	hash := checkout.NanoHash("240000005", "shoptest", "240000005", "1000", ts, "test-key")
+	form := "resultCode=0000&shopcode=240000005&compOrderNo=" + created.ID +
+		"&reqPayAmt=1000&tranNo=tn_1&timestamp=" + ts + "&hashValue=" + hash
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/webhooks/nano", bytes.NewBufferString(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["resultCode"] != "00" {
+		t.Fatalf("resultCode = %q, want 00", body["resultCode"])
+	}
+	if len(pub.events) != 1 {
+		t.Fatalf("events = %d, want 1", len(pub.events))
+	}
+}
+
+func TestNanoWebhook_RejectsForgedCallback(t *testing.T) {
+	repo := memory.NewRepository()
+	pub := &recordingPublisher{}
+	nano := checkout.NewNanoProvider(checkout.NanoConfig{
+		Ver: "240000005", ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key",
+		PublicBaseURL: "http://localhost:8080",
+	})
+	svc := service.New(repo, nanoOrderClient{}, nano, pub)
+	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret")).WithNano(nano)
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	form := "resultCode=0000&compOrderNo=" + created.ID
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/webhooks/nano", bytes.NewBufferString(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code == http.StatusOK {
+		t.Fatalf("forged webhook must not succeed, body=%s", rec.Body.String())
+	}
+	if len(pub.events) != 0 {
+		t.Fatalf("events = %d, want 0", len(pub.events))
+	}
+}

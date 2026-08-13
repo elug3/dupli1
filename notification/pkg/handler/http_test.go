@@ -101,10 +101,11 @@ func TestTelegramWebhookRejectsInvalidSecret(t *testing.T) {
 }
 
 func TestTelegramWebhookRejectsInvalidJSON(t *testing.T) {
-	h, _ := newTestHandler(t, "")
+	h, _ := newTestHandler(t, "expected-secret")
 	mux := newMux(h)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notification/telegram/webhook", bytes.NewReader([]byte(`not-json`)))
+	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "expected-secret")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
