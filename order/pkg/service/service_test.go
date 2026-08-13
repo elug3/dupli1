@@ -18,6 +18,7 @@ type fakeStock struct {
 	reservationID string
 	committed     string
 	released      string
+	commitErr     error
 }
 
 func (f *fakeStock) Reserve(ctx context.Context, orderID string, items []ports.StockItem) (string, error) {
@@ -29,6 +30,12 @@ func (f *fakeStock) Reserve(ctx context.Context, orderID string, items []ports.S
 }
 
 func (f *fakeStock) CommitReservation(ctx context.Context, reservationID string) error {
+	if f.commitErr != nil {
+		return f.commitErr
+	}
+	if f.committed != "" && f.committed == reservationID {
+		return ports.ErrReservationClosed
+	}
 	f.committed = reservationID
 	return nil
 }
@@ -253,9 +260,9 @@ func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
 	}
 }
 
-func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
+func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
 	ctx := context.Background()
-	stock := &fakeStock{reservationID: "res-123"}
+	stock := &fakeStock{reservationID: "res-original"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
@@ -320,6 +327,98 @@ func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
 	}
 	if len(stock.reservedItems) != 1 || stock.reservedItems[0].SKU != "BAG-1" {
 		t.Fatalf("reserved items = %+v, want one BAG-1 line", stock.reservedItems)
+	}
+}
+
+func TestMarkOrderPaidRollsBackReinstatedReservationOnAmountMismatch(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-original"}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.CancelOrder(ctx, order.ID); err != nil {
+		t.Fatalf("CancelOrder returned error: %v", err)
+	}
+
+	stock.reservationID = "res-late-pay"
+	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents+1)
+	if !errors.Is(err, domain.ErrPaymentAmountMismatch) {
+		t.Fatalf("MarkOrderPaid error = %v, want ErrPaymentAmountMismatch", err)
+	}
+	if stock.released != "res-late-pay" {
+		t.Fatalf("released = %q, want res-late-pay rollback", stock.released)
+	}
+
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", got.Status)
+	}
+}
+
+func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-123"}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	_, err = svc.ShipOrder(ctx, order.ID, "manager-1")
+	if !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Fatalf("ShipOrder error = %v, want ErrInvalidTransition", err)
+	}
+	if stock.committed != "" {
+		t.Fatalf("committed = %q, want empty (stock must not commit on rejected ship)", stock.committed)
+	}
+
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusPending {
+		t.Fatalf("status = %q, want pending", got.Status)
+	}
+}
+
+func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-123"}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+
+	// Simulate a prior ShipOrder that committed stock but failed before saving status.
+	stock.committed = order.ReservationID
+
+	shipped, err := svc.ShipOrder(ctx, order.ID, "manager-1")
+	if err != nil {
+		t.Fatalf("ShipOrder retry returned error: %v", err)
+	}
+	if shipped.Status != domain.StatusInTransit {
+		t.Fatalf("status = %q, want in_transit", shipped.Status)
 	}
 }
 

@@ -228,19 +228,31 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 	if order.PaymentID == paymentID && order.Status != domain.StatusPending {
 		return cloneOrder(order), nil
 	}
+	var reinstatedReservation string
 	if order.Status == domain.StatusCanceled {
-		if err := s.reinstateCanceledOrder(ctx, order); err != nil {
+		reservationID, err := s.reinstateCanceledOrder(ctx, order)
+		if err != nil {
 			return nil, err
 		}
+		reinstatedReservation = reservationID
 	}
 	if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {
+		if reinstatedReservation != "" {
+			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
+		}
 		return nil, err
 	}
 	events, err := s.outboxEvents(order, orderPaidSubject, orderUpdatedSubject)
 	if err != nil {
+		if reinstatedReservation != "" {
+			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
+		}
 		return nil, err
 	}
 	if err := s.repo.SaveWithOutbox(ctx, order, nil, events); err != nil {
+		if reinstatedReservation != "" {
+			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
+		}
 		return nil, err
 	}
 	s.tryDrainOutbox(ctx)
@@ -252,13 +264,18 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string) (*do
 	if err != nil {
 		return nil, err
 	}
-	// Validate the transition before committing stock — CommitReservation is
-	// irreversible, and shipping a non-paid order would permanently decrement
-	// inventory while leaving the order pending/canceled.
-	if err := order.Ship(shippedBy, s.now()); err != nil {
+	shippedBy = strings.TrimSpace(shippedBy)
+	if shippedBy == "" {
+		return nil, domain.ErrInvalidOrder
+	}
+	// Validate before touching stock — CommitReservation is irreversible.
+	if order.Status != domain.StatusPaid {
+		return nil, domain.ErrInvalidTransition
+	}
+	if err := s.commitReservationForShip(ctx, order.ReservationID); err != nil {
 		return nil, err
 	}
-	if err := s.stock.CommitReservation(ctx, order.ReservationID); err != nil {
+	if err := order.Ship(shippedBy, s.now()); err != nil {
 		return nil, err
 	}
 	return s.saveStatusChange(ctx, order)
@@ -516,7 +533,7 @@ func (s *Service) resolveVariant(ctx context.Context, item domain.OrderItem) (*p
 	return info, nil
 }
 
-func (s *Service) reinstateCanceledOrder(ctx context.Context, order *domain.Order) error {
+func (s *Service) reinstateCanceledOrder(ctx context.Context, order *domain.Order) (string, error) {
 	stockItems := make([]ports.StockItem, len(order.Items))
 	for i, item := range order.Items {
 		stockItems[i] = ports.StockItem{
@@ -527,13 +544,24 @@ func (s *Service) reinstateCanceledOrder(ctx context.Context, order *domain.Orde
 	}
 	reservationID, err := s.stock.Reserve(ctx, order.ID, stockItems)
 	if err != nil {
-		return fmt.Errorf("reinstate canceled order %s: %w", order.ID, err)
+		return "", fmt.Errorf("reinstate canceled order %s: %w", order.ID, err)
 	}
 	if err := order.ReinstateForLatePayment(reservationID, s.now()); err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
-		return err
+		return "", err
 	}
-	return nil
+	return reservationID, nil
+}
+
+// commitReservationForShip commits reserved stock when shipping. A closed
+// reservation is treated as success so ShipOrder can retry after a prior commit
+// succeeded but the order status save failed.
+func (s *Service) commitReservationForShip(ctx context.Context, reservationID string) error {
+	err := s.stock.CommitReservation(ctx, reservationID)
+	if err == nil || errors.Is(err, ports.ErrReservationClosed) {
+		return nil
+	}
+	return err
 }
 
 func cloneOrder(order *domain.Order) *domain.Order {

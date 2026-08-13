@@ -68,6 +68,20 @@ func TestClient_RetriesOnceOnUnauthorized(t *testing.T) {
 	}
 }
 
+func TestClient_CommitReservationClosed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "reservation is not active"})
+	}))
+	defer srv.Close()
+
+	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "fixed")
+	err := client.CommitReservation(context.Background(), "res-1")
+	if !errors.Is(err, ports.ErrReservationClosed) {
+		t.Fatalf("err = %v, want ErrReservationClosed", err)
+	}
+}
+
 func TestClient_UnauthorizedErrorIsClear(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
