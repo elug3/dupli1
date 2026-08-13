@@ -273,36 +273,6 @@ func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
 
-	_, err = svc.ShipOrder(ctx, order.ID, "manager-1")
-	if !errors.Is(err, domain.ErrInvalidTransition) {
-		t.Fatalf("ShipOrder error = %v, want ErrInvalidTransition", err)
-	}
-	if stock.committed != "" {
-		t.Fatalf("committed = %q, want empty (stock must not commit on rejected ship)", stock.committed)
-	}
-
-	got, err := svc.GetOrder(ctx, order.ID)
-	if err != nil {
-		t.Fatalf("GetOrder: %v", err)
-	}
-	if got.Status != domain.StatusPending {
-		t.Fatalf("status = %q, want pending", got.Status)
-	}
-}
-
-func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
-	ctx := context.Background()
-	stock := &fakeStock{reservationID: "res-original"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
-
-	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
-		CustomerID: "customer-1",
-		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
-	})
-	if err != nil {
-		t.Fatalf("CreateOrder returned error: %v", err)
-	}
-
 	canceled, err := svc.CancelOrder(ctx, order.ID)
 	if err != nil {
 		t.Fatalf("CancelOrder returned error: %v", err)
@@ -391,6 +361,87 @@ func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
 	}
 	if got.Status != domain.StatusPending {
 		t.Fatalf("status = %q, want pending", got.Status)
+	}
+}
+
+func TestShipOrderRejectsEmptyShippedByWithoutCommittingStock(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-123"}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+
+	_, err = svc.ShipOrder(ctx, order.ID, "   ")
+	if !errors.Is(err, domain.ErrInvalidOrder) {
+		t.Fatalf("ShipOrder error = %v, want ErrInvalidOrder", err)
+	}
+	if stock.committed != "" {
+		t.Fatalf("committed = %q, want empty (stock must not commit when shippedBy is empty)", stock.committed)
+	}
+
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid", got.Status)
+	}
+}
+
+// saveFailOnPaidRepo simulates a persistence failure after MarkOrderPaid mutates the order.
+type saveFailOnPaidRepo struct {
+	*memory.Repository
+	fail bool
+}
+
+func (r *saveFailOnPaidRepo) SaveWithOutbox(ctx context.Context, order *domain.Order, idem *ports.IdempotencyRecord, events []ports.OutboxEvent) error {
+	if r.fail && order.Status == domain.StatusPaid {
+		return errors.New("simulated persistence failure")
+	}
+	return r.Repository.SaveWithOutbox(ctx, order, idem, events)
+}
+
+func TestMarkOrderPaidRollsBackReinstatedReservationOnSaveFailure(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-original"}
+	repo := &saveFailOnPaidRepo{Repository: memory.NewRepository(), fail: true}
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.CancelOrder(ctx, order.ID); err != nil {
+		t.Fatalf("CancelOrder returned error: %v", err)
+	}
+
+	stock.reservationID = "res-late-pay"
+	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents)
+	if err == nil {
+		t.Fatal("MarkOrderPaid expected save failure")
+	}
+	if stock.released != "res-late-pay" {
+		t.Fatalf("released = %q, want res-late-pay rollback", stock.released)
+	}
+
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled (save failure must not leave order paid)", got.Status)
 	}
 }
 
