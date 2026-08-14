@@ -8,6 +8,12 @@ import (
 // ErrReservationClosed is returned when a reservation was already committed or released.
 var ErrReservationClosed = errors.New("reservation is not active")
 
+// ErrReservationAlreadyCommitted is returned when commit is retried on a committed reservation.
+var ErrReservationAlreadyCommitted = errors.New("reservation already committed")
+
+// ErrReservationAlreadyReleased is returned when commit or ship targets a released reservation.
+var ErrReservationAlreadyReleased = errors.New("reservation already released")
+
 // StockItem is a line to reserve/commit against product stock.
 type StockItem struct {
 	SkuID    string `json:"sku_id,omitempty"`

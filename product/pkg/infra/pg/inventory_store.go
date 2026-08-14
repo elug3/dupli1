@@ -284,7 +284,14 @@ func (s *InventoryStore) FinalizeReservation(ctx context.Context, id string, sta
 		return nil, err
 	}
 	if !reservation.IsActive() {
-		return nil, ports.ErrReservationClosed
+		switch reservation.Status {
+		case domain.ReservationCommitted:
+			return nil, ports.ErrReservationAlreadyCommitted
+		case domain.ReservationReleased:
+			return nil, ports.ErrReservationAlreadyReleased
+		default:
+			return nil, ports.ErrReservationClosed
+		}
 	}
 
 	rows, err := tx.Query(ctx, `

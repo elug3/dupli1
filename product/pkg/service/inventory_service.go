@@ -15,10 +15,12 @@ var (
 	// ErrInvalidSKU covers both a blank sku/skuId reference and one that
 	// doesn't resolve to any known variant — from inventory's point of view,
 	// an unknown sku is equivalent to malformed input.
-	ErrInvalidSKU        = errors.New("invalid sku")
-	ErrInvalidQuantity   = errors.New("invalid quantity")
-	ErrInsufficientStock = errors.New("insufficient stock")
-	ErrReservationClosed = errors.New("reservation is not active")
+	ErrInvalidSKU                    = errors.New("invalid sku")
+	ErrInvalidQuantity               = errors.New("invalid quantity")
+	ErrInsufficientStock             = errors.New("insufficient stock")
+	ErrReservationClosed             = errors.New("reservation is not active")
+	ErrReservationAlreadyCommitted   = errors.New("reservation already committed")
+	ErrReservationAlreadyReleased    = errors.New("reservation already released")
 )
 
 // SkuRef is a caller-supplied reference to a variant: either the canonical
@@ -182,6 +184,12 @@ func (s *InventoryService) closeReservation(ctx context.Context, id string, stat
 
 	reservation, err := s.store.FinalizeReservation(ctx, id, status, s.now())
 	if err != nil {
+		if errors.Is(err, ports.ErrReservationAlreadyCommitted) {
+			return nil, ErrReservationAlreadyCommitted
+		}
+		if errors.Is(err, ports.ErrReservationAlreadyReleased) {
+			return nil, ErrReservationAlreadyReleased
+		}
 		if errors.Is(err, ports.ErrReservationClosed) {
 			return nil, ErrReservationClosed
 		}

@@ -68,6 +68,20 @@ func TestClient_RetriesOnceOnUnauthorized(t *testing.T) {
 	}
 }
 
+func TestClient_CommitReservationAlreadyCommitted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "reservation already committed"})
+	}))
+	defer srv.Close()
+
+	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "fixed")
+	err := client.CommitReservation(context.Background(), "res-1")
+	if !errors.Is(err, ports.ErrReservationAlreadyCommitted) {
+		t.Fatalf("err = %v, want ErrReservationAlreadyCommitted", err)
+	}
+}
+
 func TestClient_CommitReservationClosed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
