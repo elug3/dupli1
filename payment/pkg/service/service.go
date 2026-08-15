@@ -81,6 +81,11 @@ func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInpu
 	if err != nil {
 		return nil, err
 	}
+	if existing, err := s.reuseOpenPaymentForOrder(ctx, order.ID); err != nil {
+		return nil, err
+	} else if existing != nil {
+		return existing, nil
+	}
 
 	paymentID, err := s.repo.NextPaymentID(ctx)
 	if err != nil {
@@ -122,6 +127,11 @@ func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInpu
 	}
 	payment.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
 	if err := s.repo.Save(ctx, payment); err != nil {
+		if existing, reuseErr := s.reuseOpenPaymentForOrder(ctx, order.ID); reuseErr != nil {
+			return nil, reuseErr
+		} else if existing != nil {
+			return existing, nil
+		}
 		return nil, err
 	}
 	return payment, nil
@@ -135,6 +145,11 @@ func (s *Service) createBypassPayment(ctx context.Context, input CreatePaymentIn
 	order, err := s.loadPendingOrder(ctx, input, true)
 	if err != nil {
 		return nil, err
+	}
+	if existing, err := s.reuseOpenPaymentForOrder(ctx, order.ID); err != nil {
+		return nil, err
+	} else if existing != nil {
+		return existing, nil
 	}
 
 	paymentID, err := s.repo.NextPaymentID(ctx)
@@ -157,6 +172,19 @@ func (s *Service) createBypassPayment(ctx context.Context, input CreatePaymentIn
 		return nil, err
 	}
 	return payment, nil
+}
+
+// reuseOpenPaymentForOrder returns an existing checkout when a pending order
+// already has requires_payment (or succeeded but not yet reflected on the order).
+func (s *Service) reuseOpenPaymentForOrder(ctx context.Context, orderID string) (*domain.Payment, error) {
+	existing, err := s.repo.FindRequiresPaymentByOrderID(ctx, orderID)
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, ports.ErrNotFound) {
+		return nil, err
+	}
+	return nil, nil
 }
 
 // loadPendingOrder fetches the order and enforces pending + ownership rules.
