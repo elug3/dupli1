@@ -370,9 +370,7 @@ See [payment-service.md](payment-service.md) for NANO / Bypass / local simulate,
 
 ## Inventory (served by the product service)
 
-Merged into `dupli1-product` — same routes as the former standalone inventory
-service. Each route also has a `by-sku-id/{skuId}` sibling keyed by the
-variant's canonical ULID `skuId` (e.g. `GET /api/v1/inventory/by-sku-id/{skuId}`).
+Merged into `dupli1-product`. **Canonical** paths are under `/api/v1/products/inventory/…`; legacy `/api/v1/inventory/…` remains aliased. Each item route also has a `by-sku-id/{skuId}` sibling keyed by the variant's canonical ULID `skuId`.
 
 | Method | Path | Permission | Description |
 |---|---|---|---|
@@ -385,14 +383,14 @@ variant's canonical ULID `skuId` (e.g. `GET /api/v1/inventory/by-sku-id/{skuId}`
 | `POST` | `/api/v1/products/inventory/reservations/{id}/commit` | `inventory.reservation.manage` | Commit a reservation |
 | `POST` | `/api/v1/products/inventory/reservations/{id}/release` | `inventory.reservation.manage` | Release a reservation |
 
-### GET /api/v1/inventory/health
+### GET /api/v1/products/inventory/health
 
 Response `200`:
 ```json
 { "status": "ok" }
 ```
 
-### GET /api/v1/inventory/{sku}
+### GET /api/v1/products/inventory/items/{sku}
 
 Response `200`:
 ```json
@@ -404,7 +402,7 @@ Response `200`:
 }
 ```
 
-### PUT /api/v1/inventory/{sku}
+### PUT /api/v1/products/inventory/items/{sku}
 
 Request:
 ```json
@@ -413,7 +411,7 @@ Request:
 
 Response `200`: stock item object (same shape as GET).
 
-### POST /api/v1/inventory/{sku}/adjust
+### POST /api/v1/products/inventory/items/{sku}/adjust
 
 Request:
 ```json
