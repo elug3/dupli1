@@ -12,8 +12,8 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 
 | # | Finding | Status |
 |---|---------|--------|
-| C1 | **Client-controlled order prices** — `POST /orders` and checkout item APIs accept `unit_price_cents` from the client; totals and Stripe amounts derive from that. | **Fixed** — order/checkout resolve prices from product (client `unit_price_cents` ignored) |
-| C2 | **Unauthenticated `simulate-success`** — `GET /api/v1/payments/{id}/simulate-success` completes payment and publishes `payment.succeeded` with no auth. | **Fixed** — route only registered when Stripe is unset (`allowDevSimulate`) |
+| C1 | **Client-controlled order prices** — `POST /orders` and checkout item APIs accept `unit_price_cents` from the client; totals and payment amounts derive from that. | **Fixed** — order/checkout resolve prices from product (client `unit_price_cents` ignored) |
+| C2 | **Unauthenticated `simulate-success`** — `GET /api/v1/payments/{id}/simulate-success` completes payment and publishes `payment.succeeded` with no auth. | **Fixed** — route only registered when NANO is unset and `PAYMENT_ALLOW_DEV_SIMULATE` is true |
 | C3 | **Checkout delete-by-skuId skips ownership check** — `DELETE …/items/by-sku-id/{id}` omitted `withCheckoutSessionAccess`. | **Fixed** |
 | C4 | **Payment succeeded + failed NATS publish = stuck order** — `CompletePayment` saves `succeeded` then publishes; on publish failure, retry returns early without republishing. | **Fixed** — already-succeeded payments republish the event (order `MarkOrderPaid` is idempotent) |
 
@@ -55,7 +55,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 - Auth `ListAll` / `HasOwner` load entire users table (including password hashes for list)
 - Brand filter uses leading-wildcard `ILIKE` (hard to index)
 - Product ID generation does regex `MAX` scan instead of a sequence
-- Stripe webhook body not size-limited (`io.ReadAll`)
+- NANO webhook / return body size limits (review if unbounded `io.ReadAll` remains)
 - Variant event publish errors ignored inconsistently vs product create/update
 - Redis unused outside auth — no catalog/cart cache
 - Prod nginx (`api/nginx.prod.conf`) may lag local route coverage (cart/payment/variants) — verify against live
@@ -77,7 +77,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 | Area | Gap |
 |------|-----|
 | Order | Checkout by-sku-id ABAC (now covered); payment consumer; expiry worker; price trust |
-| Payment | simulate-success gating (now covered); publish-after-save retry (now covered); Stripe webhook |
+| Payment | simulate-success gating (now covered); publish-after-save retry (now covered); NANO return/webhook |
 | Product | PG store / migrate failure; pagination (now covered at handler level) |
 | Cart | Enrichment failure / partial availability behavior |
 | Notification | NATS subscriber + Telegram client |

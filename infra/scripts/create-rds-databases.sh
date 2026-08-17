@@ -7,7 +7,7 @@ set -euo pipefail
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
 SECRET_ID="${DB_SECRET_ID:-dupli1/production/database}"
-DATABASES=("products" "orders" "cart" "payments")
+DATABASES=("products" "orders" "cart" "payments" "notifications")
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {

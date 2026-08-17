@@ -1,5 +1,7 @@
 # Plan: SKU Master Data (Code → Name) Runtime CRUD
 
+> **Mostly shipped.** Phases A–C are as-built in [product-sku-system.md](product-sku-system.md). Only **Phase D** (admin UI) remains open — track in [TODO.md](TODO.md).
+
 **Status:** Phase A + B + C implemented. Phase D pending.  
 **As-built reference:** [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`, human SKU, masters, catalog APIs, write enforce).
 

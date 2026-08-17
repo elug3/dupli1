@@ -19,6 +19,7 @@ All services listen on port `8080` inside Docker. The nginx gateway proxies by p
 | `/api/v1/carts/` | `dupli1-cart:8080` (legacy alias) |
 | `/api/v1/payments` | `dupli1-payment:8080` |
 | `/api/v1/payments/` | `dupli1-payment:8080` |
+| `/api/v1/notification/` | `dupli1-notification:8080` |
 
 Local gateway: `http://localhost:8080` (also host port 80).
 
@@ -551,3 +552,22 @@ Order object shape:
   "updated_at": "..."
 }
 ```
+
+---
+
+## Notification Service
+
+NATS → Telegram ops alerts. Design: [notification-telegram-bot.md](notification-telegram-bot.md).
+
+| Method | Path | Permission / rule | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/notification/health` | — | Health check |
+| `GET` | `/api/v1/notification/settings` | — | Non-secret service settings |
+| `POST` | `/api/v1/notification/telegram/webhook` | webhook secret header | Telegram Bot API webhook (prod) |
+| `GET` | `/api/v1/notification/telegram/subscriptions` | `notification.telegram.read` | List Telegram subscriptions |
+| `POST` | `/api/v1/notification/telegram/subscriptions` | `notification.telegram.manage` | Create / upsert subscription |
+| `POST` | `/api/v1/notification/telegram/subscriptions/{id}/accept` | `notification.telegram.manage` | Accept pending subscription |
+| `POST` | `/api/v1/notification/telegram/subscriptions/{id}/reject` | `notification.telegram.manage` | Reject pending subscription |
+| `DELETE` | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` | Delete subscription |
+
+Local Compose uses `getUpdates` polling when webhook URL is unset. Subscriptions persist in PostgreSQL `notifications` (`DUPLI1_NOTIFICATION_DB`, host port **5438**).

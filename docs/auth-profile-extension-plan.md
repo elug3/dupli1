@@ -1,5 +1,7 @@
 # Auth profile extension plan
 
+> **Phases A+B shipped** (auth profile/addresses + order checkout snapshot). Remaining: optional profile module extraction. As-built endpoints: [endpoints.md](endpoints.md) Auth section.
+
 **Status:** Phase A implemented in `auth/` (profile + addresses). **Phase B** implemented in `order/` (checkout snapshot). Profile module extraction remains planned.
 
 **Related:** [payment-service.md](payment-service.md), [payment-methods-plan.md](payment-methods-plan.md), [checkout-session.md](checkout-session.md), [permissions.md](permissions.md), [current-state.md](current-state.md).

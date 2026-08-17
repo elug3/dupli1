@@ -16,7 +16,7 @@ Open highlights:
 
 - [x] Create the JWT signing-key secret and set `jwt_private_key_secret_arn` — prod `ephemeral_jwt_key` is `false` (A6)
 - [x] Product images CDN applied on prod (A2–A3) — `imageUrls` use CloudFront
-- [x] Card PG / Stripe (A4) — **waived**; PG TBD; launch pay = Bypass
+- [x] Card PG / NANO (A4) — NANO when configured; launch without NANO = Bypass
 - [x] Telegram wired (A7); gateway uses `nginx.ecs.conf` (A8)
 - [ ] Deploy payment build so prod `dev_simulate_success` is `false` (A5 — needs `PAYMENT_ALLOW_DEV_SIMULATE` unset)
 - [ ] Catalog prices not zeroed (A9) — sample product currently `price: 0`
@@ -63,7 +63,7 @@ Completeness / code-quality follow-ups for `dupli1-notification`. Design: [notif
 
 ### Docs / API surface drift
 
-- [ ] **Refresh stale notification docs** — `service-layout.md` still says “Health endpoint only”; `current-state.md` API table and `api.md` omit webhook + subscriptions; reconcile webhook vs polling notes in [notification-telegram-bot.md](notification-telegram-bot.md).
+- [ ] **Refresh stale notification docs** — keep `endpoints.md` / OpenAPI in sync with webhook + subscriptions; reconcile webhook vs polling notes in [notification-telegram-bot.md](notification-telegram-bot.md). (`service-layout.md` / `current-state.md` API table updated 2026-08-17.)
 - [ ] **OpenAPI: telegram manager + webhook** — extend `api/specs/notification-v1.yaml` (and `docs/openapi.yaml` if needed) beyond health/settings.
 - [ ] **Fix CLI usage blurb** — `notification/cmd/main.go` claims “customer and admin messaging APIs”; service is ops Telegram only.
 
@@ -86,14 +86,14 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 
 - [x] Checkout `DELETE …/items/by-sku-id/{id}` ownership ABAC
 - [x] Payment `CompletePayment` republishes `payment.succeeded` after prior publish failure
-- [x] Gate `simulate-success` behind dev-only flag (Stripe unset)
+- [x] Gate `simulate-success` behind dev-only flag (NANO unset + `PAYMENT_ALLOW_DEV_SIMULATE`)
 - [x] Product search pagination (`limit`/`offset`) + filter indexes
 - [x] Order list / expiry batch item load + pending `payment_due_at` index
 - [x] Cart enrichment parallelized (bounded concurrency)
 
 ### Still open (priority)
 
-Implement in the order in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) (C1 → H7 → H1/H3 → H4/H5 → H6 → H8+H9).
+Implement remaining open items in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md). Money-path Criticals (**C1** pricing, **H7** JWT fail-closed) and most Highs (**H1**/**H3**/**H4**/**H5**/**H8**/**H9**) are **done**; still open: Redis catalog cache, plumb request `context` through product PG stores (**H6**), frontend legacy-path/`skuId` migration.
 
 - [ ] **API path convention** — `/api/v1/{service_name}/...` only. Canonical paths added; legacy top-level aliases kept until clients migrate, then remove.
   - [x] New canonical paths registered (product / order / cart) with legacy aliases

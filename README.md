@@ -15,11 +15,12 @@ Go microservice backend for a fashion bag marketplace. Services behind an nginx 
 | `dupli1-payment` | 8087 | Payments — NANO card, manager Bypass, local dev simulate when gated |
 | `dupli1-notification` | 8084 | NATS subscriber → Telegram ops alerts when configured |
 | `dupli1-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
-| `postgres-auth` | 5432 | Auth DB |
+| `postgres-auth` | 5432 | Auth DB (`dupli1_db`) |
 | `postgres-product` | 5433 | Product DB (also stock/reservations) |
 | `postgres-order` | 5435 | Order DB |
 | `postgres-cart` | 5436 | Cart DB |
 | `postgres-payment` | 5437 | Payment DB |
+| `postgres-notification` | 5438 | Notification DB (Telegram subscriptions) |
 | `redis` | 6379 | Rate limiter / session cache |
 | `nats` | 4222 | Event bus (order/payment/notification) |
 | `minio` | 9000 / 9001 | S3-compatible image storage (console on 9001) |
@@ -92,12 +93,16 @@ Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](doc
 | POST | `/api/v1/auth/login` | — | Login; returns refresh token |
 | POST | `/api/v1/auth/refresh` | — | Exchange refresh token for access token |
 | POST | `/api/v1/auth/logout` | — | Revoke refresh token |
-| GET | `/api/v1/auth/me` | Bearer | Current user profile |
-| POST | `/api/v1/auth/register` | `owner` / `admin` / `user_manager` / `customer_registrar` | Create user account (`account_type` optional) |
-| GET | `/api/v1/auth/users` | `owner` / `admin` | List users |
-| PATCH | `/api/v1/auth/users/{id}/roles` | `owner` / `admin` | Set user roles / `account_type` |
-| PATCH | `/api/v1/auth/users/{id}/password` | `admin` / `user_manager` | Set user password |
-| PATCH | `/api/v1/auth/users/{id}/status` | `admin` / `user_manager` | Activate / deactivate user |
+| GET | `/api/v1/auth/me` | Bearer | Current user account |
+| GET/PATCH | `/api/v1/auth/me/profile` | Bearer | Customer commerce profile |
+| GET/POST/PATCH/DELETE | `/api/v1/auth/me/addresses`… | Bearer | Saved shipping addresses |
+| POST | `/api/v1/auth/register` | `user.create` *or open register* | Create user (`AUTH_OPEN_REGISTER` allows anonymous → `customer`) |
+| GET | `/api/v1/auth/users` | `user.read` | List users (auth ABAC) |
+| PATCH | `/api/v1/auth/users/{id}/permissions` | `user.permissions.update` | Replace permissions / optional `account_type` |
+| PATCH | `/api/v1/auth/users/{id}/password` | `user.password.update` | Set user password |
+| PATCH | `/api/v1/auth/users/{id}/status` | `user.status.update` | Activate / deactivate user |
+
+Authorization uses fine-grained **permissions** in the JWT (`permissions` claim), not legacy roles. See [docs/permissions.md](docs/permissions.md).
 
 **Token flow:** `POST /login` returns `{ "refresh_token": "..." }`. Call `POST /refresh` with that token to get `{ "token": "<access_jwt>" }`. Send the access token as `Authorization: Bearer <token>` on protected routes.
 
@@ -113,15 +118,16 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 |--------|------|-------------|
 | GET | `/api/v1/products/health` | Health check |
 | GET | `/api/v1/products/settings` | Non-secret service settings |
-| GET | `/api/v1/products` | Search **parent styles** (`?category=`, `?brand=`, `?color=`, `?size=`, `?tags=`) |
+| GET | `/api/v1/products` | Search **parent styles** (`?category=`, `?brand=`, `?color=`, `?size=`, `?tags=`, …) |
 | GET | `/api/v1/products/{id}` | PDP: parent + variants (colors/sizes/images per SKU) |
-| POST | `/api/v1/coupons/redeem` | Redeem a coupon code |
+| GET | `/api/v1/products/{id}/recommendations` | Content + popularity recommendations |
+| POST | `/api/v1/products/coupons/redeem` | Redeem a coupon code (legacy alias: `/api/v1/coupons/redeem`) |
 
-**Requires `Authorization: Bearer <access_token>`** (validated via JWKS)
+**Requires `Authorization: Bearer <access_token>`** (validated via JWKS; per-route permissions)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/products` | Manager search (all statuses) |
+| GET | `/api/v1/products` | Manager search (all statuses; needs `product.read`) |
 | POST | `/api/v1/products` | Create parent style |
 | PUT | `/api/v1/products/{id}` | Update parent |
 | DELETE | `/api/v1/products/{id}` | Delete parent (cascades variants) |
@@ -129,26 +135,23 @@ Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on 
 | POST | `/api/v1/products/{id}/variants` | Create variant (SKU) |
 | PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | Update / delete variant |
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | Upload image for a variant |
-| GET | `/api/v1/coupons` | List coupons |
-| POST | `/api/v1/coupons` | Create coupon |
-| PUT | `/api/v1/coupons/{code}` | Update coupon |
-| DELETE | `/api/v1/coupons/{code}` | Delete coupon |
+| GET/POST | `/api/v1/products/coupons` | List / create coupons (legacy `/api/v1/coupons`) |
+| PUT/DELETE | `/api/v1/products/coupons/by-code/{code}` | Update / delete coupon |
 
 ### Inventory (served by `dupli1-product` :8081)
 
 Stock and reservations, merged into the product service. **Canonical paths:**
 `/api/v1/products/inventory/*` (legacy `/api/v1/inventory/*` still aliased on the gateway).
-Each variant also has a canonical ULID `skuId`; every route below has a
-`by-sku-id/{skuId}` sibling (e.g. `GET /api/v1/products/inventory/by-sku-id/{skuId}`)
-alongside the `sku`-keyed form.
+Each variant has a canonical ULID `skuId`; item routes also have
+`by-sku-id/{skuId}` siblings.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/products/inventory/health` | Health check |
 | GET | `/api/v1/products/inventory/settings` | Non-secret product-service settings |
-| GET | `/api/v1/products/inventory/{sku}` | Get stock for SKU |
-| PUT | `/api/v1/products/inventory/{sku}` | Set stock quantity |
-| POST | `/api/v1/products/inventory/{sku}/adjust` | Adjust stock by delta |
+| GET | `/api/v1/products/inventory/items/{sku}` | Get stock for SKU |
+| PUT | `/api/v1/products/inventory/items/{sku}` | Set stock quantity |
+| POST | `/api/v1/products/inventory/items/{sku}/adjust` | Adjust stock by delta |
 | POST | `/api/v1/products/inventory/reservations` | Reserve stock for an order |
 | POST | `/api/v1/products/inventory/reservations/{id}/commit` | Commit reservation |
 | POST | `/api/v1/products/inventory/reservations/{id}/release` | Release reservation |
@@ -161,11 +164,11 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 |--------|------|-------------|
 | GET | `/api/v1/orders/health` | Health check |
 | GET | `/api/v1/orders/settings` | Non-secret service settings |
-| POST | `/api/v1/checkout/sessions` | Create checkout session |
-| GET | `/api/v1/checkout/sessions/{id}` | Get session |
-| PUT/POST/DELETE | `/api/v1/checkout/sessions/{id}/items` | Manage cart items |
-| POST | `/api/v1/checkout/sessions/{id}/coupon` | Apply coupon |
-| POST | `/api/v1/checkout/sessions/{id}/complete` | Complete checkout |
+| POST | `/api/v1/orders/checkout/sessions` | Create checkout session (legacy `/api/v1/checkout/sessions`) |
+| GET | `/api/v1/orders/checkout/sessions/{id}` | Get session |
+| PUT/POST/DELETE | `/api/v1/orders/checkout/sessions/{id}/items` | Manage session items |
+| POST | `/api/v1/orders/checkout/sessions/{id}/coupon` | Apply coupon |
+| POST | `/api/v1/orders/checkout/sessions/{id}/complete` | Complete checkout |
 | POST | `/api/v1/orders` | Create order directly |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
@@ -189,7 +192,7 @@ Full design (boundaries vs inventory/order, data model, checkout handoff): [docs
 | PUT | `/api/v1/cart/items` | Replace all items |
 | POST | `/api/v1/cart/items` | Add or update one item |
 | DELETE | `/api/v1/cart/items/{sku}` | Remove line |
-| GET | `/api/v1/carts/{customer_id}` | Admin: get user cart |
+| GET | `/api/v1/cart/customers/{customer_id}` | Admin: get user cart (`cart.read`; legacy `/api/v1/carts/{id}`) |
 
 ### Payment (`dupli1-payment` :8087)
 
@@ -197,24 +200,20 @@ Credit card uses **NANO Solution** certified payment when `NANO_*` is configured
 
 ### Product IDs and variants
 
-Parent style IDs are generated from the brand name: first 3 characters uppercased, followed by a sequential counter.
+New parent style `id`s are **ULIDs**. Human design identity is `brandCode` + `styleCode` (master catalog). Legacy brand-prefixed ids (e.g. `BOT-001`) remain readable.
 
-```
-Bottega Veneta → BOT-001, BOT-002, …
-```
-
-Variants (sellable SKUs) hang under a parent, e.g. `BOT-001-GRN` / `BOT-001-BLK`. Search returns parents only so colors do not duplicate results. Checkout and inventory use the **variant SKU**.
+Variants (sellable SKUs) hang under a parent. Each variant has a human `sku` (`Brand_Style_Color[_Edition]_Size`) and a canonical ULID `skuId`. Search returns parents only so colors do not duplicate results. Cart, checkout, and inventory prefer **`skuId`** (human `sku` still accepted). See [docs/product-sku-system.md](docs/product-sku-system.md).
 
 ### Image Upload
 
 ```bash
 # Preferred: image for a specific color/size variant
-curl -X POST http://localhost:8080/api/v1/products/BOT-001/variants/BOT-001-GRN/images \
+curl -X POST "http://localhost:8080/api/v1/products/{parentId}/variants/{sku}/images" \
   -H "Authorization: Bearer $TOKEN" \
   -F "image=@photo.jpg"
 
-# Legacy: appends to the default variant
-curl -X POST http://localhost:8080/api/v1/products/BOT-001/images \
+# Appends to the default variant
+curl -X POST "http://localhost:8080/api/v1/products/{parentId}/images" \
   -H "Authorization: Bearer $TOKEN" \
   -F "image=@photo.jpg"
 ```
@@ -259,8 +258,9 @@ curl -X POST http://localhost:8080/api/v1/products/BOT-001/images \
 | `DUPLI1_ORDER_DB` | — | Postgres connection string |
 | `AUTH_JWKS_URL` | — | JWKS URL for RS256 token validation (set in Compose) |
 | `JWT_SECRET` | — | HS256 fallback when JWKS is unavailable |
-| `DUPLI1_INVENTORY_URL` | — | Inventory base URL (product service — stock/reservations were merged in) |
-| `DUPLI1_PRODUCT_URL` | — | Product service base URL (coupon redeem) |
+| `DUPLI1_GATEWAY_URL` | — | Preferred: gateway base for stock/coupons (e.g. `http://dupli1-proxy`) |
+| `DUPLI1_INVENTORY_URL` | — | **Deprecated** direct product override for stock |
+| `DUPLI1_PRODUCT_URL` | — | **Deprecated** direct product override for coupons |
 
 ### MinIO
 

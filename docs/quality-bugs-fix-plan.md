@@ -27,7 +27,7 @@ Do **C1** and **H7** first — active money/auth risk. **H1** outbox landed; reu
 
 ### Problem
 
-`POST /orders` and checkout item APIs accept client `unit_price_cents`. Totals become Stripe / Bypass charge amounts. Cart already ignores client prices.
+`POST /orders` and checkout item APIs accept client `unit_price_cents`. Totals become NANO / Bypass charge amounts. Cart already ignores client prices.
 
 ### Solution (copy cart)
 
@@ -41,7 +41,7 @@ Do **C1** and **H7** first — active money/auth risk. **H1** outbox landed; reu
 
 ### Done when
 
-Order and checkout totals always equal sum of product catalog prices × qty (minus coupon). Payment/Stripe cannot charge a client-supplied amount.
+Order and checkout totals always equal sum of product catalog prices × qty (minus coupon). Payment cannot charge a client-supplied amount.
 
 ---
 

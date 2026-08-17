@@ -29,7 +29,7 @@ flowchart LR
 | Browse / save cart | `dupli1-cart` | Until cleared or checked out | None |
 | Checkout session | `dupli1-order` | 30 minutes (default) | Reserved on `complete` |
 | Payment | `dupli1-payment` | 5 minutes to pay | Reserved until ship or cancel |
-| Order | `dupli1-order` | Permanent | Committed after payment |
+| Order | `dupli1-order` | Permanent | Committed on **ship** (`paid` → `in_transit`) |
 
 ---
 
@@ -40,7 +40,7 @@ flowchart LR
 - One cart per customer (`customer_id` = JWT `sub`)
 - Line items: **variant SKU** + **quantity**
 - CRUD at `/api/v1/cart` (current user)
-- Admin read at `/api/v1/carts/{customer_id}`
+- Admin read at `/api/v1/cart/customers/{customer_id}` (legacy `/api/v1/carts/{customer_id}`)
 
 ### What cart does **not** own
 
@@ -52,7 +52,7 @@ flowchart LR
 | Orders | `dupli1-order` | Created when checkout completes |
 | Catalog / prices | `dupli1-product` | Cart validates SKU and resolves price on read |
 
-There is **no conflict** with inventory: cart stores **intent**; product stores **truth**. Overselling at checkout time is handled when order calls `POST /api/v1/inventory/reservations` (served by product).
+There is **no conflict** with inventory: cart stores **intent**; product stores **truth**. Overselling at checkout time is handled when order calls `POST /api/v1/products/inventory/reservations` (legacy `/api/v1/inventory/reservations`).
 
 ---
 
@@ -107,7 +107,7 @@ The cart owner is always **`sub` from the JWT** — clients do not send `custome
 | Route | Identity |
 |-------|----------|
 | `/api/v1/cart` | `claims.UserID` from token |
-| `/api/v1/carts/{customer_id}` | Path id; requires `cart.read` |
+| `/api/v1/cart/customers/{customer_id}` | Path id; requires `cart.read` (legacy `/api/v1/carts/{id}`) |
 
 Guest / anonymous carts are **not implemented** yet (planned phase 2). Identity should reuse the shared `dupli1_guest` browser cookie defined in [product-guest-views-plan.md](product-guest-views-plan.md) (minted on PDP in phase 1; cart mints if absent later).
 
@@ -226,9 +226,9 @@ Clear the cart. **Response `204`**.
 
 ---
 
-### `GET /api/v1/carts/{customer_id}`
+### `GET /api/v1/cart/customers/{customer_id}`
 
-Admin read-only view of a customer's cart. Requires elevated role.
+Admin read-only view of a customer's cart. Requires `cart.read`. Legacy alias: `/api/v1/carts/{customer_id}`.
 
 ---
 
@@ -247,16 +247,16 @@ sequenceDiagram
     Client->>Cart: GET /api/v1/cart
     Cart-->>Client: items + unit_price_cents
 
-    Client->>Order: POST /api/v1/checkout/sessions
-    Client->>Order: PUT /api/v1/checkout/sessions/{id}/items
-    Note right of Client: use sku, quantity, unit_price_cents from cart
+    Client->>Order: POST /api/v1/orders/checkout/sessions
+    Client->>Order: PUT /api/v1/orders/checkout/sessions/{id}/items
+    Note right of Client: use sku / sku_id, quantity from cart (server prices)
 
     Client->>Order: POST .../coupon (optional)
     Client->>Order: POST .../complete
-    Order->>Product: reserve stock (/api/v1/inventory/reservations)
+    Order->>Product: reserve stock (/api/v1/products/inventory/reservations)
     Order-->>Client: pending order
 
-    Client->>Pay: POST /api/v1/payments → redirect Stripe
+    Client->>Pay: POST /api/v1/payments (NANO card / Bypass / local simulate)
     Note over Client,Pay: see payment-service.md
 
     Client->>Cart: DELETE /api/v1/cart
@@ -281,8 +281,8 @@ See [checkout-session.md](checkout-session.md) for checkout session details. See
 |----------|---------|-------------|
 | `DUPLI1_CART_ADDR` | `:8086` | Listen address |
 | `DUPLI1_CART_DB` | — | Postgres URL (`cart` database); omit for in-memory (tests) |
-| `DUPLI1_PRODUCT_URL` | `http://localhost:8081` | Variant lookup |
-| `DUPLI1_INVENTORY_URL` | `http://localhost:8081` | Stock hints (optional; product service — stock/reservations were merged in) |
+| `DUPLI1_PRODUCT_URL` | `http://localhost:8081` | Variant lookup (prefer gateway in Compose) |
+| `DUPLI1_INVENTORY_URL` | `http://localhost:8081` | **Deprecated** stock-hint override (product owns inventory) |
 | `AUTH_JWKS_URL` | — | RS256 JWT validation (Compose: auth JWKS) |
 | `JWT_SECRET` | — | HS256 dev fallback |
 

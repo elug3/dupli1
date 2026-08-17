@@ -1,5 +1,7 @@
 # Plan: Parent Product + Variants
 
+> **Historical plan.** Phases 1–3 shipped; 4–5 superseded by ULID `SkuID` + inventory merge into product. Prefer [current-state.md](current-state.md), [product-sku-system.md](product-sku-system.md), and [product-structure-final-review.md](product-structure-final-review.md) for as-built behavior. Body below retains pre-ULID examples (`BOT-001` parent ids) for context only — **new parent ids are ULIDs**.
+
 **Status:** Phases 1–3 implemented in product service (schema, backfill, read/write APIs). Phases 4–5 below (stock integration, cleanup) were superseded by a larger follow-up: every variant now has a canonical ULID `SkuID` (in addition to the human `sku`), and the standalone inventory service was merged into product outright (stock/reservations now live in product's own database, not read via an external HTTP client). See `product/pkg/domain/skuid.go`, `product/pkg/service/inventory_service.go`, and [current-state.md](current-state.md) for the implemented shape.
 
 **Pricing:** Sale and reference prices live on the **parent** (`price` / `officialPrice`) — see [product-price-on-parent.md](product-price-on-parent.md). Sections below that show `price` on variants are historical.
