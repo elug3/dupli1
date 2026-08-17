@@ -18,6 +18,8 @@ type Repository interface {
 	Get(ctx context.Context, id string) (*domain.Payment, error)
 	GetByProviderRef(ctx context.Context, providerRef string) (*domain.Payment, error)
 	FindByIdempotencyKey(ctx context.Context, key string) (*domain.Payment, error)
+	// FindRequiresPaymentByOrderID returns the newest open checkout for an order.
+	FindRequiresPaymentByOrderID(ctx context.Context, orderID string) (*domain.Payment, error)
 	ListSucceededSince(ctx context.Context, since time.Time, limit int) ([]domain.Payment, error)
 
 	ListPendingOutbox(ctx context.Context, limit int) ([]OutboxMessage, error)

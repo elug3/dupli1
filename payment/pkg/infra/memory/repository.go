@@ -117,6 +117,28 @@ func (r *Repository) FindByIdempotencyKey(ctx context.Context, key string) (*dom
 	return &copied, nil
 }
 
+func (r *Repository) FindRequiresPaymentByOrderID(ctx context.Context, orderID string) (*domain.Payment, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var latest *domain.Payment
+	for _, p := range r.payments {
+		if p.OrderID != orderID || p.Status != domain.StatusRequiresPayment {
+			continue
+		}
+		if latest == nil || p.CreatedAt.After(latest.CreatedAt) {
+			copied := *p
+			latest = &copied
+		}
+	}
+	if latest == nil {
+		return nil, ports.ErrNotFound
+	}
+	return latest, nil
+}
+
 func (r *Repository) ListSucceededSince(ctx context.Context, since time.Time, limit int) ([]domain.Payment, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

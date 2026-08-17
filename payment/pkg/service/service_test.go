@@ -37,6 +37,32 @@ func (p *recordingPublisher) Publish(_ context.Context, subject string, event an
 	return nil
 }
 
+func TestCreatePayment_ReusesExistingRequiresPaymentForOrder(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+
+	first, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("first CreatePayment: %v", err)
+	}
+
+	second, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("second CreatePayment: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("second payment id = %q, want %q", second.ID, first.ID)
+	}
+}
+
 func TestCreatePayment_DevCheckout(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
