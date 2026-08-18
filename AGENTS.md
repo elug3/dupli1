@@ -43,7 +43,7 @@ Docker is configured with the `fuse-overlayfs` storage driver and the containerd
 
 ### Database credentials (dev)
 
-Docker Compose provides two Postgres instances:
+Docker Compose provides Postgres instances per service:
 
 | Service | Host port | Database | User | Password |
 |---------|-----------|----------|------|----------|
@@ -52,6 +52,7 @@ Docker Compose provides two Postgres instances:
 | `postgres-order` | 5435 | `orders` | `dupli1` | `dupli1_dev` |
 | `postgres-cart` | 5436 | `cart` | `dupli1` | `dupli1_dev` |
 | `postgres-payment` | 5437 | `payments` | `dupli1` | `dupli1_dev` |
+| `postgres-notification` | 5438 | `notifications` | `dupli1` | `dupli1_dev` |
 
 Connection strings:
 
@@ -60,6 +61,7 @@ Connection strings:
 - Order: `postgres://dupli1:dupli1_dev@localhost:5435/orders?sslmode=disable`
 - Cart: `postgres://dupli1:dupli1_dev@localhost:5436/cart?sslmode=disable`
 - Payment: `postgres://dupli1:dupli1_dev@localhost:5437/payments?sslmode=disable`
+- Notification: `postgres://dupli1:dupli1_dev@localhost:5438/notifications?sslmode=disable`
 
 Production uses **Amazon RDS** — see [docs/deployment-aws.md](docs/deployment-aws.md) and [infra/terraform/README.md](infra/terraform/README.md).
 
@@ -70,7 +72,7 @@ cp .env.example .env   # optional; compose already has working dev defaults
 sudo docker compose up --build   # all docker commands need sudo here
 ```
 
-The full stack (5 Postgres + Redis + NATS + MinIO + 6 Go services + nginx) comes up healthy in ~1–2 min after the first image build. The seeded owner account is `admin@dupli1.com` / `password`.
+The full stack (6 Postgres + Redis + NATS + MinIO + 6 Go services + nginx) comes up healthy in ~1–2 min after the first image build. The seeded owner account is `admin@dupli1.com` / `password`.
 
 Gateway (HTTP): `http://localhost:8080` or `http://localhost` (port 80). TLS certs exist in `certs/` but are not wired into local nginx yet.
 

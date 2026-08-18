@@ -8,18 +8,21 @@ Run the full Dupli1 backend on one EC2 instance using Docker Compose. This repla
 Internet → EC2 (Elastic IP)
              └── docker compose
                    ├── dupli1-proxy (nginx :80/:443)
-                   ├── dupli1-auth, product, order, notification
-                   ├── postgres (single instance, 3 databases)
+                   ├── dupli1-auth, product, order, cart, payment, notification
+                   ├── postgres (single instance, multiple databases)
+                   │     dupli1_db, products, orders, cart, payments, notifications
                    ├── redis, nats, minio
 ```
 
 Frontends (`dupli1-web`, `dupli1-manage-web`) live in separate repositories. Add them as Compose services and extend `api/nginx.prod.conf` when ready.
 
+Use [docker-compose.prod.yml](../docker-compose.prod.yml) (or the provisioned overlay on the instance) together with the main compose file. Prefer the multi-Postgres Compose layout from `docker-compose.yml` when bringing the full stack up locally; the single-EC2 path consolidates DBs on one Postgres with `infra/postgres/init-databases.sh`.
+
 ## Cost comparison
 
 | Resource | ECS + RDS (paused compute) | Single EC2 |
 |----------|---------------------------|------------|
-| Fargate tasks (8 services) | ~$80–150/mo when running | — |
+| Fargate / ECS tasks | ~$80–150/mo when running | — |
 | RDS db.t3.micro | ~$15/mo + storage | — |
 | ALB | ~$16–22/mo | — |
 | NAT Gateway | ~$32/mo | — |
@@ -74,7 +77,7 @@ If you have production data on RDS:
 bash /opt/dupli1/app/infra/scripts/migrate-rds-to-ec2.sh
 ```
 
-This starts RDS if stopped, dumps `dupli1_db` and `products`, and restores into local Postgres. Orders was not on RDS and starts empty.
+This starts RDS if stopped, dumps application databases (`dupli1_db`, `products`, `orders`, `cart`, `payments`, and `notifications` when present), and restores into local Postgres.
 
 Stop RDS again after migration:
 
@@ -96,48 +99,8 @@ bash infra/scripts/pause-aws.sh   # ensure ECS/RDS/VPN are stopped
 
 # Manual cleanup in AWS Console or CLI:
 # - Delete dupli1-prod-alb
-# - Delete NAT Gateway nat-168d96b459ab0cf17
+# - Delete NAT Gateway
 # - Delete RDS dupli1-production (after final snapshot)
-# - Delete ECS cluster services / cluster
-# - Disable .github/workflows/aws.yml ECS deploys
 ```
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `docker-compose.prod.yml` | Production overlay (single Postgres, no exposed internal ports) |
-| `.env.prod.example` | Secret template |
-| `api/nginx.prod.conf` | Gateway config without VPC Cloud Map DNS |
-| `infra/scripts/provision-ec2.sh` | Launch EC2 + Elastic IP |
-| `infra/scripts/ec2-bootstrap.sh` | Install Docker, clone repo, generate JWT key |
-| `infra/scripts/deploy-ec2.sh` | `docker compose up` on EC2 |
-| `infra/scripts/migrate-rds-to-ec2.sh` | RDS → local Postgres import |
-| `infra/scripts/pause-aws.sh` | Scale down legacy ECS/RDS |
-
-## Updating the app
-
-On EC2:
-
-```bash
-bash /opt/dupli1/app/infra/scripts/deploy-ec2.sh
-```
-
-Or set up a GitHub Actions workflow that SSHes into EC2 and runs the same script.
-
-## TLS
-
-Ports 443 are exposed but TLS is not configured yet. Options:
-
-- Terminate TLS at nginx using certs in `certs/`
-- Use Caddy or Certbot on the host
-- Terminate TLS at Cloudflare in front of the Elastic IP
-
-## Troubleshooting
-
-| Issue | Fix |
-|-------|-----|
-| Gateway unhealthy | `docker compose -f docker-compose.yml -f docker-compose.prod.yml logs dupli1-auth` |
-| RDS migration fails | Ensure EC2 security group is allowed on RDS SG (provision script adds this) |
-| Auth tokens invalid after restart | Confirm `jwt_private_key.pem` exists in `/opt/dupli1/secrets/` |
-| Out of memory | Upgrade to `t3.xlarge` or reduce services |
+For production ECS (not single-EC2), see [deployment-aws.md](deployment-aws.md).

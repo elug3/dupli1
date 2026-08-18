@@ -18,6 +18,9 @@ dupli1/
 ├── cart/
 │   ├── cmd/
 │   └── pkg/
+├── payment/
+│   ├── cmd/
+│   └── pkg/
 ├── notification/
 │   ├── cmd/
 │   └── pkg/
@@ -95,8 +98,8 @@ Owns:
 Owns:
 
 - Parent styles + variants (SKUs, each with a canonical ULID `SkuID`): search returns parents only; PDP embeds variants
-- Admin product/variant/coupon CRUD; brand-prefixed parent IDs (`BOT-001`); images on variants
-- Stock and reservations at `/api/v1/inventory/*` (merged in from the former standalone `inventory` service — same routes, keyed by `SkuID` internally, `sku` and `by-sku-id/{skuId}` lookups both supported). Public reads; writes require `inventory.stock.write` or `inventory.reservation.manage`
+- Admin product/variant/coupon CRUD; new parent `id`s are ULIDs (legacy brand-prefixed ids e.g. `BOT-001` remain valid); images on variants
+- Stock and reservations at `/api/v1/products/inventory/*` (merged in from the former standalone `inventory` service; legacy `/api/v1/inventory/*` still aliased). Keyed by canonical ULID `SkuID` with `sku` and `by-sku-id/{skuId}` lookups. Public reads; writes require `inventory.stock.write` or `inventory.reservation.manage`
 - JWT validation via `AUTH_JWKS_URL` (RS256 JWKS); per-route permission checks (`product.create`, `coupon.read`, …)
 
 ### Order (`order/pkg`)
@@ -104,14 +107,14 @@ Owns:
 **Module:** `github.com/elug3/dupli1/order`  
 **Storage:** PostgreSQL (`orders` table set), in-memory fallback when no DB URL is configured (tests)
 
-Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/checkout/sessions`. Requires Bearer JWT when `AUTH_JWKS_URL` or `JWT_SECRET` is set (RS256 JWKS from auth; access tokens only).
+Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions`). Requires Bearer JWT when `AUTH_JWKS_URL` or `JWT_SECRET` is set (RS256 JWKS from auth; access tokens only).
 
 ### Cart (`cart/pkg`)
 
 **Module:** `github.com/elug3/dupli1/cart`  
 **Storage:** PostgreSQL (`cart` table set), in-memory fallback when no DB URL is configured (tests)
 
-Owns shopping carts at `/api/v1/cart` (current user) and `/api/v1/carts/{customer_id}` (admin read). Requires Bearer JWT when `AUTH_JWKS_URL` or `JWT_SECRET` is set. See [cart-service.md](cart-service.md).
+Owns shopping carts at `/api/v1/cart` (current user) and `/api/v1/cart/customers/{customer_id}` (admin read; legacy `/api/v1/carts/{customer_id}`). Requires Bearer JWT when `AUTH_JWKS_URL` or `JWT_SECRET` is set. See [cart-service.md](cart-service.md).
 
 ### Payment (`payment/pkg`)
 
@@ -135,16 +138,19 @@ Bypass + NANO card + local/dev simulate; publishes `payment.succeeded` on NATS. 
 | `/api/v1/auth/` | dupli1-auth |
 | `/api/v1/products` | dupli1-product (canonical; also covers `/products/variants`, `/products/coupons`, `/products/catalog`, `/products/inventory`) |
 | `/api/v1/coupons` | dupli1-product (legacy alias) |
+| `/api/v1/catalog` | dupli1-product (legacy alias) |
 | `/api/v1/inventory/` | dupli1-product (legacy alias) |
 | `/api/v1/orders` | dupli1-order (canonical; also covers `/orders/checkout`) |
 | `/api/v1/checkout` | dupli1-order (legacy alias) |
 | `/api/v1/cart` | dupli1-cart (canonical; also covers `/cart/customers`) |
 | `/api/v1/carts/` | dupli1-cart (legacy alias) |
+| `/api/v1/payments` | dupli1-payment |
+| `/api/v1/notification/` | dupli1-notification |
 | `/api/v1/variants` | dupli1-product (legacy alias) |
 
 Checkout sessions: canonical `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions`). Cart admin: canonical `/api/v1/cart/customers/{id}` (legacy `/api/v1/carts/{id}`). Path migration checklist: [TODO.md](TODO.md).
 
-Direct host ports (bypass gateway): auth **18080**, product **8081**, order **8083**, cart **8086**, notification **8084**.
+Direct host ports (bypass gateway): auth **18080**, product **8081**, order **8083**, cart **8086**, payment **8087**, notification **8084**.
 
 ## Adding a new service
 
@@ -162,6 +168,8 @@ cd auth && go test ./...
 cd product && go test ./...
 cd order && go test ./...
 cd cart && go test ./...
+cd payment && go test ./...
+cd notification && go test ./...
 ```
 
 Root `go test ./...` does not work — the root `go.mod` is a stub.

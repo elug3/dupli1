@@ -1,5 +1,7 @@
 # Plan: Guest Session Cookie + Unique Product View Counter
 
+> **Phase 1 shipped** (backend). Guest cart / merge-on-login remains open (v1.2). As-built: [current-state.md](current-state.md), [api.md](api.md).
+
 **Status:** Phase 1 implemented (guest cookie + unique PDP views).  
 **Related:** [cart-service.md](cart-service.md) (guest cart phase 2), [current-state.md](current-state.md), [api.md](api.md) (`GET /api/v1/products/{id}`), [product-recommendations.md](product-recommendations.md) (recommendations consume `view_count` / co-view).
 

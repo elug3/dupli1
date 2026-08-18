@@ -33,55 +33,52 @@ Infra implements Ports
 
 ## Service Layout
 
-Every service must follow this exact structure.
+Every service lives in its own module directory with `cmd/` (entrypoint) and `pkg/` (hexagonal layers):
 
 ```
 service-name/
-
-├── server.go
-├── config.go
-├── errors.go
-│
-├── domain/
-├── service/
-├── ports/
-├── infra/
-├── handler/
-└── bootstrap/
+├── cmd/                      # CLI / process entrypoint
+│   └── main.go
+├── go.mod
+└── pkg/
+    ├── server.go             # HTTP server wiring (location may vary)
+    ├── domain/
+    ├── service/
+    ├── ports/
+    ├── infra/
+    ├── handler/
+    └── bootstrap/
 ```
 
 ### Example:
 
 ```
 auth/
-
-├── server.go
-├── options.go
-│
-├── domain/
-│   └── user.go
-│
-├── service/
-│   └── service.go
-│
-├── ports/
-│   ├── repository.go
-│   └── token.go
-│
-├── infra/
-│   ├── postgres/
-│   ├── redis/
-│   └── jwt/
-│
-├── handler/
-│   └── handler.go
-│
-└── bootstrap/
-    ├── bootstrap.go
-    └── config.go
+├── cmd/
+│   └── main.go
+├── go.mod
+└── pkg/
+    ├── server.go
+    ├── options.go
+    ├── domain/
+    │   └── user.go
+    ├── service/
+    │   └── service.go
+    ├── ports/
+    │   ├── repository.go
+    │   └── token.go
+    ├── infra/
+    │   ├── postgres/
+    │   ├── redis/
+    │   └── jwt/
+    ├── handler/
+    │   └── handler.go
+    └── bootstrap/
+        ├── bootstrap.go
+        └── config.go
 ```
 
-Note: `config.go` and `errors.go` may live in `bootstrap/` or a dedicated `autherrors/` package rather than at the service root. Existing services use `options.go` at the root and `bootstrap/config.go` for wiring config.
+Note: `config.go` and `errors.go` may live in `bootstrap/` or a dedicated `autherrors/` package. Existing services use `options.go` under `pkg/` and `bootstrap/config.go` for wiring config. See [docs/service-layout.md](docs/service-layout.md).
 
 ---
 
@@ -218,20 +215,18 @@ h := handler.New(svc)
 
 ## Shared Code
 
-Reusable components belong in:
+Reusable components belong in the **`shared/`** module (`github.com/elug3/dupli1/shared`):
 
 ```
-pkg/shared/
+shared/
+├── go.mod
+└── pkg/
+    ├── permissions/    # Fine-grained permission constants and helpers
+    ├── settings/       # Shared GET /settings response helpers
+    └── authjwt/        # JWKS / JWT validation helpers (where extracted)
 ```
 
-### Examples:
-
-- pkg/shared/db
-- pkg/shared/logger
-- pkg/shared/cache
-- pkg/shared/config
-
-Business logic must never be placed in shared.
+Local services typically `replace` the module to `../shared`. Business logic must never be placed in shared.
 
 ---
 

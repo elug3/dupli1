@@ -189,7 +189,7 @@ Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
 
 **Default storefront:** authenticated user with empty `permissions` may create/read **only their own** payments (ownership enforced in service).
 
-Stripe webhook and dev simulate endpoints are **unauthenticated** (signature / dev-only).
+NANO return/webhook and gated dev simulate endpoints are **unauthenticated** (callback / webhook secret / dev-only). Bypass requires `payment.bypass`.
 
 ---
 

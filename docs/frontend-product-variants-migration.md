@@ -4,6 +4,8 @@
 **Backend:** `dupli1-product` (catalog, stock, and reservations), `dupli1-order` (cart/checkout)  
 **Gateway base URL (local):** `http://localhost:8080`
 
+> **Note (2026-08):** New parent `id`s are **ULIDs** (not `BOT-001`). Examples below that use brand-prefixed ids describe legacy rows that remain valid. Prefer `skuId` (ULID) over human `sku` for cart/checkout/inventory. Canonical API paths are `/api/v1/products/…`, `/api/v1/orders/…`, `/api/v1/cart/…`.
+
 This document describes how to migrate clients from the old flat product model (one row = one color) to **parent style + variants (SKUs)**.
 
 Related backend plan: [product-variants-plan.md](product-variants-plan.md)
@@ -271,7 +273,7 @@ Content-Type: application/json
 }
 ```
 
-Parent id is auto-generated (`BOT-001`) if omitted.
+Parent id is a **ULID** when omitted on create (legacy brand-prefixed ids e.g. `BOT-001` may still exist in older rows).
 
 **Legacy shortcut:** if you also send `color` and/or `imageUrls`, the API seeds **one default variant** with `sku === parent.id`. Prefer explicit variant APIs for multi-color products. Set `price` / `officialPrice` on the **parent**, not on variants.
 

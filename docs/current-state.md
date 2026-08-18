@@ -146,6 +146,7 @@ See [service-layout.md](service-layout.md) for details.
 | PostgreSQL `orders` | order | `postgres-order:5435` |
 | PostgreSQL `cart` | cart | `postgres-cart:5436` |
 | PostgreSQL `payments` | payment | `postgres-payment:5437` |
+| PostgreSQL `notifications` | notification | `postgres-notification:5438` |
 | MinIO `product-images` | product (local) | `minio:9000` via gateway `/product-images/` |
 | S3 + CloudFront OAC | product (AWS) | `images.dupli1.com` — see [product-images-browser-access.md](product-images-browser-access.md) |
 | Redis | auth | `redis:6379` (in Compose) |
@@ -155,12 +156,12 @@ See [service-layout.md](service-layout.md) for details.
 
 | Service | Public | Authenticated |
 |---------|--------|---------------|
-| auth | login, refresh, logout, JWKS | register (`user.create`), me, user admin (permissions) |
+| auth | login, refresh, logout, JWKS | register (`user.create` or open register), me, profile/addresses, user admin (permissions) |
 | product | health, product search/PDP, coupon redeem, inventory reads | product/coupon CRUD (per permission), image upload, inventory writes (`inventory.stock.write`, `inventory.reservation.manage`) |
 | order | health only | orders, checkout (ABAC + permissions), ship (`order.ship`) |
 | cart | health only | own cart; admin read (`cart.read`) |
-| payment | health, dev simulate | payments (ABAC + permissions) |
-| notification | health | — |
+| payment | health, dev simulate (gated) | payments (ABAC + permissions); Bypass (`payment.bypass`) |
+| notification | health, Telegram webhook | Telegram subscriptions (`notification.telegram.read` / `notification.telegram.manage`) |
 
 Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Permission spec: [permissions.md](permissions.md).
 
