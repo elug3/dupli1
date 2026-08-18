@@ -175,11 +175,18 @@ func (s *Service) createBypassPayment(ctx context.Context, input CreatePaymentIn
 }
 
 // reuseOpenPaymentForOrder returns an existing checkout when a pending order
-// already has requires_payment (or succeeded but not yet reflected on the order).
+// already has requires_payment or succeeded (order not yet marked paid).
 func (s *Service) reuseOpenPaymentForOrder(ctx context.Context, orderID string) (*domain.Payment, error) {
 	existing, err := s.repo.FindRequiresPaymentByOrderID(ctx, orderID)
 	if err == nil {
 		return existing, nil
+	}
+	if !errors.Is(err, ports.ErrNotFound) {
+		return nil, err
+	}
+	succeeded, err := s.repo.FindSucceededByOrderID(ctx, orderID)
+	if err == nil {
+		return succeeded, nil
 	}
 	if !errors.Is(err, ports.ErrNotFound) {
 		return nil, err
