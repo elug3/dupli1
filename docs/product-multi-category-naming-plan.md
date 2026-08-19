@@ -124,9 +124,9 @@ Only useful as a *local* clarity rename inside bag-only packages — not the sha
 | Rename / introduce `BagSku{}` | **Reject** |
 | Keep `Product` + `Variant`; use `category` (+ bag masters) | **Accept (current direction)** |
 | Clean up unused `Bag`/`Shoes`/… stubs | **Done** — removed; see [product-structure-final-review.md](product-structure-final-review.md) |
-| Multi-category extension plan | Now scheduled (wallets, clothing) — concrete type design in [product-multi-category-design.md](product-multi-category-design.md) |
+| Multi-category extension plan | Scheduled: **wallets September 2026**; clothing later — concrete type design in [product-multi-category-design.md](product-multi-category-design.md). **Padded** bag line: **October 2026** (catalog, not a new category). |
 
-## Checklist (first non-bag categories: **wallets, clothing**, scheduled — see [product-multi-category-design.md](product-multi-category-design.md))
+## Checklist (first non-bag categories: **wallets** September 2026, clothing later — see [product-multi-category-design.md](product-multi-category-design.md))
 
 - [ ] Confirm shared vs category-only fields for the new type
 - [ ] Add category masters + search filters (mirror bag taxonomy pattern)

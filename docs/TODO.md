@@ -2,7 +2,17 @@
 
 **Release boundary:** [v1.0-release-spec.md](v1.0-release-spec.md) (v1.0 closeout checklist) · [v1-release-plan.md](v1-release-plan.md) (narrative) · [v1.1-release-plan.md](v1.1-release-plan.md) (post-launch).
 
-## v1.0 closeout (**postponed** — 2026-07-27)
+## Schedule
+
+| When | Milestone |
+|------|-----------|
+| **By 2026-08-30** | Dupli1 **v1.0** released — [v1.0-release-spec.md](v1.0-release-spec.md) |
+| **September 2026** | **Wallet** products added — [product-multi-category-design.md](product-multi-category-design.md) |
+| **October 2026** | **Padded** products added (bag line catalog expansion) |
+
+Full narrative: [v1-release-plan.md § Schedule](v1-release-plan.md#schedule).
+
+## v1.0 closeout (**target 2026-08-30** — was postponed 2026-07-27)
 
 **Do not tag v1.0** until every open item below and in [v1.0-release-spec.md](v1.0-release-spec.md) is resolved.
 
@@ -165,7 +175,7 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 - [x] **Final review: Product / sellable SKU structure** — field ownership, no `Sku{}` type, Phase 0 locks; [product-structure-final-review.md](product-structure-final-review.md).
 - [ ] **Flat sellable product model** — fold SKU/variant into `Product` (product becomes the unit of sale; style becomes the grouping); plan + phases in [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md). Phase 0 locked in the final review; implementation not started.
 - [ ] **Naming for multi-category catalog** — keep `Product` / `Variant` category-agnostic; do not rename to `Bag` / `BagSku`; see [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md).
-- [ ] **Wallets + clothing categories** — category master, per-category taxonomy, and validated `details` facets instead of per-category Go types. `NormalizeProductTaxonomy` currently validates bag seeds regardless of `category`, so wallet/clothing subcategories are rejected today while bag terms leak onto non-bags. Design + phases in [product-multi-category-design.md](product-multi-category-design.md); phases 1–2 unblock non-bag products.
+- [ ] **Wallets + clothing categories** — **wallets scheduled September 2026**; category master, per-category taxonomy, and validated `details` facets instead of per-category Go types. `NormalizeProductTaxonomy` currently validates bag seeds regardless of `category`, so wallet/clothing subcategories are rejected today while bag terms leak onto non-bags. Design + phases in [product-multi-category-design.md](product-multi-category-design.md); phases 1–2 unblock non-bag products. **Padded** bag-line products scheduled **October 2026** (catalog seed, not a new category).
 
 ### Found in review (2026-07-08, size/color variants)
 
