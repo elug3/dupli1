@@ -32,12 +32,15 @@ Postgres, Redis, NATS and MinIO are **not** installed as system services; they r
 
 ### Starting Docker (required before Compose)
 
+Cloud Agent `install` / `start` helpers live in `scripts/cloud-agent-install.sh` and `scripts/cloud-agent-start.sh` (Go module refresh + dockerd/Compose readiness). Manual session bootstrap:
+
 The Docker daemon does not start automatically. Start it in the background once per session, then verify:
 
 ```bash
 sudo dockerd >/tmp/dockerd.log 2>&1 &
 sudo docker info | grep -i "storage driver"   # expect: fuse-overlayfs
 ```
+
 
 Docker is configured with the `fuse-overlayfs` storage driver and the containerd-snapshotter feature disabled (`/etc/docker/daemon.json`), and `iptables-legacy` — needed for Docker-in-Firecracker on this VM. All `docker`/`docker compose` commands need `sudo`.
 
