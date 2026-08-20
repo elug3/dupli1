@@ -174,11 +174,27 @@ Return the authenticated user's cart.
       "available_qty": 3
     }
   ],
+  "unavailable_items": [],
   "subtotal_cents": 125000,
   "updated_at": "2026-07-05T12:00:00Z"
 }
 ```
 
+When a stored line can no longer be resolved to an active variant, it remains in `items` with `available: false` and empty enrichment (`product_id`, `unit_price_cents`, …). The same line is listed under top-level `unavailable_items`:
+
+```json
+{
+  "unavailable_items": [
+    {
+      "sku_id": "01JAY6Z9K3F8QW1G7H2T5X0ABC",
+      "sku": "BOT-001-BLK",
+      "reason": "variant_not_found"
+    }
+  ]
+}
+```
+
+`subtotal_cents` **excludes** unavailable lines. `unavailable_items` is omitted (or `[]`) when every line is sellable.
 ---
 
 ### `POST /api/v1/cart/items`
@@ -196,6 +212,18 @@ or
 
 **Response `200`** — updated cart (same shape as `GET`).
 
+When the variant cannot be resolved, the mutation returns **`422`** with the historical `error` string and every failed line:
+
+```json
+{
+  "error": "variant not found",
+  "code": 422,
+  "unavailable_items": [
+    { "sku_id": "NOPE", "sku": "", "reason": "variant_not_found" }
+  ]
+}
+```
+
 ---
 
 ### `PUT /api/v1/cart/items`
@@ -212,6 +240,7 @@ Replace all line items.
 }
 ```
 
+Batch replace validates **all** lines before writing. If any variants are missing, the cart is unchanged and the response is **`422`** with `unavailable_items` listing **every** failed line (not fail-fast on the first).
 ---
 
 ### `DELETE /api/v1/cart/items/{sku}`
@@ -312,8 +341,11 @@ Local Postgres: `postgres://dupli1:dupli1_dev@localhost:5436/cart?sslmode=disabl
 | `400` | Invalid SKU, quantity, or empty customer |
 | `401` | Missing or invalid token |
 | `403` | Customer calling admin route |
-| `404` | Unknown or inactive variant |
+| `404` | Plain unknown variant (legacy paths without `unavailable_items`) |
+| `422` | Variant not sellable — body includes `unavailable_items` (`sku_id`, `sku`, `reason`) |
 | `503` | Product service unavailable |
+
+`reason` is a stable snake_case code. Today: `variant_not_found` (unknown / inactive / archived variant).
 
 ---
 

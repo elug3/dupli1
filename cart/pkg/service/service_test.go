@@ -2,8 +2,11 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
+	"github.com/elug3/dupli1/cart/pkg/domain"
 	"github.com/elug3/dupli1/cart/pkg/infra/memory"
 	"github.com/elug3/dupli1/cart/pkg/ports"
 	"github.com/elug3/dupli1/cart/pkg/service"
@@ -104,8 +107,16 @@ func TestUpsertItem_UnknownSkuID_ReturnsNotFound(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 
-	if _, err := svc.UpsertItem(ctx, "cust-3", service.ItemInput{SkuID: "NOPE", Quantity: 1}); err != ports.ErrVariantNotFound {
+	_, err := svc.UpsertItem(ctx, "cust-3", service.ItemInput{SkuID: "NOPE", Quantity: 1})
+	if !errors.Is(err, ports.ErrVariantNotFound) {
 		t.Fatalf("want ErrVariantNotFound, got %v", err)
+	}
+	var unavailable *service.UnavailableVariantsError
+	if !errors.As(err, &unavailable) || len(unavailable.Items) != 1 {
+		t.Fatalf("want UnavailableVariantsError with 1 item, got %v", err)
+	}
+	if unavailable.Items[0].SkuID != "NOPE" || unavailable.Items[0].Reason != domain.ReasonVariantNotFound {
+		t.Fatalf("unexpected unavailable item: %+v", unavailable.Items[0])
 	}
 }
 
@@ -154,5 +165,76 @@ func TestGetCart_EnrichesStoredItemBySkuIDWhenPresent(t *testing.T) {
 	}
 	if len(cart.Items) != 1 || cart.Items[0].SkuID != "SKUID-GRN" || cart.Items[0].AvailableQty != 7 {
 		t.Fatalf("unexpected cart: %+v", cart.Items)
+	}
+	if len(cart.UnavailableItems) != 0 {
+		t.Fatalf("want no unavailable items, got %+v", cart.UnavailableItems)
+	}
+}
+
+func TestGetCart_ReportsUnavailableItems(t *testing.T) {
+	ctx := context.Background()
+	variant := &ports.VariantInfo{
+		SkuID:          "SKUID-GRN",
+		SKU:            "BOT-001-GRN",
+		ProductID:      "BOT-001",
+		Color:          "Green",
+		UnitPriceCents: 250000,
+	}
+	product := &fakeProductClient{
+		bySKU:   map[string]*ports.VariantInfo{"BOT-001-GRN": variant},
+		bySkuID: map[string]*ports.VariantInfo{"SKUID-GRN": variant},
+	}
+	repo := memory.NewRepository()
+	if err := repo.ReplaceItems(ctx, "cust-mix", []domain.StoredItem{
+		{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", Quantity: 1},
+		{SkuID: "GONE-ID", SKU: "GONE-SKU", Quantity: 2},
+	}, time.Now().UTC()); err != nil {
+		t.Fatalf("ReplaceItems: %v", err)
+	}
+	svc := service.New(repo, product, nil)
+
+	cart, err := svc.GetCart(ctx, "cust-mix")
+	if err != nil {
+		t.Fatalf("GetCart: %v", err)
+	}
+	if len(cart.Items) != 2 {
+		t.Fatalf("want 2 items, got %d", len(cart.Items))
+	}
+	if len(cart.UnavailableItems) != 1 {
+		t.Fatalf("want 1 unavailable item, got %+v", cart.UnavailableItems)
+	}
+	u := cart.UnavailableItems[0]
+	if u.SkuID != "GONE-ID" || u.SKU != "GONE-SKU" || u.Reason != domain.ReasonVariantNotFound {
+		t.Fatalf("unexpected unavailable: %+v", u)
+	}
+	if cart.Items[1].Available == nil || *cart.Items[1].Available {
+		t.Fatalf("want available=false on stale line, got %+v", cart.Items[1])
+	}
+	if cart.SubtotalCents != 250000 {
+		t.Fatalf("subtotal = %d, want 250000 (exclude unavailable)", cart.SubtotalCents)
+	}
+}
+
+func TestReplaceItems_CollectsAllUnavailable(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	_, err := svc.ReplaceItems(ctx, "cust-batch", []service.ItemInput{
+		{SkuID: "BAD-1", Quantity: 1},
+		{SkuID: "SKUID-GRN", Quantity: 1},
+		{SkuID: "BAD-2", SKU: "BAD-SKU-2", Quantity: 1},
+	})
+	var unavailable *service.UnavailableVariantsError
+	if !errors.As(err, &unavailable) {
+		t.Fatalf("want UnavailableVariantsError, got %v", err)
+	}
+	if len(unavailable.Items) != 2 {
+		t.Fatalf("want 2 unavailable items, got %+v", unavailable.Items)
+	}
+	if unavailable.Items[0].SkuID != "BAD-1" || unavailable.Items[1].SkuID != "BAD-2" {
+		t.Fatalf("unexpected order/ids: %+v", unavailable.Items)
+	}
+	if unavailable.Error() != "variant not found" {
+		t.Fatalf("error string = %q, want variant not found", unavailable.Error())
 	}
 }

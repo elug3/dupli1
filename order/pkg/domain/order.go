@@ -14,6 +14,10 @@ var (
 
 const DefaultPaymentTTL = 5 * time.Minute
 
+// ReasonVariantNotFound is returned when a line cannot be resolved to an
+// active, sellable product variant.
+const ReasonVariantNotFound = "variant_not_found"
+
 type OrderStatus string
 
 const (
@@ -24,11 +28,20 @@ const (
 	StatusCanceled  OrderStatus = "canceled"
 )
 
+// UnavailableItem identifies a checkout/order line that cannot be purchased.
+type UnavailableItem struct {
+	SkuID  string `json:"sku_id,omitempty"`
+	SKU    string `json:"sku,omitempty"`
+	Reason string `json:"reason"`
+}
+
 type OrderItem struct {
 	SkuID          string `json:"sku_id,omitempty"`
 	SKU            string `json:"sku"`
 	Quantity       int    `json:"quantity"`
 	UnitPriceCents int64  `json:"unit_price_cents"` // whole KRW won
+	// Available is false when the variant is no longer sellable (checkout session reads).
+	Available *bool `json:"available,omitempty"`
 }
 
 type Order struct {

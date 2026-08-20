@@ -82,6 +82,8 @@ func (f *countingStock) Reserve(ctx context.Context, orderID string, items []por
 type fakeProduct struct {
 	defaultCents int64
 	byKey        map[string]*ports.VariantInfo
+	// strictMissing makes unknown keys return ErrVariantNotFound when byKey is set.
+	strictMissing bool
 }
 
 func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantInfo, error) {
@@ -101,6 +103,9 @@ func (f *fakeProduct) lookup(key string, asSKU bool) (*ports.VariantInfo, error)
 		if v, ok := f.byKey[strings.ToUpper(key)]; ok {
 			cp := *v
 			return &cp, nil
+		}
+		if f.strictMissing {
+			return nil, ports.ErrVariantNotFound
 		}
 	}
 	cents := f.defaultCents
