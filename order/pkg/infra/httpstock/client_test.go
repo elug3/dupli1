@@ -82,6 +82,20 @@ func TestClient_CommitReservationAlreadyCommitted(t *testing.T) {
 	}
 }
 
+func TestClient_CommitReservationAlreadyReleased(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "reservation already released"})
+	}))
+	defer srv.Close()
+
+	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "fixed")
+	err := client.CommitReservation(context.Background(), "res-released")
+	if !errors.Is(err, ports.ErrReservationAlreadyReleased) {
+		t.Fatalf("err = %v, want ErrReservationAlreadyReleased", err)
+	}
+}
+
 func TestClient_CommitReservationClosed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)

@@ -37,6 +37,70 @@ func (p *recordingPublisher) Publish(_ context.Context, subject string, event an
 	return nil
 }
 
+// saveRaceRepo simulates concurrent checkout tabs where both miss FindRequiresPayment
+// and the loser hits the partial unique index on Save; the service should reuse the winner.
+type saveRaceRepo struct {
+	*memory.Repository
+	failSaveForOrder string
+	winner           *domain.Payment
+}
+
+func (r *saveRaceRepo) Save(ctx context.Context, payment *domain.Payment) error {
+	if payment.OrderID == r.failSaveForOrder && r.winner != nil {
+		if err := r.Repository.Save(ctx, r.winner); err != nil {
+			return err
+		}
+		return fmt.Errorf("duplicate open payment for order %s", payment.OrderID)
+	}
+	return r.Repository.Save(ctx, payment)
+}
+
+func (r *saveRaceRepo) SaveWithOutbox(ctx context.Context, payment *domain.Payment, events []ports.OutboxEvent) error {
+	if payment.OrderID == r.failSaveForOrder && r.winner != nil {
+		if err := r.Repository.SaveWithOutbox(ctx, r.winner, nil); err != nil {
+			return err
+		}
+		return fmt.Errorf("duplicate open payment for order %s", payment.OrderID)
+	}
+	return r.Repository.SaveWithOutbox(ctx, payment, events)
+}
+
+func TestCreatePayment_ReusesOpenPaymentWhenSaveRacesDuplicateOpenIndex(t *testing.T) {
+	now := time.Now().UTC()
+	winner, err := domain.NewPayment(
+		"pay_winner", "ord_1", "cust_1", 4200, domain.DefaultCurrency,
+		domain.ProviderDev, "dev_winner", "http://localhost:8080/pay/winner", now,
+	)
+	if err != nil {
+		t.Fatalf("NewPayment winner: %v", err)
+	}
+	winner.Method = domain.MethodCreditCard
+
+	repo := &saveRaceRepo{
+		Repository:       memory.NewRepository(),
+		failSaveForOrder:   "ord_1",
+		winner:             winner,
+	}
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+
+	got, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment after save race: %v", err)
+	}
+	if got.ID != winner.ID {
+		t.Fatalf("payment id = %q, want winner %q", got.ID, winner.ID)
+	}
+	if got.CheckoutURL != winner.CheckoutURL {
+		t.Fatalf("checkout_url = %q, want %q", got.CheckoutURL, winner.CheckoutURL)
+	}
+}
+
 func TestCreatePayment_ReusesExistingRequiresPaymentForOrder(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
