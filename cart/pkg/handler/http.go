@@ -222,6 +222,15 @@ func (h *Handler) adminCart(w http.ResponseWriter, r *http.Request) {
 }
 
 func respondServiceError(w http.ResponseWriter, err error) {
+	var unavailable *service.UnavailableVariantsError
+	if errors.As(err, &unavailable) && len(unavailable.Items) > 0 {
+		respondJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"error":             unavailable.Error(),
+			"code":              http.StatusUnprocessableEntity,
+			"unavailable_items": unavailable.Items,
+		})
+		return
+	}
 	switch {
 	case errors.Is(err, ports.ErrVariantNotFound):
 		respondError(w, http.StatusNotFound, err.Error())

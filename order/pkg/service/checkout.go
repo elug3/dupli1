@@ -43,7 +43,7 @@ func (s *Service) GetCheckoutSession(ctx context.Context, id string) (*domain.Ch
 		_ = s.repo.SaveCheckoutSession(ctx, session)
 		return nil, err
 	}
-	return cloneCheckoutSession(session), nil
+	return s.annotateCheckoutSession(ctx, cloneCheckoutSession(session)), nil
 }
 
 func (s *Service) SetCheckoutItems(ctx context.Context, sessionID string, items []domain.OrderItem) (*domain.CheckoutSession, error) {
@@ -207,7 +207,30 @@ func (s *Service) saveCheckoutSession(ctx context.Context, session *domain.Check
 	if err := s.repo.SaveCheckoutSession(ctx, session); err != nil {
 		return nil, err
 	}
-	return cloneCheckoutSession(session), nil
+	return s.annotateCheckoutSession(ctx, cloneCheckoutSession(session)), nil
+}
+
+// annotateCheckoutSession re-checks each stored line against the product catalog
+// so the storefront can surface unavailable_items before complete.
+func (s *Service) annotateCheckoutSession(ctx context.Context, session *domain.CheckoutSession) *domain.CheckoutSession {
+	if session == nil || len(session.Items) == 0 || s.product == nil {
+		return session
+	}
+	unavailable := make([]domain.UnavailableItem, 0)
+	for i, item := range session.Items {
+		_, err := s.resolveVariant(ctx, item)
+		if errors.Is(err, ports.ErrVariantNotFound) {
+			available := false
+			session.Items[i].Available = &available
+			unavailable = append(unavailable, unavailableFromOrderItem(item))
+		}
+	}
+	if len(unavailable) > 0 {
+		session.UnavailableItems = unavailable
+	} else {
+		session.UnavailableItems = nil
+	}
+	return session
 }
 
 func cloneCheckoutSession(session *domain.CheckoutSession) *domain.CheckoutSession {
@@ -216,6 +239,9 @@ func cloneCheckoutSession(session *domain.CheckoutSession) *domain.CheckoutSessi
 	}
 	copied := *session
 	copied.Items = cloneOrderItems(session.Items)
+	if session.UnavailableItems != nil {
+		copied.UnavailableItems = append([]domain.UnavailableItem(nil), session.UnavailableItems...)
+	}
 	return &copied
 }
 

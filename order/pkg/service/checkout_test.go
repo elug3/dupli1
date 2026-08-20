@@ -281,3 +281,118 @@ func TestCompleteCheckoutRejectsSecondComplete(t *testing.T) {
 		t.Fatalf("order id = %q, want %q", orders[0].ID, first.Order.ID)
 	}
 }
+
+func TestSetCheckoutItems_CollectsAllUnavailable(t *testing.T) {
+	ctx := context.Background()
+	product := &fakeProduct{
+		byKey: map[string]*ports.VariantInfo{
+			"BAG-OK": {SkuID: "ID-BAG-OK", SKU: "BAG-OK", UnitPriceCents: 5000},
+		},
+		strictMissing: true,
+	}
+	svc := service.NewWithCheckout(memory.NewRepository(), &fakeStock{}, nil, 0).WithProduct(product)
+
+	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
+		CustomerID: "customer-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession: %v", err)
+	}
+
+	_, err = svc.SetCheckoutItems(ctx, session.ID, []domain.OrderItem{
+		{SkuID: "BAD-1", Quantity: 1},
+		{SKU: "BAG-OK", Quantity: 1},
+		{SkuID: "BAD-2", SKU: "BAD-SKU-2", Quantity: 2},
+	})
+	var unavailable *service.UnavailableVariantsError
+	if !errors.As(err, &unavailable) {
+		t.Fatalf("want UnavailableVariantsError, got %v", err)
+	}
+	if len(unavailable.Items) != 2 {
+		t.Fatalf("want 2 unavailable items, got %+v", unavailable.Items)
+	}
+	if unavailable.Items[0].SkuID != "BAD-1" || unavailable.Items[1].SkuID != "BAD-2" {
+		t.Fatalf("unexpected unavailable: %+v", unavailable.Items)
+	}
+	if unavailable.Error() != "variant not found" {
+		t.Fatalf("error = %q", unavailable.Error())
+	}
+}
+
+func TestGetCheckoutSession_ReportsUnavailableItems(t *testing.T) {
+	ctx := context.Background()
+	product := &fakeProduct{
+		byKey: map[string]*ports.VariantInfo{
+			"BAG-1":    {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceCents: 5000},
+			"ID-BAG-1": {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceCents: 5000},
+		},
+		strictMissing: true,
+	}
+	svc := service.NewWithCheckout(memory.NewRepository(), &fakeStock{}, nil, 0).WithProduct(product)
+
+	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
+		CustomerID: "customer-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession: %v", err)
+	}
+	session, err = svc.SetCheckoutItems(ctx, session.ID, []domain.OrderItem{
+		{SKU: "BAG-1", Quantity: 1},
+	})
+	if err != nil {
+		t.Fatalf("SetCheckoutItems: %v", err)
+	}
+
+	delete(product.byKey, "BAG-1")
+	delete(product.byKey, "ID-BAG-1")
+
+	got, err := svc.GetCheckoutSession(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("GetCheckoutSession: %v", err)
+	}
+	if len(got.UnavailableItems) != 1 {
+		t.Fatalf("want 1 unavailable item, got %+v", got.UnavailableItems)
+	}
+	if got.UnavailableItems[0].SkuID != "ID-BAG-1" || got.UnavailableItems[0].Reason != domain.ReasonVariantNotFound {
+		t.Fatalf("unexpected unavailable: %+v", got.UnavailableItems[0])
+	}
+	if got.Items[0].Available == nil || *got.Items[0].Available {
+		t.Fatalf("want available=false, got %+v", got.Items[0])
+	}
+}
+
+func TestCompleteCheckout_UnavailableVariants(t *testing.T) {
+	ctx := context.Background()
+	product := &fakeProduct{
+		byKey: map[string]*ports.VariantInfo{
+			"BAG-1":    {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceCents: 5000},
+			"ID-BAG-1": {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceCents: 5000},
+		},
+		strictMissing: true,
+	}
+	svc := service.NewWithCheckout(memory.NewRepository(), &fakeStock{}, nil, 0).WithProduct(product)
+
+	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
+		CustomerID: "customer-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession: %v", err)
+	}
+	if _, err := svc.SetCheckoutItems(ctx, session.ID, []domain.OrderItem{
+		{SKU: "BAG-1", Quantity: 1},
+	}); err != nil {
+		t.Fatalf("SetCheckoutItems: %v", err)
+	}
+
+	delete(product.byKey, "BAG-1")
+	delete(product.byKey, "ID-BAG-1")
+
+	_, err = svc.CompleteCheckout(ctx, session.ID, testCompleteCheckoutInput())
+	var unavailable *service.UnavailableVariantsError
+	if !errors.As(err, &unavailable) || len(unavailable.Items) != 1 {
+		t.Fatalf("want UnavailableVariantsError with 1 item, got %v", err)
+	}
+	if unavailable.Items[0].SkuID != "ID-BAG-1" {
+		t.Fatalf("unexpected unavailable: %+v", unavailable.Items[0])
+	}
+}

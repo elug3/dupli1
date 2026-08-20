@@ -11,10 +11,21 @@ var (
 	ErrInvalidCartItem = errors.New("invalid cart item")
 )
 
+// ReasonVariantNotFound is returned when a cart line cannot be resolved to an
+// active, sellable product variant.
+const ReasonVariantNotFound = "variant_not_found"
+
 type StoredItem struct {
 	SkuID    string
 	SKU      string
 	Quantity int
+}
+
+// UnavailableItem identifies a cart/checkout line that cannot be purchased.
+type UnavailableItem struct {
+	SkuID  string `json:"sku_id,omitempty"`
+	SKU    string `json:"sku,omitempty"`
+	Reason string `json:"reason"`
 }
 
 type CartItem struct {
@@ -26,13 +37,17 @@ type CartItem struct {
 	Color          string `json:"color,omitempty"`
 	ImageURL       string `json:"image_url,omitempty"`
 	AvailableQty   int    `json:"available_qty,omitempty"`
+	// Available is false when enrichment failed (variant not sellable).
+	// Omitted when true/unknown so existing clients stay compatible.
+	Available *bool `json:"available,omitempty"`
 }
 
 type Cart struct {
-	CustomerID    string     `json:"customer_id"`
-	Items         []CartItem `json:"items"`
-	SubtotalCents int64      `json:"subtotal_cents"` // whole KRW won
-	UpdatedAt     time.Time  `json:"updated_at"`
+	CustomerID       string            `json:"customer_id"`
+	Items            []CartItem        `json:"items"`
+	UnavailableItems []UnavailableItem `json:"unavailable_items,omitempty"`
+	SubtotalCents    int64             `json:"subtotal_cents"` // whole KRW won; excludes unavailable lines
+	UpdatedAt        time.Time         `json:"updated_at"`
 }
 
 func NormalizeSKU(sku string) string {

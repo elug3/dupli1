@@ -514,6 +514,8 @@ func (s *Service) DrainOutbox(ctx context.Context) error {
 }
 
 // priceItems resolves each line from the product catalog and ignores any client unit_price_cents.
+// When any variants are missing, every failed line is collected into UnavailableVariantsError
+// rather than failing on the first miss.
 func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]domain.OrderItem, error) {
 	if s.product == nil {
 		return nil, ports.ErrProductUnavailable
@@ -521,21 +523,29 @@ func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]d
 	if len(items) == 0 {
 		return nil, domain.ErrInvalidOrder
 	}
-	out := make([]domain.OrderItem, len(items))
-	for i, item := range items {
+	out := make([]domain.OrderItem, 0, len(items))
+	var unavailable []domain.UnavailableItem
+	for _, item := range items {
 		info, err := s.resolveVariant(ctx, item)
 		if err != nil {
+			if errors.Is(err, ports.ErrVariantNotFound) {
+				unavailable = append(unavailable, unavailableFromOrderItem(item))
+				continue
+			}
 			return nil, err
 		}
 		if info.UnitPriceCents <= 0 {
 			return nil, domain.ErrInvalidOrder
 		}
-		out[i] = domain.OrderItem{
+		out = append(out, domain.OrderItem{
 			SkuID:          info.SkuID,
 			SKU:            info.SKU,
 			Quantity:       item.Quantity,
 			UnitPriceCents: info.UnitPriceCents,
-		}
+		})
+	}
+	if len(unavailable) > 0 {
+		return nil, &UnavailableVariantsError{Items: unavailable}
 	}
 	return out, nil
 }

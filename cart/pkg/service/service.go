@@ -67,13 +67,21 @@ func (s *Service) ReplaceItems(ctx context.Context, customerID string, inputs []
 	if err := domain.ValidateStoredItems(stored); err != nil {
 		return nil, err
 	}
+	var unavailable []domain.UnavailableItem
 	for i, item := range stored {
 		info, err := s.resolveVariant(ctx, item)
 		if err != nil {
+			if errors.Is(err, ports.ErrVariantNotFound) {
+				unavailable = append(unavailable, unavailableFromStored(item))
+				continue
+			}
 			return nil, err
 		}
 		stored[i].SkuID = info.SkuID
 		stored[i].SKU = info.SKU
+	}
+	if len(unavailable) > 0 {
+		return nil, &UnavailableVariantsError{Items: unavailable}
 	}
 
 	now := s.now()
@@ -99,6 +107,9 @@ func (s *Service) UpsertItem(ctx context.Context, customerID string, input ItemI
 	}
 	info, err := s.resolveVariant(ctx, item)
 	if err != nil {
+		if errors.Is(err, ports.ErrVariantNotFound) {
+			return nil, &UnavailableVariantsError{Items: []domain.UnavailableItem{unavailableFromStored(item)}}
+		}
 		return nil, err
 	}
 	item.SkuID = info.SkuID
@@ -174,6 +185,7 @@ func (s *Service) resolveVariant(ctx context.Context, item domain.StoredItem) (*
 
 func (s *Service) enrichCart(ctx context.Context, customerID string, stored []domain.StoredItem, updatedAt time.Time) (*domain.Cart, error) {
 	items := make([]domain.CartItem, len(stored))
+	unavailableSlots := make([]*domain.UnavailableItem, len(stored))
 	var subtotal int64
 
 	workers := enrichConcurrency
@@ -206,8 +218,13 @@ func (s *Service) enrichCart(ctx context.Context, customerID string, stored []do
 				enriched.Color = info.Color
 				enriched.UnitPriceCents = info.UnitPriceCents
 				enriched.ImageURL = info.ImageURL
+			} else if errors.Is(err, ports.ErrVariantNotFound) {
+				available := false
+				enriched.Available = &available
+				u := unavailableFromStored(item)
+				unavailableSlots[i] = &u
 			}
-			if s.inventory != nil {
+			if s.inventory != nil && enriched.Available == nil {
 				qty, err := s.lookupAvailableQty(ctx, enriched.SkuID, item.SKU)
 				if err == nil {
 					enriched.AvailableQty = qty
@@ -218,16 +235,30 @@ func (s *Service) enrichCart(ctx context.Context, customerID string, stored []do
 	}
 	wg.Wait()
 
+	unavailable := make([]domain.UnavailableItem, 0)
+	for _, u := range unavailableSlots {
+		if u != nil {
+			unavailable = append(unavailable, *u)
+		}
+	}
+
 	for _, enriched := range items {
+		if enriched.Available != nil && !*enriched.Available {
+			continue
+		}
 		subtotal += int64(enriched.Quantity) * enriched.UnitPriceCents
 	}
 
-	return &domain.Cart{
+	cart := &domain.Cart{
 		CustomerID:    customerID,
 		Items:         items,
 		SubtotalCents: subtotal,
 		UpdatedAt:     updatedAt,
-	}, nil
+	}
+	if len(unavailable) > 0 {
+		cart.UnavailableItems = unavailable
+	}
+	return cart, nil
 }
 
 func (s *Service) lookupAvailableQty(ctx context.Context, skuID, sku string) (int, error) {
