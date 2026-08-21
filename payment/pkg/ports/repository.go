@@ -20,6 +20,8 @@ type Repository interface {
 	FindByIdempotencyKey(ctx context.Context, key string) (*domain.Payment, error)
 	// FindRequiresPaymentByOrderID returns the newest open checkout for an order.
 	FindRequiresPaymentByOrderID(ctx context.Context, orderID string) (*domain.Payment, error)
+	// FindSucceededByOrderID returns the newest succeeded payment for an order.
+	FindSucceededByOrderID(ctx context.Context, orderID string) (*domain.Payment, error)
 	ListSucceededSince(ctx context.Context, since time.Time, limit int) ([]domain.Payment, error)
 
 	ListPendingOutbox(ctx context.Context, limit int) ([]OutboxMessage, error)

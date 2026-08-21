@@ -23,16 +23,19 @@ func newInventoryMux(t *testing.T) (*http.ServeMux, *service.InventoryService) {
 	}
 	invStore := memory.NewInventoryStore().WithProducts(products)
 	invSvc := service.NewInventoryService(invStore, products)
-	h := handler.NewHandler(nil, nil, invSvc, nil)
+
+	svc := service.NewProductSearchService(products, nil)
+	h := handler.NewHandler(svc, service.NewCouponService(memory.NewCouponStore()), invSvc, service.NewCatalogService(memory.NewCatalogStore()))
 
 	mux := http.NewServeMux()
-	handler.Mount(mux, "POST", handler.RouteInventoryReservations, h.CreateReservationHandler(), handler.LegacyRouteInventoryReservations)
-	handler.Mount(mux, "POST", handler.RouteInventoryReservationCommit, h.CommitReservationHandler(), handler.LegacyRouteInventoryReservationCommit)
-	handler.Mount(mux, "POST", handler.RouteInventoryReservationRelease, h.ReleaseReservationHandler(), handler.LegacyRouteInventoryReservationRelease)
+	mux.Handle("POST "+handler.RouteInventoryReservationCommit, h.CommitReservationHandler())
+	mux.Handle("POST "+handler.RouteInventoryReservationRelease, h.ReleaseReservationHandler())
+	mux.Handle("POST "+handler.RouteInventoryReservations, h.CreateReservationHandler())
+	mux.Handle("PUT "+handler.RouteInventoryItem, h.UpsertInventoryItemHandler())
 	return mux, invSvc
 }
 
-func TestCommitReservationOnReleasedReturns400(t *testing.T) {
+func TestCommitReservationHandler_RejectsAlreadyReleased(t *testing.T) {
 	mux, invSvc := newInventoryMux(t)
 	ctx := context.Background()
 
@@ -49,7 +52,8 @@ func TestCommitReservationOnReleasedReturns400(t *testing.T) {
 		t.Fatalf("ReleaseReservation: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/inventory/reservations/"+reservation.ID+"/commit", nil)
+	req := httptest.NewRequest(http.MethodPost, "http://example.test/api/v1/products/inventory/reservations/"+reservation.ID+"/commit", nil)
+	req.SetPathValue("id", reservation.ID)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 

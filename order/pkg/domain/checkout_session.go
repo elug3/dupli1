@@ -24,18 +24,19 @@ const (
 const DefaultCheckoutTTL = 30 * time.Minute
 
 type CheckoutSession struct {
-	ID            string                `json:"id"`
-	CustomerID    string                `json:"customer_id"`
-	Items         []OrderItem           `json:"items"`
-	Status        CheckoutSessionStatus `json:"status"`
-	CouponCode    string                `json:"coupon_code,omitempty"`
-	SubtotalCents int64                 `json:"subtotal_cents"`
-	DiscountCents int64                 `json:"discount_cents"`
-	TotalCents    int64                 `json:"total_cents"`
-	OrderID       string                `json:"order_id,omitempty"`
-	ExpiresAt     time.Time             `json:"expires_at"`
-	CreatedAt     time.Time             `json:"created_at"`
-	UpdatedAt     time.Time             `json:"updated_at"`
+	ID               string                `json:"id"`
+	CustomerID       string                `json:"customer_id"`
+	Items            []OrderItem           `json:"items"`
+	UnavailableItems []UnavailableItem     `json:"unavailable_items,omitempty"`
+	Status           CheckoutSessionStatus `json:"status"`
+	CouponCode       string                `json:"coupon_code,omitempty"`
+	SubtotalCents    int64                 `json:"subtotal_cents"`
+	DiscountCents    int64                 `json:"discount_cents"`
+	TotalCents       int64                 `json:"total_cents"`
+	OrderID          string                `json:"order_id,omitempty"`
+	ExpiresAt        time.Time             `json:"expires_at"`
+	CreatedAt        time.Time             `json:"created_at"`
+	UpdatedAt        time.Time             `json:"updated_at"`
 }
 
 func NewCheckoutSession(id, customerID string, now time.Time, ttl time.Duration) (*CheckoutSession, error) {

@@ -657,11 +657,13 @@ See [cart-service.md](cart-service.md) for architecture, service boundaries, and
       "available_qty": 3
     }
   ],
+  "unavailable_items": [],
   "subtotal_cents": 125000,
   "updated_at": "2026-07-05T12:00:00Z"
 }
 ```
 
+Lines that fail variant enrichment stay in `items` with `available: false` and are listed in `unavailable_items` (`sku_id`, `sku`, `reason`). Item mutations that cannot resolve variants return **`422`** with the same `unavailable_items` array (and `error: "variant not found"`). See [cart-service.md](cart-service.md).
 ### Admin
 
 | Method | Path | Description |

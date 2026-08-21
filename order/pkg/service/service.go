@@ -320,13 +320,17 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if order.Status != domain.StatusPending && order.Status != domain.StatusPaid {
 		return nil, domain.ErrInvalidTransition
 	}
-	if err := s.stock.ReleaseReservation(ctx, order.ReservationID); err != nil {
-		return nil, err
-	}
 	if err := order.Cancel(s.now()); err != nil {
 		return nil, err
 	}
-	return s.saveStatusChange(ctx, order)
+	saved, err := s.saveStatusChange(ctx, order)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.releaseReservationForCancel(ctx, saved.ReservationID); err != nil {
+		log.Printf("cancel order %s: release reservation %s: %v", saved.ID, saved.ReservationID, err)
+	}
+	return saved, nil
 }
 
 func (s *Service) FulfillOrder(ctx context.Context, id string) (*domain.Order, error) {
@@ -514,6 +518,8 @@ func (s *Service) DrainOutbox(ctx context.Context) error {
 }
 
 // priceItems resolves each line from the product catalog and ignores any client unit_price_cents.
+// When any variants are missing, every failed line is collected into UnavailableVariantsError
+// rather than failing on the first miss.
 func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]domain.OrderItem, error) {
 	if s.product == nil {
 		return nil, ports.ErrProductUnavailable
@@ -521,21 +527,29 @@ func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]d
 	if len(items) == 0 {
 		return nil, domain.ErrInvalidOrder
 	}
-	out := make([]domain.OrderItem, len(items))
-	for i, item := range items {
+	out := make([]domain.OrderItem, 0, len(items))
+	var unavailable []domain.UnavailableItem
+	for _, item := range items {
 		info, err := s.resolveVariant(ctx, item)
 		if err != nil {
+			if errors.Is(err, ports.ErrVariantNotFound) {
+				unavailable = append(unavailable, unavailableFromOrderItem(item))
+				continue
+			}
 			return nil, err
 		}
 		if info.UnitPriceCents <= 0 {
 			return nil, domain.ErrInvalidOrder
 		}
-		out[i] = domain.OrderItem{
+		out = append(out, domain.OrderItem{
 			SkuID:          info.SkuID,
 			SKU:            info.SKU,
 			Quantity:       item.Quantity,
 			UnitPriceCents: info.UnitPriceCents,
-		}
+		})
+	}
+	if len(unavailable) > 0 {
+		return nil, &UnavailableVariantsError{Items: unavailable}
 	}
 	return out, nil
 }
@@ -582,6 +596,17 @@ func (s *Service) reinstateCanceledOrder(ctx context.Context, order *domain.Orde
 		return "", err
 	}
 	return reservationID, nil
+}
+
+// releaseReservationForCancel releases reserved stock after cancel is persisted.
+// An already-released reservation is treated as success so retries do not block
+// when release succeeded but a prior attempt failed before returning.
+func (s *Service) releaseReservationForCancel(ctx context.Context, reservationID string) error {
+	err := s.stock.ReleaseReservation(ctx, reservationID)
+	if err == nil || errors.Is(err, ports.ErrReservationAlreadyReleased) {
+		return nil
+	}
+	return err
 }
 
 // commitReservationForShip commits reserved stock when shipping. An already

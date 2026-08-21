@@ -88,6 +88,8 @@ Fetch the current session. Expired open sessions are marked `expired` on read.
 
 **Response `200`** — session object (same shape as above, with items when present).
 
+On read, the service re-checks each stored line against the product catalog. Lines that are no longer sellable stay in `items` with `available: false` and are listed in top-level `unavailable_items` (same shape as cart). `unavailable_items` is omitted when every line resolves.
+
 ---
 
 ### `PUT /api/v1/checkout/sessions/{id}/items`
@@ -105,6 +107,18 @@ Replace all line items. Server resolves prices from product (client `unit_price_
 
 **Response `200`** — updated session with recalculated `subtotal_cents` and `total_cents` (catalog prices).
 
+Batch replace validates **all** lines. Missing variants return **`422`**:
+
+```json
+{
+  "error": "variant not found",
+  "code": 422,
+  "unavailable_items": [
+    { "sku_id": "01JAY…", "sku": "BAG-GONE", "reason": "variant_not_found" }
+  ]
+}
+```
+
 ---
 
 ### `POST /api/v1/checkout/sessions/{id}/items`
@@ -118,6 +132,7 @@ Add or update a single line item (matched by `sku`). Server resolves price from 
 
 **Response `200`** — updated session.
 
+Unknown / inactive variants return the same **`422`** + `unavailable_items` body as `PUT …/items`.
 ---
 
 ### `DELETE /api/v1/checkout/sessions/{id}/items/{sku}`
@@ -204,6 +219,8 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
 
 After completion, the order is **`pending`** with inventory reserved. The customer must pay within **5 minutes** via the payment service (NANO card, manager Bypass, or local simulate); see [payment-service.md](payment-service.md). Only `dupli1-payment` confirms the order after a successful payment — not manual status updates.
 
+When completion fails because one or more session lines no longer resolve to sellable variants, the response is **`422`** with `error: "variant not found"` and `unavailable_items` (same shape as cart / item mutations). This is distinct from empty cart, expired session, or stock exhaustion.
+
 ## Concurrency and idempotency
 
 `POST …/complete` tolerates concurrent or duplicate calls:
@@ -232,6 +249,7 @@ Direct order create (`POST /api/v1/orders`) supports optional `Idempotency-Key` 
 |--------|-----------|
 | `400` | Invalid input, empty checkout, expired session, invalid coupon, duplicate `complete` on non-open session |
 | `404` | Session not found |
+| `422` | Variant not sellable on item mutations or `complete` — body includes `unavailable_items` |
 | `503` | Coupon service not configured |
 | `500` | Inventory or persistence failure |
 

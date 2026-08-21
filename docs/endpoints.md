@@ -340,10 +340,10 @@ Batch public variant lookup by canonical ULID `skuId`. Comma-separated `sku_ids`
 |---|---|---|---|
 | `GET` | `/api/v1/cart/health` | — | Health check |
 | `GET` | `/api/v1/cart/settings` | — | Non-secret service settings |
-| `GET` | `/api/v1/cart` | Bearer | Get current user's cart |
+| `GET` | `/api/v1/cart` | Bearer | Get current user's cart (includes `unavailable_items` when stored lines are not sellable) |
 | `DELETE` | `/api/v1/cart` | Bearer | Clear current user's cart |
-| `PUT` | `/api/v1/cart/items` | Bearer | Replace all cart items |
-| `POST` | `/api/v1/cart/items` | Bearer | Add or update one item |
+| `PUT` | `/api/v1/cart/items` | Bearer | Replace all cart items (`422` + `unavailable_items` on bad variants) |
+| `POST` | `/api/v1/cart/items` | Bearer | Add or update one item (`422` + `unavailable_items` on bad variants) |
 | `DELETE` | `/api/v1/cart/items/{sku}` | Bearer | Remove one item |
 | `GET` | `/api/v1/cart/customers/{customer_id}` | `cart.read` | Get a customer's cart (legacy: `/api/v1/carts/{customer_id}`) |
 
@@ -464,12 +464,12 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | `GET` | `/api/v1/orders/health` | — | Health check |
 | `GET` | `/api/v1/orders/settings` | — | Non-secret service settings |
 | `POST` | `/api/v1/orders/checkout/sessions` | ABAC / `order.create` | Create checkout session (legacy: `/api/v1/checkout/sessions`) |
-| `GET` | `/api/v1/orders/checkout/sessions/{id}` | ABAC / `order.read.all` | Get session |
-| `PUT` | `/api/v1/orders/checkout/sessions/{id}/items` | ABAC / `order.create` | Replace all items |
-| `POST` | `/api/v1/orders/checkout/sessions/{id}/items` | ABAC / `order.create` | Add or update one item |
+| `GET` | `/api/v1/orders/checkout/sessions/{id}` | ABAC / `order.read.all` | Get session (re-checks variants → `unavailable_items`) |
+| `PUT` | `/api/v1/orders/checkout/sessions/{id}/items` | ABAC / `order.create` | Replace all items (`422` + `unavailable_items` on bad variants) |
+| `POST` | `/api/v1/orders/checkout/sessions/{id}/items` | ABAC / `order.create` | Add or update one item (`422` + `unavailable_items` on bad variants) |
 | `DELETE` | `/api/v1/orders/checkout/sessions/{id}/items/{sku}` | ABAC / `order.create` | Remove item |
 | `POST` | `/api/v1/orders/checkout/sessions/{id}/coupon` | ABAC / `order.create` | Apply coupon |
-| `POST` | `/api/v1/orders/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout |
+| `POST` | `/api/v1/orders/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout (`422` + `unavailable_items` when variants invalid) |
 | `POST` | `/api/v1/orders` | ABAC / `order.create` | Create a new order |
 | `GET` | `/api/v1/orders?customer_id={id}` | ABAC / `order.read.all` | List orders for a customer |
 | `GET` | `/api/v1/orders/{id}` | ABAC / `order.read.all` | Get a single order |

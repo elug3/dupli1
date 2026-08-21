@@ -37,54 +37,46 @@ func (p *recordingPublisher) Publish(_ context.Context, subject string, event an
 	return nil
 }
 
-// saveRaceRepo simulates concurrent checkout tabs where both miss FindRequiresPayment
-// and the loser hits the partial unique index on Save; the service should reuse the winner.
+// saveRaceRepo simulates concurrent checkout tabs: the first FindRequiresPaymentByOrderID
+// misses a row another request just saved, then Save hits a unique open-payment constraint.
 type saveRaceRepo struct {
 	*memory.Repository
-	failSaveForOrder string
-	winner           *domain.Payment
+	hideOpenPaymentOnce bool
+}
+
+func (r *saveRaceRepo) FindRequiresPaymentByOrderID(ctx context.Context, orderID string) (*domain.Payment, error) {
+	if r.hideOpenPaymentOnce {
+		r.hideOpenPaymentOnce = false
+		return nil, ports.ErrNotFound
+	}
+	return r.Repository.FindRequiresPaymentByOrderID(ctx, orderID)
 }
 
 func (r *saveRaceRepo) Save(ctx context.Context, payment *domain.Payment) error {
-	if payment.OrderID == r.failSaveForOrder && r.winner != nil {
-		if err := r.Repository.Save(ctx, r.winner); err != nil {
-			return err
+	if payment.Status == domain.StatusRequiresPayment {
+		if existing, err := r.Repository.FindRequiresPaymentByOrderID(ctx, payment.OrderID); err == nil && existing.ID != payment.ID {
+			return fmt.Errorf("duplicate open payment for order %s", payment.OrderID)
 		}
-		return fmt.Errorf("duplicate open payment for order %s", payment.OrderID)
 	}
 	return r.Repository.Save(ctx, payment)
 }
 
-func (r *saveRaceRepo) SaveWithOutbox(ctx context.Context, payment *domain.Payment, events []ports.OutboxEvent) error {
-	if payment.OrderID == r.failSaveForOrder && r.winner != nil {
-		if err := r.Repository.SaveWithOutbox(ctx, r.winner, nil); err != nil {
-			return err
-		}
-		return fmt.Errorf("duplicate open payment for order %s", payment.OrderID)
-	}
-	return r.Repository.SaveWithOutbox(ctx, payment, events)
-}
-
-func TestCreatePayment_ReusesOpenPaymentWhenSaveRacesDuplicateOpenIndex(t *testing.T) {
-	now := time.Now().UTC()
-	winner, err := domain.NewPayment(
-		"pay_winner", "ord_1", "cust_1", 4200, domain.DefaultCurrency,
-		domain.ProviderDev, "dev_winner", "http://localhost:8080/pay/winner", now,
-	)
-	if err != nil {
-		t.Fatalf("NewPayment winner: %v", err)
-	}
-	winner.Method = domain.MethodCreditCard
-
-	repo := &saveRaceRepo{
-		Repository:       memory.NewRepository(),
-		failSaveForOrder:   "ord_1",
-		winner:             winner,
-	}
+func TestCreatePayment_ReusesOpenPaymentWhenSaveRaces(t *testing.T) {
+	base := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
 		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	winner, err := domain.NewPayment("pay_000001", "ord_1", "cust_1", 4200, domain.DefaultCurrency, domain.ProviderDev, "dev_ref", "http://checkout/1", now)
+	if err != nil {
+		t.Fatalf("NewPayment: %v", err)
+	}
+	if err := base.Save(context.Background(), winner); err != nil {
+		t.Fatalf("seed payment: %v", err)
+	}
+
+	repo := &saveRaceRepo{Repository: base, hideOpenPaymentOnce: true}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
 	got, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
@@ -124,6 +116,71 @@ func TestCreatePayment_ReusesExistingRequiresPaymentForOrder(t *testing.T) {
 	}
 	if second.ID != first.ID {
 		t.Fatalf("second payment id = %q, want %q", second.ID, first.ID)
+	}
+}
+
+func TestCreatePayment_ReusesExistingSucceededForOrder(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+
+	first, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	succeeded, err := svc.CompletePayment(context.Background(), first.ID)
+	if err != nil {
+		t.Fatalf("CompletePayment: %v", err)
+	}
+	if succeeded.Status != domain.StatusSucceeded {
+		t.Fatalf("status = %s, want succeeded", succeeded.Status)
+	}
+
+	second, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("second CreatePayment: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("second payment id = %q, want %q (double checkout after success)", second.ID, first.ID)
+	}
+	if second.Status != domain.StatusSucceeded {
+		t.Fatalf("second status = %s, want succeeded", second.Status)
+	}
+}
+
+func TestCreatePayment_ReusesBypassSucceededWhenCardRetried(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+	}}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+
+	bypass, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID:           "ord_1",
+		CustomerID:        "manager_1",
+		BearerToken:       "token",
+		Method:            domain.MethodBypass,
+		AllowMethodBypass: true,
+	})
+	if err != nil {
+		t.Fatalf("bypass CreatePayment: %v", err)
+	}
+
+	card, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("card CreatePayment after bypass: %v", err)
+	}
+	if card.ID != bypass.ID {
+		t.Fatalf("card payment id = %q, want bypass %q", card.ID, bypass.ID)
 	}
 }
 
