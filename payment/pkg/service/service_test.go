@@ -63,6 +63,71 @@ func TestCreatePayment_ReusesExistingRequiresPaymentForOrder(t *testing.T) {
 	}
 }
 
+func TestCreatePayment_ReusesExistingSucceededForOrder(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+
+	first, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	succeeded, err := svc.CompletePayment(context.Background(), first.ID)
+	if err != nil {
+		t.Fatalf("CompletePayment: %v", err)
+	}
+	if succeeded.Status != domain.StatusSucceeded {
+		t.Fatalf("status = %s, want succeeded", succeeded.Status)
+	}
+
+	second, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("second CreatePayment: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("second payment id = %q, want %q (double checkout after success)", second.ID, first.ID)
+	}
+	if second.Status != domain.StatusSucceeded {
+		t.Fatalf("second status = %s, want succeeded", second.Status)
+	}
+}
+
+func TestCreatePayment_ReusesBypassSucceededWhenCardRetried(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+	}}
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+
+	bypass, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID:           "ord_1",
+		CustomerID:        "manager_1",
+		BearerToken:       "token",
+		Method:            domain.MethodBypass,
+		AllowMethodBypass: true,
+	})
+	if err != nil {
+		t.Fatalf("bypass CreatePayment: %v", err)
+	}
+
+	card, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("card CreatePayment after bypass: %v", err)
+	}
+	if card.ID != bypass.ID {
+		t.Fatalf("card payment id = %q, want bypass %q", card.ID, bypass.ID)
+	}
+}
+
 func TestCreatePayment_DevCheckout(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{

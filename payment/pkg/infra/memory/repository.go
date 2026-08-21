@@ -123,9 +123,30 @@ func (r *Repository) FindRequiresPaymentByOrderID(ctx context.Context, orderID s
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	p := findLatestPaymentByOrderAndStatus(r.payments, orderID, domain.StatusRequiresPayment)
+	if p == nil {
+		return nil, ports.ErrNotFound
+	}
+	return p, nil
+}
+
+func (r *Repository) FindSucceededByOrderID(ctx context.Context, orderID string) (*domain.Payment, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p := findLatestPaymentByOrderAndStatus(r.payments, orderID, domain.StatusSucceeded)
+	if p == nil {
+		return nil, ports.ErrNotFound
+	}
+	return p, nil
+}
+
+func findLatestPaymentByOrderAndStatus(payments map[string]*domain.Payment, orderID string, status domain.PaymentStatus) *domain.Payment {
 	var latest *domain.Payment
-	for _, p := range r.payments {
-		if p.OrderID != orderID || p.Status != domain.StatusRequiresPayment {
+	for _, p := range payments {
+		if p.OrderID != orderID || p.Status != status {
 			continue
 		}
 		if latest == nil || p.CreatedAt.After(latest.CreatedAt) {
@@ -134,9 +155,9 @@ func (r *Repository) FindRequiresPaymentByOrderID(ctx context.Context, orderID s
 		}
 	}
 	if latest == nil {
-		return nil, ports.ErrNotFound
+		return nil
 	}
-	return latest, nil
+	return latest
 }
 
 func (r *Repository) ListSucceededSince(ctx context.Context, since time.Time, limit int) ([]domain.Payment, error) {

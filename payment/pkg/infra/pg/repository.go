@@ -68,6 +68,7 @@ func (r *Repository) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_payments_provider_ref ON payments(provider_ref)`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_one_open_per_order ON payments(order_id) WHERE status = 'requires_payment'`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_one_succeeded_per_order ON payments(order_id) WHERE status = 'succeeded'`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_succeeded_updated ON payments(updated_at) WHERE status = 'succeeded'`,
 		`CREATE TABLE IF NOT EXISTS payment_outbox (
 			id BIGSERIAL PRIMARY KEY,
@@ -290,6 +291,18 @@ func (r *Repository) FindRequiresPaymentByOrderID(ctx context.Context, orderID s
 		ORDER BY created_at DESC
 		LIMIT 1
 	`, orderID, string(domain.StatusRequiresPayment))
+	return scanPayment(row)
+}
+
+func (r *Repository) FindSucceededByOrderID(ctx context.Context, orderID string) (*domain.Payment, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	row := r.pool.QueryRow(ctx, paymentSelect+`
+		WHERE order_id = $1 AND status = $2
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, orderID, string(domain.StatusSucceeded))
 	return scanPayment(row)
 }
 
