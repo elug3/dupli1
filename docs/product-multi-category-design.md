@@ -1,6 +1,7 @@
 # Type design for multiple product categories (bags, wallets, clothing)
 
 **Status:** Design plan (no code change yet).  
+**Schedule:** **Wallets — September 2026**; padded bag-line products (catalog expansion, not a new category) — **October 2026**. See [v1-release-plan.md § Schedule](v1-release-plan.md#schedule).  
 **Question:** Wallets and clothing are scheduled. How should the product types be designed?  
 **Related:** [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md) (why types stay category-agnostic), [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md) (Product as the sellable unit), [product-master-catalog.md](product-master-catalog.md) (bag taxonomy as built), [product-sku-system.md](product-sku-system.md), [product-attributes.md](product-attributes.md).
 
@@ -245,7 +246,7 @@ Each phase is additive and leaves bag behavior identical until new categories ar
 5. **Seed wallets + clothing.** Spec rows only — no schema or Go changes if 1–4 landed.
 6. **Cleanup.** Drop `bag_*` tables and bag-named routes; drop the `capacity` column; optional `Style` → `Look` rename; enforce `styles.category`.
 
-Wallets can ship after Phase 2 with display-only specs in `attributes`; clothing realistically wants Phases 3–4 first.
+Wallets can ship after Phase 2 with display-only specs in `attributes`; clothing realistically wants Phases 3–4 first. Target: **wallet category live in September 2026** (phases 1–2). **Padded** products in **October 2026** are a bag-line catalog seed (existing `bags` category / style masters), not a new multi-category phase.
 
 ### Sequencing against the flat sellable model
 

@@ -1,11 +1,23 @@
 # Dupli1 v1.0 release plan
 
-**Status:** **Postponed** (2026-07-27) — v1.0 will not ship until every open item in [v1.0-release-spec.md](v1.0-release-spec.md) sections A–F is resolved (ops, smoke, frontends, sign-off — not only backend hardening).  
+**Status:** Target **2026-08-30** (was postponed 2026-07-27) — v1.0 will not ship until every open item in [v1.0-release-spec.md](v1.0-release-spec.md) sections A–F is resolved (ops, smoke, frontends, sign-off — not only backend hardening).  
 **Closeout checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) — authoritative spec + ship checklist.  
 **Scope:** Backend repo `dupli1` + production ops needed for a KRW fashion-bag marketplace launch.  
 **Sibling frontends:** `dupli1-web`, `dupli1-manage-web` (called out where they block launch).
 
-**Related:** [current-state.md](current-state.md), [TODO.md](TODO.md), [v1.0-release-spec.md](v1.0-release-spec.md), [v1.1-release-plan.md](v1.1-release-plan.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [payment-methods-plan.md](payment-methods-plan.md).
+**Related:** [current-state.md](current-state.md), [TODO.md](TODO.md), [v1.0-release-spec.md](v1.0-release-spec.md), [v1.1-release-plan.md](v1.1-release-plan.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [payment-methods-plan.md](payment-methods-plan.md), [product-multi-category-design.md](product-multi-category-design.md).
+
+---
+
+## Schedule
+
+| When | Milestone |
+|------|-----------|
+| **By 2026-08-30** | **Dupli1 v1.0** released (tag `v1.0` after [v1.0-release-spec.md](v1.0-release-spec.md) closeout) |
+| **September 2026** | **Wallet** products added to the catalog (multi-category phases 1–2 — [product-multi-category-design.md](product-multi-category-design.md)) |
+| **October 2026** | **Padded** products added to the catalog (bag line expansion; merchandising / SKU seed, not a new category) |
+
+v1.1 platform work starts only after the v1.0 tag — see [v1.1-release-plan.md](v1.1-release-plan.md).
 
 ---
 
@@ -13,7 +25,7 @@
 
 The **money path is implemented**: cart → checkout/order → NANO card / Bypass / local simulate → `payment.succeeded` → `paid` → ship → stock commit. Critical money/auth bugs from the Jul review (server-side pricing, JWT fail-closed, outboxes) are done. Backend hardening (section C) is **done in the repo**.
 
-**v1.0 is postponed** until all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed — product images CDN, persistent JWT, Telegram wiring, and gateway ECS conf are done; **external card PG beyond NANO is waived for launch** when NANO is unset (pay path = Bypass). Remaining: disable prod simulate (A5), catalog prices (A9), prod smoke (Bypass path), and `dupli1-web` / `dupli1-manage-web` alignment. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, Bypass (or NANO) pay, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
+**v1.0 target is 2026-08-30** — ship only when all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed. Product images CDN, persistent JWT, Telegram wiring, and gateway ECS conf are done; **external card PG beyond NANO is waived for launch** when NANO is unset (pay path = Bypass). Remaining: disable prod simulate (A5), catalog prices (A9), prod smoke (Bypass path), and `dupli1-web` / `dupli1-manage-web` alignment. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, Bypass (or NANO) pay, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
 
 ---
 
