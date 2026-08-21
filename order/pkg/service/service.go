@@ -320,13 +320,17 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if order.Status != domain.StatusPending && order.Status != domain.StatusPaid {
 		return nil, domain.ErrInvalidTransition
 	}
-	if err := s.stock.ReleaseReservation(ctx, order.ReservationID); err != nil {
-		return nil, err
-	}
 	if err := order.Cancel(s.now()); err != nil {
 		return nil, err
 	}
-	return s.saveStatusChange(ctx, order)
+	saved, err := s.saveStatusChange(ctx, order)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.releaseReservationForCancel(ctx, saved.ReservationID); err != nil {
+		log.Printf("cancel order %s: release reservation %s: %v", saved.ID, saved.ReservationID, err)
+	}
+	return saved, nil
 }
 
 func (s *Service) FulfillOrder(ctx context.Context, id string) (*domain.Order, error) {
@@ -592,6 +596,17 @@ func (s *Service) reinstateCanceledOrder(ctx context.Context, order *domain.Orde
 		return "", err
 	}
 	return reservationID, nil
+}
+
+// releaseReservationForCancel releases reserved stock after cancel is persisted.
+// An already-released reservation is treated as success so retries do not block
+// when release succeeded but a prior attempt failed before returning.
+func (s *Service) releaseReservationForCancel(ctx context.Context, reservationID string) error {
+	err := s.stock.ReleaseReservation(ctx, reservationID)
+	if err == nil || errors.Is(err, ports.ErrReservationAlreadyReleased) {
+		return nil
+	}
+	return err
 }
 
 // commitReservationForShip commits reserved stock when shipping. An already

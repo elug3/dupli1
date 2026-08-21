@@ -617,6 +617,84 @@ func TestCancelInTransitOrderFails(t *testing.T) {
 	}
 }
 
+type saveFailOnCancelRepo struct {
+	*memory.Repository
+	fail bool
+}
+
+func (r *saveFailOnCancelRepo) SaveWithOutbox(ctx context.Context, order *domain.Order, idem *ports.IdempotencyRecord, events []ports.OutboxEvent) error {
+	if r.fail && order.Status == domain.StatusCanceled {
+		return errors.New("simulated cancel persistence failure")
+	}
+	return r.Repository.SaveWithOutbox(ctx, order, idem, events)
+}
+
+func TestCancelOrderDoesNotReleaseStockWhenSaveFails(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-123"}
+	repo := &saveFailOnCancelRepo{Repository: memory.NewRepository(), fail: true}
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	_, err = svc.CancelOrder(ctx, order.ID)
+	if err == nil {
+		t.Fatal("CancelOrder expected save failure")
+	}
+	if stock.released != "" {
+		t.Fatalf("released = %q, want empty when cancel save fails", stock.released)
+	}
+
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusPending {
+		t.Fatalf("status = %q, want pending", got.Status)
+	}
+}
+
+type alreadyReleasedStock struct {
+	fakeStock
+	releaseCalls int
+}
+
+func (f *alreadyReleasedStock) ReleaseReservation(ctx context.Context, reservationID string) error {
+	f.releaseCalls++
+	return ports.ErrReservationAlreadyReleased
+}
+
+func TestCancelOrderSucceedsWhenReservationAlreadyReleased(t *testing.T) {
+	ctx := context.Background()
+	stock := &alreadyReleasedStock{fakeStock: fakeStock{reservationID: "res-123"}}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	canceled, err := svc.CancelOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("CancelOrder returned error: %v", err)
+	}
+	if canceled.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", canceled.Status)
+	}
+	if stock.releaseCalls != 1 {
+		t.Fatalf("release calls = %d, want 1", stock.releaseCalls)
+	}
+}
+
 func TestCreateOrderReservesStockWithSkuID(t *testing.T) {
 	ctx := context.Background()
 	stock := &fakeStock{reservationID: "res-999"}
