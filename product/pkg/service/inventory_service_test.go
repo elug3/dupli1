@@ -172,6 +172,28 @@ func TestInventoryReleaseReservation(t *testing.T) {
 	}
 }
 
+func TestInventoryReleaseReservation_AlreadyCommitted(t *testing.T) {
+	svc, _ := newInventoryTestService(t)
+	ctx := context.Background()
+
+	if _, err := svc.UpsertItem(ctx, service.SkuRef{SkuID: "SKUID-GRN"}, 10); err != nil {
+		t.Fatalf("UpsertItem: %v", err)
+	}
+	reservation, err := svc.Reserve(ctx, "order-3", []service.ReservationItemRef{
+		{Ref: service.SkuRef{SkuID: "SKUID-GRN"}, Quantity: 2},
+	})
+	if err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+	if _, err := svc.CommitReservation(ctx, reservation.ID); err != nil {
+		t.Fatalf("CommitReservation: %v", err)
+	}
+
+	if _, err := svc.ReleaseReservation(ctx, reservation.ID); err != service.ErrReservationAlreadyCommitted {
+		t.Fatalf("want ErrReservationAlreadyCommitted releasing a committed reservation, got %v", err)
+	}
+}
+
 func TestInventoryCommitReservation_IncrementsSoldCountIdempotent(t *testing.T) {
 	svc, products := newInventoryTestService(t)
 	ctx := context.Background()
