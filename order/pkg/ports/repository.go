@@ -24,6 +24,14 @@ type Repository interface {
 	// CompleteCheckoutSessionIfOpen atomically marks an open session completed.
 	// Returns false when the session is not open (already completed, expired, or missing).
 	CompleteCheckoutSessionIfOpen(ctx context.Context, sessionID, orderID string, now time.Time) (bool, error)
+	// CancelIfPendingExpired atomically cancels an order only when it is still pending and past payment_due_at.
+	// Returns the canceled order and true when canceled; false when skipped (paid, already canceled, not expired).
+	CancelIfPendingExpired(ctx context.Context, orderID string, now time.Time, events []OutboxEvent) (*domain.Order, bool, error)
+	// SavePaidIfPending atomically persists a paid order only when it is still pending.
+	// Returns true when saved; false when skipped (concurrent cancel or already paid).
+	SavePaidIfPending(ctx context.Context, order *domain.Order, events []OutboxEvent) (bool, error)
+	// SavePaidIfCanceled atomically persists a reinstated late payment when the order is still canceled.
+	SavePaidIfCanceled(ctx context.Context, order *domain.Order, events []OutboxEvent) (bool, error)
 
 	FindByIdempotencyKey(ctx context.Context, customerID, key string) (*IdempotencyRecord, error)
 	ListPendingOutbox(ctx context.Context, limit int) ([]OutboxMessage, error)

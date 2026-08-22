@@ -282,6 +282,116 @@ func (r *Repository) CompleteCheckoutSessionIfOpen(ctx context.Context, sessionI
 	return true, nil
 }
 
+func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string, now time.Time, events []ports.OutboxEvent) (*domain.Order, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	order, ok := r.orders[orderID]
+	if !ok {
+		return nil, false, nil
+	}
+	if order.Status != domain.StatusPending || !now.After(order.PaymentDueAt) {
+		return nil, false, nil
+	}
+
+	order.Status = domain.StatusCanceled
+	order.UpdatedAt = now
+	r.orders[orderID] = cloneOrder(order)
+
+	for _, ev := range events {
+		r.nextOutboxID++
+		id := r.nextOutboxID
+		payload := append([]byte(nil), ev.Payload...)
+		r.outbox[id] = &outboxEntry{
+			msg: ports.OutboxMessage{
+				ID:          id,
+				AggregateID: ev.AggregateID,
+				Subject:     ev.Subject,
+				Payload:     payload,
+				CreatedAt:   now,
+			},
+		}
+	}
+
+	return cloneOrder(order), true, nil
+}
+
+func (r *Repository) SavePaidIfPending(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.orders[order.ID]
+	if !ok {
+		return false, nil
+	}
+	if existing.Status != domain.StatusPending {
+		return false, nil
+	}
+
+	r.orders[order.ID] = cloneOrder(order)
+
+	for _, ev := range events {
+		r.nextOutboxID++
+		id := r.nextOutboxID
+		payload := append([]byte(nil), ev.Payload...)
+		r.outbox[id] = &outboxEntry{
+			msg: ports.OutboxMessage{
+				ID:          id,
+				AggregateID: ev.AggregateID,
+				Subject:     ev.Subject,
+				Payload:     payload,
+				CreatedAt:   order.UpdatedAt,
+			},
+		}
+	}
+
+	return true, nil
+}
+
+func (r *Repository) SavePaidIfCanceled(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, ok := r.orders[order.ID]
+	if !ok {
+		return false, nil
+	}
+	if existing.Status != domain.StatusCanceled {
+		return false, nil
+	}
+
+	r.orders[order.ID] = cloneOrder(order)
+
+	for _, ev := range events {
+		r.nextOutboxID++
+		id := r.nextOutboxID
+		payload := append([]byte(nil), ev.Payload...)
+		r.outbox[id] = &outboxEntry{
+			msg: ports.OutboxMessage{
+				ID:          id,
+				AggregateID: ev.AggregateID,
+				Subject:     ev.Subject,
+				Payload:     payload,
+				CreatedAt:   order.UpdatedAt,
+			},
+		}
+	}
+
+	return true, nil
+}
+
 func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain.CheckoutSession, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

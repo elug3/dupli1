@@ -280,14 +280,69 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 		}
 		return nil, err
 	}
-	if err := s.repo.SaveWithOutbox(ctx, order, nil, events); err != nil {
+	saved, err := s.persistPaid(ctx, order, events, reinstatedReservation != "")
+	if err != nil {
 		if reinstatedReservation != "" {
 			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
 		}
 		return nil, err
 	}
-	s.tryDrainOutbox(ctx)
-	return cloneOrder(order), nil
+	if saved {
+		s.tryDrainOutbox(ctx)
+		return cloneOrder(order), nil
+	}
+
+	// Concurrent expiry or duplicate payment event — reconcile once.
+	fresh, err := s.repo.Get(ctx, order.ID)
+	if err != nil {
+		if reinstatedReservation != "" {
+			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
+		}
+		return nil, err
+	}
+	if fresh.PaymentID == paymentID && fresh.Status != domain.StatusPending {
+		if reinstatedReservation != "" {
+			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
+		}
+		return cloneOrder(fresh), nil
+	}
+	if fresh.Status == domain.StatusCanceled {
+		reservationID, err := s.reinstateCanceledOrder(ctx, fresh)
+		if err != nil {
+			return nil, err
+		}
+		if err := fresh.MarkPaid(paymentID, amountCents, s.now()); err != nil {
+			_ = s.stock.ReleaseReservation(ctx, reservationID)
+			return nil, err
+		}
+		events, err = s.outboxEvents(fresh, orderPaidSubject, orderUpdatedSubject)
+		if err != nil {
+			_ = s.stock.ReleaseReservation(ctx, reservationID)
+			return nil, err
+		}
+		saved, err = s.persistPaid(ctx, fresh, events, true)
+		if err != nil {
+			_ = s.stock.ReleaseReservation(ctx, reservationID)
+			return nil, err
+		}
+		if !saved {
+			_ = s.stock.ReleaseReservation(ctx, reservationID)
+			return nil, fmt.Errorf("mark order paid order_id=%s: concurrent status change", order.ID)
+		}
+		s.tryDrainOutbox(ctx)
+		return cloneOrder(fresh), nil
+	}
+	if reinstatedReservation != "" {
+		_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
+	}
+	return nil, fmt.Errorf("mark order paid order_id=%s: order not pending (status=%s)", order.ID, fresh.Status)
+}
+
+func (s *Service) persistPaid(ctx context.Context, order *domain.Order, events []ports.OutboxEvent, fromCanceled bool) (bool, error) {
+	if fromCanceled {
+		return s.repo.SavePaidIfCanceled(ctx, order, events)
+	}
+	return s.repo.SavePaidIfPending(ctx, order, events)
 }
 
 func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string) (*domain.Order, error) {
