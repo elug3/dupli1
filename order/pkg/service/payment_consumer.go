@@ -73,20 +73,33 @@ func (s *Service) expirePendingOrders(ctx context.Context) error {
 }
 
 // cancelExpiredPendingOrder cancels an unpaid pending order past payment_due_at.
-// It re-reads the row so a payment that completes after the expiry scan cannot be
-// undone — CancelOrder also allows paid orders (manager refunds), which must not
-// apply to the automatic expiry worker.
+// Uses an atomic status guard so a payment that completes concurrently cannot be undone.
 func (s *Service) cancelExpiredPendingOrder(ctx context.Context, orderID string) error {
+	now := s.now()
 	order, err := s.repo.Get(ctx, orderID)
 	if err != nil {
 		return err
 	}
-	if order.Status != domain.StatusPending {
+	if order.Status != domain.StatusPending || !order.IsPaymentExpired(now) {
 		return nil
 	}
-	if !order.IsPaymentExpired(s.now()) {
-		return nil
+
+	cancelled := cloneOrder(order)
+	if err := cancelled.Cancel(now); err != nil {
+		return err
 	}
-	_, err = s.CancelOrder(ctx, orderID)
-	return err
+	events, err := s.outboxEvents(cancelled, orderUpdatedSubject)
+	if err != nil {
+		return err
+	}
+
+	canceledOrder, didCancel, err := s.repo.CancelIfPendingExpired(ctx, orderID, now, events)
+	if err != nil || !didCancel {
+		return err
+	}
+	s.tryDrainOutbox(ctx)
+	if err := s.releaseReservationForCancel(ctx, canceledOrder.ReservationID); err != nil {
+		log.Printf("cancel expired order %s: release reservation %s: %v", orderID, canceledOrder.ReservationID, err)
+	}
+	return nil
 }
