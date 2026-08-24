@@ -17,6 +17,7 @@ type Repository interface {
 	SaveWithOutbox(ctx context.Context, order *domain.Order, idem *IdempotencyRecord, events []OutboxEvent) error
 	Get(ctx context.Context, id string) (*domain.Order, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error)
+	ListAll(ctx context.Context) ([]domain.Order, error)
 	ListPendingPaymentExpired(ctx context.Context, now time.Time) ([]domain.Order, error)
 	NextCheckoutSessionID(ctx context.Context) (string, error)
 	SaveCheckoutSession(ctx context.Context, session *domain.CheckoutSession) error

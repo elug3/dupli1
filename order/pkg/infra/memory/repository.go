@@ -225,6 +225,21 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	return orders, nil
 }
 
+func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var orders []domain.Order
+	for _, order := range r.orders {
+		orders = append(orders, *cloneOrder(order))
+	}
+	return orders, nil
+}
+
 func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Time) ([]domain.Order, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

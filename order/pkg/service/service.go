@@ -216,6 +216,14 @@ func (s *Service) ListCustomerOrders(ctx context.Context, customerID string) ([]
 	return cloneOrders(orders), nil
 }
 
+func (s *Service) ListAllOrders(ctx context.Context) ([]domain.Order, error) {
+	orders, err := s.repo.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return cloneOrders(orders), nil
+}
+
 func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, amountCents int64) (*domain.Order, error) {
 	order, err := s.repo.Get(ctx, strings.TrimSpace(orderID))
 	if err != nil {
@@ -546,6 +554,8 @@ func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]d
 			SKU:            info.SKU,
 			Quantity:       item.Quantity,
 			UnitPriceCents: info.UnitPriceCents,
+			ProductName:    info.ProductName,
+			ImageURL:       info.ImageURL,
 		})
 	}
 	if len(unavailable) > 0 {

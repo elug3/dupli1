@@ -125,6 +125,8 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address JSONB NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_address_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
+		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE checkout_session_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
 	}
 	for _, stmt := range alterStmts {
@@ -294,9 +296,9 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 	}
 	for _, item := range order.Items {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO order_items (order_id, sku, sku_id, quantity, unit_price_cents)
-			VALUES ($1, $2, $3, $4, $5)
-		`, order.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceCents); err != nil {
+			INSERT INTO order_items (order_id, sku, sku_id, quantity, unit_price_cents, product_name, image_url)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, order.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceCents, item.ProductName, item.ImageURL); err != nil {
 			return err
 		}
 	}
@@ -461,7 +463,8 @@ func (r *Repository) loadOrderItemsBatch(ctx context.Context, orderIDs []string)
 		return out, nil
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT order_id, sku, COALESCE(sku_id, ''), quantity, unit_price_cents
+		SELECT order_id, sku, COALESCE(sku_id, ''), quantity, unit_price_cents,
+			COALESCE(product_name, ''), COALESCE(image_url, '')
 		FROM order_items
 		WHERE order_id = ANY($1)
 		ORDER BY order_id, sku
@@ -474,7 +477,7 @@ func (r *Repository) loadOrderItemsBatch(ctx context.Context, orderIDs []string)
 	for rows.Next() {
 		var orderID string
 		var item domain.OrderItem
-		if err := rows.Scan(&orderID, &item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents); err != nil {
+		if err := rows.Scan(&orderID, &item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents, &item.ProductName, &item.ImageURL); err != nil {
 			return nil, err
 		}
 		out[orderID] = append(out[orderID], item)
@@ -510,6 +513,60 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			created_at, updated_at
 		FROM orders WHERE customer_id = $1 ORDER BY created_at DESC
 	`, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []domain.Order
+	var ids []string
+	for rows.Next() {
+		var order domain.Order
+		var paidAt, shippedAt *time.Time
+		var shippingJSON []byte
+		if err := rows.Scan(
+			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
+			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
+			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+			&order.CreatedAt, &order.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if err := decodeShippingJSON(shippingJSON, &order.ShippingAddress); err != nil {
+			return nil, err
+		}
+		order.PaidAt = paidAt
+		order.ShippedAt = shippedAt
+		orders = append(orders, order)
+		ids = append(ids, order.ID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	itemsByOrder, err := r.loadOrderItemsBatch(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range orders {
+		orders[i].Items = itemsByOrder[orders[i].ID]
+	}
+	return orders, nil
+}
+
+func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, customer_id, reservation_id, status, coupon_code,
+			subtotal_cents, discount_cents, total_cents,
+			recipient_name, recipient_phone, shipping_address, source_address_id,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			created_at, updated_at
+		FROM orders ORDER BY created_at DESC
+	`)
 	if err != nil {
 		return nil, err
 	}
