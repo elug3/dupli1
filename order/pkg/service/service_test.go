@@ -418,6 +418,13 @@ func (r *saveFailOnPaidRepo) SaveWithOutbox(ctx context.Context, order *domain.O
 	return r.Repository.SaveWithOutbox(ctx, order, idem, events)
 }
 
+func (r *saveFailOnPaidRepo) SavePaidIfCanceled(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
+	if r.fail {
+		return false, errors.New("simulated persistence failure")
+	}
+	return r.Repository.SavePaidIfCanceled(ctx, order, events)
+}
+
 func TestMarkOrderPaidRollsBackReinstatedReservationOnSaveFailure(t *testing.T) {
 	ctx := context.Background()
 	stock := &fakeStock{reservationID: "res-original"}
@@ -540,6 +547,59 @@ func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSave(t *testing.T) {
 		Repository: memory.NewRepository(),
 		stock:      stock,
 		getCount:   make(map[string]int),
+	}
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	stock.reservationID = "res-late-pay"
+	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents)
+	if err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+	if paid.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid", paid.Status)
+	}
+	if paid.ReservationID != "res-late-pay" {
+		t.Fatalf("reservation_id = %q, want res-late-pay", paid.ReservationID)
+	}
+	if stock.released != "res-original" {
+		t.Fatalf("released = %q, want res-original from simulated expiry", stock.released)
+	}
+}
+
+type savePaidRaceRepo struct {
+	*memory.Repository
+	stock *fakeStock
+}
+
+func (r *savePaidRaceRepo) SavePaidIfPending(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
+	stored, err := r.Get(ctx, order.ID)
+	if err != nil {
+		return false, err
+	}
+	if stored.Status == domain.StatusPending {
+		_ = r.stock.ReleaseReservation(ctx, stored.ReservationID)
+		stored.Status = domain.StatusCanceled
+		if err := r.Repository.Save(ctx, stored); err != nil {
+			return false, err
+		}
+	}
+	return r.Repository.SavePaidIfPending(ctx, order, events)
+}
+
+func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSavePaid(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-original"}
+	repo := &savePaidRaceRepo{
+		Repository: memory.NewRepository(),
+		stock:      stock,
 	}
 	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
 
