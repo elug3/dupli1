@@ -171,7 +171,7 @@ func TestListAllReturnsOrdersAcrossCustomers(t *testing.T) {
 		{"ord-b", "cust-b"},
 	} {
 		order, err := domain.NewOrder(spec.id, spec.customer, "res-"+spec.id, []domain.OrderItem{{
-			SKU: "BAG-001", Quantity: 1, UnitPriceCents: 1000,
+			SkuID: "sku-" + spec.id, SKU: "BAG-001", Quantity: 1, UnitPriceCents: 1000,
 		}}, "", 0, now)
 		if err != nil {
 			t.Fatalf("NewOrder(%s): %v", spec.id, err)
