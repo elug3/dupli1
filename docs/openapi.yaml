@@ -1173,11 +1173,20 @@ paths:
         '201':
           description: Created
     get:
-      summary: 'List a customer''s orders'
+      summary: List orders
       tags: [Order]
       security:
         - bearerAuth: []
-      description: ABAC on customer_id; order.read.all bypasses it.
+      description: |
+        Without customer_id, lists all orders (requires order.read.all).
+        With customer_id, lists that customer's orders (ABAC; order.read.all bypasses it).
+      parameters:
+        - name: customer_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: When set, filter to this customer; omit to list all (order.read.all).
       responses:
         '200':
           description: Success

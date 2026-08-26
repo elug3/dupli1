@@ -322,16 +322,27 @@ func TestListOrders_OrderManagerCanListAny(t *testing.T) {
 	}
 }
 
-// ── GET /api/v1/orders/all ────────────────────────────────────────────────────
+// ── GET /api/v1/orders (list all) ─────────────────────────────────────────────
 
 func TestListAllOrders_CustomerForbidden(t *testing.T) {
 	h, _ := newTestHandler(t)
 	mux := newMux(h)
 	token := makeToken(t, "u-1", nil)
 
-	w := do(t, mux, http.MethodGet, "/api/v1/orders/all", token, nil)
+	w := do(t, mux, http.MethodGet, "/api/v1/orders", token, nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestListAllOrders_OrdersAllPathGone(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/all", token, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /api/v1/orders/all: status=%d, want 404", w.Code)
 	}
 }
 
@@ -343,13 +354,13 @@ func TestListAllOrders_OrderManagerReturnsAllCustomers(t *testing.T) {
 	seedOrder(t, svc, "u-2")
 	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
 
-	w := do(t, mux, http.MethodGet, "/api/v1/orders/all", token, nil)
+	w := do(t, mux, http.MethodGet, "/api/v1/orders", token, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
 	var body struct {
-		Total  int             `json:"total"`
-		Orders []domain.Order  `json:"orders"`
+		Total  int            `json:"total"`
+		Orders []domain.Order `json:"orders"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -373,7 +384,7 @@ func TestListAllOrders_OrderReadAllPermission(t *testing.T) {
 	seedOrder(t, svc, "u-1")
 	token := makeToken(t, "reader-1", []string{permissions.OrderReadAll})
 
-	w := do(t, mux, http.MethodGet, "/api/v1/orders/all", token, nil)
+	w := do(t, mux, http.MethodGet, "/api/v1/orders", token, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
