@@ -717,6 +717,7 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/v1/orders` | Create order directly |
+| GET | `/api/v1/orders` | List all orders (`order.read.all`) |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
 | POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship order (`paid` → `in_transit`) |
