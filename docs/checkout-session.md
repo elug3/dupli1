@@ -173,13 +173,16 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
     "address_line1": "테헤란로 78길 14-12",
     "address_line2": "9층",
     "city": "강남구",
-    "province": "서울특별시"
+    "province": "서울특별시",
+    "pccc": "P123456789012"
   },
   "address_id": "addr_000001"
 }
 ```
 
 `address_id` is optional audit metadata when the client copied from auth profile; the order stores the snapshot fields, not a live reference.
+
+`shipping_address.pccc` is optional — the Korea Personal Customs Clearance Code (`P` + 12 digits) required by carriers to clear an overseas-purchase shipment through Korean customs. Omit it for domestic-sourced items.
 
 **Response `200`**
 ```json
@@ -204,7 +207,8 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
       "address_line1": "테헤란로 78길 14-12",
       "address_line2": "9층",
       "city": "강남구",
-      "province": "서울특별시"
+      "province": "서울특별시",
+      "pccc": "P123456789012"
     },
     "source_address_id": "addr_000001",
     "coupon_code": "SUMMER30",

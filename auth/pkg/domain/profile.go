@@ -16,6 +16,7 @@ var (
 
 	krPhoneDigits = regexp.MustCompile(`^01[0-9]{8,9}$`)
 	postalCodeRE  = regexp.MustCompile(`^\d{5}$`)
+	pcccRE        = regexp.MustCompile(`^P\d{12}$`)
 )
 
 // Profile holds reusable customer defaults (1:1 with User).
@@ -39,6 +40,7 @@ type Address struct {
 	AddressLine2   string    `json:"address_line2,omitempty"`
 	City           string    `json:"city"`
 	Province       string    `json:"province"`
+	PCCC           string    `json:"pccc,omitempty"`
 	IsDefault      bool      `json:"is_default"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
@@ -86,6 +88,21 @@ func NormalizePostalCode(code string) (string, error) {
 	return code, nil
 }
 
+// NormalizePCCC trims, uppercases, and validates an optional Personal Customs
+// Clearance Code (Korea customs identity for overseas-purchase shipments):
+// the letter "P" followed by 12 digits, e.g. "P123456789012". Blank input is
+// allowed since PCCC only applies to overseas-sourced shipments.
+func NormalizePCCC(code string) (string, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" {
+		return "", nil
+	}
+	if !pcccRE.MatchString(code) {
+		return "", ErrInvalidAddress
+	}
+	return code, nil
+}
+
 // NormalizeAddressLine trims and validates a required address line.
 func NormalizeAddressLine(line string, maxLen int) (string, error) {
 	line = strings.TrimSpace(line)
@@ -108,7 +125,7 @@ func NormalizeOptionalLine(line string, maxLen int) (string, error) {
 }
 
 // ValidateAddressInput validates required address fields for create/update.
-func ValidateAddressInput(recipientName, recipientPhone, postalCode, line1, line2, city, province string) (*Address, error) {
+func ValidateAddressInput(recipientName, recipientPhone, postalCode, line1, line2, city, province, pccc string) (*Address, error) {
 	name, err := NormalizePersonName(recipientName)
 	if err != nil {
 		return nil, ErrInvalidAddress
@@ -137,6 +154,10 @@ func ValidateAddressInput(recipientName, recipientPhone, postalCode, line1, line
 	if err != nil {
 		return nil, err
 	}
+	pcccNorm, err := NormalizePCCC(pccc)
+	if err != nil {
+		return nil, err
+	}
 	return &Address{
 		RecipientName:  name,
 		RecipientPhone: phone,
@@ -145,5 +166,6 @@ func ValidateAddressInput(recipientName, recipientPhone, postalCode, line1, line
 		AddressLine2:   addr2,
 		City:           cityNorm,
 		Province:       provinceNorm,
+		PCCC:           pcccNorm,
 	}, nil
 }

@@ -53,7 +53,7 @@ func (r *ProfileRepository) UpsertProfile(ctx context.Context, profile *domain.P
 func (r *ProfileRepository) ListAddresses(ctx context.Context, userID string) ([]*domain.Address, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, user_id, label, recipient_name, recipient_phone, postal_code,
-		       address_line1, address_line2, city, province, is_default, created_at, updated_at
+		       address_line1, address_line2, city, province, pccc, is_default, created_at, updated_at
 		FROM customer_addresses
 		WHERE user_id = $1
 		ORDER BY is_default DESC, created_at ASC`, userID)
@@ -87,7 +87,7 @@ func (r *ProfileRepository) CountAddresses(ctx context.Context, userID string) (
 func (r *ProfileRepository) GetAddress(ctx context.Context, userID, addressID string) (*domain.Address, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, user_id, label, recipient_name, recipient_phone, postal_code,
-		       address_line1, address_line2, city, province, is_default, created_at, updated_at
+		       address_line1, address_line2, city, province, pccc, is_default, created_at, updated_at
 		FROM customer_addresses
 		WHERE user_id = $1 AND id = $2`, userID, addressID)
 	a, err := scanAddress(row)
@@ -104,8 +104,8 @@ func (r *ProfileRepository) SaveAddress(ctx context.Context, address *domain.Add
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO customer_addresses (
 			id, user_id, label, recipient_name, recipient_phone, postal_code,
-			address_line1, address_line2, city, province, is_default, created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			address_line1, address_line2, city, province, pccc, is_default, created_at, updated_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		ON CONFLICT (id) DO UPDATE SET
 			label = EXCLUDED.label,
 			recipient_name = EXCLUDED.recipient_name,
@@ -115,11 +115,12 @@ func (r *ProfileRepository) SaveAddress(ctx context.Context, address *domain.Add
 			address_line2 = EXCLUDED.address_line2,
 			city = EXCLUDED.city,
 			province = EXCLUDED.province,
+			pccc = EXCLUDED.pccc,
 			is_default = EXCLUDED.is_default,
 			updated_at = EXCLUDED.updated_at`,
 		address.ID, address.UserID, address.Label, address.RecipientName, address.RecipientPhone,
 		address.PostalCode, address.AddressLine1, address.AddressLine2, address.City, address.Province,
-		address.IsDefault, address.CreatedAt, address.UpdatedAt,
+		address.PCCC, address.IsDefault, address.CreatedAt, address.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("save address: %w", err)
@@ -172,7 +173,7 @@ func scanAddress(s addressScanner) (*domain.Address, error) {
 	var a domain.Address
 	err := s.Scan(
 		&a.ID, &a.UserID, &a.Label, &a.RecipientName, &a.RecipientPhone, &a.PostalCode,
-		&a.AddressLine1, &a.AddressLine2, &a.City, &a.Province, &a.IsDefault, &a.CreatedAt, &a.UpdatedAt,
+		&a.AddressLine1, &a.AddressLine2, &a.City, &a.Province, &a.PCCC, &a.IsDefault, &a.CreatedAt, &a.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err

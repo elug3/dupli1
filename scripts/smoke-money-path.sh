@@ -158,7 +158,8 @@ session=$(api POST "/api/v1/orders/checkout/sessions/$SESSION_ID/items" "$CUSTOM
 check "session subtotal" "$(echo "$session" | field 'd["subtotal_cents"]')" "$((catalog_price * QUANTITY))"
 
 step "Complete checkout"
-completed=$(api POST "/api/v1/orders/checkout/sessions/$SESSION_ID/complete" "$CUSTOMER")
+completed=$(api POST "/api/v1/orders/checkout/sessions/$SESSION_ID/complete" "$CUSTOMER" \
+  '{"recipient_name":"Smoke Test","recipient_phone":"01012345678","shipping_address":{"postal_code":"06236","address_line1":"123 Teheran-ro","city":"Gangnam-gu","province":"Seoul"}}')
 ORDER_ID=$(echo "$completed" | field 'd["order"]["id"]')
 [ -n "$ORDER_ID" ] && pass "order $ORDER_ID" || { fail "complete checkout: $completed"; exit 1; }
 check "order status" "$(echo "$completed" | field 'd["order"]["status"]')" pending
