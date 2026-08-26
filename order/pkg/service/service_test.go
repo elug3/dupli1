@@ -172,6 +172,45 @@ func TestCreateOrderIgnoresClientUnitPrice(t *testing.T) {
 	}
 }
 
+func TestCreateOrderCapturesProductNameAndImageURL(t *testing.T) {
+	ctx := context.Background()
+	product := &fakeProduct{
+		byKey: map[string]*ports.VariantInfo{
+			"BAG-001": {
+				SkuID:          "sku-bag-1",
+				SKU:            "BAG-001",
+				UnitPriceCents: 50000,
+				ProductName:    "Prada Galleria",
+				ImageURL:       "https://cdn.example/bag.jpg",
+			},
+		},
+		strictMissing: true,
+	}
+	svc := newSvc(&fakeStock{}, product)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "BAG-001", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	if order.Items[0].ProductName != "Prada Galleria" {
+		t.Fatalf("ProductName = %q, want Prada Galleria", order.Items[0].ProductName)
+	}
+	if order.Items[0].ImageURL != "https://cdn.example/bag.jpg" {
+		t.Fatalf("ImageURL = %q, want catalog image", order.Items[0].ImageURL)
+	}
+
+	loaded, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if loaded.Items[0].ProductName != "Prada Galleria" || loaded.Items[0].ImageURL != "https://cdn.example/bag.jpg" {
+		t.Fatalf("persisted snapshot lost on reload: %+v", loaded.Items[0])
+	}
+}
+
 func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 	ctx := context.Background()
 	stock := &fakeStock{reservationID: "res-123"}
