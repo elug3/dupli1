@@ -45,11 +45,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/orders/health", h.health)
 	mux.HandleFunc("/settings", h.settingsHandler)
 	mux.HandleFunc("/api/v1/orders/settings", h.settingsHandler)
-	// Checkout before /api/v1/orders/ catch-all so it is not shadowed.
+	// Checkout and /me before /api/v1/orders/ catch-all so they are not shadowed.
 	mux.HandleFunc("/api/v1/orders/checkout/sessions", h.requireAuth(h.checkoutSessions))
 	mux.HandleFunc("/api/v1/orders/checkout/sessions/", h.requireAuth(h.checkoutSession))
 	mux.HandleFunc("/api/v1/checkout/sessions", h.requireAuth(h.checkoutSessions))
 	mux.HandleFunc("/api/v1/checkout/sessions/", h.requireAuth(h.checkoutSession))
+	mux.HandleFunc("/api/v1/orders/me", h.requireAuth(h.listMyOrders))
 	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
 	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
 }
@@ -149,10 +150,23 @@ func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {
 	claims, _ := authjwt.FromContext(r.Context())
-
 	customerID := r.URL.Query().Get("customer_id")
+
+	// No customer_id → list all orders (requires order.read.all).
 	if customerID == "" {
-		respondError(w, http.StatusBadRequest, "customer_id query parameter is required")
+		if h.jwtValidator != nil && !permissions.BypassesOrderReadABAC(claims.Permissions) {
+			respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
+			return
+		}
+		orders, err := h.svc.ListAllOrders(r.Context())
+		if err != nil {
+			respondServiceError(w, err)
+			return
+		}
+		respondJSON(w, http.StatusOK, map[string]any{
+			"total":  len(orders),
+			"orders": orders,
+		})
 		return
 	}
 
@@ -165,6 +179,24 @@ func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orders, err := h.svc.ListCustomerOrders(r.Context(), customerID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]any{
+		"total":  len(orders),
+		"orders": orders,
+	})
+}
+
+func (h *Handler) listMyOrders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	claims, _ := authjwt.FromContext(r.Context())
+	orders, err := h.svc.ListCustomerOrders(r.Context(), claims.UserID)
 	if err != nil {
 		respondServiceError(w, err)
 		return

@@ -277,6 +277,7 @@ registered as an alias.
 | Method | Path | Permission / rule |
 |--------|------|-------------------|
 | `POST` | `/api/v1/orders` | ABAC or `order.create` |
+| `GET` | `/api/v1/orders` | `order.read.all` |
 | `GET` | `/api/v1/orders?customer_id=` | ABAC or `order.read.all` |
 | `GET` | `/api/v1/orders/{id}` | ABAC or `order.read.all` |
 | `POST` | `/api/v1/orders/{id}/ship` | `order.ship` |
