@@ -52,7 +52,9 @@ func (f *fakeStock) CommitReservation(_ context.Context, _ string) error  { retu
 func (f *fakeStock) ReleaseReservation(_ context.Context, _ string) error { return nil }
 
 type fakeProduct struct {
-	price int64
+	price       int64
+	productName string
+	imageURL    string
 }
 
 func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantInfo, error) {
@@ -60,7 +62,13 @@ func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantI
 	if p == 0 {
 		p = 1000
 	}
-	return &ports.VariantInfo{SkuID: "ID-" + sku, SKU: sku, UnitPriceCents: p}, nil
+	return &ports.VariantInfo{
+		SkuID:          "ID-" + sku,
+		SKU:            sku,
+		UnitPriceCents: p,
+		ProductName:    f.productName,
+		ImageURL:       f.imageURL,
+	}, nil
 }
 
 func (f *fakeProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports.VariantInfo, error) {
@@ -68,7 +76,13 @@ func (f *fakeProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports
 	if p == 0 {
 		p = 1000
 	}
-	return &ports.VariantInfo{SkuID: skuID, SKU: "SKU-" + skuID, UnitPriceCents: p}, nil
+	return &ports.VariantInfo{
+		SkuID:          skuID,
+		SKU:            "SKU-" + skuID,
+		UnitPriceCents: p,
+		ProductName:    f.productName,
+		ImageURL:       f.imageURL,
+	}, nil
 }
 
 func newTestHandler(t *testing.T) (*handler.Handler, *service.Service) {
@@ -402,6 +416,45 @@ func TestGetOrder_CustomerCanReadOwnOrder(t *testing.T) {
 	w := do(t, mux, http.MethodGet, "/api/v1/orders/"+orderID, token, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestGetOrder_IncludesProductSnapshotInJSON(t *testing.T) {
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{
+		price:       250000,
+		productName: "Prada Galleria",
+		imageURL:    "https://cdn.example/bag.jpg",
+	})
+	validator := authjwt.NewHMACValidator(testSecret)
+	h := handler.New(svc, validator)
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	token := makeToken(t, "u-1", nil)
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/"+orderID, token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	var body struct {
+		Items []struct {
+			ProductName string `json:"product_name"`
+			ImageURL    string `json:"image_url"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(body.Items))
+	}
+	if body.Items[0].ProductName != "Prada Galleria" {
+		t.Fatalf("product_name = %q, want Prada Galleria", body.Items[0].ProductName)
+	}
+	if body.Items[0].ImageURL != "https://cdn.example/bag.jpg" {
+		t.Fatalf("image_url = %q, want catalog image", body.Items[0].ImageURL)
 	}
 }
 
