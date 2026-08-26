@@ -346,6 +346,17 @@ func TestListAllOrders_OrdersAllPathGone(t *testing.T) {
 	}
 }
 
+func TestListOrders_OrdersMePathGone(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+	token := makeToken(t, "u-1", nil)
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/me", token, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /api/v1/orders/me: status=%d, want 404", w.Code)
+	}
+}
+
 func TestListAllOrders_OrderManagerReturnsAllCustomers(t *testing.T) {
 	h, svc := newTestHandler(t)
 	mux := newMux(h)
