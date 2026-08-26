@@ -141,24 +141,19 @@ Implement remaining open items in [quality-bugs-fix-plan.md](quality-bugs-fix-pl
 
 ## Weekly review follow-ups (2026-07-20)
 
-From the Jul 13–19 progress / quality / security check.
+From the Jul 13–19 progress / quality / security check. Merged PRs from that week (#111 gateway, #113 canonical paths) are done.
 
-### Merge when ready (CI green)
-
-- [x] **[#111](https://github.com/elug3/dupli1/pull/111)** — order calls product stock/coupons via internal gateway (`DUPLI1_GATEWAY_URL`)
-- [x] **[#113](https://github.com/elug3/dupli1/pull/113)** — service-prefixed API paths with legacy aliases
-
-### After #113 merges
+### Still open from that review
 
 - [ ] **API path convention** — migrate storefront / manage-web / external callers off legacy prefixes (`/variants`, `/coupons`, `/catalog`, `/inventory`, `/checkout`, `/carts`)
 - [ ] **Remove legacy aliases** — drop dual routes + matching nginx locations once callers are migrated
 
-### Security / quality (from weekly check)
+### Security / quality
 
 See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 
-- [x] **Server-side pricing** — same Critical as above; top remaining money-path risk
-- [x] **Fail closed without JWT** — same as quality section; prod must always wire JWKS
+- [x] **Server-side pricing** — Critical C1 done
+- [x] **Fail closed without JWT** — H7 done; prod must always wire JWKS
 - [ ] **Admin/owner lockout exemption** — keep intentional; ensure compensating controls (auth rate limits, strong passwords, no public admin email enum)
 - [ ] **Bitcoin payment method** — planned only; do not implement yet ([payment-methods-plan.md](payment-methods-plan.md))
 

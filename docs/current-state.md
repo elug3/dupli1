@@ -88,10 +88,12 @@ See [service-layout.md](service-layout.md) for details.
 - **Features:**
   - Checkout sessions at `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions` still aliased; see [checkout-session.md](checkout-session.md))
   - Order lifecycle at `/api/v1/orders` — statuses: `pending`, `paid`, `in_transit`, `fulfilled`, `canceled`
+  - List: `GET /api/v1/orders` (all — requires `order.read.all`); `GET /api/v1/orders?customer_id=` (ABAC); `GET /api/v1/orders/me` (caller's orders). There is no `/orders/all`.
   - Consumes **`payment.succeeded`** (NATS) → `paid` (idempotent on `payment_id`; replays after ship/fulfill are no-ops); late payment on auto-`canceled` orders **re-reserves stock** and reopens the payment window before marking `paid`
-  - 5-minute unpaid `pending` expiry worker
+  - 5-minute unpaid `pending` expiry worker (skips when payment wins the race)
   - Publishes order events via transactional **outbox** (`order.created` / status updates); outbox drain worker
   - Optional `Idempotency-Key` on `POST /api/v1/orders` (replay-safe create)
+  - Checkout `complete` snapshots recipient + shipping address (optional prefill from auth profile)
   - Checkout `complete` uses atomic session claim — concurrent completes cannot create duplicate orders
   - `POST /api/v1/orders/{id}/ship` validates `paid` → `in_transit` **before** committing inventory (plan B)
   - Calls product to reserve stock and redeem coupons
@@ -158,7 +160,7 @@ See [service-layout.md](service-layout.md) for details.
 |---------|--------|---------------|
 | auth | login, refresh, logout, JWKS | register (`user.create` or open register), me, profile/addresses, user admin (permissions) |
 | product | health, product search/PDP, coupon redeem, inventory reads | product/coupon CRUD (per permission), image upload, inventory writes (`inventory.stock.write`, `inventory.reservation.manage`) |
-| order | health only | orders, checkout (ABAC + permissions), ship (`order.ship`) |
+| order | health only | orders (list all / by customer / me), checkout (ABAC + permissions), ship (`order.ship`) |
 | cart | health only | own cart; admin read (`cart.read`) |
 | payment | health, dev simulate (gated) | payments (ABAC + permissions); Bypass (`payment.bypass`) |
 | notification | health, Telegram webhook | Telegram subscriptions (`notification.telegram.read` / `notification.telegram.manage`) |

@@ -6,7 +6,7 @@ For a **persistent** shopping cart (saved across sessions), use the **cart servi
 
 For **payment** after checkout, see [payment-service.md](payment-service.md) (NANO card / Bypass / local simulate; 5-minute unpaid window).
 
-Recipient name, phone, and shipping address are planned on checkout **complete** (order snapshot) with optional prefill from auth profile — see [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
+Recipient name, phone, and shipping address are snapshotted on checkout **complete** (optional prefill from auth profile) — see [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
 
 Direct order creation (`POST /api/v1/orders`) remains available for callers that already have a finalized cart.
 
@@ -18,18 +18,18 @@ sequenceDiagram
     participant Order as dupli1-order
     participant Product as dupli1-product
 
-    Client->>Order: POST /api/v1/checkout/sessions
+    Client->>Order: POST /api/v1/orders/checkout/sessions
     Order-->>Client: open session (expires in 30 min)
 
-    Client->>Order: POST /api/v1/checkout/sessions/{id}/items
+    Client->>Order: POST /api/v1/orders/checkout/sessions/{id}/items
     Order-->>Client: session with subtotal
 
-    Client->>Order: POST /api/v1/checkout/sessions/{id}/coupon
-    Order->>Product: POST /api/v1/coupons/redeem
+    Client->>Order: POST /api/v1/orders/checkout/sessions/{id}/coupon
+    Order->>Product: POST /api/v1/products/coupons/redeem
     Product-->>Order: discount fraction
     Order-->>Client: session with discount + total
 
-    Client->>Order: POST /api/v1/checkout/sessions/{id}/complete
+    Client->>Order: POST /api/v1/orders/checkout/sessions/{id}/complete
     Order->>Product: reserve stock (/api/v1/products/inventory/reservations)
     Order-->>Client: completed session + pending order
 ```
@@ -53,9 +53,10 @@ Default TTL is **30 minutes** (`domain.DefaultCheckoutTTL`).
 
 ## API
 
-Base path: `/api/v1/checkout/sessions` on `dupli1-order` (port **8083** locally).
+**Canonical** base path: `/api/v1/orders/checkout/sessions` on `dupli1-order` (port **8083** locally).  
+Legacy alias `/api/v1/checkout/sessions…` remains registered until clients migrate ([TODO.md](TODO.md)).
 
-### `POST /api/v1/checkout/sessions`
+### `POST /api/v1/orders/checkout/sessions`
 
 Create an empty checkout session.
 
@@ -82,7 +83,7 @@ Create an empty checkout session.
 
 ---
 
-### `GET /api/v1/checkout/sessions/{id}`
+### `GET /api/v1/orders/checkout/sessions/{id}`
 
 Fetch the current session. Expired open sessions are marked `expired` on read.
 
@@ -92,7 +93,7 @@ On read, the service re-checks each stored line against the product catalog. Lin
 
 ---
 
-### `PUT /api/v1/checkout/sessions/{id}/items`
+### `PUT /api/v1/orders/checkout/sessions/{id}/items`
 
 Replace all line items. Server resolves prices from product (client `unit_price_cents` is ignored).
 
@@ -121,7 +122,7 @@ Batch replace validates **all** lines. Missing variants return **`422`**:
 
 ---
 
-### `POST /api/v1/checkout/sessions/{id}/items`
+### `POST /api/v1/orders/checkout/sessions/{id}/items`
 
 Add or update a single line item (matched by `sku`). Server resolves price from product.
 
@@ -135,7 +136,7 @@ Add or update a single line item (matched by `sku`). Server resolves price from 
 Unknown / inactive variants return the same **`422`** + `unavailable_items` body as `PUT …/items`.
 ---
 
-### `DELETE /api/v1/checkout/sessions/{id}/items/{sku}`
+### `DELETE /api/v1/orders/checkout/sessions/{id}/items/{sku}`
 
 Remove a line item.
 
@@ -143,7 +144,7 @@ Remove a line item.
 
 ---
 
-### `POST /api/v1/checkout/sessions/{id}/coupon`
+### `POST /api/v1/orders/checkout/sessions/{id}/coupon`
 
 Apply a coupon by redeeming it from the product service.
 
@@ -158,7 +159,7 @@ Requires `DUPLI1_PRODUCT_URL` to be configured. Returns `503` when the coupon cl
 
 ---
 
-### `POST /api/v1/checkout/sessions/{id}/complete`
+### `POST /api/v1/orders/checkout/sessions/{id}/complete`
 
 Finalize checkout: reserve inventory, create a `pending` order with **fulfillment snapshot**, and mark the session `completed`.
 

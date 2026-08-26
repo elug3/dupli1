@@ -1,5 +1,7 @@
 # Fix plan: remaining quality / security bugs (2026-07-20)
 
+> **Status (2026-08):** Money-path Criticals (**C1**, **H7**) and most Highs are **done**. Still open: plumb request `context` through product PG stores (**H6**), Redis catalog cache, frontend legacy-path / `skuId` migration. Living checklist: [TODO.md](TODO.md). Audit table: [quality-performance-review.md](quality-performance-review.md).
+
 Concrete solutions for open findings from [quality-performance-review.md](quality-performance-review.md) and the weekly check. Feature / ops TODOs (Bitcoin, settings API, AWS cost cleanup) are out of scope here.
 
 **Template to copy:** cart already server-sources prices (`cart/pkg/service` + `httpproduct`); product already sanitizes 500s ([product-error-wrapping.md](product-error-wrapping.md)) and fails closed on missing JWT at bootstrap.

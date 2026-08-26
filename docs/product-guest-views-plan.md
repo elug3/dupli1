@@ -18,16 +18,18 @@ Non-goals for this plan:
 - Bot-proof fraud scoring (light heuristics only)
 - Changing JWT auth or creating auth DB users for guests
 
-## Current state
+## Current state (as of Phase 1 ship)
 
 | Piece | Today |
 |-------|--------|
-| `GET /api/v1/products/{id}` | Public PDP; no view side effects |
-| Product domain | No `viewCount` / view tables |
-| Auth cookies | Options exist (`CookieName=dupli1_session`, Secure/HttpOnly) for refresh sessions; **no guest cookie** |
-| Cart | JWT-only; guest cart **not started** |
-| Redis | Wired to **auth** only in Compose/ECS |
-| Storefront ↔ API | Production ALB: `dupli1.com` serves web (`/*`) and API (`/api/*`) — **same site**, so first-party cookies work without credentialed CORS |
+| `GET /api/v1/products/{id}` | Public PDP; mints `dupli1_guest` when absent and records a unique view |
+| Product domain | Parent `viewCount` (denormalized); `product_views` table / memory set |
+| Auth cookies | Separate from guest — `dupli1_session` for refresh when used |
+| Cart | JWT-only; guest cart **not started** (v1.2) |
+| Redis | Wired to **auth** only in Compose/ECS (views are Postgres/memory, not Redis) |
+| Storefront ↔ API | Production ALB: `dupli1.com` serves web (`/*`) and API (`/api/*`) — same site |
+
+As-built narrative: [product-recommendations.md](product-recommendations.md), [current-state.md](current-state.md). Body below retains the original design; prefer those docs when they diverge.
 
 ## Design summary
 

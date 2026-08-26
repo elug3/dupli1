@@ -1,6 +1,8 @@
 # Dupli1 quality and performance review (2026-07-15)
 
-Audit of the Go microservice backend (`auth/`, `product/`, `order/`, `cart/`, `payment/`, `notification/`, `shared/`, `api/`). Findings are ordered by severity. Items marked **Fixed in this PR** were addressed alongside the review; the rest remain recommended follow-ups.
+> **Status (2026-08):** Most Critical/High findings below are **Fixed**. Remaining follow-ups: **H6** (request `context` in product PG), Redis catalog cache, frontend legacy paths / `skuId`. See [TODO.md](TODO.md) and [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
+
+Audit of the Go microservice backend (`auth/`, `product/`, `order/`, `cart/`, `payment/`, `notification/`, `shared/`, `api/`). Findings are ordered by severity. Items marked **Fixed** were addressed after the review; the rest remain recommended follow-ups.
 
 ## Verdict
 

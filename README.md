@@ -2,7 +2,7 @@
 
 Go microservice backend for a fashion bag marketplace. Services behind an nginx proxy, wired with Docker Compose for local dev and deployed to AWS ECS on EC2 (ALB, RDS, S3, CloudWatch Logs) in production.
 
-**Authoritative implementation snapshot:** [docs/current-state.md](docs/current-state.md). The tables below are a quick reference; when they diverge, trust `current-state.md` and [docs/api.md](docs/api.md).
+**Authoritative implementation snapshot:** [docs/current-state.md](docs/current-state.md). Doc index: [docs/README.md](docs/README.md). The tables below are a quick reference; when they diverge, trust `current-state.md` and [docs/api.md](docs/api.md).
 
 ## Services
 

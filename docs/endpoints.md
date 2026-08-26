@@ -473,6 +473,7 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | `POST` | `/api/v1/orders` | ABAC / `order.create` | Create a new order |
 | `GET` | `/api/v1/orders` | `order.read.all` | List all orders |
 | `GET` | `/api/v1/orders?customer_id={id}` | ABAC / `order.read.all` | List orders for a customer |
+| `GET` | `/api/v1/orders/me` | Bearer | List the caller's orders |
 | `GET` | `/api/v1/orders/{id}` | ABAC / `order.read.all` | Get a single order |
 | `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | Ship order (`paid` → `in_transit`, commit stock) |
 | `PUT` | `/api/v1/orders/{id}/status` | `order.status.update` | Cancel or fulfill |
@@ -519,6 +520,10 @@ Response `200`:
 ```json
 { "total": 2, "orders": [ /* order objects */ ] }
 ```
+
+### GET /api/v1/orders/me
+
+Lists orders for the JWT subject (`sub`). Same response shape as list-by-customer.
 
 ### GET /api/v1/orders/{id}
 
