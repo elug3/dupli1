@@ -90,7 +90,7 @@ func TestClient_CommitReservationAlreadyReleased(t *testing.T) {
 	defer srv.Close()
 
 	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "fixed")
-	err := client.CommitReservation(context.Background(), "res-1")
+	err := client.CommitReservation(context.Background(), "res-released")
 	if !errors.Is(err, ports.ErrReservationAlreadyReleased) {
 		t.Fatalf("err = %v, want ErrReservationAlreadyReleased", err)
 	}

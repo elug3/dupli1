@@ -2,8 +2,10 @@ package handler_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
@@ -40,7 +42,7 @@ func TestCommitReservationHandler_RejectsAlreadyReleased(t *testing.T) {
 	if _, err := invSvc.UpsertItem(ctx, service.SkuRef{SkuID: "SKUID-GRN"}, 5); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
 	}
-	reservation, err := invSvc.Reserve(ctx, "order-http-1", []service.ReservationItemRef{
+	reservation, err := invSvc.Reserve(ctx, "order-ship-race", []service.ReservationItemRef{
 		{Ref: service.SkuRef{SkuID: "SKUID-GRN"}, Quantity: 1},
 	})
 	if err != nil {
@@ -56,9 +58,15 @@ func TestCommitReservationHandler_RejectsAlreadyReleased(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rec.Code)
+		t.Fatalf("status = %d, want 400; body = %s", rec.Code, rec.Body.String())
 	}
-	if body := rec.Body.String(); body == "" || body == "{}\n" {
-		t.Fatalf("expected error body, got %q", body)
+	var body struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if !strings.Contains(body.Error, "already released") {
+		t.Fatalf("error = %q, want reservation already released", body.Error)
 	}
 }

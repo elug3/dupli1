@@ -322,6 +322,74 @@ func TestListOrders_OrderManagerCanListAny(t *testing.T) {
 	}
 }
 
+// ── GET /api/v1/orders (list all) ─────────────────────────────────────────────
+
+func TestListAllOrders_CustomerForbidden(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+	token := makeToken(t, "u-1", nil)
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders", token, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestListAllOrders_OrdersAllPathGone(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/all", token, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /api/v1/orders/all: status=%d, want 404", w.Code)
+	}
+}
+
+func TestListAllOrders_OrderManagerReturnsAllCustomers(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	seedOrder(t, svc, "u-1")
+	seedOrder(t, svc, "u-2")
+	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders", token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Total  int            `json:"total"`
+		Orders []domain.Order `json:"orders"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Total != 2 {
+		t.Fatalf("total = %d, want 2", body.Total)
+	}
+	customers := map[string]bool{}
+	for _, o := range body.Orders {
+		customers[o.CustomerID] = true
+	}
+	if !customers["u-1"] || !customers["u-2"] {
+		t.Fatalf("expected orders from u-1 and u-2, got customers %v", customers)
+	}
+}
+
+func TestListAllOrders_OrderReadAllPermission(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	seedOrder(t, svc, "u-1")
+	token := makeToken(t, "reader-1", []string{permissions.OrderReadAll})
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders", token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+}
+
 // ── GET /api/v1/orders/{id} ───────────────────────────────────────────────────
 
 func TestGetOrder_CustomerCanReadOwnOrder(t *testing.T) {

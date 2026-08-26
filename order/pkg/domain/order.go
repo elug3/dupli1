@@ -40,6 +40,9 @@ type OrderItem struct {
 	SKU            string `json:"sku"`
 	Quantity       int    `json:"quantity"`
 	UnitPriceCents int64  `json:"unit_price_cents"` // whole KRW won
+	// ProductName and ImageURL are captured at order creation from the product catalog.
+	ProductName string `json:"product_name,omitempty"`
+	ImageURL    string `json:"image_url,omitempty"`
 	// Available is false when the variant is no longer sellable (checkout session reads).
 	Available *bool `json:"available,omitempty"`
 }

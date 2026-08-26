@@ -471,6 +471,7 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | `POST` | `/api/v1/orders/checkout/sessions/{id}/coupon` | ABAC / `order.create` | Apply coupon |
 | `POST` | `/api/v1/orders/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout (`422` + `unavailable_items` when variants invalid) |
 | `POST` | `/api/v1/orders` | ABAC / `order.create` | Create a new order |
+| `GET` | `/api/v1/orders` | `order.read.all` | List all orders |
 | `GET` | `/api/v1/orders?customer_id={id}` | ABAC / `order.read.all` | List orders for a customer |
 | `GET` | `/api/v1/orders/{id}` | ABAC / `order.read.all` | Get a single order |
 | `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | Ship order (`paid` → `in_transit`, commit stock) |
@@ -501,7 +502,18 @@ Request:
 
 Response `201`: order object. Events (`order.created`) are written to a transactional outbox and published asynchronously (create succeeds even if NATS is briefly unavailable).
 
+### GET /api/v1/orders
+
+Requires `order.read.all`. Lists orders across all customers.
+
+Response `200`:
+```json
+{ "total": 2, "orders": [ /* order objects */ ] }
+```
+
 ### GET /api/v1/orders?customer_id=cust-123
+
+ABAC on `customer_id`; `order.read.all` bypasses it.
 
 Response `200`:
 ```json

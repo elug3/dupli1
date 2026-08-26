@@ -236,6 +236,7 @@ func (s *ProductSearchService) checkPublicVariant(v *domain.Variant) (*domain.Va
 		return nil, fmt.Errorf("variant: %w", ports.ErrNotFound)
 	}
 	v.ApplyParentPrice(*parent)
+	v.ProductName = parent.Name
 	return v, nil
 }
 

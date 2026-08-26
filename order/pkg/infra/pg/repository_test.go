@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
@@ -108,5 +110,89 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	}
 	if err := repo.migrate(); err != nil {
 		t.Fatalf("second migrate returned error: %v", err)
+	}
+}
+
+func TestSaveAndLoadOrderItemProductSnapshot(t *testing.T) {
+	dsn := requireDSN(t)
+	pool := freshSchema(t, dsn, "order_item_snapshot_test")
+	repo := &Repository{pool: pool}
+	if err := repo.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	order, err := domain.NewOrder("ord-snap-1", "cust-1", "res-1", []domain.OrderItem{{
+		SkuID:          "sku-bag-1",
+		SKU:            "BAG-001",
+		Quantity:       1,
+		UnitPriceCents: 50000,
+		ProductName:    "Prada Galleria",
+		ImageURL:       "https://cdn.example/bag.jpg",
+	}}, "", 0, now)
+	if err != nil {
+		t.Fatalf("NewOrder: %v", err)
+	}
+	if err := repo.Save(ctx, order); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := repo.Get(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(loaded.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(loaded.Items))
+	}
+	item := loaded.Items[0]
+	if item.ProductName != "Prada Galleria" {
+		t.Fatalf("ProductName = %q, want Prada Galleria", item.ProductName)
+	}
+	if item.ImageURL != "https://cdn.example/bag.jpg" {
+		t.Fatalf("ImageURL = %q, want catalog image", item.ImageURL)
+	}
+}
+
+func TestListAllReturnsOrdersAcrossCustomers(t *testing.T) {
+	dsn := requireDSN(t)
+	pool := freshSchema(t, dsn, "order_list_all_test")
+	repo := &Repository{pool: pool}
+	if err := repo.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	for _, spec := range []struct {
+		id, customer string
+	}{
+		{"ord-a", "cust-a"},
+		{"ord-b", "cust-b"},
+	} {
+		order, err := domain.NewOrder(spec.id, spec.customer, "res-"+spec.id, []domain.OrderItem{{
+			SkuID: "sku-" + spec.id, SKU: "BAG-001", Quantity: 1, UnitPriceCents: 1000,
+		}}, "", 0, now)
+		if err != nil {
+			t.Fatalf("NewOrder(%s): %v", spec.id, err)
+		}
+		if err := repo.Save(ctx, order); err != nil {
+			t.Fatalf("Save(%s): %v", spec.id, err)
+		}
+	}
+
+	orders, err := repo.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(orders) != 2 {
+		t.Fatalf("ListAll returned %d orders, want 2", len(orders))
+	}
+	customers := map[string]bool{}
+	for _, o := range orders {
+		customers[o.CustomerID] = true
+	}
+	if !customers["cust-a"] || !customers["cust-b"] {
+		t.Fatalf("expected cust-a and cust-b, got %v", customers)
 	}
 }
