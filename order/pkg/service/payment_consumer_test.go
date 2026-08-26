@@ -104,6 +104,62 @@ func TestCancelExpiredPendingOrderCancelsUnpaidPending(t *testing.T) {
 	}
 }
 
+// paidDuringExpiryRepo simulates MarkOrderPaid completing while expiry tries to cancel.
+type paidDuringExpiryRepo struct {
+	*memory.Repository
+}
+
+func (r *paidDuringExpiryRepo) CancelIfPendingExpired(ctx context.Context, orderID string, now time.Time, events []ports.OutboxEvent) (*domain.Order, bool, error) {
+	order, err := r.Get(ctx, orderID)
+	if err != nil {
+		return nil, false, err
+	}
+	if order.Status == domain.StatusPending {
+		if err := order.MarkPaid("pay-race", order.TotalCents, now); err != nil {
+			return nil, false, err
+		}
+		if err := r.Repository.Save(ctx, order); err != nil {
+			return nil, false, err
+		}
+	}
+	return r.Repository.CancelIfPendingExpired(ctx, orderID, now, events)
+}
+
+func TestCancelExpiredPendingOrderSkipsWhenPaymentWinsRace(t *testing.T) {
+	ctx := context.Background()
+	stock := &expiryStock{reservationID: "res-expiry"}
+	repo := &paidDuringExpiryRepo{Repository: memory.NewRepository()}
+	svc := New(repo, stock)
+
+	now := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
+	svc.now = func() time.Time { return now }
+
+	order, err := domain.NewOrder("ord_expiry_race", "customer-1", "res-expiry", []domain.OrderItem{
+		{SKU: "BAG-RACE", Quantity: 1, UnitPriceCents: 5000},
+	}, "", 0, now.Add(-10*time.Minute))
+	if err != nil {
+		t.Fatalf("NewOrder: %v", err)
+	}
+	order.PaymentDueAt = now.Add(-time.Minute)
+	if err := repo.Save(ctx, order); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := svc.cancelExpiredPendingOrder(ctx, order.ID); err != nil {
+		t.Fatalf("cancelExpiredPendingOrder: %v", err)
+	}
+	if stock.released != "" {
+		t.Fatalf("released reservation %q when payment won race", stock.released)
+	}
+	stored, err := repo.Get(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if stored.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid", stored.Status)
+	}
+}
+
 func TestHandlePaymentSucceededMarksOrderPaid(t *testing.T) {
 	ctx := context.Background()
 	stock := &expiryStock{reservationID: "res-pay"}

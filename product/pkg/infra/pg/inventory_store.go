@@ -62,6 +62,15 @@ func (s *InventoryStore) migrate() error {
 			quantity INTEGER NOT NULL,
 			PRIMARY KEY (reservation_id, sku_id)
 		)`,
+		// Sync the reservation sequence to the actual max ID so a missing or
+		// stale id_sequences row never collides with existing reservations.
+		`INSERT INTO id_sequences (name, value)
+		SELECT 'reservation', COALESCE(
+			(SELECT MAX(CAST(regexp_replace(id, '^res_0*', '') AS BIGINT))
+			 FROM reservations WHERE id ~ '^res_\d+$'),
+			0
+		)
+		ON CONFLICT (name) DO NOTHING`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.pool.Exec(ctx, stmt); err != nil {
