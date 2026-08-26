@@ -45,12 +45,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/orders/health", h.health)
 	mux.HandleFunc("/settings", h.settingsHandler)
 	mux.HandleFunc("/api/v1/orders/settings", h.settingsHandler)
-	// Checkout and /me before /api/v1/orders/ catch-all so they are not shadowed.
+	// Checkout before /api/v1/orders/ catch-all so it is not shadowed.
 	mux.HandleFunc("/api/v1/orders/checkout/sessions", h.requireAuth(h.checkoutSessions))
 	mux.HandleFunc("/api/v1/orders/checkout/sessions/", h.requireAuth(h.checkoutSession))
 	mux.HandleFunc("/api/v1/checkout/sessions", h.requireAuth(h.checkoutSessions))
 	mux.HandleFunc("/api/v1/checkout/sessions/", h.requireAuth(h.checkoutSession))
-	mux.HandleFunc("/api/v1/orders/me", h.requireAuth(h.listMyOrders))
 	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
 	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
 }
@@ -179,24 +178,6 @@ func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orders, err := h.svc.ListCustomerOrders(r.Context(), customerID)
-	if err != nil {
-		respondServiceError(w, err)
-		return
-	}
-	respondJSON(w, http.StatusOK, map[string]any{
-		"total":  len(orders),
-		"orders": orders,
-	})
-}
-
-func (h *Handler) listMyOrders(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	claims, _ := authjwt.FromContext(r.Context())
-	orders, err := h.svc.ListCustomerOrders(r.Context(), claims.UserID)
 	if err != nil {
 		respondServiceError(w, err)
 		return

@@ -1191,17 +1191,6 @@ paths:
         '200':
           description: Success
 
-  /api/v1/orders/me:
-    get:
-      summary: List the caller's orders
-      tags: [Order]
-      security:
-        - bearerAuth: []
-      description: Lists orders for the JWT subject (sub).
-      responses:
-        '200':
-          description: Success
-
   /api/v1/orders/{id}:
     parameters:
       - name: id
