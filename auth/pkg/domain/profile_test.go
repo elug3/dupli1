@@ -45,13 +45,16 @@ func TestNormalizePostalCode(t *testing.T) {
 func TestValidateAddressInput(t *testing.T) {
 	addr, err := domain.ValidateAddressInput(
 		"윤라희", "010-4112-5167", "06194",
-		"테헤란로 78길 14-12", "9층", "강남구", "서울특별시",
+		"테헤란로 78길 14-12", "9층", "강남구", "서울특별시", "p123456789012",
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if addr.RecipientPhone != "01041125167" || addr.AddressLine2 != "9층" {
 		t.Fatalf("unexpected address: %+v", addr)
+	}
+	if addr.PCCC != "P123456789012" {
+		t.Fatalf("pccc = %q, want normalized P123456789012", addr.PCCC)
 	}
 }
 
@@ -99,7 +102,7 @@ func TestNormalizeOptionalLine(t *testing.T) {
 }
 
 func TestValidateAddressInput_RejectsInvalidFields(t *testing.T) {
-	valid := []string{"윤라희", "01041125167", "06194", "테헤란로", "", "강남구", "서울특별시"}
+	valid := []string{"윤라희", "01041125167", "06194", "테헤란로", "", "강남구", "서울특별시", ""}
 	cases := []struct {
 		name string
 		idx  int
@@ -109,14 +112,32 @@ func TestValidateAddressInput_RejectsInvalidFields(t *testing.T) {
 		{"invalid postal", 2, "0619"},
 		{"empty line1", 3, ""},
 		{"empty city", 5, ""},
+		{"invalid pccc", 7, "P12345"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			args := append([]string(nil), valid...)
 			args[tc.idx] = tc.val
-			if _, err := domain.ValidateAddressInput(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); err == nil {
+			if _, err := domain.ValidateAddressInput(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); err == nil {
 				t.Fatalf("ValidateAddressInput(%q) should fail", tc.name)
 			}
 		})
+	}
+}
+
+func TestNormalizePCCC(t *testing.T) {
+	got, err := domain.NormalizePCCC("  p123456789012  ")
+	if err != nil || got != "P123456789012" {
+		t.Fatalf("valid pccc: got %q, %v", got, err)
+	}
+	got, err = domain.NormalizePCCC("")
+	if err != nil || got != "" {
+		t.Fatalf("blank pccc should be allowed: got %q, %v", got, err)
+	}
+	if _, err := domain.NormalizePCCC("P12345"); err == nil {
+		t.Fatal("expected invalid pccc (too short)")
+	}
+	if _, err := domain.NormalizePCCC("Q123456789012"); err == nil {
+		t.Fatal("expected invalid pccc (wrong prefix)")
 	}
 }

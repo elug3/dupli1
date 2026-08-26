@@ -85,10 +85,12 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			address_line2   TEXT NOT NULL DEFAULT '',
 			city            TEXT NOT NULL,
 			province        TEXT NOT NULL,
+			pccc            TEXT NOT NULL DEFAULT '',
 			is_default      BOOLEAN NOT NULL DEFAULT FALSE,
 			created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`,
+		`ALTER TABLE customer_addresses ADD COLUMN IF NOT EXISTS pccc TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_customer_addresses_user_id ON customer_addresses (user_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_addresses_one_default
 			ON customer_addresses (user_id) WHERE is_default`,

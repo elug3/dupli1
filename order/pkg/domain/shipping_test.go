@@ -106,6 +106,32 @@ func TestValidateFulfillmentSnapshot_RejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestValidateFulfillmentSnapshot_PCCC(t *testing.T) {
+	addr := validShippingAddress()
+	addr.PCCC = "  p123456789012  "
+	snap, err := domain.ValidateFulfillmentSnapshot("윤라희", "01041125167", addr, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.ShippingAddress.PCCC != "P123456789012" {
+		t.Fatalf("pccc = %q, want normalized P123456789012", snap.ShippingAddress.PCCC)
+	}
+
+	addr.PCCC = ""
+	snap, err = domain.ValidateFulfillmentSnapshot("윤라희", "01041125167", addr, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.ShippingAddress.PCCC != "" {
+		t.Fatalf("pccc = %q, want empty (optional)", snap.ShippingAddress.PCCC)
+	}
+
+	addr.PCCC = "P12345"
+	if _, err := domain.ValidateFulfillmentSnapshot("윤라희", "01041125167", addr, ""); err != domain.ErrInvalidFulfillment {
+		t.Fatalf("error = %v, want ErrInvalidFulfillment for malformed pccc", err)
+	}
+}
+
 func TestValidateFulfillmentSnapshot_AllowsEmptyOptionalLine2(t *testing.T) {
 	addr := validShippingAddress()
 	addr.AddressLine2 = ""

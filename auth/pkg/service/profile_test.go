@@ -140,6 +140,41 @@ func TestPatchAddress_PartialUpdate(t *testing.T) {
 	}
 }
 
+func TestCreateAndPatchAddress_PCCC(t *testing.T) {
+	svc, _ := newProfileService(t)
+	ctx := context.Background()
+	userID := uuid.New().String()
+
+	created, err := svc.CreateAddress(ctx, userID, service.AddressInput{
+		RecipientName: "A", RecipientPhone: "01011112222", PostalCode: "06194",
+		AddressLine1: "One", City: "강남구", Province: "서울", PCCC: "p123456789012",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.PCCC != "P123456789012" {
+		t.Fatalf("pccc = %q, want normalized P123456789012", created.PCCC)
+	}
+
+	// Patching an unrelated field should preserve the existing PCCC.
+	updated, err := svc.PatchAddress(ctx, userID, created.ID, service.AddressInput{
+		RecipientName: "Updated Name",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.PCCC != "P123456789012" {
+		t.Fatalf("pccc after unrelated patch = %q, want unchanged", updated.PCCC)
+	}
+
+	if _, err := svc.CreateAddress(ctx, userID, service.AddressInput{
+		RecipientName: "B", RecipientPhone: "01011112222", PostalCode: "06194",
+		AddressLine1: "Two", City: "강남구", Province: "서울", PCCC: "bad-code",
+	}); err == nil {
+		t.Fatal("expected error for malformed pccc")
+	}
+}
+
 func TestPatchAddress_NotFound(t *testing.T) {
 	svc, _ := newProfileService(t)
 	ctx := context.Background()

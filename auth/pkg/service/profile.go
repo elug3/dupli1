@@ -27,6 +27,7 @@ type AddressInput struct {
 	AddressLine2   string `json:"address_line2"`
 	City           string `json:"city"`
 	Province       string `json:"province"`
+	PCCC           string `json:"pccc"`
 	IsDefault      *bool  `json:"is_default"`
 }
 
@@ -152,7 +153,7 @@ func (s *Service) CreateAddress(ctx context.Context, userID string, input Addres
 
 	validated, err := domain.ValidateAddressInput(
 		input.RecipientName, input.RecipientPhone, input.PostalCode,
-		input.AddressLine1, input.AddressLine2, input.City, input.Province,
+		input.AddressLine1, input.AddressLine2, input.City, input.Province, input.PCCC,
 	)
 	if err != nil {
 		return nil, err
@@ -227,9 +228,13 @@ func (s *Service) PatchAddress(ctx context.Context, userID, addressID string, in
 	if input.Province != "" {
 		province = input.Province
 	}
+	pccc := existing.PCCC
+	if input.PCCC != "" {
+		pccc = input.PCCC
+	}
 
 	validated, err := domain.ValidateAddressInput(
-		recipientName, recipientPhone, postalCode, line1, line2, city, province,
+		recipientName, recipientPhone, postalCode, line1, line2, city, province, pccc,
 	)
 	if err != nil {
 		return nil, err

@@ -84,6 +84,7 @@ Keep credentials on `users`. Add profile tables keyed by `user_id` (= JWT `sub`)
 | `address_line2` | `TEXT` | Unit / detail |
 | `city` | `TEXT` | 시/군/구 |
 | `province` | `TEXT` | 시/도 |
+| `pccc` | `TEXT` | Personal Customs Clearance Code (optional; overseas-purchase customs ID, `P` + 12 digits) |
 | `is_default` | `BOOLEAN` | At most one `true` per user |
 | `created_at` / `updated_at` | `TIMESTAMPTZ` | |
 
@@ -144,11 +145,14 @@ Base path: **`/api/v1/auth/me/…`** (profile is “my account data”, not admi
       "address_line2": "9층",
       "city": "강남구",
       "province": "서울특별시",
+      "pccc": "P123456789012",
       "is_default": true
     }
   ]
 }
 ```
+
+`pccc` is omitted from the response when not set — it is only required for overseas-sourced shipments that clear Korean customs as a personal import.
 
 #### Validation (KR-first)
 
@@ -158,6 +162,7 @@ Base path: **`/api/v1/auth/me/…`** (profile is “my account data”, not admi
 | `phone` / `recipient_phone` | Normalize digits; accept `010-XXXX-XXXX`; store canonical (digits only or E.164 `+82…`) |
 | `postal_code` | Exactly 5 digits |
 | `address_line1` | Required, max 200 chars |
+| `pccc` | Optional; when present must match `P` + 12 digits (case-insensitive, normalized to uppercase) |
 | Max addresses per user | **10** (configurable constant) |
 
 ### Authorization
@@ -211,7 +216,8 @@ Profile extension alone does not satisfy NANO; **order** must snapshot at purcha
     "address_line1": "테헤란로 78길 14-12",
     "address_line2": "9층",
     "city": "강남구",
-    "province": "서울특별시"
+    "province": "서울특별시",
+    "pccc": "P123456789012"
   },
   "address_id": "addr_000001"
 }
@@ -222,6 +228,7 @@ Profile extension alone does not satisfy NANO; **order** must snapshot at purcha
 | `recipient_name` | Yes at complete | Prefill from profile or selected address |
 | `recipient_phone` | Yes at complete | Prefill from profile or address |
 | `shipping_address` | Yes at complete | Snapshot object on order row |
+| `shipping_address.pccc` | No | Personal Customs Clearance Code; required by the shipper only for overseas-purchase customs clearance |
 | `address_id` | No | If set, storefront copied from auth address; order still stores snapshot |
 
 **Order service** does not call auth at complete if the client sends the snapshot (simplest). Optional server-side verify: order calls auth internal endpoint with user token to validate `address_id` belongs to user — phase B.1.

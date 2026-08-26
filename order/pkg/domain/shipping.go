@@ -12,6 +12,7 @@ var ErrInvalidFulfillment = errors.New("invalid fulfillment")
 var (
 	krPhoneDigits = regexp.MustCompile(`^01[0-9]{8,9}$`)
 	postalCodeRE  = regexp.MustCompile(`^\d{5}$`)
+	pcccRE        = regexp.MustCompile(`^P\d{12}$`)
 )
 
 // ShippingAddress is the immutable shipping location snapshot on an order.
@@ -21,6 +22,10 @@ type ShippingAddress struct {
 	AddressLine2 string `json:"address_line2,omitempty"`
 	City         string `json:"city"`
 	Province     string `json:"province"`
+	// PCCC is the Korea Personal Customs Clearance Code for overseas-sourced
+	// shipments ("P" + 12 digits). Optional — only required for orders that
+	// clear Korean customs as a personal import.
+	PCCC string `json:"pccc,omitempty"`
 }
 
 // FulfillmentSnapshot captures recipient + shipping data at checkout complete.
@@ -96,12 +101,17 @@ func normalizeShippingAddress(addr ShippingAddress) (ShippingAddress, error) {
 	if err != nil {
 		return ShippingAddress{}, err
 	}
+	pccc, err := normalizePCCC(addr.PCCC)
+	if err != nil {
+		return ShippingAddress{}, err
+	}
 	return ShippingAddress{
 		PostalCode:   postal,
 		AddressLine1: line1,
 		AddressLine2: line2,
 		City:         city,
 		Province:     province,
+		PCCC:         pccc,
 	}, nil
 }
 
@@ -119,6 +129,17 @@ func normalizeAddressLine(line string, maxLen int) (string, error) {
 		return "", ErrInvalidFulfillment
 	}
 	return line, nil
+}
+
+func normalizePCCC(code string) (string, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" {
+		return "", nil
+	}
+	if !pcccRE.MatchString(code) {
+		return "", ErrInvalidFulfillment
+	}
+	return code, nil
 }
 
 func normalizeOptionalLine(line string, maxLen int) (string, error) {
