@@ -68,7 +68,9 @@ func TestCreatePayment_ReusesOpenPaymentWhenSaveRaces(t *testing.T) {
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
-	winner, err := domain.NewPayment("pay_000001", "ord_1", "cust_1", 4200, domain.DefaultCurrency, domain.ProviderDev, "dev_ref", "http://checkout/1", now)
+	// Seed with a non-sequential id so NextPaymentID's pay_000001 collides on Save
+	// (same-id overwrite would skip the unique-open-payment race path).
+	winner, err := domain.NewPayment("pay_winner", "ord_1", "cust_1", 4200, domain.DefaultCurrency, domain.ProviderDev, "dev_ref", "http://checkout/1", now)
 	if err != nil {
 		t.Fatalf("NewPayment: %v", err)
 	}
@@ -90,6 +92,39 @@ func TestCreatePayment_ReusesOpenPaymentWhenSaveRaces(t *testing.T) {
 	}
 	if got.CheckoutURL != winner.CheckoutURL {
 		t.Fatalf("checkout_url = %q, want %q", got.CheckoutURL, winner.CheckoutURL)
+	}
+}
+
+func TestCreatePayment_ReusesNewestRequiresPaymentForOrder(t *testing.T) {
+	repo := memory.NewRepository()
+	orders := stubOrderClient{order: &ports.OrderSummary{
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		RecipientName: "홍길동", RecipientPhone: "01012345678",
+	}}
+	older, err := domain.NewPayment("pay_old", "ord_1", "cust_1", 4200, domain.DefaultCurrency, domain.ProviderDev, "dev_old", "http://checkout/old", time.Date(2026, 8, 15, 10, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("NewPayment older: %v", err)
+	}
+	newer, err := domain.NewPayment("pay_new", "ord_1", "cust_1", 4200, domain.DefaultCurrency, domain.ProviderDev, "dev_new", "http://checkout/new", time.Date(2026, 8, 15, 11, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("NewPayment newer: %v", err)
+	}
+	if err := repo.Save(context.Background(), older); err != nil {
+		t.Fatalf("save older: %v", err)
+	}
+	if err := repo.Save(context.Background(), newer); err != nil {
+		t.Fatalf("save newer: %v", err)
+	}
+
+	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
+	got, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	if got.ID != newer.ID {
+		t.Fatalf("payment id = %q, want newest %q", got.ID, newer.ID)
 	}
 }
 

@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -155,5 +157,74 @@ func TestCancelExpiredPendingOrderSkipsWhenPaymentWinsRace(t *testing.T) {
 	}
 	if stored.Status != domain.StatusPaid {
 		t.Fatalf("status = %q, want paid", stored.Status)
+	}
+}
+
+func TestHandlePaymentSucceededMarksOrderPaid(t *testing.T) {
+	ctx := context.Background()
+	stock := &expiryStock{reservationID: "res-pay"}
+	repo := memory.NewRepository()
+	svc := New(repo, stock)
+
+	now := time.Date(2026, 8, 21, 10, 0, 0, 0, time.UTC)
+	svc.now = func() time.Time { return now }
+
+	order, err := domain.NewOrder("ord_pay_1", "customer-1", "res-pay", []domain.OrderItem{
+		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 120000},
+	}, "", 0, now.Add(-5*time.Minute))
+	if err != nil {
+		t.Fatalf("NewOrder: %v", err)
+	}
+	if err := repo.Save(ctx, order); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"event_type":   "payment.succeeded",
+		"order_id":     order.ID,
+		"payment_id":   "pay-nano-1",
+		"amount_cents": order.TotalCents,
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := svc.handlePaymentSucceeded(ctx, paymentSucceededSubject, payload); err != nil {
+		t.Fatalf("handlePaymentSucceeded: %v", err)
+	}
+
+	stored, err := repo.Get(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if stored.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid", stored.Status)
+	}
+	if stored.PaymentID != "pay-nano-1" {
+		t.Fatalf("payment_id = %q, want pay-nano-1", stored.PaymentID)
+	}
+}
+
+func TestHandlePaymentSucceededRejectsInvalidPayload(t *testing.T) {
+	ctx := context.Background()
+	svc := New(memory.NewRepository(), &expiryStock{})
+
+	if err := svc.handlePaymentSucceeded(ctx, paymentSucceededSubject, []byte("{")); err == nil {
+		t.Fatal("expected decode error for invalid JSON")
+	} else if !strings.Contains(err.Error(), "decode payment.succeeded") {
+		t.Fatalf("error = %v, want decode prefix", err)
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"event_type":   "payment.succeeded",
+		"payment_id":   "pay-1",
+		"amount_cents": 1000,
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := svc.handlePaymentSucceeded(ctx, paymentSucceededSubject, payload); err == nil {
+		t.Fatal("expected error for missing order_id")
+	} else if !strings.Contains(err.Error(), "missing order_id or payment_id") {
+		t.Fatalf("error = %v, want missing fields message", err)
 	}
 }
