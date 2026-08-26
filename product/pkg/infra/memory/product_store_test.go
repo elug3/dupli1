@@ -13,23 +13,29 @@ func newStoreWithProduct(id string) *memory.ProductStore {
 	return s
 }
 
-func TestRecordProductViewSameVisitorSameDayDedupes(t *testing.T) {
+func TestRecordUniqueViewSameGuestDedupes(t *testing.T) {
 	s := newStoreWithProduct("BOT-001")
 
-	got1, err := s.RecordProductView("BOT-001", "1.2.3.4", "2024-01-01")
+	got1, count1, err := s.RecordUniqueView("1.2.3.4", "BOT-001")
 	if err != nil {
 		t.Fatalf("first call: unexpected error: %v", err)
 	}
 	if !got1 {
-		t.Fatalf("first call: want incremented=true")
+		t.Fatalf("first call: want inserted=true")
+	}
+	if count1 != 1 {
+		t.Fatalf("first call: want viewCount=1, got %d", count1)
 	}
 
-	got2, err := s.RecordProductView("BOT-001", "1.2.3.4", "2024-01-01")
+	got2, count2, err := s.RecordUniqueView("1.2.3.4", "BOT-001")
 	if err != nil {
 		t.Fatalf("second call: unexpected error: %v", err)
 	}
 	if got2 {
-		t.Fatalf("second call: want incremented=false (same visitor, same day)")
+		t.Fatalf("second call: want inserted=false (same guest)")
+	}
+	if count2 != 1 {
+		t.Fatalf("second call: want viewCount=1, got %d", count2)
 	}
 
 	if s.Products[0].ViewCount != 1 {
@@ -37,18 +43,21 @@ func TestRecordProductViewSameVisitorSameDayDedupes(t *testing.T) {
 	}
 }
 
-func TestRecordProductViewSameVisitorDifferentDayIncrementsAgain(t *testing.T) {
+func TestRecordUniqueViewDifferentGuestsBothCount(t *testing.T) {
 	s := newStoreWithProduct("BOT-001")
 
-	if _, err := s.RecordProductView("BOT-001", "1.2.3.4", "2024-01-01"); err != nil {
-		t.Fatalf("day 1: unexpected error: %v", err)
+	if _, _, err := s.RecordUniqueView("1.2.3.4", "BOT-001"); err != nil {
+		t.Fatalf("guest 1: unexpected error: %v", err)
 	}
-	got, err := s.RecordProductView("BOT-001", "1.2.3.4", "2024-01-02")
+	got, count, err := s.RecordUniqueView("5.6.7.8", "BOT-001")
 	if err != nil {
-		t.Fatalf("day 2: unexpected error: %v", err)
+		t.Fatalf("guest 2: unexpected error: %v", err)
 	}
 	if !got {
-		t.Fatalf("day 2: want incremented=true (new day)")
+		t.Fatalf("guest 2: want inserted=true (different guest)")
+	}
+	if count != 2 {
+		t.Fatalf("guest 2: want viewCount=2, got %d", count)
 	}
 
 	if s.Products[0].ViewCount != 2 {
@@ -56,29 +65,10 @@ func TestRecordProductViewSameVisitorDifferentDayIncrementsAgain(t *testing.T) {
 	}
 }
 
-func TestRecordProductViewDifferentVisitorsSameDayBothCount(t *testing.T) {
-	s := newStoreWithProduct("BOT-001")
-
-	if _, err := s.RecordProductView("BOT-001", "1.2.3.4", "2024-01-01"); err != nil {
-		t.Fatalf("visitor 1: unexpected error: %v", err)
-	}
-	got, err := s.RecordProductView("BOT-001", "5.6.7.8", "2024-01-01")
-	if err != nil {
-		t.Fatalf("visitor 2: unexpected error: %v", err)
-	}
-	if !got {
-		t.Fatalf("visitor 2: want incremented=true (different visitor)")
-	}
-
-	if s.Products[0].ViewCount != 2 {
-		t.Fatalf("want ViewCount=2, got %d", s.Products[0].ViewCount)
-	}
-}
-
-func TestRecordProductViewUnknownProduct(t *testing.T) {
+func TestRecordUniqueViewUnknownProduct(t *testing.T) {
 	s := memory.NewProductStore()
 
-	_, err := s.RecordProductView("NOPE-001", "1.2.3.4", "2024-01-01")
+	_, _, err := s.RecordUniqueView("1.2.3.4", "NOPE-001")
 	if err == nil {
 		t.Fatalf("want error for unknown product")
 	}

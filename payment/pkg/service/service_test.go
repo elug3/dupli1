@@ -68,7 +68,9 @@ func TestCreatePayment_ReusesOpenPaymentWhenSaveRaces(t *testing.T) {
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
-	winner, err := domain.NewPayment("pay_000001", "ord_1", "cust_1", 4200, domain.DefaultCurrency, domain.ProviderDev, "dev_ref", "http://checkout/1", now)
+	// Seed with a non-sequential id so NextPaymentID's pay_000001 collides on Save
+	// (same-id overwrite would skip the unique-open-payment race path).
+	winner, err := domain.NewPayment("pay_winner", "ord_1", "cust_1", 4200, domain.DefaultCurrency, domain.ProviderDev, "dev_ref", "http://checkout/1", now)
 	if err != nil {
 		t.Fatalf("NewPayment: %v", err)
 	}
