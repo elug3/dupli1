@@ -1,9 +1,9 @@
 # Plan: Product View Counter + Simple Recommendations
 
 **Status:** Phase 0–1 implemented in `dupli1-product` (unique views + content/popularity recommendations). Phase 2 co-view boost not started.  
-**Authoritative how-it-works:** [product-recommendations.md](product-recommendations.md)  
+**Authoritative how-it-works:** [product-recommendations.md](product-recommendations.md) (prefer this over the body below for ranking rules and response shape).  
 **Depends on:** [product-guest-views-plan.md](product-guest-views-plan.md) (guest cookie + unique `viewCount`).  
-**Related:** [current-state.md](current-state.md), [api.md](api.md), [TODO.md](TODO.md).
+**Related:** [current-state.md](current-state.md), [api.md](api.md), [TODO.md](TODO.md), [docs/README.md](README.md).
 
 ## Goals
 

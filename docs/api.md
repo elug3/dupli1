@@ -719,6 +719,7 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 | POST | `/api/v1/orders` | Create order directly |
 | GET | `/api/v1/orders` | List all orders (`order.read.all`) |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
+| GET | `/api/v1/orders/me` | List the caller's orders |
 | GET | `/api/v1/orders/{id}` | Get order |
 | POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship order (`paid` → `in_transit`) |
 | PUT | `/api/v1/orders/{id}/status` | `order.status.update` — cancel or fulfill |
@@ -843,6 +844,7 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | GET | `/api/v1/orders/settings` | — | order |
 | GET/PUT/POST/DELETE | `/api/v1/orders/checkout/sessions/{id}/...` | ABAC (same as orders) | order |
 | POST/GET | `/api/v1/orders` | ABAC / `order.create` / `order.read.all` | order |
+| GET | `/api/v1/orders/me` | Bearer (own orders) | order |
 | GET | `/api/v1/orders/{id}` | ABAC / `order.read.all` | order |
 | POST | `/api/v1/orders/{id}/ship` | `order.ship` | order |
 | PUT | `/api/v1/orders/{id}/status` | `order.status.update` | order |

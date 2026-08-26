@@ -15,7 +15,7 @@ See [docs/current-state.md](docs/current-state.md) for the authoritative snapsho
 
 ## Documentation conventions
 
-- AI agents must look up existing documents in `docs/` before writing new ones. You don't have to read everything — skim for relevant overlap first.
+- AI agents must look up existing documents in `docs/` before writing new ones. Start with [docs/README.md](docs/README.md) for the living vs historical index. You don't have to read everything — skim for relevant overlap first.
 - Add a service-name prefix when creating a new document (e.g. `product-*.md`, `cart-*.md`). You can skip the `order` document when working in `product-service`.
 
 ## Cursor Cloud specific instructions
