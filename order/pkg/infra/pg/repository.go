@@ -125,6 +125,8 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address JSONB NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_address_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
+		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE checkout_session_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
 	}
 	for _, stmt := range alterStmts {
@@ -294,9 +296,9 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 	}
 	for _, item := range order.Items {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO order_items (order_id, sku, sku_id, quantity, unit_price_cents)
-			VALUES ($1, $2, $3, $4, $5)
-		`, order.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceCents); err != nil {
+			INSERT INTO order_items (order_id, sku, sku_id, quantity, unit_price_cents, product_name, image_url)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, order.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceCents, item.ProductName, item.ImageURL); err != nil {
 			return err
 		}
 	}
@@ -461,7 +463,8 @@ func (r *Repository) loadOrderItemsBatch(ctx context.Context, orderIDs []string)
 		return out, nil
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT order_id, sku, COALESCE(sku_id, ''), quantity, unit_price_cents
+		SELECT order_id, sku, COALESCE(sku_id, ''), quantity, unit_price_cents,
+			COALESCE(product_name, ''), COALESCE(image_url, '')
 		FROM order_items
 		WHERE order_id = ANY($1)
 		ORDER BY order_id, sku
@@ -474,7 +477,7 @@ func (r *Repository) loadOrderItemsBatch(ctx context.Context, orderIDs []string)
 	for rows.Next() {
 		var orderID string
 		var item domain.OrderItem
-		if err := rows.Scan(&orderID, &item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents); err != nil {
+		if err := rows.Scan(&orderID, &item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents, &item.ProductName, &item.ImageURL); err != nil {
 			return nil, err
 		}
 		out[orderID] = append(out[orderID], item)
@@ -510,6 +513,60 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			created_at, updated_at
 		FROM orders WHERE customer_id = $1 ORDER BY created_at DESC
 	`, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []domain.Order
+	var ids []string
+	for rows.Next() {
+		var order domain.Order
+		var paidAt, shippedAt *time.Time
+		var shippingJSON []byte
+		if err := rows.Scan(
+			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
+			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
+			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+			&order.CreatedAt, &order.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if err := decodeShippingJSON(shippingJSON, &order.ShippingAddress); err != nil {
+			return nil, err
+		}
+		order.PaidAt = paidAt
+		order.ShippedAt = shippedAt
+		orders = append(orders, order)
+		ids = append(ids, order.ID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	itemsByOrder, err := r.loadOrderItemsBatch(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range orders {
+		orders[i].Items = itemsByOrder[orders[i].ID]
+	}
+	return orders, nil
+}
+
+func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, customer_id, reservation_id, status, coupon_code,
+			subtotal_cents, discount_cents, total_cents,
+			recipient_name, recipient_phone, shipping_address, source_address_id,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			created_at, updated_at
+		FROM orders ORDER BY created_at DESC
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -667,6 +724,174 @@ func (r *Repository) CompleteCheckoutSessionIfOpen(ctx context.Context, sessionI
 		return false, err
 	}
 	return tag.RowsAffected() == 1, nil
+}
+
+func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string, now time.Time, events []ports.OutboxEvent) (*domain.Order, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	defer tx.Rollback(ctx)
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE orders
+		SET status = $3, updated_at = $4
+		WHERE id = $1 AND status = $2 AND payment_due_at < $4
+	`, orderID, domain.StatusPending, domain.StatusCanceled, now)
+	if err != nil {
+		return nil, false, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, false, nil
+	}
+
+	var order domain.Order
+	var paidAt, shippedAt *time.Time
+	var shippingJSON []byte
+	err = tx.QueryRow(ctx, `
+		SELECT id, customer_id, reservation_id, status, coupon_code,
+			subtotal_cents, discount_cents, total_cents,
+			recipient_name, recipient_phone, shipping_address, source_address_id,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			created_at, updated_at
+		FROM orders WHERE id = $1
+	`, orderID).Scan(
+		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
+		&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
+		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+		&order.CreatedAt, &order.UpdatedAt,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := decodeShippingJSON(shippingJSON, &order.ShippingAddress); err != nil {
+		return nil, false, err
+	}
+	order.PaidAt = paidAt
+	order.ShippedAt = shippedAt
+
+	rows, err := tx.Query(ctx, `
+		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_cents
+		FROM order_items WHERE order_id = $1 ORDER BY sku
+	`, orderID)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item domain.OrderItem
+		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents); err != nil {
+			return nil, false, err
+		}
+		order.Items = append(order.Items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+
+	for _, ev := range events {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO order_outbox (aggregate_id, subject, payload)
+			VALUES ($1, $2, $3)
+		`, ev.AggregateID, ev.Subject, ev.Payload); err != nil {
+			return nil, false, fmt.Errorf("enqueue outbox: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, false, err
+	}
+	return &order, true, nil
+}
+
+func (r *Repository) SavePaidIfPending(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE orders SET
+			status = $2,
+			payment_id = $3,
+			paid_at = $4,
+			reservation_id = $5,
+			updated_at = $6
+		WHERE id = $1 AND status = $7
+	`, order.ID, domain.StatusPaid, order.PaymentID, order.PaidAt, order.ReservationID, order.UpdatedAt, domain.StatusPending)
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+
+	for _, ev := range events {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO order_outbox (aggregate_id, subject, payload)
+			VALUES ($1, $2, $3)
+		`, ev.AggregateID, ev.Subject, ev.Payload); err != nil {
+			return false, fmt.Errorf("enqueue outbox: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *Repository) SavePaidIfCanceled(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE orders SET
+			status = $2,
+			payment_id = $3,
+			paid_at = $4,
+			reservation_id = $5,
+			payment_due_at = $6,
+			updated_at = $7
+		WHERE id = $1 AND status = $8
+	`, order.ID, domain.StatusPaid, order.PaymentID, order.PaidAt, order.ReservationID, order.PaymentDueAt, order.UpdatedAt, domain.StatusCanceled)
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+
+	for _, ev := range events {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO order_outbox (aggregate_id, subject, payload)
+			VALUES ($1, $2, $3)
+		`, ev.AggregateID, ev.Subject, ev.Payload); err != nil {
+			return false, fmt.Errorf("enqueue outbox: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain.CheckoutSession, error) {

@@ -23,8 +23,10 @@ type Variant struct {
 	OfficialPrice float64  `json:"officialPrice,omitempty"`
 	Price         float64  `json:"price,omitempty"`
 	Status        string   `json:"status"` // "active" | "draft" | "archived"
-	ImageURLs     []string `json:"imageUrls,omitempty"`
-	CreatedAt     string   `json:"createdAt,omitempty"`
+	ImageURLs   []string `json:"imageUrls,omitempty"`
+	// ProductName is the parent product's display name, populated on public variant reads.
+	ProductName string `json:"productName,omitempty"`
+	CreatedAt   string `json:"createdAt,omitempty"`
 }
 
 // Product is a parent catalog style. Sellable options live on Variants.

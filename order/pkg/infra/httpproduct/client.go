@@ -27,11 +27,13 @@ func NewClient(baseURL string, httpClient *http.Client) *Client {
 }
 
 type variantResponse struct {
-	SkuID     string  `json:"skuId"`
-	SKU       string  `json:"sku"`
-	ProductID string  `json:"productId"`
-	Price     float64 `json:"price"`
-	Status    string  `json:"status"`
+	SkuID       string   `json:"skuId"`
+	SKU         string   `json:"sku"`
+	ProductID   string   `json:"productId"`
+	Price       float64  `json:"price"`
+	Status      string   `json:"status"`
+	ProductName string   `json:"productName"`
+	ImageURLs   []string `json:"imageUrls"`
 }
 
 func (c *Client) GetVariant(ctx context.Context, sku string) (*ports.VariantInfo, error) {
@@ -71,5 +73,14 @@ func (c *Client) fetchVariant(ctx context.Context, path string) (*ports.VariantI
 		SKU:            strings.ToUpper(strings.TrimSpace(body.SKU)),
 		ProductID:      body.ProductID,
 		UnitPriceCents: money.FromProductPrice(body.Price),
+		ProductName:    body.ProductName,
+		ImageURL:       firstOf(body.ImageURLs),
 	}, nil
+}
+
+func firstOf(ss []string) string {
+	if len(ss) > 0 {
+		return ss[0]
+	}
+	return ""
 }
