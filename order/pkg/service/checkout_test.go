@@ -96,6 +96,61 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestCompleteCheckoutPersistsPCCC(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.NewRepository()
+	svc := service.NewWithCheckout(repo, &fakeStock{reservationID: "res-pccc"}, nil, 0).WithProduct(&fakeProduct{defaultCents: 1000})
+
+	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
+		CustomerID: "customer-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession returned error: %v", err)
+	}
+	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
+		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1,
+	}); err != nil {
+		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
+	}
+
+	input := testCompleteCheckoutInput()
+	input.ShippingAddress.PCCC = "p123456789012"
+
+	result, err := svc.CompleteCheckout(ctx, session.ID, input)
+	if err != nil {
+		t.Fatalf("CompleteCheckout returned error: %v", err)
+	}
+	if result.Order.ShippingAddress.PCCC != "P123456789012" {
+		t.Fatalf("order shipping pccc = %q, want normalized P123456789012", result.Order.ShippingAddress.PCCC)
+	}
+}
+
+func TestCompleteCheckoutRejectsMalformedPCCC(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.NewRepository()
+	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultCents: 1000})
+
+	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
+		CustomerID: "customer-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession returned error: %v", err)
+	}
+	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
+		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1,
+	}); err != nil {
+		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
+	}
+
+	input := testCompleteCheckoutInput()
+	input.ShippingAddress.PCCC = "P12345"
+
+	_, err = svc.CompleteCheckout(ctx, session.ID, input)
+	if !errors.Is(err, domain.ErrInvalidFulfillment) {
+		t.Fatalf("CompleteCheckout error = %v, want ErrInvalidFulfillment", err)
+	}
+}
+
 func TestCompleteCheckoutRejectsInvalidFulfillment(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.NewRepository()
