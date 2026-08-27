@@ -123,3 +123,76 @@ func TestMigrateSeedsReservationSequenceFromExistingRows(t *testing.T) {
 		t.Fatalf("reservation ID = %q, want res_000006", res.ID)
 	}
 }
+
+// Regression when id_sequences exists but is stale (e.g. partial DB reset).
+func TestMigrateRepairsStaleReservationSequence(t *testing.T) {
+	dsn := requireProductDSN(t)
+	pool := freshInventorySchema(t, dsn, "inv_seq_stale_test")
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	if _, err := pool.Exec(ctx, `CREATE TABLE product_variants (sku_id TEXT PRIMARY KEY, sku TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create product_variants: %v", err)
+	}
+	for _, stmt := range []string{
+		`CREATE TABLE IF NOT EXISTS id_sequences (
+			name TEXT PRIMARY KEY,
+			value BIGINT NOT NULL DEFAULT 0
+		)`,
+		`CREATE TABLE IF NOT EXISTS reservations (
+			id TEXT PRIMARY KEY,
+			order_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+	} {
+		if _, err := pool.Exec(ctx, stmt); err != nil {
+			t.Fatalf("prepare schema: %v", err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO id_sequences (name, value) VALUES ('reservation', 0)
+	`); err != nil {
+		t.Fatalf("seed stale id_sequences: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO reservations (id, order_id, status, created_at, updated_at)
+		VALUES ('res_000005', 'ord-1', 'held', $1, $1)
+	`, now); err != nil {
+		t.Fatalf("seed reservation: %v", err)
+	}
+
+	store, err := NewInventoryStore(pool)
+	if err != nil {
+		t.Fatalf("NewInventoryStore: %v", err)
+	}
+
+	var seq int64
+	if err := pool.QueryRow(ctx, `SELECT value FROM id_sequences WHERE name = 'reservation'`).Scan(&seq); err != nil {
+		t.Fatalf("read id_sequences: %v", err)
+	}
+	if seq != 5 {
+		t.Fatalf("id_sequences value = %d, want 5 (stale row repaired)", seq)
+	}
+
+	if _, err := pool.Exec(ctx, `INSERT INTO product_variants (sku_id, sku) VALUES ('sku-1', 'TEST-1')`); err != nil {
+		t.Fatalf("insert variant: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO stock_items (sku_id, quantity, reserved, updated_at)
+		VALUES ('sku-1', 10, 0, $1)
+	`, now); err != nil {
+		t.Fatalf("insert stock: %v", err)
+	}
+
+	res, err := store.CreateReservation(ctx, "ord-2", []domain.ReservationItem{{
+		SkuID: "sku-1", SKU: "TEST-1", Quantity: 1,
+	}}, now)
+	if err != nil {
+		t.Fatalf("CreateReservation: %v", err)
+	}
+	if res.ID != "res_000006" {
+		t.Fatalf("reservation ID = %q, want res_000006", res.ID)
+	}
+}

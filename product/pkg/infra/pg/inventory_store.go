@@ -70,7 +70,8 @@ func (s *InventoryStore) migrate() error {
 			 FROM reservations WHERE id ~ '^res_\d+$'),
 			0
 		)
-		ON CONFLICT (name) DO NOTHING`,
+		ON CONFLICT (name) DO UPDATE
+		SET value = GREATEST(id_sequences.value, EXCLUDED.value)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.pool.Exec(ctx, stmt); err != nil {
