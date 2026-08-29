@@ -416,6 +416,42 @@ func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
 	}
 }
 
+func TestShipOrderRejectsInvalidTrackingWithoutCommittingStock(t *testing.T) {
+	ctx := context.Background()
+	stock := &fakeStock{reservationID: "res-123"}
+	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+
+	_, err = svc.ShipOrder(ctx, order.ID, "manager-1", domain.ShipmentTracking{
+		Carrier:        "fedex",
+		TrackingNumber: "123456789012",
+	})
+	if !errors.Is(err, domain.ErrInvalidShipment) {
+		t.Fatalf("ShipOrder error = %v, want ErrInvalidShipment", err)
+	}
+	if stock.committed != "" {
+		t.Fatalf("committed = %q, want empty (stock must not commit on invalid tracking)", stock.committed)
+	}
+
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid", got.Status)
+	}
+}
+
 func TestShipOrderRejectsEmptyShippedByWithoutCommittingStock(t *testing.T) {
 	ctx := context.Background()
 	stock := &fakeStock{reservationID: "res-123"}

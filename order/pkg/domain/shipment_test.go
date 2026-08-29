@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
@@ -49,5 +50,14 @@ func TestNormalizeShipmentTracking(t *testing.T) {
 	}
 	if got.CarrierNote != "" {
 		t.Fatalf("expected note cleared, got %q", got.CarrierNote)
+	}
+
+	_, err = domain.NormalizeShipmentTracking("cj", strings.Repeat("x", 65), "")
+	if !errors.Is(err, domain.ErrInvalidShipment) {
+		t.Fatalf("tracking too long err = %v", err)
+	}
+	_, err = domain.NormalizeShipmentTracking("other", "TRK-1", strings.Repeat("n", 121))
+	if !errors.Is(err, domain.ErrInvalidShipment) {
+		t.Fatalf("carrier_note too long err = %v", err)
 	}
 }
