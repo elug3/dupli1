@@ -123,7 +123,7 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 | `TELEGRAM_BOT_TOKEN` | Yes (for Telegram) | Bot API token from [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_WEBHOOK_URL` | Production | Public HTTPS webhook URL |
 | `TELEGRAM_WEBHOOK_SECRET` | **Required** when webhook URL is set | Validates `X-Telegram-Bot-Api-Secret-Token`; handler is fail-closed without it |
-| `AUTH_JWKS_URL` | For manager API | Auth JWKS for RS256 manager tokens |
+| `AUTH_JWKS_URL` | **Required for manage-web** | Auth JWKS for RS256 manager tokens. Without it, Telegram manager routes return `503 auth not configured` and manage-web `/telegram` shows **Failed to load Telegram subscriptions**. |
 | `TELEGRAM_ALLOWED_USER_IDS` | Optional bootstrap | Comma-separated user IDs until DB entries exist |
 | `TELEGRAM_ORDER_CHAT_ID` | Fallback routing | Order alerts chat when no DB `alert_order` row |
 | `TELEGRAM_PRODUCT_CHAT_ID` | Fallback routing | Product alerts chat when no DB `alert_product` row |
