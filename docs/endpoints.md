@@ -544,7 +544,20 @@ Response `200`: updated order object. Errors: `400` invalid transition, `404` no
 
 Moves a **`paid`** order to **`in_transit`** and commits inventory reservations. Requires `order.ship`.
 
-Response `200`: updated order object with `shipped_by`, `shipped_at`. Errors: `400` invalid state, `404` not found.
+Request body (required):
+```json
+{
+  "carrier": "cj",
+  "tracking_number": "123456789012",
+  "carrier_note": ""
+}
+```
+
+- `carrier` — one of `cj`, `hanjin`, `lotte`, `logen`, `epost`, `other`
+- `tracking_number` — required for every ship
+- `carrier_note` — required when `carrier` is `other` (free-text carrier name); ignored otherwise
+
+Response `200`: updated order object with `shipped_by`, `shipped_at`, `carrier`, `tracking_number`, and optional `carrier_note`. Errors: `400` invalid state or missing/invalid tracking, `404` not found.
 
 Order object shape:
 ```json

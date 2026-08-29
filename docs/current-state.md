@@ -95,8 +95,9 @@ See [service-layout.md](service-layout.md) for details.
   - Optional `Idempotency-Key` on `POST /api/v1/orders` (replay-safe create)
   - Checkout `complete` snapshots recipient + shipping address (optional prefill from auth profile)
   - Checkout `complete` uses atomic session claim — concurrent completes cannot create duplicate orders
-  - `POST /api/v1/orders/{id}/ship` validates `paid` → `in_transit` **before** committing inventory (plan B)
+  - `POST /api/v1/orders/{id}/ship` validates `paid` → `in_transit` **before** committing inventory (plan B); **requires** `carrier` + `tracking_number` (fixed KR set: `cj`/`hanjin`/`lotte`/`logen`/`epost`/`other`; `carrier_note` required when `other`)
   - Calls product to reserve stock and redeem coupons
+  - Order responses include optional `carrier`, `tracking_number`, `carrier_note` after ship
 - **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS; HS256 fallback in dev). Storefront ABAC on `customer_id`; `order.create` / `order.read.all` bypass ABAC. Ship requires `order.ship`; status changes require `order.status.update`
 - **Tests:** `cd order && go test ./...`
 

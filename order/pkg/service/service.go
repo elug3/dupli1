@@ -353,7 +353,7 @@ func (s *Service) persistPaid(ctx context.Context, order *domain.Order, events [
 	return s.repo.SavePaidIfPending(ctx, order, events)
 }
 
-func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string) (*domain.Order, error) {
+func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string, tracking domain.ShipmentTracking) (*domain.Order, error) {
 	order, err := s.repo.Get(ctx, strings.TrimSpace(orderID))
 	if err != nil {
 		return nil, err
@@ -362,6 +362,10 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string) (*do
 	if shippedBy == "" {
 		return nil, domain.ErrInvalidOrder
 	}
+	normalized, err := domain.NormalizeShipmentTracking(tracking.Carrier, tracking.TrackingNumber, tracking.CarrierNote)
+	if err != nil {
+		return nil, err
+	}
 	// Validate before touching stock — CommitReservation is irreversible.
 	if order.Status != domain.StatusPaid {
 		return nil, domain.ErrInvalidTransition
@@ -369,7 +373,7 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string) (*do
 	if err := s.commitReservationForShip(ctx, order.ReservationID); err != nil {
 		return nil, err
 	}
-	if err := order.Ship(shippedBy, s.now()); err != nil {
+	if err := order.Ship(shippedBy, normalized, s.now()); err != nil {
 		return nil, err
 	}
 	return s.saveStatusChange(ctx, order)

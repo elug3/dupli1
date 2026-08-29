@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -10,6 +11,7 @@ var (
 	ErrInvalidOrder          = errors.New("invalid order")
 	ErrInvalidTransition     = errors.New("invalid order status transition")
 	ErrPaymentAmountMismatch = errors.New("payment amount does not match order total")
+	ErrInvalidShipment       = errors.New("invalid shipment tracking")
 )
 
 const DefaultPaymentTTL = 5 * time.Minute
@@ -64,10 +66,13 @@ type Order struct {
 	PaymentID     string      `json:"payment_id,omitempty"`
 	PaidAt        *time.Time  `json:"paid_at,omitempty"`
 	PaymentDueAt  time.Time   `json:"payment_due_at"`
-	ShippedBy     string      `json:"shipped_by,omitempty"`
-	ShippedAt     *time.Time  `json:"shipped_at,omitempty"`
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
+	ShippedBy      string     `json:"shipped_by,omitempty"`
+	ShippedAt      *time.Time `json:"shipped_at,omitempty"`
+	Carrier        string     `json:"carrier,omitempty"`
+	TrackingNumber string     `json:"tracking_number,omitempty"`
+	CarrierNote    string     `json:"carrier_note,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCode string, discountCents int64, now time.Time) (*Order, error) {
@@ -130,7 +135,7 @@ func (o *Order) MarkPaid(paymentID string, amountCents int64, now time.Time) err
 	return nil
 }
 
-func (o *Order) Ship(shippedBy string, now time.Time) error {
+func (o *Order) Ship(shippedBy string, tracking ShipmentTracking, now time.Time) error {
 	if o.Status != StatusPaid {
 		return ErrInvalidTransition
 	}
@@ -138,9 +143,25 @@ func (o *Order) Ship(shippedBy string, now time.Time) error {
 	if shippedBy == "" {
 		return ErrInvalidOrder
 	}
+	if tracking.Carrier == "" || tracking.TrackingNumber == "" {
+		return fmt.Errorf("%w: carrier and tracking_number are required", ErrInvalidShipment)
+	}
+	if _, ok := ValidCarriers[tracking.Carrier]; !ok {
+		return fmt.Errorf("%w: unknown carrier %q", ErrInvalidShipment, tracking.Carrier)
+	}
+	if tracking.Carrier == CarrierOther && strings.TrimSpace(tracking.CarrierNote) == "" {
+		return fmt.Errorf("%w: carrier_note is required when carrier is other", ErrInvalidShipment)
+	}
 	o.Status = StatusInTransit
 	o.ShippedBy = shippedBy
 	o.ShippedAt = &now
+	o.Carrier = tracking.Carrier
+	o.TrackingNumber = tracking.TrackingNumber
+	if tracking.Carrier == CarrierOther {
+		o.CarrierNote = strings.TrimSpace(tracking.CarrierNote)
+	} else {
+		o.CarrierNote = ""
+	}
 	o.UpdatedAt = now
 	return nil
 }
