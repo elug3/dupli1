@@ -516,6 +516,8 @@ resource "aws_ecs_task_definition" "notification" {
         }
       ]
       environment = [
+        # Match nginx upstream dupli1-notification:8080 (default process port is 8084).
+        { name = "DUPLI1_NOTIFICATION_ADDR", value = ":8080" },
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
         { name = "MANAGE_WEB_URL", value = "https://manage.dupli1.com" },
         # Required for manage-web /telegram (manager JWT via auth JWKS).
