@@ -213,8 +213,11 @@ done
 check "order status" "$order_status" paid
 
 step "Ship (commits the reservation)"
-shipped=$(api POST "/api/v1/orders/$ORDER_ID/ship" "$OWNER")
+shipped=$(api POST "/api/v1/orders/$ORDER_ID/ship" "$OWNER" \
+  '{"carrier":"cj","tracking_number":"123456789012"}')
 check "order status" "$(echo "$shipped" | field 'd["status"]')" in_transit
+check "carrier" "$(echo "$shipped" | field 'd["carrier"]')" cj
+check "tracking_number" "$(echo "$shipped" | field 'd["tracking_number"]')" 123456789012
 
 read -r stock_after reserved_after <<<"$(stock_of "$SKU_ID")"
 check "stock decremented" "$stock_after" "$((stock_before - QUANTITY))"

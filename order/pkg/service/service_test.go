@@ -21,6 +21,11 @@ type fakeStock struct {
 	commitErr     error
 }
 
+
+func testShipTracking() domain.ShipmentTracking {
+	return domain.ShipmentTracking{Carrier: domain.CarrierCJ, TrackingNumber: "123456789012"}
+}
+
 func (f *fakeStock) Reserve(ctx context.Context, orderID string, items []ports.StockItem) (string, error) {
 	f.reservedItems = append([]ports.StockItem(nil), items...)
 	if f.reservationID == "" {
@@ -235,7 +240,7 @@ func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 		t.Fatal("stock should not commit on paid")
 	}
 
-	order, err = svc.ShipOrder(ctx, order.ID, "manager-1")
+	order, err = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	if err != nil {
 		t.Fatalf("ShipOrder returned error: %v", err)
 	}
@@ -270,7 +275,7 @@ func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 		advance func() error
 		want    domain.OrderStatus
 	}{
-		{"in_transit", func() error { _, err := svc.ShipOrder(ctx, order.ID, "manager-1"); return err }, domain.StatusInTransit},
+		{"in_transit", func() error { _, err := svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking()); return err }, domain.StatusInTransit},
 		{"fulfilled", func() error { _, err := svc.FulfillOrder(ctx, order.ID); return err }, domain.StatusFulfilled},
 	} {
 		if err := status.advance(); err != nil {
@@ -394,7 +399,7 @@ func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
 
-	_, err = svc.ShipOrder(ctx, order.ID, "manager-1")
+	_, err = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	if !errors.Is(err, domain.ErrInvalidTransition) {
 		t.Fatalf("ShipOrder error = %v, want ErrInvalidTransition", err)
 	}
@@ -427,7 +432,7 @@ func TestShipOrderRejectsEmptyShippedByWithoutCommittingStock(t *testing.T) {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
-	_, err = svc.ShipOrder(ctx, order.ID, "   ")
+	_, err = svc.ShipOrder(ctx, order.ID, "   ", testShipTracking())
 	if !errors.Is(err, domain.ErrInvalidOrder) {
 		t.Fatalf("ShipOrder error = %v, want ErrInvalidOrder", err)
 	}
@@ -518,7 +523,7 @@ func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
 	// Simulate a prior ShipOrder that committed stock but failed before saving status.
 	stock.committed = order.ReservationID
 
-	shipped, err := svc.ShipOrder(ctx, order.ID, "manager-1")
+	shipped, err := svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	if err != nil {
 		t.Fatalf("ShipOrder retry returned error: %v", err)
 	}
@@ -547,7 +552,7 @@ func TestShipOrderRejectsReleasedReservation(t *testing.T) {
 	// (e.g. expiry race saved paid with a stale reservation_id).
 	stock.released = order.ReservationID
 
-	_, err = svc.ShipOrder(ctx, order.ID, "manager-1")
+	_, err = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	if !errors.Is(err, ports.ErrReservationAlreadyReleased) {
 		t.Fatalf("ShipOrder error = %v, want ErrReservationAlreadyReleased", err)
 	}
@@ -706,7 +711,7 @@ func TestCancelInTransitOrderFails(t *testing.T) {
 	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
-	if _, err := svc.ShipOrder(ctx, order.ID, "manager-1"); err != nil {
+	if _, err := svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking()); err != nil {
 		t.Fatalf("ShipOrder: %v", err)
 	}
 

@@ -544,7 +544,56 @@ func TestShipOrder_OrderManagerSuccess(t *testing.T) {
 	orderID := seedPaidOrder(t, svc, "u-1")
 	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
 
-	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, nil)
+	body := map[string]string{
+		"carrier":         "cj",
+		"tracking_number": "123456789012",
+	}
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var order domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&order); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if order.Carrier != "cj" || order.TrackingNumber != "123456789012" {
+		t.Fatalf("tracking = %s/%s", order.Carrier, order.TrackingNumber)
+	}
+}
+
+func TestShipOrder_RequiresTracking(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	orderID := seedPaidOrder(t, svc, "u-1")
+	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
+
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, map[string]string{})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestShipOrder_OtherRequiresNote(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	orderID := seedPaidOrder(t, svc, "u-1")
+	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
+
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, map[string]string{
+		"carrier":         "other",
+		"tracking_number": "INTL-1",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, map[string]string{
+		"carrier":         "other",
+		"tracking_number": "INTL-1",
+		"carrier_note":    "DHL",
+	})
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
@@ -557,7 +606,10 @@ func TestShipOrder_CustomerForbidden(t *testing.T) {
 	orderID := seedPaidOrder(t, svc, "u-1")
 	token := makeToken(t, "u-1", nil)
 
-	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, map[string]string{
+		"carrier":         "cj",
+		"tracking_number": "123456789012",
+	})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", w.Code)
 	}

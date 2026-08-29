@@ -241,7 +241,23 @@ func (h *Handler) shipOrder(w http.ResponseWriter, r *http.Request, orderID stri
 		return
 	}
 
-	order, err := h.svc.ShipOrder(r.Context(), orderID, claims.UserID)
+	var req struct {
+		Carrier        string `json:"carrier"`
+		TrackingNumber string `json:"tracking_number"`
+		CarrierNote    string `json:"carrier_note"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, "carrier and tracking_number are required")
+		return
+	}
+
+	tracking, err := domain.NormalizeShipmentTracking(req.Carrier, req.TrackingNumber, req.CarrierNote)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	order, err := h.svc.ShipOrder(r.Context(), orderID, claims.UserID, tracking)
 	if err != nil {
 		respondServiceError(w, err)
 		return
@@ -306,7 +322,7 @@ func respondServiceError(w http.ResponseWriter, err error) {
 		respondError(w, http.StatusBadGateway, err.Error())
 	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, domain.ErrPaymentAmountMismatch),
 		errors.Is(err, domain.ErrInvalidCheckoutSession), errors.Is(err, domain.ErrEmptyCheckout),
-		errors.Is(err, domain.ErrInvalidFulfillment),
+		errors.Is(err, domain.ErrInvalidFulfillment), errors.Is(err, domain.ErrInvalidShipment),
 		errors.Is(err, domain.ErrSessionNotOpen):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:

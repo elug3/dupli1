@@ -720,7 +720,7 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 | GET | `/api/v1/orders` | List all orders (`order.read.all`) |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
-| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship order (`paid` → `in_transit`) |
+| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship order (`paid` → `in_transit`); body requires `carrier` + `tracking_number` (`carrier_note` when `carrier=other`) |
 | PUT | `/api/v1/orders/{id}/status` | `order.status.update` — cancel or fulfill |
 
 **Create order request**

@@ -69,22 +69,29 @@ func TestMarkPaidRequiresPendingAndMatchingAmount(t *testing.T) {
 func TestShipRequiresPaidOrder(t *testing.T) {
 	order := newTestOrder(t)
 	now := time.Date(2026, 8, 11, 10, 10, 0, 0, time.UTC)
+	tracking := domain.ShipmentTracking{Carrier: domain.CarrierCJ, TrackingNumber: "1234567890"}
 
-	if err := order.Ship("manager-1", now); !errors.Is(err, domain.ErrInvalidTransition) {
+	if err := order.Ship("manager-1", tracking, now); !errors.Is(err, domain.ErrInvalidTransition) {
 		t.Fatalf("ship pending err = %v, want ErrInvalidTransition", err)
 	}
 
 	if err := order.MarkPaid("pay-1", order.TotalCents, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
-	if err := order.Ship("", now); !errors.Is(err, domain.ErrInvalidOrder) {
+	if err := order.Ship("", tracking, now); !errors.Is(err, domain.ErrInvalidOrder) {
 		t.Fatalf("empty shippedBy err = %v, want ErrInvalidOrder", err)
 	}
-	if err := order.Ship("manager-1", now); err != nil {
+	if err := order.Ship("manager-1", domain.ShipmentTracking{}, now); !errors.Is(err, domain.ErrInvalidShipment) {
+		t.Fatalf("empty tracking err = %v, want ErrInvalidShipment", err)
+	}
+	if err := order.Ship("manager-1", tracking, now); err != nil {
 		t.Fatalf("Ship: %v", err)
 	}
 	if order.Status != domain.StatusInTransit || order.ShippedBy != "manager-1" || order.ShippedAt == nil {
 		t.Fatalf("order = %+v, want in_transit with ship metadata", order)
+	}
+	if order.Carrier != domain.CarrierCJ || order.TrackingNumber != "1234567890" {
+		t.Fatalf("tracking = %s/%s", order.Carrier, order.TrackingNumber)
 	}
 }
 
@@ -135,7 +142,7 @@ func TestCancelAndFulfillTransitions(t *testing.T) {
 	if err := paid.MarkPaid("pay-1", paid.TotalCents, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
-	if err := paid.Ship("manager-1", now); err != nil {
+	if err := paid.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-1"}, now); err != nil {
 		t.Fatalf("Ship: %v", err)
 	}
 	if err := paid.Fulfill(now); err != nil {
