@@ -1,7 +1,6 @@
 package memory_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 
 func seedPendingOrder(t *testing.T, repo *memory.Repository, id string, dueAt time.Time) *domain.Order {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	now := dueAt
 	order, err := domain.NewOrder(id, "cust-1", "res-1", []domain.OrderItem{
 		{SKU: "BAG-1", SkuID: "01SKU", Quantity: 1, UnitPriceCents: 1000},
@@ -28,7 +27,7 @@ func seedPendingOrder(t *testing.T, repo *memory.Repository, id string, dueAt ti
 }
 
 func TestCancelIfPendingExpiredCancelsOverduePending(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	repo := memory.NewRepository()
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	dueAt := now.Add(-time.Minute)
@@ -56,7 +55,7 @@ func TestCancelIfPendingExpiredCancelsOverduePending(t *testing.T) {
 }
 
 func TestCancelIfPendingExpiredSkipsPaidOrder(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	repo := memory.NewRepository()
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	order := seedPendingOrder(t, repo, "ord-exp-2", now.Add(-time.Minute))
@@ -84,7 +83,7 @@ func TestCancelIfPendingExpiredSkipsPaidOrder(t *testing.T) {
 }
 
 func TestCancelIfPendingExpiredSkipsBeforeDue(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	repo := memory.NewRepository()
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	seedPendingOrder(t, repo, "ord-exp-3", now.Add(time.Minute))
@@ -99,7 +98,7 @@ func TestCancelIfPendingExpiredSkipsBeforeDue(t *testing.T) {
 }
 
 func TestSavePaidIfPendingUpdatesOnlyPending(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	repo := memory.NewRepository()
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	order := seedPendingOrder(t, repo, "ord-pay-1", now.Add(5*time.Minute))
@@ -126,7 +125,7 @@ func TestSavePaidIfPendingUpdatesOnlyPending(t *testing.T) {
 }
 
 func TestSavePaidIfPendingRejectsNonPending(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	repo := memory.NewRepository()
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	order := seedPendingOrder(t, repo, "ord-pay-2", now.Add(5*time.Minute))
@@ -147,7 +146,7 @@ func TestSavePaidIfPendingRejectsNonPending(t *testing.T) {
 }
 
 func TestSavePaidIfCanceledReinstatesCanceledOrder(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	repo := memory.NewRepository()
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	order := seedPendingOrder(t, repo, "ord-pay-3", now.Add(-time.Minute))
@@ -178,7 +177,7 @@ func TestSavePaidIfCanceledReinstatesCanceledOrder(t *testing.T) {
 }
 
 func TestSavePaidIfCanceledRejectsPending(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	repo := memory.NewRepository()
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	order := seedPendingOrder(t, repo, "ord-pay-4", now.Add(5*time.Minute))

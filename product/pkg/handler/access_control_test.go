@@ -178,7 +178,7 @@ func TestCustomerCannotManageProducts(t *testing.T) {
 
 func TestProductManagerCanManageProducts(t *testing.T) {
 	store := memory.NewProductStore()
-	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "GUC", Code: "MINI01", Name: "Mini Bag"}); err != nil {
+	if _, err := store.Catalog.CreateStyle(t.Context(), domain.Style{BrandCode: "GUC", Code: "MINI01", Name: "Mini Bag"}); err != nil {
 		t.Fatal(err)
 	}
 	mux := newAccessControlMux(store)
@@ -243,7 +243,7 @@ func TestProductManagerCanGetDraftProduct(t *testing.T) {
 
 func TestAdminCanManageProducts(t *testing.T) {
 	store := memory.NewProductStore()
-	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "GUC", Code: "TOTE01", Name: "Tote"}); err != nil {
+	if _, err := store.Catalog.CreateStyle(t.Context(), domain.Style{BrandCode: "GUC", Code: "TOTE01", Name: "Tote"}); err != nil {
 		t.Fatal(err)
 	}
 	mux := newAccessControlMux(store)
@@ -263,7 +263,7 @@ func TestAdminCanManageProducts(t *testing.T) {
 
 func TestOwnerCanManageProducts(t *testing.T) {
 	store := memory.NewProductStore()
-	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "GUC", Code: "PACK01", Name: "Backpack"}); err != nil {
+	if _, err := store.Catalog.CreateStyle(t.Context(), domain.Style{BrandCode: "GUC", Code: "PACK01", Name: "Backpack"}); err != nil {
 		t.Fatal(err)
 	}
 	mux := newAccessControlMux(store)

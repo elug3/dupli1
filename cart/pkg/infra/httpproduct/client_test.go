@@ -1,7 +1,6 @@
 package httpproduct_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +24,7 @@ func TestGetVariantUsesWholeWon(t *testing.T) {
 	defer srv.Close()
 
 	client := httpproduct.NewClient(srv.URL, srv.Client())
-	info, err := client.GetVariant(context.Background(), "BOT-001-GRN")
+	info, err := client.GetVariant(t.Context(), "BOT-001-GRN")
 	if err != nil {
 		t.Fatal(err)
 	}

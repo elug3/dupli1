@@ -103,7 +103,7 @@ func TestRegisterPublishesUserRegisteredEvent(t *testing.T) {
 	publisher := &recordedEventPublisher{}
 	svc := NewService(repo, fakeTokenGenerator{}, WithEventPublisher(publisher))
 
-	user, err := svc.Register(context.Background(), "customer@example.com", "supersecret", domain.AccountTypeCustomer)
+	user, err := svc.Register(t.Context(), "customer@example.com", "supersecret", domain.AccountTypeCustomer)
 	if err != nil {
 		t.Fatalf("Register returned error: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestLogin_RefreshTokenOmitsPermissions(t *testing.T) {
 	gen := &capturingTokenGenerator{}
 	svc := NewService(repo, gen)
 
-	if _, err := svc.Login(context.Background(), "user@example.com", "pass"); err != nil {
+	if _, err := svc.Login(t.Context(), "user@example.com", "pass"); err != nil {
 		t.Fatalf("Login returned error: %v", err)
 	}
 	if gen.capturedUserID != "u-1" {
@@ -174,7 +174,7 @@ func TestRefresh_FetchesFreshPermissionsFromDB(t *testing.T) {
 
 	gen.capturedUserID = "u-2"
 
-	if _, err := svc.Refresh(context.Background(), "any-token"); err != nil {
+	if _, err := svc.Refresh(t.Context(), "any-token"); err != nil {
 		t.Fatalf("Refresh returned error: %v", err)
 	}
 	if !permissions.Has(gen.capturedPermissions, permissions.AdminAll) {
@@ -202,7 +202,7 @@ func TestRegisterSucceedsWhenEventPublishFails(t *testing.T) {
 	repo := &deleteTrackingUserRepository{}
 	svc := NewService(repo, fakeTokenGenerator{}, WithEventPublisher(failingEventPublisher{}))
 
-	user, err := svc.Register(context.Background(), "customer@example.com", "supersecret", domain.AccountTypeCustomer)
+	user, err := svc.Register(t.Context(), "customer@example.com", "supersecret", domain.AccountTypeCustomer)
 	if err != nil {
 		t.Fatalf("Register returned error: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestRegisterSucceedsWhenEventPublishFails(t *testing.T) {
 func TestRegisterRejectsInvalidAccountType(t *testing.T) {
 	svc := NewService(&fakeUserRepository{}, fakeTokenGenerator{})
 
-	if _, err := svc.Register(context.Background(), "customer@example.com", "supersecret", "staff"); !errors.Is(err, autherrors.ErrInvalidAccountType) {
+	if _, err := svc.Register(t.Context(), "customer@example.com", "supersecret", "staff"); !errors.Is(err, autherrors.ErrInvalidAccountType) {
 		t.Fatalf("got %v, want ErrInvalidAccountType", err)
 	}
 }
@@ -228,7 +228,7 @@ func TestRegisterRejectsInvalidAccountType(t *testing.T) {
 func TestRegisterRejectsAdminAccountType(t *testing.T) {
 	svc := NewService(&fakeUserRepository{}, fakeTokenGenerator{})
 
-	if _, err := svc.Register(context.Background(), "ops@example.com", "supersecret", "admin"); !errors.Is(err, autherrors.ErrInvalidAccountType) {
+	if _, err := svc.Register(t.Context(), "ops@example.com", "supersecret", "admin"); !errors.Is(err, autherrors.ErrInvalidAccountType) {
 		t.Fatalf("Register(admin) error = %v, want ErrInvalidAccountType (admin is a permission, not account_type)", err)
 	}
 }
@@ -237,7 +237,7 @@ func TestRegisterAssignsEmptyPermissionsForCustomer(t *testing.T) {
 	repo := &fakeUserRepository{}
 	svc := NewService(repo, fakeTokenGenerator{})
 
-	user, err := svc.Register(context.Background(), "customer@example.com", "supersecret", domain.AccountTypeCustomer)
+	user, err := svc.Register(t.Context(), "customer@example.com", "supersecret", domain.AccountTypeCustomer)
 	if err != nil {
 		t.Fatalf("Register returned error: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestLogin_LocksAccountAfterMaxFailedAttempts(t *testing.T) {
 	svc := NewService(repo, fakeTokenGenerator{})
 
 	for i := 0; i < maxFailedAttempts; i++ {
-		if _, err := svc.Login(context.Background(), "locked@example.com", "wrong"); err == nil {
+		if _, err := svc.Login(t.Context(), "locked@example.com", "wrong"); err == nil {
 			t.Fatalf("attempt %d: expected error", i+1)
 		}
 	}
@@ -284,7 +284,7 @@ func TestLogin_LocksAccountAfterMaxFailedAttempts(t *testing.T) {
 		t.Fatal("account should be locked after max failed attempts")
 	}
 
-	if _, err := svc.Login(context.Background(), "locked@example.com", "correct-pass"); !errors.Is(err, autherrors.ErrAccountLocked) {
+	if _, err := svc.Login(t.Context(), "locked@example.com", "correct-pass"); !errors.Is(err, autherrors.ErrAccountLocked) {
 		t.Fatalf("locked login: got %v, want ErrAccountLocked", err)
 	}
 }
@@ -313,7 +313,7 @@ func TestLogin_DoesNotLockAdminOrOwner(t *testing.T) {
 			svc := NewService(repo, fakeTokenGenerator{})
 
 			for i := 0; i < maxFailedAttempts+2; i++ {
-				_, err := svc.Login(context.Background(), tc.user.Email, "wrong")
+				_, err := svc.Login(t.Context(), tc.user.Email, "wrong")
 				if !errors.Is(err, autherrors.ErrInvalidCredentials) {
 					t.Fatalf("attempt %d: got %v, want ErrInvalidCredentials", i+1, err)
 				}
@@ -322,7 +322,7 @@ func TestLogin_DoesNotLockAdminOrOwner(t *testing.T) {
 				t.Fatal("admin/owner must not be locked after failed attempts")
 			}
 
-			token, err := svc.Login(context.Background(), tc.user.Email, "correct-pass")
+			token, err := svc.Login(t.Context(), tc.user.Email, "correct-pass")
 			if err != nil {
 				t.Fatalf("correct password: %v", err)
 			}
@@ -352,7 +352,7 @@ func TestLogin_RejectsDeactivatedAccount(t *testing.T) {
 	repo := &stubUserRepository{user: user}
 	svc := NewService(repo, fakeTokenGenerator{})
 
-	if _, err := svc.Login(context.Background(), "off@example.com", "pass"); !errors.Is(err, autherrors.ErrAccountDeactivated) {
+	if _, err := svc.Login(t.Context(), "off@example.com", "pass"); !errors.Is(err, autherrors.ErrAccountDeactivated) {
 		t.Fatalf("got %v, want ErrAccountDeactivated", err)
 	}
 }
@@ -364,7 +364,7 @@ func TestRefresh_RejectsDeactivatedAccount(t *testing.T) {
 	gen := &capturingTokenGenerator{capturedUserID: "u-off"}
 	svc := NewService(repo, fakeTokenGenerator{}, WithRefreshTokenGen(gen, time.Hour))
 
-	if _, err := svc.Refresh(context.Background(), "refresh-token"); !errors.Is(err, autherrors.ErrAccountDeactivated) {
+	if _, err := svc.Refresh(t.Context(), "refresh-token"); !errors.Is(err, autherrors.ErrAccountDeactivated) {
 		t.Fatalf("got %v, want ErrAccountDeactivated", err)
 	}
 }
@@ -412,7 +412,7 @@ func TestLogout_RevokesRefreshSession(t *testing.T) {
 		WithSessionStore(sessions),
 	)
 
-	refreshToken, err := svc.Login(context.Background(), "user@example.com", "pass")
+	refreshToken, err := svc.Login(t.Context(), "user@example.com", "pass")
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -420,14 +420,14 @@ func TestLogout_RevokesRefreshSession(t *testing.T) {
 		t.Fatal("refresh token was not stored in session store")
 	}
 
-	if err := svc.Logout(context.Background(), refreshToken); err != nil {
+	if err := svc.Logout(t.Context(), refreshToken); err != nil {
 		t.Fatalf("Logout: %v", err)
 	}
 	if _, ok := sessions.entries[refreshToken]; ok {
 		t.Fatal("refresh token should be removed after logout")
 	}
 
-	if _, err := svc.Refresh(context.Background(), refreshToken); !errors.Is(err, autherrors.ErrInvalidToken) {
+	if _, err := svc.Refresh(t.Context(), refreshToken); !errors.Is(err, autherrors.ErrInvalidToken) {
 		t.Fatalf("Refresh after logout: got %v, want ErrInvalidToken", err)
 	}
 }
@@ -437,7 +437,7 @@ func TestSetUserPermissionsRejectsInvalidPermission(t *testing.T) {
 	repo := &stubUserRepository{user: user}
 	svc := NewService(repo, fakeTokenGenerator{})
 
-	_, err := svc.SetUserPermissions(context.Background(), "u-1", []string{"not.valid.permission"}, "")
+	_, err := svc.SetUserPermissions(t.Context(), "u-1", []string{"not.valid.permission"}, "")
 	if !errors.Is(err, autherrors.ErrInvalidPermission) {
 		t.Fatalf("got %v, want ErrInvalidPermission", err)
 	}

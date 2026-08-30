@@ -84,7 +84,7 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 
 func seedCatalogStyle(t *testing.T, catalog *memory.CatalogStore, brandCode, styleCode, name string) {
 	t.Helper()
-	if _, err := catalog.CreateStyle(domain.Style{BrandCode: brandCode, Code: styleCode, Name: name}); err != nil {
+	if _, err := catalog.CreateStyle(t.Context(), domain.Style{BrandCode: brandCode, Code: styleCode, Name: name}); err != nil {
 		t.Fatalf("seed style %s/%s: %v", brandCode, styleCode, err)
 	}
 }

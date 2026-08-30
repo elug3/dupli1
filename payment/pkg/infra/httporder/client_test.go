@@ -1,7 +1,6 @@
 package httporder_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +37,7 @@ func TestGetOrderParsesFulfillmentFields(t *testing.T) {
 	defer srv.Close()
 
 	client := httporder.NewClient(srv.URL, srv.Client())
-	got, err := client.GetOrder(context.Background(), "access-token", "ord-42")
+	got, err := client.GetOrder(t.Context(), "access-token", "ord-42")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +62,7 @@ func TestGetOrderNotFound(t *testing.T) {
 	defer srv.Close()
 
 	client := httporder.NewClient(srv.URL, srv.Client())
-	_, err := client.GetOrder(context.Background(), "token", "missing")
+	_, err := client.GetOrder(t.Context(), "token", "missing")
 	if err != ports.ErrOrderNotFound {
 		t.Fatalf("error = %v, want ErrOrderNotFound", err)
 	}
@@ -76,7 +75,7 @@ func TestGetOrderForbidden(t *testing.T) {
 	defer srv.Close()
 
 	client := httporder.NewClient(srv.URL, srv.Client())
-	_, err := client.GetOrder(context.Background(), "token", "ord-1")
+	_, err := client.GetOrder(t.Context(), "token", "ord-1")
 	if err != ports.ErrOrderForbidden {
 		t.Fatalf("error = %v, want ErrOrderForbidden", err)
 	}

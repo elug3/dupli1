@@ -37,6 +37,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// CLI process lifetime root; no request context available.
 	ctx := context.Background()
 
 	conn, err := pgx.Connect(ctx, *orderDB)

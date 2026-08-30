@@ -29,6 +29,8 @@ func NewInventoryStore(pool *pgxpool.Pool) (*InventoryStore, error) {
 }
 
 func (s *InventoryStore) migrate() error {
+	// Startup schema migration runs outside any HTTP request; there is no
+	// request-scoped context to propagate (process lifetime only).
 	ctx := context.Background()
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS id_sequences (

@@ -132,7 +132,7 @@ func newSvc(stock ports.StockClient, product *fakeProduct, publisher ...ports.Ev
 }
 
 func TestCreateOrderReservesStockAndPublishesEvent(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	publisher := &recordedPublisher{}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 1250}, publisher)
@@ -162,7 +162,7 @@ func TestCreateOrderReservesStockAndPublishesEvent(t *testing.T) {
 }
 
 func TestCreateOrderIgnoresClientUnitPrice(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	svc := newSvc(&fakeStock{}, &fakeProduct{defaultCents: 2890000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
@@ -178,7 +178,7 @@ func TestCreateOrderIgnoresClientUnitPrice(t *testing.T) {
 }
 
 func TestCreateOrderCapturesProductNameAndImageURL(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	product := &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
 			"BAG-001": {
@@ -217,7 +217,7 @@ func TestCreateOrderCapturesProductNameAndImageURL(t *testing.T) {
 }
 
 func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
@@ -255,7 +255,7 @@ func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 // Payment republishes payment.succeeded for two hours, so the consumer sees replays
 // after the order has already shipped or been fulfilled.
 func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
@@ -292,7 +292,7 @@ func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 }
 
 func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	svc := newSvc(&fakeStock{reservationID: "res-123"}, &fakeProduct{defaultCents: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
@@ -313,7 +313,7 @@ func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
 }
 
 func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-original"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
@@ -353,7 +353,7 @@ func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
 }
 
 func TestMarkOrderPaidRollsBackReinstatedReservationOnAmountMismatch(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-original"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
@@ -387,7 +387,7 @@ func TestMarkOrderPaidRollsBackReinstatedReservationOnAmountMismatch(t *testing.
 }
 
 func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
@@ -417,7 +417,7 @@ func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
 }
 
 func TestShipOrderRejectsInvalidTrackingWithoutCommittingStock(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
@@ -453,7 +453,7 @@ func TestShipOrderRejectsInvalidTrackingWithoutCommittingStock(t *testing.T) {
 }
 
 func TestShipOrderRejectsEmptyShippedByWithoutCommittingStock(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
@@ -506,7 +506,7 @@ func (r *saveFailOnPaidRepo) SavePaidIfCanceled(ctx context.Context, order *doma
 }
 
 func TestMarkOrderPaidRollsBackReinstatedReservationOnSaveFailure(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-original"}
 	repo := &saveFailOnPaidRepo{Repository: memory.NewRepository(), fail: true}
 	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
@@ -541,7 +541,7 @@ func TestMarkOrderPaidRollsBackReinstatedReservationOnSaveFailure(t *testing.T) 
 }
 
 func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
@@ -569,7 +569,7 @@ func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
 }
 
 func TestShipOrderRejectsReleasedReservation(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
@@ -621,7 +621,7 @@ func (r *expiryRaceRepo) Get(ctx context.Context, id string) (*domain.Order, err
 }
 
 func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSave(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-original"}
 	repo := &expiryRaceRepo{
 		Repository: memory.NewRepository(),
@@ -675,7 +675,7 @@ func (r *savePaidRaceRepo) SavePaidIfPending(ctx context.Context, order *domain.
 }
 
 func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSavePaid(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-original"}
 	repo := &savePaidRaceRepo{
 		Repository: memory.NewRepository(),
@@ -708,7 +708,7 @@ func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSavePaid(t *testing.T) {
 }
 
 func TestCancelPaidOrderReleasesStock(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 7500})
 
@@ -733,7 +733,7 @@ func TestCancelPaidOrderReleasesStock(t *testing.T) {
 }
 
 func TestCancelInTransitOrderFails(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 7500})
 
@@ -770,7 +770,7 @@ func (r *saveFailOnCancelRepo) SaveWithOutbox(ctx context.Context, order *domain
 }
 
 func TestCancelOrderDoesNotReleaseStockWhenSaveFails(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	repo := &saveFailOnCancelRepo{Repository: memory.NewRepository(), fail: true}
 	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
@@ -811,7 +811,7 @@ func (f *alreadyReleasedStock) ReleaseReservation(ctx context.Context, reservati
 }
 
 func TestCancelOrderSucceedsWhenReservationAlreadyReleased(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &alreadyReleasedStock{fakeStock: fakeStock{reservationID: "res-123"}}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
 
@@ -836,7 +836,7 @@ func TestCancelOrderSucceedsWhenReservationAlreadyReleased(t *testing.T) {
 }
 
 func TestCreateOrderReservesStockWithSkuID(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-999"}
 	svc := newSvc(stock, &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
@@ -859,7 +859,7 @@ func TestCreateOrderReservesStockWithSkuID(t *testing.T) {
 }
 
 func TestCreateOrderEventCarriesSkuID(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-1"}
 	publisher := &recordedPublisher{}
 	svc := newSvc(stock, &fakeProduct{
@@ -900,7 +900,7 @@ func TestCreateOrderEventCarriesSkuID(t *testing.T) {
 }
 
 func TestCreateOrderIdempotencyKeyReplaysWithoutSecondReserve(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &countingStock{fakeStock: fakeStock{reservationID: "res-1"}}
 	publisher := &recordedPublisher{}
 	svc := newSvc(stock, &fakeProduct{defaultCents: 1000}, publisher)
@@ -927,7 +927,7 @@ func TestCreateOrderIdempotencyKeyReplaysWithoutSecondReserve(t *testing.T) {
 }
 
 func TestCreateOrderIdempotencyKeyConflict(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	svc := newSvc(&fakeStock{reservationID: "res-1"}, &fakeProduct{defaultCents: 1000})
 
 	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
@@ -949,7 +949,7 @@ func TestCreateOrderIdempotencyKeyConflict(t *testing.T) {
 }
 
 func TestCreateOrderSucceedsWhenPublishFails(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-1"}
 	publisher := &failingPublisher{}
 	repo := memory.NewRepository()
@@ -978,7 +978,7 @@ func TestCreateOrderSucceedsWhenPublishFails(t *testing.T) {
 }
 
 func TestDrainOutboxPublishesPending(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-1"}
 	failPub := &failingPublisher{}
 	repo := memory.NewRepository()

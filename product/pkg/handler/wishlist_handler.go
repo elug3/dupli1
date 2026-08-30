@@ -37,7 +37,7 @@ func (h *Handler) AddWishlist(w http.ResponseWriter, r *http.Request) {
 		h.respondServiceError(w, err)
 		return
 	}
-	_, count, err := h.wishlistStore.AddWishlist(ownerKey, id)
+	_, count, err := h.wishlistStore.AddWishlist(r.Context(), ownerKey, id)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -64,7 +64,7 @@ func (h *Handler) RemoveWishlist(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, count, err := h.wishlistStore.RemoveWishlist(ownerKey, id)
+	_, count, err := h.wishlistStore.RemoveWishlist(r.Context(), ownerKey, id)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -86,7 +86,7 @@ func (h *Handler) ListWishlist(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ids, err := h.wishlistStore.ListWishlistProductIDs(ownerKey)
+	ids, err := h.wishlistStore.ListWishlistProductIDs(r.Context(), ownerKey)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

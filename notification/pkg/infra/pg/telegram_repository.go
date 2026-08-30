@@ -21,6 +21,7 @@ type TelegramRepository struct {
 
 func NewTelegramRepository(connString string) (*TelegramRepository, error) {
 	connString = withPostgresSSLMode(connString)
+	// Pool connect at process start; no request context available.
 	pool, err := pgxpool.Connect(context.Background(), connString)
 	if err != nil {
 		return nil, fmt.Errorf("connect notification database: %w", err)
@@ -40,6 +41,7 @@ func (r *TelegramRepository) Close() {
 }
 
 func (r *TelegramRepository) migrate() error {
+	// Startup schema migration; no request-scoped context to propagate.
 	ctx := context.Background()
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS telegram_subscriptions (

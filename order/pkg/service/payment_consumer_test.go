@@ -32,7 +32,7 @@ func (f *expiryStock) ReleaseReservation(_ context.Context, reservationID string
 }
 
 func TestCancelExpiredPendingOrderSkipsPaidOrder(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &expiryStock{reservationID: "res-expiry"}
 	repo := memory.NewRepository()
 	svc := New(repo, stock)
@@ -70,7 +70,7 @@ func TestCancelExpiredPendingOrderSkipsPaidOrder(t *testing.T) {
 }
 
 func TestCancelExpiredPendingOrderCancelsUnpaidPending(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &expiryStock{reservationID: "res-expiry"}
 	repo := memory.NewRepository()
 	svc := New(repo, stock)
@@ -126,7 +126,7 @@ func (r *paidDuringExpiryRepo) CancelIfPendingExpired(ctx context.Context, order
 }
 
 func TestCancelExpiredPendingOrderSkipsWhenPaymentWinsRace(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &expiryStock{reservationID: "res-expiry"}
 	repo := &paidDuringExpiryRepo{Repository: memory.NewRepository()}
 	svc := New(repo, stock)
@@ -161,7 +161,7 @@ func TestCancelExpiredPendingOrderSkipsWhenPaymentWinsRace(t *testing.T) {
 }
 
 func TestHandlePaymentSucceededMarksOrderPaid(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	stock := &expiryStock{reservationID: "res-pay"}
 	repo := memory.NewRepository()
 	svc := New(repo, stock)
@@ -205,7 +205,7 @@ func TestHandlePaymentSucceededMarksOrderPaid(t *testing.T) {
 }
 
 func TestHandlePaymentSucceededRejectsInvalidPayload(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	svc := New(memory.NewRepository(), &expiryStock{})
 
 	if err := svc.handlePaymentSucceeded(ctx, paymentSucceededSubject, []byte("{")); err == nil {

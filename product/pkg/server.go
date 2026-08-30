@@ -22,6 +22,7 @@ type ProductSearchServer struct {
 
 // NewSearchServer creates and wires a new read-only product search server.
 func NewSearchServer(opts SearchServerOptions) (*ProductSearchServer, error) {
+	// Process bootstrap wiring runs before any HTTP request exists.
 	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
 		DatabaseConnString: opts.DatabaseConnString,
 		JWTSecret:          opts.JWTSecret,
@@ -72,6 +73,7 @@ func (s *ProductSearchServer) Stop() error {
 		return nil
 	}
 
+	// Shutdown timeout parent: no request context after SIGINT.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -110,6 +112,7 @@ type ProductServer struct {
 
 // NewServer creates and wires a new full-featured product server for admin/manager use.
 func NewServer(opts ServerOptions) (*ProductServer, error) {
+	// Process bootstrap wiring runs before any HTTP request exists.
 	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
 		DatabaseConnString: opts.DatabaseConnString,
 		JWTSecret:          opts.JWTSecret,
@@ -161,6 +164,7 @@ func (s *ProductServer) Stop() error {
 		return nil
 	}
 
+	// Shutdown timeout parent: no request context after SIGINT.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

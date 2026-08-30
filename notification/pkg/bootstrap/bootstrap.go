@@ -57,6 +57,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	telegramSubs := service.NewTelegramSubscriptions(telegramRepo)
 	telegramAccess := service.NewTelegramAccess(telegramSubs, envAllowlist)
 	refreshAccess := func() {
+		// Process bootstrap: no HTTP request context available.
 		if err := telegramAccess.Refresh(context.Background()); err != nil {
 			log.Printf("telegram access refresh: %v", err)
 		}
@@ -105,6 +106,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	var cancelTelegram context.CancelFunc
 
 	if notifier.Enabled() {
+		// Long-lived worker/subscriber root; cancelled on process shutdown.
 		telegramCtx, cancel := context.WithCancel(context.Background())
 		cancelTelegram = cancel
 
@@ -147,6 +149,7 @@ func Bootstrap(cfg Config) (*App, error) {
 			ProductChatID: cfg.ProductChatID,
 			ManageWebURL:  cfg.ManageWebURL,
 		})
+		// Long-lived worker/subscriber root; cancelled on process shutdown.
 		if err := dispatcher.Register(subscriber, context.Background()); err != nil {
 			natsSubscriber.Close()
 			if cancelTelegram != nil {

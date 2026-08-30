@@ -1,7 +1,6 @@
 package telegram_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +21,7 @@ func TestClientSendRespectsOutboundAllowlist(t *testing.T) {
 	allowlist := telegram.NewAllowlist("-1001", "", "")
 	client.SetAccessPolicy(allowlist)
 
-	if err := client.Send(context.Background(), "42", "blocked"); err != nil {
+	if err := client.Send(t.Context(), "42", "blocked"); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	if called {
@@ -30,7 +29,7 @@ func TestClientSendRespectsOutboundAllowlist(t *testing.T) {
 	}
 
 	called = false
-	if err := client.Send(context.Background(), "-1001", "allowed"); err != nil {
+	if err := client.Send(t.Context(), "-1001", "allowed"); err != nil {
 		t.Fatalf("Send allowlisted: %v", err)
 	}
 	if !called {
@@ -58,7 +57,7 @@ func TestClientReplyBypassesOutboundAllowlist(t *testing.T) {
 	allowlist := telegram.NewAllowlist("-1001", "", "")
 	client.SetAccessPolicy(allowlist)
 
-	if err := client.Reply(context.Background(), "42", "Registration received"); err != nil {
+	if err := client.Reply(t.Context(), "42", "Registration received"); err != nil {
 		t.Fatalf("Reply: %v", err)
 	}
 	if gotChatID != "42" {

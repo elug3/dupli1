@@ -1,7 +1,6 @@
 package checkout
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -10,7 +9,7 @@ import (
 
 func TestUnavailableProviderRejectsSession(t *testing.T) {
 	p := NewUnavailableProvider("no pg")
-	_, err := p.CreateSession(context.Background(), ports.CheckoutSessionInput{PaymentID: "p1"})
+	_, err := p.CreateSession(t.Context(), ports.CheckoutSessionInput{PaymentID: "p1"})
 	if err == nil {
 		t.Fatal("expected error")
 	}

@@ -1,7 +1,6 @@
 package handler_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -37,7 +36,7 @@ func newInventoryMux(t *testing.T) (*http.ServeMux, *service.InventoryService) {
 
 func TestCommitReservationHandler_RejectsAlreadyReleased(t *testing.T) {
 	mux, invSvc := newInventoryMux(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := invSvc.UpsertItem(ctx, service.SkuRef{SkuID: "SKUID-GRN"}, 5); err != nil {
 		t.Fatalf("UpsertItem: %v", err)

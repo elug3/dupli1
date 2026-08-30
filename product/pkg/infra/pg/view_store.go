@@ -8,11 +8,10 @@ import (
 // RecordUniqueView inserts a unique (guest, product) view and increments products.view_count
 // when the view is new. Always returns the current denormalized view_count after the write.
 // Implements ports.ProductViewStore.
-func (s *ProductSearchStore) RecordUniqueView(guestID, productID string) (bool, int64, error) {
+func (s *ProductSearchStore) RecordUniqueView(ctx context.Context, guestID, productID string) (bool, int64, error) {
 	if guestID == "" || productID == "" {
 		return false, 0, fmt.Errorf("guest id and product id are required")
 	}
-	ctx := context.Background()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return false, 0, wrapDB("record unique view begin", err)

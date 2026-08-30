@@ -136,7 +136,7 @@ func newMux(h *handler.Handler) *http.ServeMux {
 // createOrder via the service and return the order ID.
 func seedOrder(t *testing.T, svc *service.Service, customerID string) string {
 	t.Helper()
-	order, err := svc.CreateOrder(context.Background(), service.CreateOrderInput{
+	order, err := svc.CreateOrder(t.Context(), service.CreateOrderInput{
 		CustomerID: customerID,
 		Items:      []domain.OrderItem{{SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}},
 	})
@@ -527,11 +527,11 @@ func TestUpdateStatus_CustomerForbidden(t *testing.T) {
 func seedPaidOrder(t *testing.T, svc *service.Service, customerID string) string {
 	t.Helper()
 	orderID := seedOrder(t, svc, customerID)
-	order, err := svc.GetOrder(context.Background(), orderID)
+	order, err := svc.GetOrder(t.Context(), orderID)
 	if err != nil {
 		t.Fatalf("GetOrder: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(context.Background(), orderID, "pay-test", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay-test", order.TotalCents); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 	return orderID
@@ -647,7 +647,7 @@ func TestCheckoutDeleteBySkuID_ForeignUserForbidden(t *testing.T) {
 	}
 
 	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
-	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
 
@@ -674,7 +674,7 @@ func TestCheckoutDeleteBySkuID_OwnerSuccess(t *testing.T) {
 	}
 
 	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
-	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
 
@@ -700,7 +700,7 @@ func TestCompleteCheckoutPersistsPCCCInOrderJSON(t *testing.T) {
 	}
 
 	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
-	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
 
@@ -768,7 +768,7 @@ func TestCompleteCheckoutRejectsMalformedPCCC(t *testing.T) {
 	}
 
 	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
-	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
 
@@ -805,7 +805,7 @@ func TestCompleteCheckoutRejectsInvalidFulfillment(t *testing.T) {
 	}
 
 	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
-	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
 

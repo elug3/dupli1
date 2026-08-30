@@ -3,7 +3,6 @@
 package jwt_test
 
 import (
-	"context"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -28,7 +27,7 @@ func init() {
 
 func TestRSA_RoundtripPreservesClaims(t *testing.T) {
 	gen := jwtinfra.NewRSATokenGenerator(testRSAKey, "test-kid", 3600)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, err := gen.Generate(ctx, "user-1", []string{permissions.UserCreate})
 	if err != nil {
@@ -49,7 +48,7 @@ func TestRSA_RoundtripPreservesClaims(t *testing.T) {
 
 func TestRSA_AdminPermissionsPreserved(t *testing.T) {
 	gen := jwtinfra.NewRSATokenGenerator(testRSAKey, "kid", 3600)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	perms := permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})
 	token, err := gen.Generate(ctx, "user-2", perms)
@@ -68,7 +67,7 @@ func TestRSA_AdminPermissionsPreserved(t *testing.T) {
 
 func TestRSA_EmptyPermissionsForCustomer(t *testing.T) {
 	gen := jwtinfra.NewRSATokenGenerator(testRSAKey, "kid", 3600)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, err := gen.Generate(ctx, "user-3", []string{})
 	if err != nil {
@@ -86,7 +85,7 @@ func TestRSA_EmptyPermissionsForCustomer(t *testing.T) {
 
 func TestRSA_ExpiredTokenReturnsError(t *testing.T) {
 	gen := jwtinfra.NewRSATokenGenerator(testRSAKey, "kid", -1)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, err := gen.Generate(ctx, "user-1", []string{})
 	if err != nil {
@@ -106,7 +105,7 @@ func TestRSA_WrongKeyReturnsError(t *testing.T) {
 
 	signer := jwtinfra.NewRSATokenGenerator(testRSAKey, "kid", 3600)
 	verifier := jwtinfra.NewRSATokenGenerator(otherKey, "kid", 3600)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, _ := signer.Generate(ctx, "user-1", []string{})
 	if _, err := verifier.Validate(ctx, token); err == nil {
@@ -117,7 +116,7 @@ func TestRSA_WrongKeyReturnsError(t *testing.T) {
 func TestRSA_Validate_RejectsWrongTokenType(t *testing.T) {
 	access := jwtinfra.NewRSATokenGeneratorWithType(testRSAKey, "kid", 3600, "access")
 	refresh := jwtinfra.NewRSATokenGeneratorWithType(testRSAKey, "kid", 3600, "refresh")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	refreshToken, err := refresh.Generate(ctx, "user-1", nil)
 	if err != nil {
@@ -130,7 +129,7 @@ func TestRSA_Validate_RejectsWrongTokenType(t *testing.T) {
 
 func TestRSA_TamperedTokenReturnsError(t *testing.T) {
 	gen := jwtinfra.NewRSATokenGenerator(testRSAKey, "kid", 3600)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, _ := gen.Generate(ctx, "user-1", []string{})
 	if _, err := gen.Validate(ctx, token+"tampered"); err == nil {
@@ -205,7 +204,7 @@ func TestRSA_NewFromPEM_PKCS1(t *testing.T) {
 		t.Fatalf("NewRSATokenGeneratorFromPEM PKCS1: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	token, err := gen.Generate(ctx, "user-1", []string{permissions.All})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
@@ -226,7 +225,7 @@ func TestRSA_NewFromPEM_PKCS8(t *testing.T) {
 		t.Fatalf("NewRSATokenGeneratorFromPEM PKCS8: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	token, err := gen.Generate(ctx, "user-2", []string{})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)

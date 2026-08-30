@@ -52,24 +52,24 @@ func (s *ProductStore) variantsFor(productID string) []domain.Variant {
 	return out
 }
 
-func (s *ProductStore) enrichMasterNames(products []domain.Product) {
+func (s *ProductStore) enrichMasterNames(ctx context.Context, products []domain.Product) {
 	cat := s.catalog()
 	for i := range products {
 		p := &products[i]
 		if p.Brand == "" && p.BrandCode != "" {
-			if b, err := cat.GetBrand(p.BrandCode); err == nil {
+			if b, err := cat.GetBrand(ctx, p.BrandCode); err == nil {
 				p.Brand = b.Name
 			}
 		}
 		for j := range p.Variants {
 			v := &p.Variants[j]
 			if v.Color == "" && v.ColorCode != "" {
-				if c, err := cat.GetColor(v.ColorCode); err == nil {
+				if c, err := cat.GetColor(ctx, v.ColorCode); err == nil {
 					v.Color = c.Name
 				}
 			}
 			if v.Size == "" && v.SizeCode != "" {
-				if sz, err := cat.GetSize(v.SizeCode); err == nil {
+				if sz, err := cat.GetSize(ctx, v.SizeCode); err == nil {
 					v.Size = sz.Name
 				}
 			}
@@ -77,14 +77,14 @@ func (s *ProductStore) enrichMasterNames(products []domain.Product) {
 	}
 }
 
-func (s *ProductStore) enrich(products []domain.Product, includeVariants bool) {
+func (s *ProductStore) enrich(ctx context.Context, products []domain.Product, includeVariants bool) {
 	for i := range products {
 		products[i].EnrichFromVariants(s.variantsFor(products[i].ID), includeVariants)
 	}
-	s.enrichMasterNames(products)
+	s.enrichMasterNames(ctx, products)
 }
 
-func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Product, int, error) {
+func (s *ProductStore) SearchProducts(ctx context.Context, filter map[string]string) ([]domain.Product, int, error) {
 	var results []domain.Product
 	q := strings.ToLower(strings.TrimSpace(filter["q"]))
 	for _, p := range s.Products {
@@ -139,7 +139,7 @@ func (s *ProductStore) SearchProducts(filter map[string]string) ([]domain.Produc
 	}
 
 	// Enrich summary fields before sort (sort=price uses parent Price).
-	s.enrich(results, false)
+	s.enrich(ctx, results, false)
 	sortProducts(results, filter)
 
 	total := len(results)
@@ -267,12 +267,12 @@ func hasAllTags(have []string, wantCSV string) bool {
 	return true
 }
 
-func (s *ProductStore) ListProducts() ([]domain.Product, error) {
-	results, _, err := s.SearchProducts(nil)
+func (s *ProductStore) ListProducts(ctx context.Context) ([]domain.Product, error) {
+	results, _, err := s.SearchProducts(ctx, nil)
 	return results, err
 }
 
-func (s *ProductStore) GetProduct(id string) (*domain.Product, error) {
+func (s *ProductStore) GetProduct(ctx context.Context, id string) (*domain.Product, error) {
 	for _, p := range s.Products {
 		if p.ID == id {
 			out := p
@@ -283,8 +283,8 @@ func (s *ProductStore) GetProduct(id string) (*domain.Product, error) {
 	return nil, fmt.Errorf("product %s: %w", id, ports.ErrNotFound)
 }
 
-func (s *ProductStore) GetActiveProduct(id string) (*domain.Product, error) {
-	p, err := s.GetProduct(id)
+func (s *ProductStore) GetActiveProduct(ctx context.Context, id string) (*domain.Product, error) {
+	p, err := s.GetProduct(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +321,7 @@ func (s *ProductStore) nextProductID(brand string) string {
 	return fmt.Sprintf("%s-%03d", prefix, max+1)
 }
 
-func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) {
+func (s *ProductStore) CreateProduct(ctx context.Context, p domain.Product) (*domain.Product, error) {
 	if p.ID == "" {
 		p.ID = domain.NewProductID()
 	}
@@ -332,14 +332,14 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 		return nil, err
 	}
 	cat := s.catalog()
-	if _, err := cat.GetBrand(p.BrandCode); err != nil {
+	if _, err := cat.GetBrand(ctx, p.BrandCode); err != nil {
 		return nil, fmt.Errorf("%w: brand %s", domain.ErrMasterNotFound, p.BrandCode)
 	}
-	if _, err := cat.GetStyle(p.BrandCode, p.StyleCode); err != nil {
+	if _, err := cat.GetStyle(ctx, p.BrandCode, p.StyleCode); err != nil {
 		return nil, fmt.Errorf("%w: style %s/%s", domain.ErrMasterNotFound, p.BrandCode, p.StyleCode)
 	}
 	if p.Brand == "" {
-		if b, err := cat.GetBrand(p.BrandCode); err == nil {
+		if b, err := cat.GetBrand(ctx, p.BrandCode); err == nil {
 			p.Brand = b.Name
 		}
 	}
@@ -353,12 +353,12 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 			if v.Status == "" {
 				v.Status = p.Status
 			}
-			if _, err := s.CreateVariant(v); err != nil {
+			if _, err := s.CreateVariant(ctx, v); err != nil {
 				return nil, err
 			}
 		}
 	case p.Color != "" || len(p.ImageURLs) > 0:
-		if _, err := s.CreateVariant(domain.Variant{
+		if _, err := s.CreateVariant(ctx, domain.Variant{
 			ProductID: p.ID,
 			Color:     p.Color,
 			Status:    p.Status,
@@ -368,10 +368,10 @@ func (s *ProductStore) CreateProduct(p domain.Product) (*domain.Product, error) 
 		}
 	}
 
-	return s.GetProduct(p.ID)
+	return s.GetProduct(ctx, p.ID)
 }
 
-func (s *ProductStore) UpdateProduct(p domain.Product) (*domain.Product, error) {
+func (s *ProductStore) UpdateProduct(ctx context.Context, p domain.Product) (*domain.Product, error) {
 	for i, existing := range s.Products {
 		if existing.ID == p.ID {
 			// Caller (service) already merges; still lock immutable codes/audit.
@@ -383,13 +383,13 @@ func (s *ProductStore) UpdateProduct(p domain.Product) (*domain.Product, error) 
 			p.SoldCount = existing.SoldCount
 			p.WishlistCount = existing.WishlistCount
 			s.Products[i] = p
-			return s.GetProduct(p.ID)
+			return s.GetProduct(ctx, p.ID)
 		}
 	}
 	return nil, fmt.Errorf("product %s: %w", p.ID, ports.ErrNotFound)
 }
 
-func (s *ProductStore) DeleteProduct(id string) error {
+func (s *ProductStore) DeleteProduct(ctx context.Context, id string) error {
 	for i, p := range s.Products {
 		if p.ID == id {
 			s.Products = append(s.Products[:i], s.Products[i+1:]...)
@@ -418,7 +418,7 @@ func (s *ProductStore) DeleteProduct(id string) error {
 }
 
 // RecordUniqueView implements ports.ProductViewStore.
-func (s *ProductStore) RecordUniqueView(guestID, productID string) (bool, int64, error) {
+func (s *ProductStore) RecordUniqueView(ctx context.Context, guestID, productID string) (bool, int64, error) {
 	if guestID == "" || productID == "" {
 		return false, 0, fmt.Errorf("guest id and product id are required")
 	}
@@ -441,7 +441,7 @@ func (s *ProductStore) RecordUniqueView(guestID, productID string) (bool, int64,
 }
 
 // AddWishlist implements ports.ProductWishlistStore.
-func (s *ProductStore) AddWishlist(ownerKey, productID string) (bool, int64, error) {
+func (s *ProductStore) AddWishlist(ctx context.Context, ownerKey, productID string) (bool, int64, error) {
 	if ownerKey == "" || productID == "" {
 		return false, 0, fmt.Errorf("owner key and product id are required")
 	}
@@ -464,7 +464,7 @@ func (s *ProductStore) AddWishlist(ownerKey, productID string) (bool, int64, err
 }
 
 // RemoveWishlist implements ports.ProductWishlistStore.
-func (s *ProductStore) RemoveWishlist(ownerKey, productID string) (bool, int64, error) {
+func (s *ProductStore) RemoveWishlist(ctx context.Context, ownerKey, productID string) (bool, int64, error) {
 	if ownerKey == "" || productID == "" {
 		return false, 0, fmt.Errorf("owner key and product id are required")
 	}
@@ -489,7 +489,7 @@ func (s *ProductStore) RemoveWishlist(ownerKey, productID string) (bool, int64, 
 }
 
 // ListWishlistProductIDs implements ports.ProductWishlistStore.
-func (s *ProductStore) ListWishlistProductIDs(ownerKey string) ([]string, error) {
+func (s *ProductStore) ListWishlistProductIDs(ctx context.Context, ownerKey string) ([]string, error) {
 	type entry struct {
 		id string
 		at time.Time
@@ -535,11 +535,11 @@ func (s *ProductStore) nextVariantSKU(productID, brandCode, styleCode string, v 
 	}
 }
 
-func (s *ProductStore) ListVariants(productID string) ([]domain.Variant, error) {
+func (s *ProductStore) ListVariants(ctx context.Context, productID string) ([]domain.Variant, error) {
 	return s.variantsFor(productID), nil
 }
 
-func (s *ProductStore) GetVariant(sku string) (*domain.Variant, error) {
+func (s *ProductStore) GetVariant(ctx context.Context, sku string) (*domain.Variant, error) {
 	for _, v := range s.Variants {
 		if v.SKU == sku {
 			out := v
@@ -549,7 +549,7 @@ func (s *ProductStore) GetVariant(sku string) (*domain.Variant, error) {
 	return nil, fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 }
 
-func (s *ProductStore) GetVariantBySkuID(skuID string) (*domain.Variant, error) {
+func (s *ProductStore) GetVariantBySkuID(ctx context.Context, skuID string) (*domain.Variant, error) {
 	for _, v := range s.Variants {
 		if v.SkuID == skuID {
 			out := v
@@ -559,7 +559,7 @@ func (s *ProductStore) GetVariantBySkuID(skuID string) (*domain.Variant, error) 
 	return nil, fmt.Errorf("variant %s: %w", skuID, ports.ErrNotFound)
 }
 
-func (s *ProductStore) GetVariantsBySkuIDs(skuIDs []string) ([]domain.Variant, error) {
+func (s *ProductStore) GetVariantsBySkuIDs(ctx context.Context, skuIDs []string) ([]domain.Variant, error) {
 	if len(skuIDs) == 0 {
 		return nil, nil
 	}
@@ -577,7 +577,7 @@ func (s *ProductStore) GetVariantsBySkuIDs(skuIDs []string) ([]domain.Variant, e
 	return results, nil
 }
 
-func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) {
+func (s *ProductStore) CreateVariant(ctx context.Context, v domain.Variant) (*domain.Variant, error) {
 	if v.ProductID == "" {
 		return nil, ports.Invalid("productId is required")
 	}
@@ -603,24 +603,24 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 		return nil, err
 	}
 	cat := s.catalog()
-	if _, err := cat.GetColor(v.ColorCode); err != nil {
+	if _, err := cat.GetColor(ctx, v.ColorCode); err != nil {
 		return nil, fmt.Errorf("%w: color %s", domain.ErrMasterNotFound, v.ColorCode)
 	}
-	if _, err := cat.GetSize(v.SizeCode); err != nil {
+	if _, err := cat.GetSize(ctx, v.SizeCode); err != nil {
 		return nil, fmt.Errorf("%w: size %s", domain.ErrMasterNotFound, v.SizeCode)
 	}
 	if v.EditionCode != "" {
-		if _, err := cat.GetEdition(v.EditionCode); err != nil {
+		if _, err := cat.GetEdition(ctx, v.EditionCode); err != nil {
 			return nil, fmt.Errorf("%w: edition %s", domain.ErrMasterNotFound, v.EditionCode)
 		}
 	}
 	if v.Color == "" {
-		if c, err := cat.GetColor(v.ColorCode); err == nil {
+		if c, err := cat.GetColor(ctx, v.ColorCode); err == nil {
 			v.Color = c.Name
 		}
 	}
 	if v.Size == "" {
-		if sz, err := cat.GetSize(v.SizeCode); err == nil {
+		if sz, err := cat.GetSize(ctx, v.SizeCode); err == nil {
 			v.Size = sz.Name
 		}
 	}
@@ -655,7 +655,7 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 		cat.VariantEditionCodes[v.SKU] = v.EditionCode
 	}
 	if s.inventory != nil {
-		_ = s.inventory.SaveItem(context.Background(), &domain.StockItem{
+		_ = s.inventory.SaveItem(ctx, &domain.StockItem{
 			SkuID:     v.SkuID,
 			SKU:       v.SKU,
 			Quantity:  0,
@@ -670,7 +670,7 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 
 // UpdateVariant updates a variant by its (immutable) sku. SkuID is always
 // preserved from the existing row regardless of what the caller passed in.
-func (s *ProductStore) UpdateVariant(v domain.Variant) (*domain.Variant, error) {
+func (s *ProductStore) UpdateVariant(ctx context.Context, v domain.Variant) (*domain.Variant, error) {
 	for i, existing := range s.Variants {
 		if existing.SKU == v.SKU {
 			v.SkuID = existing.SkuID
@@ -683,7 +683,7 @@ func (s *ProductStore) UpdateVariant(v domain.Variant) (*domain.Variant, error) 
 	return nil, fmt.Errorf("variant %s: %w", v.SKU, ports.ErrNotFound)
 }
 
-func (s *ProductStore) DeleteVariant(sku string) error {
+func (s *ProductStore) DeleteVariant(ctx context.Context, sku string) error {
 	for i, v := range s.Variants {
 		if v.SKU == sku {
 			s.Variants = append(s.Variants[:i], s.Variants[i+1:]...)

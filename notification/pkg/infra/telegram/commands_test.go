@@ -83,7 +83,7 @@ func TestUpdateProcessorStartAccepted(t *testing.T) {
 
 	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
 	access := service.NewTelegramAccess(service.NewTelegramSubscriptions(memory.NewTelegramRepository()), nil)
-	_ = access.Refresh(context.Background())
+	_ = access.Refresh(t.Context())
 
 	processor := &telegram.UpdateProcessor{
 		Client: client,
@@ -101,7 +101,7 @@ func TestUpdateProcessorStartAccepted(t *testing.T) {
 			Chat: telegram.Chat{ID: 42, Type: "private", FirstName: "Alex"},
 		},
 	}
-	if err := processor.Handle(context.Background(), update); err != nil {
+	if err := processor.Handle(t.Context(), update); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 	if gotChatID != "42" {
@@ -127,7 +127,7 @@ func TestUpdateProcessorStartPending(t *testing.T) {
 	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
 	// Empty access policy: pending chat is not allowlisted for outbound Send.
 	access := service.NewTelegramAccess(service.NewTelegramSubscriptions(memory.NewTelegramRepository()), nil)
-	if err := access.Refresh(context.Background()); err != nil {
+	if err := access.Refresh(t.Context()); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	client.SetAccessPolicy(access)
@@ -147,7 +147,7 @@ func TestUpdateProcessorStartPending(t *testing.T) {
 			Chat: telegram.Chat{ID: 42, Type: "private"},
 		},
 	}
-	if err := processor.Handle(context.Background(), update); err != nil {
+	if err := processor.Handle(t.Context(), update); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 	if !strings.Contains(gotText, "Registration received") {
@@ -164,7 +164,7 @@ func TestUpdateProcessorStartDeniedForUnknownUser(t *testing.T) {
 
 	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
 	access := service.NewTelegramAccess(service.NewTelegramSubscriptions(memory.NewTelegramRepository()), nil)
-	if err := access.Refresh(context.Background()); err != nil {
+	if err := access.Refresh(t.Context()); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 
@@ -180,7 +180,7 @@ func TestUpdateProcessorStartDeniedForUnknownUser(t *testing.T) {
 			Chat: telegram.Chat{ID: 999, Type: "private", FirstName: "Stranger"},
 		},
 	}
-	if err := processor.Handle(context.Background(), update); err != nil {
+	if err := processor.Handle(t.Context(), update); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 	if called {
@@ -203,7 +203,7 @@ func TestUpdateProcessorIgnoresOtherCommands(t *testing.T) {
 			Chat: telegram.Chat{ID: 1, Type: "private"},
 		},
 	}
-	if err := processor.Handle(context.Background(), update); err != nil {
+	if err := processor.Handle(t.Context(), update); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 	if called {

@@ -34,6 +34,6 @@ type InventoryStore interface {
 // slice of ProductStore the inventory service needs to resolve a caller's
 // sku/skuId reference to a canonical SkuID before touching InventoryStore.
 type VariantResolver interface {
-	GetVariant(sku string) (*domain.Variant, error)
-	GetVariantBySkuID(skuID string) (*domain.Variant, error)
+	GetVariant(ctx context.Context, sku string) (*domain.Variant, error)
+	GetVariantBySkuID(ctx context.Context, skuID string) (*domain.Variant, error)
 }

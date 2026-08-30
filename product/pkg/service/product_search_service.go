@@ -69,7 +69,7 @@ func (s *ProductSearchService) WithInventory(inv ports.InventoryStore) *ProductS
 // When public is true, only active parents are returned.
 // Optional filter keys "limit" and "offset" paginate results; total is the
 // full match count before pagination.
-func (s *ProductSearchService) SearchProducts(filter map[string]string, public bool) ([]domain.Product, int, error) {
+func (s *ProductSearchService) SearchProducts(ctx context.Context, filter map[string]string, public bool) ([]domain.Product, int, error) {
 	if s.store == nil {
 		return nil, 0, fmt.Errorf("store not initialized")
 	}
@@ -80,21 +80,21 @@ func (s *ProductSearchService) SearchProducts(filter map[string]string, public b
 	if public {
 		f["status"] = "active"
 	}
-	return s.store.SearchProducts(f)
+	return s.store.SearchProducts(ctx, f)
 }
 
-func (s *ProductSearchService) ListProducts() ([]domain.Product, error) {
+func (s *ProductSearchService) ListProducts(ctx context.Context) ([]domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	return s.store.ListProducts()
+	return s.store.ListProducts(ctx)
 }
 
 func (s *ProductSearchService) GetProduct(ctx context.Context, id string) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	p, err := s.store.GetProduct(id)
+	p, err := s.store.GetProduct(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (s *ProductSearchService) GetPublicProduct(ctx context.Context, id string) 
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	p, err := s.store.GetActiveProduct(id)
+	p, err := s.store.GetActiveProduct(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ const (
 )
 
 // Recommend returns related active parent products for a public PDP seed.
-func (s *ProductSearchService) Recommend(seedID string, limit int) ([]domain.Product, error) {
+func (s *ProductSearchService) Recommend(ctx context.Context, seedID string, limit int) ([]domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
@@ -131,7 +131,7 @@ func (s *ProductSearchService) Recommend(seedID string, limit int) ([]domain.Pro
 	if limit > recommendMaxLimit {
 		limit = recommendMaxLimit
 	}
-	seed, err := s.store.GetActiveProduct(seedID)
+	seed, err := s.store.GetActiveProduct(ctx, seedID)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (s *ProductSearchService) Recommend(seedID string, limit int) ([]domain.Pro
 	if seed.Category != "" {
 		filter["category"] = seed.Category
 	}
-	candidates, _, err := s.store.SearchProducts(filter)
+	candidates, _, err := s.store.SearchProducts(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (s *ProductSearchService) GetPublicVariant(ctx context.Context, sku string)
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	v, err := s.store.GetVariant(sku)
+	v, err := s.store.GetVariant(ctx, sku)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (s *ProductSearchService) GetPublicVariantBySkuID(ctx context.Context, skuI
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	v, err := s.store.GetVariantBySkuID(skuID)
+	v, err := s.store.GetVariantBySkuID(ctx, skuID)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func (s *ProductSearchService) GetPublicVariantsBySkuIDs(ctx context.Context, sk
 		return nil, nil, ports.Invalid(fmt.Sprintf("sku_ids exceeds max of %d", MaxBatchSkuIDs))
 	}
 
-	found, err := s.store.GetVariantsBySkuIDs(ids)
+	found, err := s.store.GetVariantsBySkuIDs(ctx, ids)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -212,7 +212,7 @@ func (s *ProductSearchService) GetPublicVariantsBySkuIDs(ctx context.Context, sk
 		}
 		parent, seen := activeParent[v.ProductID]
 		if !seen {
-			p, err := s.store.GetActiveProduct(v.ProductID)
+			p, err := s.store.GetActiveProduct(ctx, v.ProductID)
 			if err == nil {
 				parent = p
 			}
@@ -250,7 +250,7 @@ func (s *ProductSearchService) checkPublicVariant(ctx context.Context, v *domain
 	if v.Status != "active" {
 		return nil, fmt.Errorf("variant: %w", ports.ErrNotFound)
 	}
-	parent, err := s.store.GetActiveProduct(v.ProductID)
+	parent, err := s.store.GetActiveProduct(ctx, v.ProductID)
 	if err != nil {
 		return nil, fmt.Errorf("variant: %w", ports.ErrNotFound)
 	}
@@ -272,7 +272,7 @@ func (s *ProductSearchService) CreateProduct(ctx context.Context, p domain.Produ
 		return nil, ports.Invalid(err.Error())
 	}
 	p.Attributes = attrs
-	created, err := s.store.CreateProduct(p)
+	created, err := s.store.CreateProduct(ctx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -289,11 +289,11 @@ func (s *ProductSearchService) CreateProduct(ctx context.Context, p domain.Produ
 	return created, nil
 }
 
-func (s *ProductSearchService) UpdateProduct(p domain.Product) (*domain.Product, error) {
+func (s *ProductSearchService) UpdateProduct(ctx context.Context, p domain.Product) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	existing, err := s.store.GetProduct(p.ID)
+	existing, err := s.store.GetProduct(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -306,35 +306,35 @@ func (s *ProductSearchService) UpdateProduct(p domain.Product) (*domain.Product,
 		return nil, ports.Invalid(err.Error())
 	}
 	merged.Attributes = attrs
-	updated, err := s.store.UpdateProduct(merged)
+	updated, err := s.store.UpdateProduct(ctx, merged)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publish(context.Background(), productUpdatedSubject, updated, "", ""); err != nil {
+	if err := s.publish(ctx, productUpdatedSubject, updated, "", ""); err != nil {
 		return nil, err
 	}
 	return updated, nil
 }
 
-func (s *ProductSearchService) DeleteProduct(id string) error {
+func (s *ProductSearchService) DeleteProduct(ctx context.Context, id string) error {
 	if s.store == nil {
 		return fmt.Errorf("store not initialized")
 	}
-	existing, err := s.store.GetProduct(id)
+	existing, err := s.store.GetProduct(ctx, id)
 	if err != nil {
 		return err
 	}
-	if err := s.store.DeleteProduct(id); err != nil {
+	if err := s.store.DeleteProduct(ctx, id); err != nil {
 		return err
 	}
-	return s.publish(context.Background(), productDeletedSubject, existing, "", "")
+	return s.publish(ctx, productDeletedSubject, existing, "", "")
 }
 
 func (s *ProductSearchService) CreateVariant(ctx context.Context, productID string, v domain.Variant) (*domain.Variant, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	parent, err := s.store.GetProduct(productID)
+	parent, err := s.store.GetProduct(ctx, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +344,7 @@ func (s *ProductSearchService) CreateVariant(ctx context.Context, productID stri
 	}
 	v.Dimensions = dims
 	v.ProductID = productID
-	created, err := s.store.CreateVariant(v)
+	created, err := s.store.CreateVariant(ctx, v)
 	if err != nil {
 		return nil, err
 	}
@@ -361,11 +361,11 @@ func (s *ProductSearchService) CreateVariant(ctx context.Context, productID stri
 // existing variant rather than overwriting it outright, so an update that
 // only sets e.g. color can't silently blank size/status/images.
 // Price is owned by the parent product and is not updated here.
-func (s *ProductSearchService) UpdateVariant(productID, sku string, v domain.Variant) (*domain.Variant, error) {
+func (s *ProductSearchService) UpdateVariant(ctx context.Context, productID, sku string, v domain.Variant) (*domain.Variant, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	existing, err := s.store.GetVariant(sku)
+	existing, err := s.store.GetVariant(ctx, sku)
 	if err != nil {
 		return nil, err
 	}
@@ -380,39 +380,39 @@ func (s *ProductSearchService) UpdateVariant(productID, sku string, v domain.Var
 	merged.Dimensions = dims
 	merged.SKU = sku
 	merged.ProductID = productID
-	updated, err := s.store.UpdateVariant(merged)
+	updated, err := s.store.UpdateVariant(ctx, merged)
 	if err != nil {
 		return nil, err
 	}
-	parent, _ := s.store.GetProduct(productID)
+	parent, _ := s.store.GetProduct(ctx, productID)
 	if parent != nil {
 		updated.ApplyParentPrice(*parent)
 	}
-	_ = s.publish(context.Background(), variantUpdatedSubject, parent, updated.SKU, "")
+	_ = s.publish(ctx, variantUpdatedSubject, parent, updated.SKU, "")
 	return updated, nil
 }
 
-func (s *ProductSearchService) DeleteVariant(productID, sku string) error {
+func (s *ProductSearchService) DeleteVariant(ctx context.Context, productID, sku string) error {
 	if s.store == nil {
 		return fmt.Errorf("store not initialized")
 	}
-	existing, err := s.store.GetVariant(sku)
+	existing, err := s.store.GetVariant(ctx, sku)
 	if err != nil {
 		return err
 	}
 	if existing.ProductID != productID {
 		return fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 	}
-	parent, _ := s.store.GetProduct(productID)
-	if err := s.store.DeleteVariant(sku); err != nil {
+	parent, _ := s.store.GetProduct(ctx, productID)
+	if err := s.store.DeleteVariant(ctx, sku); err != nil {
 		return err
 	}
-	return s.publish(context.Background(), variantDeletedSubject, parent, sku, "")
+	return s.publish(ctx, variantDeletedSubject, parent, sku, "")
 }
 
 // UploadImage appends an image to the default variant (sku == productID, else first variant).
 func (s *ProductSearchService) UploadImage(ctx context.Context, productID string, r io.Reader, size int64, contentType string) (*domain.Product, error) {
-	p, err := s.store.GetProduct(productID)
+	p, err := s.store.GetProduct(ctx, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +423,7 @@ func (s *ProductSearchService) UploadImage(ctx context.Context, productID string
 	if _, err := s.UploadVariantImage(ctx, productID, sku, r, size, contentType); err != nil {
 		return nil, err
 	}
-	return s.store.GetProduct(productID)
+	return s.store.GetProduct(ctx, productID)
 }
 
 // UploadVariantImage uploads a file and appends its URL to the variant's ImageURLs.
@@ -431,7 +431,7 @@ func (s *ProductSearchService) UploadVariantImage(ctx context.Context, productID
 	if s.imageStore == nil {
 		return nil, fmt.Errorf("image store not configured")
 	}
-	v, err := s.store.GetVariant(sku)
+	v, err := s.store.GetVariant(ctx, sku)
 	if err != nil {
 		return nil, err
 	}
@@ -444,11 +444,11 @@ func (s *ProductSearchService) UploadVariantImage(ctx context.Context, productID
 		return nil, err
 	}
 	v.ImageURLs = append(v.ImageURLs, url)
-	updated, err := s.store.UpdateVariant(*v)
+	updated, err := s.store.UpdateVariant(ctx, *v)
 	if err != nil {
 		return nil, err
 	}
-	parent, err := s.store.GetProduct(productID)
+	parent, err := s.store.GetProduct(ctx, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -493,9 +493,6 @@ func (s *ProductSearchService) ensureStockRow(ctx context.Context, skuID, sku st
 	if s.inventory == nil || skuID == "" {
 		return nil
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	_, err := s.inventory.GetItem(ctx, skuID)
 	if err == nil {
 		return nil
@@ -527,9 +524,6 @@ func (s *ProductSearchService) enrichVariantListStock(ctx context.Context, varia
 		}
 		return
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	ids := make([]string, 0, len(variants))
 	for _, v := range variants {
 		if v.SkuID != "" {
@@ -557,9 +551,6 @@ func (s *ProductSearchService) applyStockToVariant(ctx context.Context, v *domai
 		v.AvailableQty = 0
 		v.InStock = false
 		return
-	}
-	if ctx == nil {
-		ctx = context.Background()
 	}
 	item, err := s.inventory.GetItem(ctx, v.SkuID)
 	if err != nil {

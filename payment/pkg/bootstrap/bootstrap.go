@@ -104,6 +104,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 
 	svc := service.New(repo, orders, checkoutProvider, eventPublisher)
+	// Long-lived worker/subscriber root; cancelled on process shutdown.
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	svc.StartOutboxWorker(workerCtx, 2*time.Second)
 	svc.StartReconcileWorker(workerCtx, 1*time.Minute, 2*time.Hour)

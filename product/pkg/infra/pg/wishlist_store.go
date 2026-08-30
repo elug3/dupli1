@@ -10,8 +10,7 @@ import (
 )
 
 // AddWishlist implements ports.ProductWishlistStore.
-func (s *ProductSearchStore) AddWishlist(ownerKey, productID string) (bool, int64, error) {
-	ctx := context.Background()
+func (s *ProductSearchStore) AddWishlist(ctx context.Context, ownerKey, productID string) (bool, int64, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return false, 0, wrapDB("add wishlist begin", err)
@@ -55,8 +54,7 @@ func (s *ProductSearchStore) AddWishlist(ownerKey, productID string) (bool, int6
 }
 
 // RemoveWishlist implements ports.ProductWishlistStore.
-func (s *ProductSearchStore) RemoveWishlist(ownerKey, productID string) (bool, int64, error) {
-	ctx := context.Background()
+func (s *ProductSearchStore) RemoveWishlist(ctx context.Context, ownerKey, productID string) (bool, int64, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return false, 0, wrapDB("remove wishlist begin", err)
@@ -97,8 +95,7 @@ func (s *ProductSearchStore) RemoveWishlist(ownerKey, productID string) (bool, i
 }
 
 // ListWishlistProductIDs implements ports.ProductWishlistStore.
-func (s *ProductSearchStore) ListWishlistProductIDs(ownerKey string) ([]string, error) {
-	ctx := context.Background()
+func (s *ProductSearchStore) ListWishlistProductIDs(ctx context.Context, ownerKey string) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT product_id FROM product_wishlists
 		WHERE owner_key = $1

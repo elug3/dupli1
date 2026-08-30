@@ -40,6 +40,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		opts.JWTPrivateKeyPEM = pem
 	}
 
+	// Process bootstrap: no HTTP request context available.
 	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
 		DBURL:              opts.DBURL,
 		RedisURL:           opts.RedisURL,
@@ -116,6 +117,7 @@ func (s *Server) Stop() error {
 		return nil
 	}
 
+	// Graceful shutdown timeout parent after SIGINT; not tied to a request.
 	ctx, cancel := context.WithTimeout(context.Background(), s.opts.ShutdownTimeout)
 	defer cancel()
 
