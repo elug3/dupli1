@@ -58,7 +58,7 @@ Untracked (no row) after Phase 1 backfill must not occur for active variants. If
 ### Phase 0 — Document + contracts (this PR)
 
 - [x] This plan
-- [ ] Index in [README.md](README.md) / checklist in [TODO.md](TODO.md)
+- [x] Index in [README.md](README.md) / checklist in [TODO.md](TODO.md)
 - [ ] OpenAPI sketch: variant fields `availableQty`, `inStock`; note auto stock row on variant create
 
 ### Phase 1 — Always-tracked SKUs (product)
