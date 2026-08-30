@@ -1,6 +1,6 @@
 # Fix plan: remaining quality / security bugs (2026-07-20)
 
-> **Status (2026-08):** Money-path Criticals (**C1**, **H7**) and most Highs are **done**. Still open: plumb request `context` through product PG stores (**H6**), Redis catalog cache, frontend legacy-path / `skuId` migration. Living checklist: [TODO.md](TODO.md). Audit table: [quality-performance-review.md](quality-performance-review.md).
+> **Status (2026-08):** Money-path Criticals (**C1**, **H7**) and Highs including **H6** are **done**. Still open: Redis catalog cache, frontend legacy-path / `skuId` migration. Living checklist: [TODO.md](TODO.md). Audit table: [quality-performance-review.md](quality-performance-review.md).
 
 Concrete solutions for open findings from [quality-performance-review.md](quality-performance-review.md) and the weekly check. Feature / ops TODOs (Bitcoin, settings API, AWS cost cleanup) are out of scope here.
 
@@ -18,7 +18,7 @@ Concrete solutions for open findings from [quality-performance-review.md](qualit
 | 4 | **H3** | NATS handler errors / redelivery | **Done** — payment outbox + order queue/log |
 | 5 | **H4** | Sanitize auth/order/cart/payment 500s | Low |
 | 6 | **H5** | Product migrate `Exec` error checks | Low |
-| 7 | **H6** | Plumb request `context` through product stores | Med |
+| 7 | **H6** | Plumb request `context` through product stores | **Done** |
 | 8 | **H8+H9** | Shared `authjwt` + JWKS `singleflight` | **Done** |
 
 Do **C1** and **H7** first — active money/auth risk. **H1** outbox landed; reuse for **H3** / payment publish side. Bundle **H8** with **H9**.
@@ -147,15 +147,15 @@ Any migrate SQL failure aborts startup with a wrapped error.
 
 ### Problem
 
-Product/variant/catalog/coupon/view PG stores use `context.Background()`; request cancel/deadline does not abort DB work. Inventory store already takes `ctx`.
+Product/variant/catalog/coupon/view PG stores used `context.Background()`; request cancel/deadline did not abort DB work. Inventory store already took `ctx`.
 
-### Solution
+### Solution (implemented)
 
-Add `ctx context.Context` as first arg on store interfaces + memory impls + service call sites; pass `r.Context()` from handlers. Keep `Background` only for migrate/seed/CLI.
+Added `ctx context.Context` as first arg on store interfaces + memory/pg impls + service call sites; handlers pass `r.Context()`. `Background` kept only for migrate/seed/CLI/bootstrap/shutdown (with reason comments).
 
 ### Done when
 
-Cancelled request contexts cancel in-flight product store queries.
+Cancelled request contexts cancel in-flight product store queries. **Done.**
 
 ---
 
@@ -186,7 +186,7 @@ One shared package; concurrent unknown-`kid` requests share a single JWKS fetch.
 | C | **H4** + **H5** (quick isolated cleanups) |
 | D | **H1** soft-success or outbox + idempotency |
 | E | **H3** logging → JetStream/outbox |
-| F | **H6** context plumbing |
+| F | **H6** context plumbing (**done**) |
 | G | **H8+H9** shared authjwt + singleflight |
 
 ---

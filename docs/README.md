@@ -75,4 +75,4 @@ These retain design history. Prefer the living docs above for current behavior.
 | [manager-settings-api.md](manager-settings-api.md) | Sketch only |
 | [frontend-product-variants-migration.md](frontend-product-variants-migration.md) | Sibling frontend migration notes |
 | [quality-performance-review.md](quality-performance-review.md) | Jul 2026 audit (mostly fixed) |
-| [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) | Remaining: H6, Redis cache, frontend paths |
+| [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) | Remaining: Redis cache, frontend paths (H6 done) |
