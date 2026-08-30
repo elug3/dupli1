@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -16,6 +17,8 @@ type ProductStore struct {
 	Products []domain.Product
 	Variants []domain.Variant
 	Catalog  *CatalogStore
+	// inventory is optional; when set, CreateVariant inserts a stock row (qty 0).
+	inventory *InventoryStore
 	// views keys are guestID + "\x00" + productID for unique PDP views.
 	views map[string]struct{}
 	// wishlists keys are ownerKey + "\x00" + productID; createdAt tracks insert order.
@@ -24,6 +27,12 @@ type ProductStore struct {
 
 func NewProductStore() *ProductStore {
 	return &ProductStore{Catalog: NewCatalogStore()}
+}
+
+// WithInventory wires stock creation on CreateVariant (always-tracked SKUs).
+func (s *ProductStore) WithInventory(inv *InventoryStore) *ProductStore {
+	s.inventory = inv
+	return s
 }
 
 func (s *ProductStore) catalog() *CatalogStore {
@@ -645,6 +654,17 @@ func (s *ProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) 
 	if v.EditionCode != "" {
 		cat.VariantEditionCodes[v.SKU] = v.EditionCode
 	}
+	if s.inventory != nil {
+		_ = s.inventory.SaveItem(context.Background(), &domain.StockItem{
+			SkuID:     v.SkuID,
+			SKU:       v.SKU,
+			Quantity:  0,
+			Reserved:  0,
+			UpdatedAt: time.Now().UTC(),
+		})
+	}
+	v.AvailableQty = 0
+	v.InStock = false
 	return &v, nil
 }
 

@@ -33,7 +33,7 @@ func (h *Handler) AddWishlist(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := h.svc.GetPublicProduct(id); err != nil {
+	if _, err := h.svc.GetPublicProduct(r.Context(), id); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -93,7 +93,7 @@ func (h *Handler) ListWishlist(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]domain.Product, 0, len(ids))
 	for _, id := range ids {
-		p, err := h.svc.GetPublicProduct(id)
+		p, err := h.svc.GetPublicProduct(r.Context(), id)
 		if err != nil {
 			continue // skip deleted/non-public parents
 		}

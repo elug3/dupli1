@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -39,6 +40,7 @@ type productEvent struct {
 type ProductSearchService struct {
 	store          ports.ProductStore
 	imageStore     ports.ImageStore
+	inventory      ports.InventoryStore
 	eventPublisher ports.EventPublisher
 	now            func() time.Time
 }
@@ -54,6 +56,12 @@ func NewProductSearchService(store ports.ProductStore, imageStore ports.ImageSto
 	if len(eventPublisher) > 0 {
 		s.eventPublisher = eventPublisher[0]
 	}
+	return s
+}
+
+// WithInventory enables stock enrichment on PDP and ensure-stock after creates.
+func (s *ProductSearchService) WithInventory(inv ports.InventoryStore) *ProductSearchService {
+	s.inventory = inv
 	return s
 }
 
@@ -82,18 +90,28 @@ func (s *ProductSearchService) ListProducts() ([]domain.Product, error) {
 	return s.store.ListProducts()
 }
 
-func (s *ProductSearchService) GetProduct(id string) (*domain.Product, error) {
+func (s *ProductSearchService) GetProduct(ctx context.Context, id string) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	return s.store.GetProduct(id)
+	p, err := s.store.GetProduct(id)
+	if err != nil {
+		return nil, err
+	}
+	s.enrichVariantsStock(ctx, p)
+	return p, nil
 }
 
-func (s *ProductSearchService) GetPublicProduct(id string) (*domain.Product, error) {
+func (s *ProductSearchService) GetPublicProduct(ctx context.Context, id string) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	return s.store.GetActiveProduct(id)
+	p, err := s.store.GetActiveProduct(id)
+	if err != nil {
+		return nil, err
+	}
+	s.enrichVariantsStock(ctx, p)
+	return p, nil
 }
 
 const (
@@ -134,7 +152,7 @@ func (s *ProductSearchService) Recommend(seedID string, limit int) ([]domain.Pro
 	return domain.RankRecommendations(seedCard, candidates, limit), nil
 }
 
-func (s *ProductSearchService) GetPublicVariant(sku string) (*domain.Variant, error) {
+func (s *ProductSearchService) GetPublicVariant(ctx context.Context, sku string) (*domain.Variant, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
@@ -142,10 +160,10 @@ func (s *ProductSearchService) GetPublicVariant(sku string) (*domain.Variant, er
 	if err != nil {
 		return nil, err
 	}
-	return s.checkPublicVariant(v)
+	return s.checkPublicVariant(ctx, v)
 }
 
-func (s *ProductSearchService) GetPublicVariantBySkuID(skuID string) (*domain.Variant, error) {
+func (s *ProductSearchService) GetPublicVariantBySkuID(ctx context.Context, skuID string) (*domain.Variant, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
@@ -153,7 +171,7 @@ func (s *ProductSearchService) GetPublicVariantBySkuID(skuID string) (*domain.Va
 	if err != nil {
 		return nil, err
 	}
-	return s.checkPublicVariant(v)
+	return s.checkPublicVariant(ctx, v)
 }
 
 // MaxBatchSkuIDs caps GET /api/v1/products/variants?sku_ids= batch size.
@@ -162,7 +180,7 @@ const MaxBatchSkuIDs = 50
 // GetPublicVariantsBySkuIDs returns active variants whose parent products are
 // also active. Missing or non-public sku_ids are listed in missing (same
 // visibility rule as the single-variant public lookups).
-func (s *ProductSearchService) GetPublicVariantsBySkuIDs(skuIDs []string) (items []domain.Variant, missing []string, err error) {
+func (s *ProductSearchService) GetPublicVariantsBySkuIDs(ctx context.Context, skuIDs []string) (items []domain.Variant, missing []string, err error) {
 	if s.store == nil {
 		return nil, nil, fmt.Errorf("store not initialized")
 	}
@@ -207,6 +225,7 @@ func (s *ProductSearchService) GetPublicVariantsBySkuIDs(skuIDs []string) (items
 		v.ApplyParentPrice(*parent)
 		items = append(items, v)
 	}
+	s.enrichVariantListStock(ctx, items)
 	return items, missing, nil
 }
 
@@ -227,7 +246,7 @@ func normalizeSkuIDs(skuIDs []string) []string {
 	return out
 }
 
-func (s *ProductSearchService) checkPublicVariant(v *domain.Variant) (*domain.Variant, error) {
+func (s *ProductSearchService) checkPublicVariant(ctx context.Context, v *domain.Variant) (*domain.Variant, error) {
 	if v.Status != "active" {
 		return nil, fmt.Errorf("variant: %w", ports.ErrNotFound)
 	}
@@ -237,10 +256,11 @@ func (s *ProductSearchService) checkPublicVariant(v *domain.Variant) (*domain.Va
 	}
 	v.ApplyParentPrice(*parent)
 	v.ProductName = parent.Name
+	s.applyStockToVariant(ctx, v)
 	return v, nil
 }
 
-func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product, error) {
+func (s *ProductSearchService) CreateProduct(ctx context.Context, p domain.Product) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
@@ -256,7 +276,14 @@ func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product,
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publish(context.Background(), productCreatedSubject, created, "", ""); err != nil {
+	for i := range created.Variants {
+		v := &created.Variants[i]
+		if err := s.ensureStockRow(ctx, v.SkuID, v.SKU, 0); err != nil {
+			return nil, err
+		}
+	}
+	s.enrichVariantsStock(ctx, created)
+	if err := s.publish(ctx, productCreatedSubject, created, "", ""); err != nil {
 		return nil, err
 	}
 	return created, nil
@@ -303,7 +330,7 @@ func (s *ProductSearchService) DeleteProduct(id string) error {
 	return s.publish(context.Background(), productDeletedSubject, existing, "", "")
 }
 
-func (s *ProductSearchService) CreateVariant(productID string, v domain.Variant) (*domain.Variant, error) {
+func (s *ProductSearchService) CreateVariant(ctx context.Context, productID string, v domain.Variant) (*domain.Variant, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
@@ -321,8 +348,12 @@ func (s *ProductSearchService) CreateVariant(productID string, v domain.Variant)
 	if err != nil {
 		return nil, err
 	}
+	if err := s.ensureStockRow(ctx, created.SkuID, created.SKU, 0); err != nil {
+		return nil, err
+	}
 	created.ApplyParentPrice(*parent)
-	_ = s.publish(context.Background(), variantCreatedSubject, parent, created.SKU, "")
+	s.applyStockToVariant(ctx, created)
+	_ = s.publish(ctx, variantCreatedSubject, parent, created.SKU, "")
 	return created, nil
 }
 
@@ -456,4 +487,102 @@ func (s *ProductSearchService) publish(ctx context.Context, subject string, prod
 		ImageURL:  imageURL,
 		Occurred:  s.now(),
 	})
+}
+
+func (s *ProductSearchService) ensureStockRow(ctx context.Context, skuID, sku string, quantity int) error {
+	if s.inventory == nil || skuID == "" {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	_, err := s.inventory.GetItem(ctx, skuID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, ports.ErrInventoryItemNotFound) {
+		return err
+	}
+	return s.inventory.SaveItem(ctx, &domain.StockItem{
+		SkuID:     skuID,
+		SKU:       sku,
+		Quantity:  quantity,
+		Reserved:  0,
+		UpdatedAt: s.now(),
+	})
+}
+
+func (s *ProductSearchService) enrichVariantsStock(ctx context.Context, p *domain.Product) {
+	if p == nil || len(p.Variants) == 0 {
+		return
+	}
+	s.enrichVariantListStock(ctx, p.Variants)
+}
+
+func (s *ProductSearchService) enrichVariantListStock(ctx context.Context, variants []domain.Variant) {
+	if s.inventory == nil || len(variants) == 0 {
+		for i := range variants {
+			variants[i].AvailableQty = 0
+			variants[i].InStock = false
+		}
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ids := make([]string, 0, len(variants))
+	for _, v := range variants {
+		if v.SkuID != "" {
+			ids = append(ids, v.SkuID)
+		}
+	}
+	items, err := s.inventory.GetItems(ctx, ids)
+	if err != nil {
+		for i := range variants {
+			variants[i].AvailableQty = 0
+			variants[i].InStock = false
+		}
+		return
+	}
+	for i := range variants {
+		applyStockItem(&variants[i], items[variants[i].SkuID])
+	}
+}
+
+func (s *ProductSearchService) applyStockToVariant(ctx context.Context, v *domain.Variant) {
+	if v == nil {
+		return
+	}
+	if s.inventory == nil || v.SkuID == "" {
+		v.AvailableQty = 0
+		v.InStock = false
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	item, err := s.inventory.GetItem(ctx, v.SkuID)
+	if err != nil {
+		v.AvailableQty = 0
+		v.InStock = false
+		return
+	}
+	applyStockItem(v, item)
+}
+
+func applyStockItem(v *domain.Variant, item *domain.StockItem) {
+	if v == nil {
+		return
+	}
+	if item == nil {
+		v.AvailableQty = 0
+		v.InStock = false
+		return
+	}
+	avail := item.Available()
+	if avail < 0 {
+		avail = 0
+	}
+	v.AvailableQty = avail
+	v.InStock = avail > 0
 }

@@ -238,3 +238,59 @@ func TestReplaceItems_CollectsAllUnavailable(t *testing.T) {
 		t.Fatalf("error string = %q, want variant not found", unavailable.Error())
 	}
 }
+
+func TestUpsertItem_RejectsInsufficientStock(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	_, err := svc.UpsertItem(ctx, "cust-stock", service.ItemInput{SkuID: "SKUID-GRN", Quantity: 8})
+	var insufficient *service.InsufficientStockError
+	if !errors.As(err, &insufficient) {
+		t.Fatalf("want InsufficientStockError, got %v", err)
+	}
+	if insufficient.AvailableQty != 7 || insufficient.Requested != 8 {
+		t.Fatalf("unexpected: %+v", insufficient)
+	}
+}
+
+func TestUpsertItem_RejectsZeroAvailable(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	// Override inventory to zero (missing / OOS).
+	inv := &fakeInventoryClient{
+		bySKU:   map[string]int{"BOT-001-GRN": 0},
+		bySkuID: map[string]int{"SKUID-GRN": 0},
+	}
+	variant := &ports.VariantInfo{
+		SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", ProductID: "BOT-001",
+		UnitPriceCents: 250000,
+	}
+	product := &fakeProductClient{
+		bySKU:   map[string]*ports.VariantInfo{"BOT-001-GRN": variant},
+		bySkuID: map[string]*ports.VariantInfo{"SKUID-GRN": variant},
+	}
+	svc = service.New(memory.NewRepository(), product, inv)
+
+	_, err := svc.UpsertItem(ctx, "cust-oos", service.ItemInput{SkuID: "SKUID-GRN", Quantity: 1})
+	var insufficient *service.InsufficientStockError
+	if !errors.As(err, &insufficient) {
+		t.Fatalf("want InsufficientStockError, got %v", err)
+	}
+	if insufficient.AvailableQty != 0 {
+		t.Fatalf("available = %d, want 0", insufficient.AvailableQty)
+	}
+}
+
+func TestReplaceItems_RejectsOversell(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+
+	_, err := svc.ReplaceItems(ctx, "cust-replace", []service.ItemInput{
+		{SkuID: "SKUID-GRN", Quantity: 99},
+	})
+	var insufficient *service.InsufficientStockError
+	if !errors.As(err, &insufficient) {
+		t.Fatalf("want InsufficientStockError, got %v", err)
+	}
+}
+

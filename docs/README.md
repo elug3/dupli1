@@ -43,7 +43,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 
 | Doc | Topic |
 |-----|-------|
-| [product-stock-tracking-plan.md](product-stock-tracking-plan.md) | Always-tracked SKUs, PDP `inStock`, cart stock-on-add |
+| [product-stock-tracking-plan.md](product-stock-tracking-plan.md) | Always-tracked SKUs, PDP `inStock`, cart stock-on-add (implemented) |
 
 ## Release / ops
 

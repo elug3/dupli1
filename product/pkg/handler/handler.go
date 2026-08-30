@@ -303,9 +303,9 @@ func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if claims, ok := authjwt.FromContext(r.Context()); ok && claims.HasPermission(permissions.ProductRead) {
 		manager = true
-		product, err = h.svc.GetProduct(id)
+		product, err = h.svc.GetProduct(r.Context(), id)
 	} else {
-		product, err = h.svc.GetPublicProduct(id)
+		product, err = h.svc.GetPublicProduct(r.Context(), id)
 	}
 	if err != nil {
 		h.respondServiceError(w, err)
@@ -374,7 +374,7 @@ func (h *Handler) PublicListVariants(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "sku_ids is required")
 		return
 	}
-	items, missing, err := h.svc.GetPublicVariantsBySkuIDs(strings.Split(raw, ","))
+	items, missing, err := h.svc.GetPublicVariantsBySkuIDs(r.Context(), strings.Split(raw, ","))
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -398,7 +398,7 @@ func (h *Handler) PublicGetVariant(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "missing sku")
 		return
 	}
-	variant, err := h.svc.GetPublicVariant(sku)
+	variant, err := h.svc.GetPublicVariant(r.Context(), sku)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -416,7 +416,7 @@ func (h *Handler) PublicGetVariantBySkuID(w http.ResponseWriter, r *http.Request
 		h.respondError(w, http.StatusBadRequest, "missing skuId")
 		return
 	}
-	variant, err := h.svc.GetPublicVariantBySkuID(skuID)
+	variant, err := h.svc.GetPublicVariantBySkuID(r.Context(), skuID)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -437,7 +437,7 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	if claims, ok := authjwt.FromContext(r.Context()); ok {
 		p.CreatedBy = claims.UserID
 	}
-	created, err := h.svc.CreateProduct(p)
+	created, err := h.svc.CreateProduct(r.Context(), p)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -589,7 +589,7 @@ func (h *Handler) CreateVariant(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	created, err := h.svc.CreateVariant(id, v)
+	created, err := h.svc.CreateVariant(r.Context(), id, v)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

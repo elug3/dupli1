@@ -1,6 +1,6 @@
 # Product stock tracking plan
 
-**Status:** Planned (not implemented).  
+**Status:** Implemented (Phases 1–4).  
 **Repos:** `dupli1` (product, cart), `dupli1-web`, `dupli1-manage-web`.  
 **Related:** [product-sold-count.md](product-sold-count.md), [payment-service.md](payment-service.md) (plan B commit-on-ship), [product-variants-plan.md](product-variants-plan.md) (historical stock section), [cart-service.md](cart-service.md), [v1.1-release-plan.md](v1.1-release-plan.md) (Commerce UX deferred items).
 
@@ -59,56 +59,56 @@ Untracked (no row) after Phase 1 backfill must not occur for active variants. If
 
 - [x] This plan
 - [x] Index in [README.md](README.md) / checklist in [TODO.md](TODO.md)
-- [ ] OpenAPI sketch: variant fields `availableQty`, `inStock`; note auto stock row on variant create
+- [x] OpenAPI / api.md: variant fields `availableQty`, `inStock`; auto stock row on variant create
 
 ### Phase 1 — Always-tracked SKUs (product)
 
 **Backend**
 
-1. On `CreateVariant` (PG + memory): ensure `stock_items` row exists (`quantity` from optional request field or 0).
-2. Startup / one-shot migrate: `INSERT … SELECT` for every `product_variants.sku_id` missing from `stock_items` with `quantity = 0`.
-3. `GetItem` / enrichment helpers: missing row ⇒ available 0 (or auto-heal insert 0) — prefer explicit backfill so reads stay simple.
-4. Tests: create variant creates stock; backfill covers orphans; reserve still works when qty set.
+1. [x] On `CreateVariant` (PG + memory): ensure `stock_items` row exists (`quantity` 0 by default).
+2. [x] Startup migrate: `INSERT … SELECT` for every `product_variants.sku_id` missing from `stock_items`.
+3. [x] Enrichment: missing row ⇒ available 0 / `inStock` false.
+4. [x] Tests: create variant creates stock; PDP enrichment; reserve still works when qty set.
 
 **manage-web**
 
-5. Keep initial-stock on variant create; show "0" instead of empty when row exists.
-6. Prefer `skuId` inventory paths everywhere (align with frontend SkuID migration notes).
+5. [x] Keep initial-stock on variant create; missing stock shows as 0.
+6. [x] Prefer `skuId` inventory paths.
 
 **Docs**
 
-7. Update [api.md](api.md), [current-state.md](current-state.md): untracked SKUs are no longer a supported mode.
+7. [x] Update [api.md](api.md), [current-state.md](current-state.md).
 
 ### Phase 2 — PDP enrichment (product + storefront)
 
 **Backend**
 
-1. When building parent PDP (and optionally search hits), batch-read stock for embedded variant `skuId`s.
-2. Set variant `availableQty` / `inStock` (new JSON fields; do not revive parent `stock`).
-3. Public list: optional parent-level `inStock` = any active variant available (for PLP badges) — only if cheap; otherwise skip and leave PLP without stock until PDP.
+1. [x] Batch-read stock for embedded variant `skuId`s on PDP / public variant reads.
+2. [x] Set variant `availableQty` / `inStock`.
+3. [x] Skip PLP parent-level `inStock` (PDP only for now).
 
 **dupli1-web**
 
-4. Prefer PDP-embedded `inStock` / `availableQty`; keep inventory poll as fallback only if fields absent.
-5. Stop treating HTTP miss / null as in-stock once Phase 1 ships.
+4. [x] Prefer PDP-embedded `inStock` / `availableQty`; inventory poll as fallback.
+5. [x] Stop treating HTTP miss / null as in-stock (404 ⇒ 0).
 
 ### Phase 3 — Cart stock on add (cart + storefront)
 
 **Backend (cart)**
 
-1. On `UpsertItem` / `ReplaceItems`, after variant resolve, look up available qty.
-2. If `quantity > available` → `400` with a clear error (and optionally `available_qty` in body). Missing/zero stock → same as unavailable for purchase.
-3. Keep enrichment `available_qty` on GET cart for UI clamp/display.
+1. [x] On `UpsertItem` / `ReplaceItems`, look up available qty after variant resolve.
+2. [x] If `quantity > available` → `400` with `reason: insufficient_stock` + `available_qty`.
+3. [x] Keep enrichment `available_qty` on GET cart.
 
 **dupli1-web**
 
-4. Surface cart errors on add-to-cart / qty change; disable increment past `available_qty`.
+4. [x] PDP disables add when OOS; cart mutation errors already surfaced via `useCartMutation`.
 
 ### Phase 4 — Cleanup
 
-1. Stop accepting/returning parent `Product.stock` (ignore on write; omit on read once clients migrated).
-2. Drop or leave unused `products.stock` column (additive migrate only; dropping is optional follow-up).
-3. Mark Commerce UX items in [v1.1-release-plan.md](v1.1-release-plan.md) / [TODO.md](TODO.md) done for `stock on add` + PDP `inStock`.
+1. [x] Parent `Product.stock` omitted from JSON (`json:"-"`).
+2. [x] Column left in place (additive migrate only; drop optional follow-up).
+3. [x] [TODO.md](TODO.md) / plan status updated for stock on add + PDP `inStock`.
 
 ## Out of scope
 
@@ -130,8 +130,8 @@ Untracked (no row) after Phase 1 backfill must not occur for active variants. If
 
 ## Exit criteria
 
-- [ ] Every active variant has a `stock_items` row
-- [ ] New variants always get a row (qty default 0)
-- [ ] PDP returns per-variant availability; storefront does not treat missing stock as in-stock
-- [ ] Cart rejects quantity above available
-- [ ] Docs (`api.md`, `current-state.md`, `TODO.md`) updated; OpenAPI fields present
+- [x] Every active variant has a `stock_items` row (create + migrate backfill)
+- [x] New variants always get a row (qty default 0)
+- [x] PDP returns per-variant availability; storefront does not treat missing stock as in-stock
+- [x] Cart rejects quantity above available
+- [x] Docs (`api.md`, `current-state.md`, `TODO.md`) updated; API narrative documents fields

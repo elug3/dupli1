@@ -20,6 +20,9 @@ var (
 // SkuID (never the human sku string).
 type InventoryStore interface {
 	GetItem(ctx context.Context, skuID string) (*domain.StockItem, error)
+	// GetItems returns stock for the given skuIDs. Missing rows are omitted
+	// from the map (caller treats missing as available 0).
+	GetItems(ctx context.Context, skuIDs []string) (map[string]*domain.StockItem, error)
 	SaveItem(ctx context.Context, item *domain.StockItem) error
 	GetReservation(ctx context.Context, id string) (*domain.Reservation, error)
 	SaveReservation(ctx context.Context, reservation *domain.Reservation) error

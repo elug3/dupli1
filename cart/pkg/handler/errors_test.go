@@ -73,3 +73,24 @@ func TestRespondServiceErrorUnavailableItems(t *testing.T) {
 		t.Fatalf("unavailable_items = %#v", body["unavailable_items"])
 	}
 }
+
+func TestRespondServiceErrorInsufficientStock(t *testing.T) {
+	rec := httptest.NewRecorder()
+	respondServiceError(rec, &service.InsufficientStockError{
+		SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", Requested: 5, AvailableQty: 2,
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["reason"] != domain.ReasonInsufficientStock {
+		t.Fatalf("reason = %v", body["reason"])
+	}
+	if body["available_qty"] != float64(2) {
+		t.Fatalf("available_qty = %v", body["available_qty"])
+	}
+}
+

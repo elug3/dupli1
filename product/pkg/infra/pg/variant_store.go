@@ -231,9 +231,15 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 		v.SkuID = domain.NewSkuID()
 	}
 
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, wrapDB("create variant begin", err)
+	}
+	defer tx.Rollback(ctx)
+
 	var createdAt time.Time
 	w, h, d := dimensionArgs(v.Dimensions)
-	err = s.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO product_variants (sku_id, sku, product_id, color, size, color_code, edition_code, size_code,
 		     width_mm, height_mm, depth_mm, status, image_urls)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
@@ -250,7 +256,22 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 		}
 		return nil, wrapDB("create variant", err)
 	}
+
+	// Always-tracked SKU: every variant gets a stock row (qty 0 by default).
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO stock_items (sku_id, quantity, reserved, updated_at)
+		VALUES ($1, 0, 0, NOW())
+		ON CONFLICT (sku_id) DO NOTHING
+	`, v.SkuID); err != nil {
+		return nil, wrapDB("create variant stock", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, wrapDB("create variant commit", err)
+	}
 	v.CreatedAt = createdAt.Format(time.RFC3339)
+	v.AvailableQty = 0
+	v.InStock = false
 	return &v, nil
 }
 

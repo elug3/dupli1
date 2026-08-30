@@ -52,6 +52,25 @@ func (s *InventoryStore) GetItem(ctx context.Context, skuID string) (*domain.Sto
 	return &copied, nil
 }
 
+func (s *InventoryStore) GetItems(ctx context.Context, skuIDs []string) (map[string]*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	out := make(map[string]*domain.StockItem, len(skuIDs))
+	if len(skuIDs) == 0 {
+		return out, nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, id := range skuIDs {
+		if item, ok := s.items[id]; ok {
+			copied := *item
+			out[id] = &copied
+		}
+	}
+	return out, nil
+}
+
 func (s *InventoryStore) SaveItem(ctx context.Context, item *domain.StockItem) error {
 	if err := ctx.Err(); err != nil {
 		return err
