@@ -155,7 +155,6 @@ Grouped by theme. None of these should delay v1.0 launch or v1.1 platform work.
 | Remove legacy API path aliases + nginx locations | After frontend migration completes |
 | SKU master Phase D (manage-web UI) | API exists; UI can follow |
 | Redis catalog cache + cart batch client | Latency polish |
-| Product PG request `context` plumbing (**H6**) | Correctness polish, not launch |
 
 ### Platform / product surface
 
