@@ -123,6 +123,62 @@ func TestMigrateSeedsReservationSequenceFromExistingRows(t *testing.T) {
 	}
 }
 
+// Regression for always-tracked SKUs: migrate backfills stock_items for variants
+// that existed before stock tracking (missing row ⇒ available 0, not "infinite").
+func TestMigrateBackfillsStockItemsForOrphanVariants(t *testing.T) {
+	dsn := requireProductDSN(t)
+	pool := freshInventorySchema(t, dsn, "inv_stock_backfill_test")
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx, `CREATE TABLE product_variants (sku_id TEXT PRIMARY KEY, sku TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create product_variants: %v", err)
+	}
+	for _, skuID := range []string{"sku-with-stock", "sku-orphan"} {
+		sku := skuID + "-HUMAN"
+		if _, err := pool.Exec(ctx, `INSERT INTO product_variants (sku_id, sku) VALUES ($1, $2)`, skuID, sku); err != nil {
+			t.Fatalf("insert variant %s: %v", skuID, err)
+		}
+	}
+	now := time.Now().UTC()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO stock_items (sku_id, quantity, reserved, updated_at)
+		VALUES ('sku-with-stock', 5, 1, $1)
+	`, now); err != nil {
+		t.Fatalf("seed existing stock row: %v", err)
+	}
+
+	store, err := NewInventoryStore(pool)
+	if err != nil {
+		t.Fatalf("NewInventoryStore: %v", err)
+	}
+
+	var orphanQty int
+	if err := pool.QueryRow(ctx, `
+		SELECT quantity FROM stock_items WHERE sku_id = 'sku-orphan'
+	`).Scan(&orphanQty); err != nil {
+		t.Fatalf("orphan stock row missing after migrate: %v", err)
+	}
+	if orphanQty != 0 {
+		t.Fatalf("backfilled orphan quantity = %d, want 0", orphanQty)
+	}
+
+	existing, err := store.GetItem(ctx, "sku-with-stock")
+	if err != nil {
+		t.Fatalf("GetItem existing: %v", err)
+	}
+	if existing.Quantity != 5 || existing.Reserved != 1 {
+		t.Fatalf("existing stock row mutated: %+v", existing)
+	}
+
+	orphan, err := store.GetItem(ctx, "sku-orphan")
+	if err != nil {
+		t.Fatalf("GetItem orphan: %v", err)
+	}
+	if orphan.Available() != 0 {
+		t.Fatalf("orphan available = %d, want 0", orphan.Available())
+	}
+}
+
 // Regression when id_sequences exists but is stale (e.g. partial DB reset).
 func TestMigrateRepairsStaleReservationSequence(t *testing.T) {
 	dsn := requireProductDSN(t)

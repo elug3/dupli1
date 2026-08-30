@@ -113,6 +113,50 @@ func TestGetPublicProduct_EnrichesInStock(t *testing.T) {
 	}
 }
 
+func TestGetPublicProduct_MissingStockRowIsOOS(t *testing.T) {
+	store := memory.NewProductStore()
+	inv := memory.NewInventoryStore()
+	store.WithInventory(inv)
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", Status: "active", Price: 2500},
+	}
+	store.Variants = []domain.Variant{
+		{SkuID: "SKUID-UNTRACKED", SKU: "BOT-001-RED", ProductID: "BOT-001", Color: "Red", Status: "active"},
+	}
+	svc := service.NewProductSearchService(store, nil).WithInventory(inv)
+
+	p, err := svc.GetPublicProduct(t.Context(), "BOT-001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Variants) != 1 {
+		t.Fatalf("want 1 variant, got %d", len(p.Variants))
+	}
+	v := p.Variants[0]
+	if v.InStock || v.AvailableQty != 0 {
+		t.Fatalf("missing stock row should be OOS, got inStock=%v qty=%d", v.InStock, v.AvailableQty)
+	}
+}
+
+func TestGetPublicProduct_NoInventoryConfiguredMarksOOS(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", Status: "active", Price: 2500},
+	}
+	store.Variants = []domain.Variant{
+		{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Status: "active"},
+	}
+	svc := service.NewProductSearchService(store, nil)
+
+	p, err := svc.GetPublicProduct(t.Context(), "BOT-001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := p.Variants[0]
+	if v.InStock || v.AvailableQty != 0 {
+		t.Fatalf("without inventory store want OOS, got inStock=%v qty=%d", v.InStock, v.AvailableQty)
+	}
+}
 
 func TestUpdateProduct_StyleOnlyKeepsPrice(t *testing.T) {
 	store := memory.NewProductStore()
