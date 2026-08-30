@@ -39,6 +39,12 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [product-images-browser-access.md](product-images-browser-access.md) | CloudFront / images |
 | [product-structure-final-review.md](product-structure-final-review.md) | Field ownership locks |
 
+### Product plans (status line first)
+
+| Doc | Topic |
+|-----|-------|
+| [product-stock-tracking-plan.md](product-stock-tracking-plan.md) | Always-tracked SKUs, PDP `inStock`, cart stock-on-add |
+
 ## Release / ops
 
 | Doc | Role |
@@ -56,7 +62,7 @@ These retain design history. Prefer the living docs above for current behavior.
 
 | Doc | Notes |
 |-----|-------|
-| [product-variants-plan.md](product-variants-plan.md) | Historical — parent/variant shipped; prefer sku-system + structure review |
+| [product-variants-plan.md](product-variants-plan.md) | Historical — parent/variant shipped; prefer sku-system + structure review; stock leftovers → [product-stock-tracking-plan.md](product-stock-tracking-plan.md) |
 | [product-guest-views-plan.md](product-guest-views-plan.md) | Phase 1 shipped; guest cart still open |
 | [product-views-recommendations-plan.md](product-views-recommendations-plan.md) | Phases 0–1 shipped; co-view open |
 | [product-sku-master-data-plan.md](product-sku-master-data-plan.md) | A–C shipped; Phase D (admin UI) open |
