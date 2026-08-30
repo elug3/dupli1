@@ -1,7 +1,6 @@
 package httpauth_test
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -39,11 +38,11 @@ func TestServiceAccountTokenSource_CachesAndRefreshes(t *testing.T) {
 
 	src := httpauth.NewServiceAccountTokenSource(srv.URL, "order@svc", "secret", srv.Client())
 
-	tok1, err := src.Token(context.Background())
+	tok1, err := src.Token(t.Context())
 	if err != nil {
 		t.Fatalf("first Token: %v", err)
 	}
-	tok2, err := src.Token(context.Background())
+	tok2, err := src.Token(t.Context())
 	if err != nil {
 		t.Fatalf("second Token: %v", err)
 	}
@@ -55,7 +54,7 @@ func TestServiceAccountTokenSource_CachesAndRefreshes(t *testing.T) {
 	}
 
 	src.Invalidate()
-	tok3, err := src.Token(context.Background())
+	tok3, err := src.Token(t.Context())
 	if err != nil {
 		t.Fatalf("Token after Invalidate: %v", err)
 	}
@@ -101,11 +100,11 @@ func TestServiceAccountTokenSource_ReloginWhenRefreshFails(t *testing.T) {
 	defer srv.Close()
 
 	src := httpauth.NewServiceAccountTokenSource(srv.URL, "order@svc", "secret", srv.Client())
-	if _, err := src.Token(context.Background()); err != nil {
+	if _, err := src.Token(t.Context()); err != nil {
 		t.Fatalf("prime: %v", err)
 	}
 	src.Invalidate()
-	if _, err := src.Token(context.Background()); err != nil {
+	if _, err := src.Token(t.Context()); err != nil {
 		t.Fatalf("Token after failed refresh: %v", err)
 	}
 	if logins.Load() != 2 {
@@ -128,7 +127,7 @@ func TestFetchAccessToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tok, err := httpauth.FetchAccessToken(context.Background(), srv.URL, "a@b.c", "pw", srv.Client())
+	tok, err := httpauth.FetchAccessToken(t.Context(), srv.URL, "a@b.c", "pw", srv.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,10 +155,10 @@ func TestServiceAccountTokenSource_RefreshesBeforeExpirySkew(t *testing.T) {
 	defer srv.Close()
 
 	src := httpauth.NewServiceAccountTokenSource(srv.URL, "a@b.c", "pw", srv.Client())
-	if _, err := src.Token(context.Background()); err != nil {
+	if _, err := src.Token(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := src.Token(context.Background()); err != nil {
+	if _, err := src.Token(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if refreshes.Load() != 2 {

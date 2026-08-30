@@ -19,7 +19,7 @@ type codeNameBody struct {
 // --- Brands ---
 
 func (h *Handler) ListBrands(w http.ResponseWriter, r *http.Request) {
-	list, err := h.catalogSvc.ListBrands()
+	list, err := h.catalogSvc.ListBrands(r.Context())
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -33,7 +33,7 @@ func (h *Handler) CreateBrand(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	created, err := h.catalogSvc.CreateBrand(domain.Brand{Code: body.Code, Name: body.Name})
+	created, err := h.catalogSvc.CreateBrand(r.Context(), domain.Brand{Code: body.Code, Name: body.Name})
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -48,7 +48,7 @@ func (h *Handler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	updated, err := h.catalogSvc.UpdateBrandName(code, body.Name)
+	updated, err := h.catalogSvc.UpdateBrandName(r.Context(), code, body.Name)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -57,7 +57,7 @@ func (h *Handler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteBrand(w http.ResponseWriter, r *http.Request) {
-	if err := h.catalogSvc.DeleteBrand(r.PathValue("code")); err != nil {
+	if err := h.catalogSvc.DeleteBrand(r.Context(), r.PathValue("code")); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -67,7 +67,7 @@ func (h *Handler) DeleteBrand(w http.ResponseWriter, r *http.Request) {
 // --- Styles ---
 
 func (h *Handler) ListStyles(w http.ResponseWriter, r *http.Request) {
-	list, err := h.catalogSvc.ListStyles(r.PathValue("code"))
+	list, err := h.catalogSvc.ListStyles(r.Context(), r.PathValue("code"))
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -82,7 +82,7 @@ func (h *Handler) CreateStyle(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	created, err := h.catalogSvc.CreateStyle(domain.Style{
+	created, err := h.catalogSvc.CreateStyle(r.Context(), domain.Style{
 		BrandCode: brandCode, Code: body.Code, Name: body.Name,
 	})
 	if err != nil {
@@ -98,7 +98,7 @@ func (h *Handler) UpdateStyle(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	updated, err := h.catalogSvc.UpdateStyleName(r.PathValue("code"), r.PathValue("styleCode"), body.Name)
+	updated, err := h.catalogSvc.UpdateStyleName(r.Context(), r.PathValue("code"), r.PathValue("styleCode"), body.Name)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -107,7 +107,7 @@ func (h *Handler) UpdateStyle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteStyle(w http.ResponseWriter, r *http.Request) {
-	if err := h.catalogSvc.DeleteStyle(r.PathValue("code"), r.PathValue("styleCode")); err != nil {
+	if err := h.catalogSvc.DeleteStyle(r.Context(), r.PathValue("code"), r.PathValue("styleCode")); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -117,7 +117,7 @@ func (h *Handler) DeleteStyle(w http.ResponseWriter, r *http.Request) {
 // --- Colors ---
 
 func (h *Handler) ListColors(w http.ResponseWriter, r *http.Request) {
-	list, err := h.catalogSvc.ListColors()
+	list, err := h.catalogSvc.ListColors(r.Context())
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -131,7 +131,7 @@ func (h *Handler) CreateColor(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	created, err := h.catalogSvc.CreateColor(domain.Color{Code: body.Code, Name: body.Name})
+	created, err := h.catalogSvc.CreateColor(r.Context(), domain.Color{Code: body.Code, Name: body.Name})
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -145,7 +145,7 @@ func (h *Handler) UpdateColor(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	updated, err := h.catalogSvc.UpdateColorName(r.PathValue("code"), body.Name)
+	updated, err := h.catalogSvc.UpdateColorName(r.Context(), r.PathValue("code"), body.Name)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -154,7 +154,7 @@ func (h *Handler) UpdateColor(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteColor(w http.ResponseWriter, r *http.Request) {
-	if err := h.catalogSvc.DeleteColor(r.PathValue("code")); err != nil {
+	if err := h.catalogSvc.DeleteColor(r.Context(), r.PathValue("code")); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -164,7 +164,7 @@ func (h *Handler) DeleteColor(w http.ResponseWriter, r *http.Request) {
 // --- Sizes ---
 
 func (h *Handler) ListSizes(w http.ResponseWriter, r *http.Request) {
-	list, err := h.catalogSvc.ListSizes()
+	list, err := h.catalogSvc.ListSizes(r.Context())
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -178,7 +178,7 @@ func (h *Handler) CreateSize(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	created, err := h.catalogSvc.CreateSize(domain.Size{Code: body.Code, Name: body.Name})
+	created, err := h.catalogSvc.CreateSize(r.Context(), domain.Size{Code: body.Code, Name: body.Name})
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -192,7 +192,7 @@ func (h *Handler) UpdateSize(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	updated, err := h.catalogSvc.UpdateSizeName(r.PathValue("code"), body.Name)
+	updated, err := h.catalogSvc.UpdateSizeName(r.Context(), r.PathValue("code"), body.Name)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -201,7 +201,7 @@ func (h *Handler) UpdateSize(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteSize(w http.ResponseWriter, r *http.Request) {
-	if err := h.catalogSvc.DeleteSize(r.PathValue("code")); err != nil {
+	if err := h.catalogSvc.DeleteSize(r.Context(), r.PathValue("code")); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -211,7 +211,7 @@ func (h *Handler) DeleteSize(w http.ResponseWriter, r *http.Request) {
 // --- Editions ---
 
 func (h *Handler) ListEditions(w http.ResponseWriter, r *http.Request) {
-	list, err := h.catalogSvc.ListEditions()
+	list, err := h.catalogSvc.ListEditions(r.Context())
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -225,7 +225,7 @@ func (h *Handler) CreateEdition(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	created, err := h.catalogSvc.CreateEdition(domain.Edition{Code: body.Code, Name: body.Name})
+	created, err := h.catalogSvc.CreateEdition(r.Context(), domain.Edition{Code: body.Code, Name: body.Name})
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -239,7 +239,7 @@ func (h *Handler) UpdateEdition(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	updated, err := h.catalogSvc.UpdateEditionName(r.PathValue("code"), body.Name)
+	updated, err := h.catalogSvc.UpdateEditionName(r.Context(), r.PathValue("code"), body.Name)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -248,7 +248,7 @@ func (h *Handler) UpdateEdition(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteEdition(w http.ResponseWriter, r *http.Request) {
-	if err := h.catalogSvc.DeleteEdition(r.PathValue("code")); err != nil {
+	if err := h.catalogSvc.DeleteEdition(r.Context(), r.PathValue("code")); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -258,7 +258,7 @@ func (h *Handler) DeleteEdition(w http.ResponseWriter, r *http.Request) {
 // --- Bag merchandising taxonomy ---
 
 func (h *Handler) GetMasterCatalog(w http.ResponseWriter, r *http.Request) {
-	catalog, err := h.catalogSvc.MasterCatalog()
+	catalog, err := h.catalogSvc.MasterCatalog(r.Context())
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -267,7 +267,7 @@ func (h *Handler) GetMasterCatalog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListSubCategories(w http.ResponseWriter, r *http.Request) {
-	list, err := h.catalogSvc.ListSubCategories()
+	list, err := h.catalogSvc.ListSubCategories(r.Context())
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -276,7 +276,7 @@ func (h *Handler) ListSubCategories(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListBagStyles(w http.ResponseWriter, r *http.Request) {
-	list, err := h.catalogSvc.ListBagStyles()
+	list, err := h.catalogSvc.ListBagStyles(r.Context())
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -285,7 +285,7 @@ func (h *Handler) ListBagStyles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
-	list, err := h.catalogSvc.ListTargets()
+	list, err := h.catalogSvc.ListTargets(r.Context())
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

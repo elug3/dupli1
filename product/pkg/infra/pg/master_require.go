@@ -93,8 +93,7 @@ func (s *ProductSearchStore) sizeName(ctx context.Context, code string) string {
 }
 
 // enrichMasterNames fills display Brand/Color/Size from master tables when blank.
-func (s *ProductSearchStore) enrichMasterNames(products []domain.Product) {
-	ctx := context.Background()
+func (s *ProductSearchStore) enrichMasterNames(ctx context.Context, products []domain.Product) {
 	for i := range products {
 		p := &products[i]
 		if p.Brand == "" && p.BrandCode != "" {

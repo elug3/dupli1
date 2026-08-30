@@ -272,11 +272,11 @@ paths:
         schema:
           type: string
     get:
-      summary: Get product detail with variants
+      summary: Get product detail with variants (availableQty/inStock per variant)
       tags: [Product]
       responses:
         '200':
-          description: Success
+          description: Parent + variants; each variant includes availableQty and inStock from stock_items
     put:
       summary: Update a product
       tags: [Product]

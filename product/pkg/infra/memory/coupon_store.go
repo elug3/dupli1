@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -26,7 +27,8 @@ func NewCouponStore() *CouponStore {
 	return s
 }
 
-func (s *CouponStore) List() ([]domain.Coupon, error) {
+func (s *CouponStore) List(ctx context.Context, ) ([]domain.Coupon, error) {
+	_ = ctx
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]domain.Coupon, 0, len(s.coupons))
@@ -36,7 +38,8 @@ func (s *CouponStore) List() ([]domain.Coupon, error) {
 	return out, nil
 }
 
-func (s *CouponStore) Create(c domain.Coupon) error {
+func (s *CouponStore) Create(ctx context.Context, c domain.Coupon) error {
+	_ = ctx
 	code := strings.ToUpper(strings.TrimSpace(c.Code))
 	if code == "" {
 		return ports.Invalid("code is required")
@@ -51,7 +54,8 @@ func (s *CouponStore) Create(c domain.Coupon) error {
 	return nil
 }
 
-func (s *CouponStore) Update(code string, discount *float64, description, expires *string, active *bool) (*domain.Coupon, error) {
+func (s *CouponStore) Update(ctx context.Context, code string, discount *float64, description, expires *string, active *bool) (*domain.Coupon, error) {
+	_ = ctx
 	code = strings.ToUpper(strings.TrimSpace(code))
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -75,7 +79,8 @@ func (s *CouponStore) Update(code string, discount *float64, description, expire
 	return &c, nil
 }
 
-func (s *CouponStore) Delete(code string) error {
+func (s *CouponStore) Delete(ctx context.Context, code string) error {
+	_ = ctx
 	code = strings.ToUpper(strings.TrimSpace(code))
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -86,7 +91,8 @@ func (s *CouponStore) Delete(code string) error {
 	return nil
 }
 
-func (s *CouponStore) GetActive(code string) (*domain.Coupon, bool) {
+func (s *CouponStore) GetActive(ctx context.Context, code string) (*domain.Coupon, bool) {
+	_ = ctx
 	code = strings.ToUpper(strings.TrimSpace(code))
 	s.mu.RLock()
 	defer s.mu.RUnlock()

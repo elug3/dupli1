@@ -34,7 +34,7 @@ func newProfileService(t *testing.T) (*service.Service, ports.ProfileRepository)
 
 func TestPatchProfile_CreateAndUpdate(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := uuid.New().String()
 
 	name := "윤라희"
@@ -62,7 +62,7 @@ func TestPatchProfile_CreateAndUpdate(t *testing.T) {
 
 func TestCreateAddress_DefaultFirst(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := uuid.New().String()
 
 	addr, err := svc.CreateAddress(ctx, userID, service.AddressInput{
@@ -91,7 +91,7 @@ func TestCreateAddress_DefaultFirst(t *testing.T) {
 
 func TestCreateAddress_Limit(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := uuid.New().String()
 
 	input := service.AddressInput{
@@ -114,7 +114,7 @@ func TestCreateAddress_Limit(t *testing.T) {
 
 func TestPatchAddress_PartialUpdate(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := uuid.New().String()
 
 	created, err := svc.CreateAddress(ctx, userID, service.AddressInput{
@@ -142,7 +142,7 @@ func TestPatchAddress_PartialUpdate(t *testing.T) {
 
 func TestCreateAndPatchAddress_PCCC(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := uuid.New().String()
 
 	created, err := svc.CreateAddress(ctx, userID, service.AddressInput{
@@ -177,7 +177,7 @@ func TestCreateAndPatchAddress_PCCC(t *testing.T) {
 
 func TestPatchAddress_NotFound(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := uuid.New().String()
 
 	_, err := svc.PatchAddress(ctx, userID, "addr_missing", service.AddressInput{
@@ -190,7 +190,7 @@ func TestPatchAddress_NotFound(t *testing.T) {
 
 func TestDeleteAddress(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := uuid.New().String()
 
 	addr, err := svc.CreateAddress(ctx, userID, service.AddressInput{
@@ -214,7 +214,7 @@ func TestDeleteAddress(t *testing.T) {
 
 func TestPatchProfile_InvalidPhone(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := uuid.New().String()
 
 	bad := "not-a-phone"
@@ -226,7 +226,7 @@ func TestPatchProfile_InvalidPhone(t *testing.T) {
 
 func TestSetDefaultAddress(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := uuid.New().String()
 
 	a1, err := svc.CreateAddress(ctx, userID, service.AddressInput{

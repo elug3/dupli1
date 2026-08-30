@@ -20,7 +20,7 @@ func TestSearchProductsNoColorDuplicates(t *testing.T) {
 	}
 	svc := service.NewProductSearchService(store, nil)
 
-	results, _, err := svc.SearchProducts(map[string]string{"category": "bags"}, true)
+	results, _, err := svc.SearchProducts(t.Context(), map[string]string{"category": "bags"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,9 @@ func TestSearchProductsNoColorDuplicates(t *testing.T) {
 
 func TestCreateVariantUnderParent(t *testing.T) {
 	store := memory.NewProductStore()
-	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "BOT", Code: "CAS001", Name: "Cassette"}); err != nil {
+	inv := memory.NewInventoryStore()
+	store.WithInventory(inv)
+	if _, err := store.Catalog.CreateStyle(t.Context(), domain.Style{BrandCode: "BOT", Code: "CAS001", Name: "Cassette"}); err != nil {
 		t.Fatal(err)
 	}
 	store.Products = []domain.Product{
@@ -46,9 +48,9 @@ func TestCreateVariantUnderParent(t *testing.T) {
 	store.Variants = []domain.Variant{
 		{SKU: "BOT_CAS001_GRN_OS", ProductID: "BOT-001", Color: "Green", ColorCode: "GRN", SizeCode: "OS", Status: "active"},
 	}
-	svc := service.NewProductSearchService(store, nil)
+	svc := service.NewProductSearchService(store, nil).WithInventory(inv)
 
-	v, err := svc.CreateVariant("BOT-001", domain.Variant{Color: "Black"})
+	v, err := svc.CreateVariant(t.Context(), "BOT-001", domain.Variant{Color: "Black"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,8 +60,18 @@ func TestCreateVariantUnderParent(t *testing.T) {
 	if v.Price != 2500 {
 		t.Fatalf("variant should inherit parent price, got %v", v.Price)
 	}
+	if v.InStock || v.AvailableQty != 0 {
+		t.Fatalf("new variant should be OOS until stock set: inStock=%v qty=%d", v.InStock, v.AvailableQty)
+	}
+	item, err := inv.GetItem(t.Context(), v.SkuID)
+	if err != nil {
+		t.Fatalf("stock row missing after create: %v", err)
+	}
+	if item.Quantity != 0 || item.Reserved != 0 {
+		t.Fatalf("want zero stock row, got %+v", item)
+	}
 
-	p, err := svc.GetPublicProduct("BOT-001")
+	p, err := svc.GetPublicProduct(t.Context(), "BOT-001")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,9 +80,43 @@ func TestCreateVariantUnderParent(t *testing.T) {
 	}
 }
 
+func TestGetPublicProduct_EnrichesInStock(t *testing.T) {
+	store := memory.NewProductStore()
+	inv := memory.NewInventoryStore()
+	store.WithInventory(inv)
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", BrandCode: "BOT", StyleCode: "CAS001", Status: "active", Price: 2500},
+	}
+	store.Variants = []domain.Variant{
+		{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Status: "active"},
+		{SkuID: "SKUID-BLK", SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Status: "active"},
+	}
+	_ = inv.SaveItem(t.Context(), &domain.StockItem{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", Quantity: 3, Reserved: 1})
+	_ = inv.SaveItem(t.Context(), &domain.StockItem{SkuID: "SKUID-BLK", SKU: "BOT-001-BLK", Quantity: 0, Reserved: 0})
+	svc := service.NewProductSearchService(store, nil).WithInventory(inv)
+
+	p, err := svc.GetPublicProduct(t.Context(), "BOT-001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bySKU := map[string]domain.Variant{}
+	for _, v := range p.Variants {
+		bySKU[v.SKU] = v
+	}
+	grn := bySKU["BOT-001-GRN"]
+	if !grn.InStock || grn.AvailableQty != 2 {
+		t.Fatalf("green: want inStock available=2, got inStock=%v qty=%d", grn.InStock, grn.AvailableQty)
+	}
+	blk := bySKU["BOT-001-BLK"]
+	if blk.InStock || blk.AvailableQty != 0 {
+		t.Fatalf("black: want OOS, got inStock=%v qty=%d", blk.InStock, blk.AvailableQty)
+	}
+}
+
+
 func TestUpdateProduct_StyleOnlyKeepsPrice(t *testing.T) {
 	store := memory.NewProductStore()
-	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "BOT", Code: "CAS001", Name: "Cassette"}); err != nil {
+	if _, err := store.Catalog.CreateStyle(t.Context(), domain.Style{BrandCode: "BOT", Code: "CAS001", Name: "Cassette"}); err != nil {
 		t.Fatal(err)
 	}
 	store.Products = []domain.Product{
@@ -81,7 +127,7 @@ func TestUpdateProduct_StyleOnlyKeepsPrice(t *testing.T) {
 	}
 	svc := service.NewProductSearchService(store, nil)
 
-	updated, err := svc.UpdateProduct(domain.Product{ID: "BOT-001", Style: "evening"})
+	updated, err := svc.UpdateProduct(t.Context(), domain.Product{ID: "BOT-001", Style: "evening"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +144,7 @@ func TestUpdateProduct_StyleOnlyKeepsPrice(t *testing.T) {
 
 func TestUpdateProduct_AttributesMemo(t *testing.T) {
 	store := memory.NewProductStore()
-	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "BOT", Code: "CAS001", Name: "Cassette"}); err != nil {
+	if _, err := store.Catalog.CreateStyle(t.Context(), domain.Style{BrandCode: "BOT", Code: "CAS001", Name: "Cassette"}); err != nil {
 		t.Fatal(err)
 	}
 	store.Products = []domain.Product{
@@ -110,7 +156,7 @@ func TestUpdateProduct_AttributesMemo(t *testing.T) {
 	}
 	svc := service.NewProductSearchService(store, nil)
 
-	updated, err := svc.UpdateProduct(domain.Product{ID: "BOT-001", Style: "evening"})
+	updated, err := svc.UpdateProduct(t.Context(), domain.Product{ID: "BOT-001", Style: "evening"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +164,7 @@ func TestUpdateProduct_AttributesMemo(t *testing.T) {
 		t.Fatalf("attributes wiped on style-only update: %#v", updated.Attributes)
 	}
 
-	updated, err = svc.UpdateProduct(domain.Product{
+	updated, err = svc.UpdateProduct(t.Context(), domain.Product{
 		ID: "BOT-001",
 		Attributes: map[string]string{
 			" condition ": " excellent ",
@@ -151,7 +197,7 @@ func TestUpdateVariant_PartialBodyDoesNotClearOtherFields(t *testing.T) {
 	svc := service.NewProductSearchService(store, nil)
 
 	// Size-only update — color/status/images must survive; price comes from parent.
-	updated, err := svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{Size: "L", Price: 9999})
+	updated, err := svc.UpdateVariant(t.Context(), "BOT-001", "BOT-001-GRN", domain.Variant{Size: "L", Price: 9999})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +223,7 @@ func TestUpdateVariant_PartialBodyDoesNotClearOtherFields(t *testing.T) {
 	// A draft variant that lost its status would silently vanish from public
 	// PDP filtering — confirm it's still there under its still-draft status
 	// (i.e. GetPublicVariant correctly still rejects it as non-active).
-	if _, err := svc.GetPublicVariant("BOT-001-GRN"); err == nil {
+	if _, err := svc.GetPublicVariant(t.Context(), "BOT-001-GRN"); err == nil {
 		t.Fatal("draft variant should not be publicly visible")
 	}
 }
@@ -196,7 +242,7 @@ func TestUpdateVariant_Dimensions(t *testing.T) {
 	}
 	svc := service.NewProductSearchService(store, nil)
 
-	updated, err := svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{Color: "Black"})
+	updated, err := svc.UpdateVariant(t.Context(), "BOT-001", "BOT-001-GRN", domain.Variant{Color: "Black"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +250,7 @@ func TestUpdateVariant_Dimensions(t *testing.T) {
 		t.Fatalf("omitted dimensions cleared: %+v", updated.Dimensions)
 	}
 
-	updated, err = svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{
+	updated, err = svc.UpdateVariant(t.Context(), "BOT-001", "BOT-001-GRN", domain.Variant{
 		Dimensions: &domain.Dimensions{WidthMm: 400, HeightMm: 250, DepthMm: 90},
 	})
 	if err != nil {
@@ -214,7 +260,7 @@ func TestUpdateVariant_Dimensions(t *testing.T) {
 		t.Fatalf("replace failed: %+v", updated.Dimensions)
 	}
 
-	updated, err = svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{
+	updated, err = svc.UpdateVariant(t.Context(), "BOT-001", "BOT-001-GRN", domain.Variant{
 		Dimensions: &domain.Dimensions{},
 	})
 	if err != nil {
@@ -224,7 +270,7 @@ func TestUpdateVariant_Dimensions(t *testing.T) {
 		t.Fatalf("want cleared, got %+v", updated.Dimensions)
 	}
 
-	if _, err := svc.UpdateVariant("BOT-001", "BOT-001-GRN", domain.Variant{
+	if _, err := svc.UpdateVariant(t.Context(), "BOT-001", "BOT-001-GRN", domain.Variant{
 		Dimensions: &domain.Dimensions{WidthMm: -5},
 	}); err == nil {
 		t.Fatal("want error for negative dimensions")
@@ -244,7 +290,7 @@ func TestGetPublicVariantsBySkuIDs(t *testing.T) {
 	}
 	svc := service.NewProductSearchService(store, nil)
 
-	items, missing, err := svc.GetPublicVariantsBySkuIDs([]string{"ID-A", "ID-B", "ID-C", "ID-MISSING", "ID-A", "  "})
+	items, missing, err := svc.GetPublicVariantsBySkuIDs(t.Context(), []string{"ID-A", "ID-B", "ID-C", "ID-MISSING", "ID-A", "  "})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +307,7 @@ func TestGetPublicVariantsBySkuIDs(t *testing.T) {
 		}
 	}
 
-	if _, _, err := svc.GetPublicVariantsBySkuIDs(nil); err == nil {
+	if _, _, err := svc.GetPublicVariantsBySkuIDs(t.Context(), nil); err == nil {
 		t.Fatal("empty sku_ids should be invalid")
 	}
 
@@ -269,7 +315,7 @@ func TestGetPublicVariantsBySkuIDs(t *testing.T) {
 	for i := range tooMany {
 		tooMany[i] = fmt.Sprintf("ID-%d", i)
 	}
-	if _, _, err := svc.GetPublicVariantsBySkuIDs(tooMany); err == nil {
+	if _, _, err := svc.GetPublicVariantsBySkuIDs(t.Context(), tooMany); err == nil {
 		t.Fatal("oversized batch should be invalid")
 	}
 }

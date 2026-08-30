@@ -26,6 +26,8 @@ func NewCouponStore(pool *pgxpool.Pool) (*CouponStore, error) {
 }
 
 func (s *CouponStore) migrate() error {
+	// Startup schema migration runs outside any HTTP request; there is no
+	// request-scoped context to propagate (process lifetime only).
 	_, err := s.pool.Exec(context.Background(), `
 		CREATE TABLE IF NOT EXISTS coupons (
 			code        TEXT PRIMARY KEY,
@@ -42,6 +44,7 @@ func (s *CouponStore) migrate() error {
 }
 
 func (s *CouponStore) seedDefaults() error {
+	// Bootstrap seed data at process start; no request context available.
 	_, err := s.pool.Exec(context.Background(), `
 		INSERT INTO coupons (code, discount, description, expires, active)
 		VALUES ('SUMMER30', 0.30, 'Summer sale — all items', 'Aug 31, 2026', TRUE)
@@ -50,8 +53,8 @@ func (s *CouponStore) seedDefaults() error {
 	return err
 }
 
-func (s *CouponStore) List() ([]domain.Coupon, error) {
-	rows, err := s.pool.Query(context.Background(), `
+func (s *CouponStore) List(ctx context.Context) ([]domain.Coupon, error) {
+	rows, err := s.pool.Query(ctx, `
 		SELECT code, discount, description, expires, active FROM coupons ORDER BY code
 	`)
 	if err != nil {
@@ -70,13 +73,13 @@ func (s *CouponStore) List() ([]domain.Coupon, error) {
 	return coupons, wrapDB("list coupons", rows.Err())
 }
 
-func (s *CouponStore) Create(c domain.Coupon) error {
+func (s *CouponStore) Create(ctx context.Context, c domain.Coupon) error {
 	code := strings.ToUpper(strings.TrimSpace(c.Code))
 	if code == "" {
 		return ports.Invalid("code is required")
 	}
 	c.Code = code
-	_, err := s.pool.Exec(context.Background(), `
+	_, err := s.pool.Exec(ctx, `
 		INSERT INTO coupons (code, discount, description, expires, active)
 		VALUES ($1, $2, $3, $4, $5)
 	`, c.Code, c.Discount, c.Description, c.Expires, c.Active)
@@ -89,9 +92,9 @@ func (s *CouponStore) Create(c domain.Coupon) error {
 	return nil
 }
 
-func (s *CouponStore) Update(code string, discount *float64, description, expires *string, active *bool) (*domain.Coupon, error) {
+func (s *CouponStore) Update(ctx context.Context, code string, discount *float64, description, expires *string, active *bool) (*domain.Coupon, error) {
 	code = strings.ToUpper(strings.TrimSpace(code))
-	current, err := s.getCoupon(code)
+	current, err := s.getCoupon(ctx, code)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +110,7 @@ func (s *CouponStore) Update(code string, discount *float64, description, expire
 	if active != nil {
 		current.Active = *active
 	}
-	_, err = s.pool.Exec(context.Background(), `
+	_, err = s.pool.Exec(ctx, `
 		UPDATE coupons SET discount = $2, description = $3, expires = $4, active = $5 WHERE code = $1
 	`, current.Code, current.Discount, current.Description, current.Expires, current.Active)
 	if err != nil {
@@ -116,9 +119,9 @@ func (s *CouponStore) Update(code string, discount *float64, description, expire
 	return current, nil
 }
 
-func (s *CouponStore) Delete(code string) error {
+func (s *CouponStore) Delete(ctx context.Context, code string) error {
 	code = strings.ToUpper(strings.TrimSpace(code))
-	tag, err := s.pool.Exec(context.Background(), `DELETE FROM coupons WHERE code = $1`, code)
+	tag, err := s.pool.Exec(ctx, `DELETE FROM coupons WHERE code = $1`, code)
 	if err != nil {
 		return wrapDB("delete coupon", err)
 	}
@@ -128,18 +131,18 @@ func (s *CouponStore) Delete(code string) error {
 	return nil
 }
 
-func (s *CouponStore) GetActive(code string) (*domain.Coupon, bool) {
+func (s *CouponStore) GetActive(ctx context.Context, code string) (*domain.Coupon, bool) {
 	code = strings.ToUpper(strings.TrimSpace(code))
-	coupon, err := s.getCoupon(code)
+	coupon, err := s.getCoupon(ctx, code)
 	if err != nil || !coupon.Active {
 		return nil, false
 	}
 	return coupon, true
 }
 
-func (s *CouponStore) getCoupon(code string) (*domain.Coupon, error) {
+func (s *CouponStore) getCoupon(ctx context.Context, code string) (*domain.Coupon, error) {
 	var c domain.Coupon
-	err := s.pool.QueryRow(context.Background(), `
+	err := s.pool.QueryRow(ctx, `
 		SELECT code, discount, description, expires, active FROM coupons WHERE code = $1
 	`, code).Scan(&c.Code, &c.Discount, &c.Description, &c.Expires, &c.Active)
 	if err != nil {

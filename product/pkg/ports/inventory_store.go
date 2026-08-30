@@ -20,6 +20,9 @@ var (
 // SkuID (never the human sku string).
 type InventoryStore interface {
 	GetItem(ctx context.Context, skuID string) (*domain.StockItem, error)
+	// GetItems returns stock for the given skuIDs. Missing rows are omitted
+	// from the map (caller treats missing as available 0).
+	GetItems(ctx context.Context, skuIDs []string) (map[string]*domain.StockItem, error)
 	SaveItem(ctx context.Context, item *domain.StockItem) error
 	GetReservation(ctx context.Context, id string) (*domain.Reservation, error)
 	SaveReservation(ctx context.Context, reservation *domain.Reservation) error
@@ -31,6 +34,6 @@ type InventoryStore interface {
 // slice of ProductStore the inventory service needs to resolve a caller's
 // sku/skuId reference to a canonical SkuID before touching InventoryStore.
 type VariantResolver interface {
-	GetVariant(sku string) (*domain.Variant, error)
-	GetVariantBySkuID(skuID string) (*domain.Variant, error)
+	GetVariant(ctx context.Context, sku string) (*domain.Variant, error)
+	GetVariantBySkuID(ctx context.Context, skuID string) (*domain.Variant, error)
 }

@@ -82,7 +82,7 @@ func TestSimulateSuccess_DisabledWhenNotDev(t *testing.T) {
 func TestSimulateSuccess_EnabledInDev(t *testing.T) {
 	repo := memory.NewRepository()
 	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
 	})
 	if err != nil {
@@ -214,7 +214,7 @@ func TestNanoReturn_SucceedsAndRedirects(t *testing.T) {
 		FailureURL:    "http://localhost:5173/checkout",
 	})
 	svc := service.New(repo, nanoOrderClient{}, nano, pub)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
 	})
 	if err != nil {
@@ -254,7 +254,7 @@ func TestNanoReturn_RejectsForgedMinimalCallback(t *testing.T) {
 		SuccessURL:    "http://localhost:5173/checkout/confirmation",
 	})
 	svc := service.New(repo, nanoOrderClient{}, nano, pub)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
 	})
 	if err != nil {
@@ -286,7 +286,7 @@ func TestNanoWebhook_SucceedsAndReturnsResultCode00(t *testing.T) {
 		PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, nanoOrderClient{}, nano, pub)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
 	})
 	if err != nil {
@@ -328,7 +328,7 @@ func TestNanoWebhook_RejectsForgedCallback(t *testing.T) {
 		PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, nanoOrderClient{}, nano, pub)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
 	})
 	if err != nil {

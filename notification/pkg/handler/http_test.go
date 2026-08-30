@@ -2,7 +2,6 @@ package handler_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -142,7 +141,7 @@ func TestTelegramSubscriptionsFailClosedWithoutValidator(t *testing.T) {
 func TestTelegramSubscriptionsReadVsManagePermissions(t *testing.T) {
 	h, subs := newTestHandler(t, "")
 	mux := newMux(h)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	readToken := makeToken(t, "reader-1", []string{permissions.NotificationTelegramRead})
 	manageToken := makeToken(t, "manager-1", []string{permissions.NotificationTelegramManage})
@@ -213,7 +212,7 @@ func TestTelegramSubscriptionRejectAndDelete(t *testing.T) {
 	mux := newMux(h)
 	manageToken := makeToken(t, "manager-1", []string{permissions.NotificationTelegramManage})
 
-	pending, err := subs.RegisterFromMessage(context.Background(), ports.TelegramSubscriptionInput{
+	pending, err := subs.RegisterFromMessage(t.Context(), ports.TelegramSubscriptionInput{
 		TelegramUserID: int64Ptr(77),
 		ChatID:         "77",
 		ChatType:       "private",
@@ -234,7 +233,7 @@ func TestTelegramSubscriptionRejectAndDelete(t *testing.T) {
 		t.Fatalf("status = %q, want rejected", rejected.Status)
 	}
 
-	manual, err := subs.CreateManual(context.Background(), ports.TelegramManualInput{
+	manual, err := subs.CreateManual(t.Context(), ports.TelegramManualInput{
 		ChatID:     "-100888",
 		ChatLabel:  "Delete me",
 		AlertOrder: true,

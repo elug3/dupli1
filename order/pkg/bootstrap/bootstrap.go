@@ -87,6 +87,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		return nil, err
 	}
 
+	// Process bootstrap: no HTTP request context available.
 	stockTokenSource, err := resolveStockTokenSource(context.Background(), cfg)
 	if err != nil {
 		closeFn()
@@ -117,6 +118,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	svc := service.NewWithCheckout(repo, stock, couponClient, 0, eventPublisher).WithProduct(product)
 
 	if natsSubscriber != nil {
+		// Long-lived worker/subscriber root; cancelled on process shutdown.
 		if err := svc.RegisterPaymentConsumer(context.Background(), natsSubscriber); err != nil {
 			natsSubscriber.Close()
 			natsPublisher.Close()
@@ -124,6 +126,7 @@ func Bootstrap(cfg Config) (*App, error) {
 			return nil, fmt.Errorf("payment consumer: %w", err)
 		}
 	}
+	// Long-lived worker/subscriber root; cancelled on process shutdown.
 	expiryCtx, expiryCancel := context.WithCancel(context.Background())
 	svc.StartPendingExpiryWorker(expiryCtx, 30*time.Second)
 	svc.StartOutboxWorker(expiryCtx, 2*time.Second)

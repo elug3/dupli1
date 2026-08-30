@@ -56,9 +56,9 @@ func NewInventoryService(store ports.InventoryStore, variants ports.VariantResol
 	}
 }
 
-func (s *InventoryService) resolve(ref SkuRef) (skuID, sku string, err error) {
+func (s *InventoryService) resolve(ctx context.Context, ref SkuRef) (skuID, sku string, err error) {
 	if ref.SkuID != "" {
-		v, err := s.variants.GetVariantBySkuID(ref.SkuID)
+		v, err := s.variants.GetVariantBySkuID(ctx, ref.SkuID)
 		if err != nil {
 			return "", "", ErrInvalidSKU
 		}
@@ -68,7 +68,7 @@ func (s *InventoryService) resolve(ref SkuRef) (skuID, sku string, err error) {
 	if normalized == "" {
 		return "", "", ErrInvalidSKU
 	}
-	v, err := s.variants.GetVariant(normalized)
+	v, err := s.variants.GetVariant(ctx, normalized)
 	if err != nil {
 		return "", "", ErrInvalidSKU
 	}
@@ -76,7 +76,7 @@ func (s *InventoryService) resolve(ref SkuRef) (skuID, sku string, err error) {
 }
 
 func (s *InventoryService) UpsertItem(ctx context.Context, ref SkuRef, quantity int) (*domain.StockItem, error) {
-	skuID, sku, err := s.resolve(ref)
+	skuID, sku, err := s.resolve(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (s *InventoryService) UpsertItem(ctx context.Context, ref SkuRef, quantity 
 }
 
 func (s *InventoryService) GetItem(ctx context.Context, ref SkuRef) (*domain.StockItem, error) {
-	skuID, _, err := s.resolve(ref)
+	skuID, _, err := s.resolve(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (s *InventoryService) GetItem(ctx context.Context, ref SkuRef) (*domain.Sto
 }
 
 func (s *InventoryService) AdjustStock(ctx context.Context, ref SkuRef, delta int) (*domain.StockItem, error) {
-	skuID, sku, err := s.resolve(ref)
+	skuID, sku, err := s.resolve(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (s *InventoryService) Reserve(ctx context.Context, orderID string, items []
 		return nil, fmt.Errorf("order id is required")
 	}
 
-	normalizedItems, err := s.resolveReservationItems(items)
+	normalizedItems, err := s.resolveReservationItems(ctx, items)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func (s *InventoryService) closeReservation(ctx context.Context, id string, stat
 // and aggregates duplicate references (e.g. the same variant sent once by
 // sku and once by skuId) into a single line, mirroring the original
 // inventory service's dedupe-by-sku behavior.
-func (s *InventoryService) resolveReservationItems(items []ReservationItemRef) ([]domain.ReservationItem, error) {
+func (s *InventoryService) resolveReservationItems(ctx context.Context, items []ReservationItemRef) ([]domain.ReservationItem, error) {
 	if len(items) == 0 {
 		return nil, ErrInvalidQuantity
 	}
@@ -220,7 +220,7 @@ func (s *InventoryService) resolveReservationItems(items []ReservationItemRef) (
 		if item.Quantity <= 0 {
 			return nil, ErrInvalidQuantity
 		}
-		skuID, sku, err := s.resolve(item.Ref)
+		skuID, sku, err := s.resolve(ctx, item.Ref)
 		if err != nil {
 			return nil, err
 		}

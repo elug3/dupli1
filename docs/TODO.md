@@ -159,7 +159,8 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 
 ## Product API
 
-- [x] **Parent + variants** — implemented; see [product-variants-plan.md](product-variants-plan.md). Remaining: inventory `inStock` enrichment on PDP, drop legacy parent `color`/`stock`/`imageUrls` columns, merge pre-existing duplicate color products.
+- [x] **Parent + variants** — implemented; see [product-variants-plan.md](product-variants-plan.md). Remaining: drop legacy parent `color`/`imageUrls` columns, merge pre-existing duplicate color products.
+- [x] **Product stock tracking** — always-tracked SKUs, PDP `inStock`/`availableQty`, cart stock-on-add; [product-stock-tracking-plan.md](product-stock-tracking-plan.md).
 - [x] **Product attributes memo** — parent `attributes` string map (JSONB); PDP display only — [product-attributes.md](product-attributes.md).
 - [ ] **Auth-aware `GET /api/v1/products/{id}`** — managers should see drafts/cost on PDP without a separate `/manage` path (optional Bearer, same pattern as list search).
 - [x] **Guest session cookie + unique product view counter** — implemented; see [product-guest-views-plan.md](product-guest-views-plan.md). Browser `dupli1_guest` cookie; exact unique views per parent product on public PDP (`viewCount`).

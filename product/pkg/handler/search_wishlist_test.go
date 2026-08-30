@@ -192,7 +192,7 @@ func TestWishlistAddRemoveAndSort(t *testing.T) {
 		t.Fatalf("remove wishlist: want 200, got %d", rec.Code)
 	}
 
-	got, _ := store.GetProduct("HOT")
+	got, _ := store.GetProduct(t.Context(), "HOT")
 	if got.WishlistCount != 0 {
 		t.Fatalf("after remove wishlistCount=%d, want 0", got.WishlistCount)
 	}

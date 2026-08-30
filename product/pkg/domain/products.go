@@ -27,6 +27,11 @@ type Variant struct {
 	// ProductName is the parent product's display name, populated on public variant reads.
 	ProductName string `json:"productName,omitempty"`
 	CreatedAt   string `json:"createdAt,omitempty"`
+	// AvailableQty is max(0, stock.quantity - stock.reserved). Response-only;
+	// not stored on the variant row. See docs/product-stock-tracking-plan.md.
+	AvailableQty int `json:"availableQty"`
+	// InStock is true when AvailableQty > 0. Response-only.
+	InStock bool `json:"inStock"`
 }
 
 // Product is a parent catalog style. Sellable options live on Variants.
@@ -77,7 +82,9 @@ type Product struct {
 	Variants        []Variant `json:"variants,omitempty"`
 
 	// Legacy display fields mirrored from the default active variant.
-	Color     string   `json:"color,omitempty"`
-	Stock     int      `json:"stock,omitempty"`
+	Color string `json:"color,omitempty"`
+	// Stock is legacy parent-level stock. Availability lives on variants
+	// (availableQty/inStock) via stock_items. Omitted from API responses.
+	Stock     int      `json:"-"`
 	ImageURLs []string `json:"imageUrls,omitempty"`
 }

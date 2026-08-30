@@ -74,14 +74,14 @@ func TestCreatePayment_ReusesOpenPaymentWhenSaveRaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPayment: %v", err)
 	}
-	if err := base.Save(context.Background(), winner); err != nil {
+	if err := base.Save(t.Context(), winner); err != nil {
 		t.Fatalf("seed payment: %v", err)
 	}
 
 	repo := &saveRaceRepo{Repository: base, hideOpenPaymentOnce: true}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
-	got, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	got, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -109,15 +109,15 @@ func TestCreatePayment_ReusesNewestRequiresPaymentForOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPayment newer: %v", err)
 	}
-	if err := repo.Save(context.Background(), older); err != nil {
+	if err := repo.Save(t.Context(), older); err != nil {
 		t.Fatalf("save older: %v", err)
 	}
-	if err := repo.Save(context.Background(), newer); err != nil {
+	if err := repo.Save(t.Context(), newer); err != nil {
 		t.Fatalf("save newer: %v", err)
 	}
 
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
-	got, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	got, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -136,14 +136,14 @@ func TestCreatePayment_ReusesExistingRequiresPaymentForOrder(t *testing.T) {
 	}}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
-	first, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	first, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
 		t.Fatalf("first CreatePayment: %v", err)
 	}
 
-	second, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	second, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -162,13 +162,13 @@ func TestCreatePayment_ReusesExistingSucceededForOrder(t *testing.T) {
 	}}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
-	first, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	first, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
 		t.Fatalf("CreatePayment: %v", err)
 	}
-	succeeded, err := svc.CompletePayment(context.Background(), first.ID)
+	succeeded, err := svc.CompletePayment(t.Context(), first.ID)
 	if err != nil {
 		t.Fatalf("CompletePayment: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestCreatePayment_ReusesExistingSucceededForOrder(t *testing.T) {
 		t.Fatalf("status = %s, want succeeded", succeeded.Status)
 	}
 
-	second, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	second, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -197,7 +197,7 @@ func TestCreatePayment_ReusesBypassSucceededWhenCardRetried(t *testing.T) {
 	}}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
-	bypass, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	bypass, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID:           "ord_1",
 		CustomerID:        "manager_1",
 		BearerToken:       "token",
@@ -208,7 +208,7 @@ func TestCreatePayment_ReusesBypassSucceededWhenCardRetried(t *testing.T) {
 		t.Fatalf("bypass CreatePayment: %v", err)
 	}
 
-	card, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	card, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -226,7 +226,7 @@ func TestCreatePayment_DevCheckout(t *testing.T) {
 	}}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
-	payment, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	payment, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -257,7 +257,7 @@ func TestCreatePayment_BypassSucceedsAndPublishes(t *testing.T) {
 	pub := &recordingPublisher{}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), pub)
 
-	payment, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	payment, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID:           "ord_1",
 		CustomerID:        "manager_1",
 		BearerToken:       "token",
@@ -302,7 +302,7 @@ func TestCreatePayment_BypassForbiddenWithoutPermission(t *testing.T) {
 	}}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
-	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	_, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", Method: domain.MethodBypass,
 	})
 	if !errors.Is(err, ports.ErrPaymentForbidden) {
@@ -317,7 +317,7 @@ func TestCreatePayment_BitcoinUnavailable(t *testing.T) {
 	}}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
-	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	_, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", Method: domain.MethodBitcoin,
 	})
 	if !errors.Is(err, ports.ErrMethodUnavailable) {
@@ -332,7 +332,7 @@ func TestCreatePayment_CardUnavailableWhenNoDevSimulate(t *testing.T) {
 	}}
 	svc := service.New(repo, orders, checkout.NewUnavailableProvider("no PG configured"), nil)
 
-	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	_, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if !errors.Is(err, ports.ErrMethodUnavailable) {
@@ -347,7 +347,7 @@ func TestCreatePayment_UnknownMethod(t *testing.T) {
 	}}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
-	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	_, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", Method: "venmo",
 	})
 	if !errors.Is(err, domain.ErrInvalidPayment) {
@@ -362,7 +362,7 @@ func TestCreatePayment_BypassSkipsCustomerABAC(t *testing.T) {
 	}}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
-	payment, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	payment, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID:           "ord_1",
 		CustomerID:        "manager_other",
 		Method:            domain.MethodBypass,
@@ -385,14 +385,14 @@ func TestCompletePayment_PublishesEvent(t *testing.T) {
 	pub := &recordingPublisher{}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), pub)
 
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
 		t.Fatalf("CreatePayment: %v", err)
 	}
 
-	paid, err := svc.CompletePayment(context.Background(), created.ID)
+	paid, err := svc.CompletePayment(t.Context(), created.ID)
 	if err != nil {
 		t.Fatalf("CompletePayment: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestCreatePayment_RejectsNonPendingOrder(t *testing.T) {
 	}}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), nil)
 
-	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	_, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err == nil {
@@ -460,14 +460,14 @@ func TestCompletePayment_SoftSucceedsWhenPublishFails(t *testing.T) {
 	pub := &failAlwaysPublisher{}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), pub)
 
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
 		t.Fatalf("CreatePayment: %v", err)
 	}
 
-	paid, err := svc.CompletePayment(context.Background(), created.ID)
+	paid, err := svc.CompletePayment(t.Context(), created.ID)
 	if err != nil {
 		t.Fatalf("CompletePayment should soft-succeed: %v", err)
 	}
@@ -477,7 +477,7 @@ func TestCompletePayment_SoftSucceedsWhenPublishFails(t *testing.T) {
 	if pub.calls < 1 {
 		t.Fatal("expected publish attempt")
 	}
-	pending, err := repo.ListPendingOutbox(context.Background(), 10)
+	pending, err := repo.ListPendingOutbox(t.Context(), 10)
 	if err != nil {
 		t.Fatalf("ListPendingOutbox: %v", err)
 	}
@@ -494,25 +494,25 @@ func TestCompletePayment_DrainOutboxAfterPublishFailure(t *testing.T) {
 	failPub := &failAlwaysPublisher{}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), failPub)
 
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
 		t.Fatalf("CreatePayment: %v", err)
 	}
-	if _, err := svc.CompletePayment(context.Background(), created.ID); err != nil {
+	if _, err := svc.CompletePayment(t.Context(), created.ID); err != nil {
 		t.Fatalf("CompletePayment: %v", err)
 	}
 
 	okPub := &recordingPublisher{}
 	svcOK := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), okPub)
-	if err := svcOK.DrainOutbox(context.Background()); err != nil {
+	if err := svcOK.DrainOutbox(t.Context()); err != nil {
 		t.Fatalf("DrainOutbox: %v", err)
 	}
 	if len(okPub.events) != 1 {
 		t.Fatalf("events = %d, want 1", len(okPub.events))
 	}
-	pending, err := repo.ListPendingOutbox(context.Background(), 10)
+	pending, err := repo.ListPendingOutbox(t.Context(), 10)
 	if err != nil {
 		t.Fatalf("ListPendingOutbox: %v", err)
 	}
@@ -529,7 +529,7 @@ func TestCompletePayment_RepublishesAfterPriorPublishFailure(t *testing.T) {
 	pub := &failOncePublisher{failFirst: true}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), pub)
 
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -537,10 +537,10 @@ func TestCompletePayment_RepublishesAfterPriorPublishFailure(t *testing.T) {
 	}
 
 	// Soft-success: first complete persists succeeded + outbox even when publish fails.
-	if _, err := svc.CompletePayment(context.Background(), created.ID); err != nil {
+	if _, err := svc.CompletePayment(t.Context(), created.ID); err != nil {
 		t.Fatalf("CompletePayment soft-success: %v", err)
 	}
-	paid, err := repo.Get(context.Background(), created.ID)
+	paid, err := repo.Get(t.Context(), created.ID)
 	if err != nil {
 		t.Fatalf("Get after failed publish: %v", err)
 	}
@@ -548,7 +548,7 @@ func TestCompletePayment_RepublishesAfterPriorPublishFailure(t *testing.T) {
 		t.Fatalf("status after failed publish = %s, want succeeded", paid.Status)
 	}
 
-	if _, err := svc.CompletePayment(context.Background(), created.ID); err != nil {
+	if _, err := svc.CompletePayment(t.Context(), created.ID); err != nil {
 		t.Fatalf("retry CompletePayment: %v", err)
 	}
 	if len(pub.events) < 1 {
@@ -564,18 +564,18 @@ func TestReconcileSucceededPaymentsRepublishes(t *testing.T) {
 	pub := &recordingPublisher{}
 	svc := service.New(repo, orders, checkout.NewDevProvider("http://localhost:8080"), pub)
 
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
 		t.Fatalf("CreatePayment: %v", err)
 	}
-	if _, err := svc.CompletePayment(context.Background(), created.ID); err != nil {
+	if _, err := svc.CompletePayment(t.Context(), created.ID); err != nil {
 		t.Fatalf("CompletePayment: %v", err)
 	}
 	pub.events = nil
 
-	if err := svc.ReconcileSucceededPayments(context.Background(), time.Hour); err != nil {
+	if err := svc.ReconcileSucceededPayments(t.Context(), time.Hour); err != nil {
 		t.Fatalf("ReconcileSucceededPayments: %v", err)
 	}
 	if len(pub.events) != 1 || pub.events[0].PaymentID != created.ID {
@@ -595,7 +595,7 @@ func TestCreatePayment_NanoCheckout(t *testing.T) {
 	})
 	svc := service.New(repo, orders, nano, nil)
 
-	payment, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	payment, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -621,7 +621,7 @@ func TestCreatePayment_NanoRequiresRecipient(t *testing.T) {
 		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, orders, nano, nil)
-	_, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	_, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if !errors.Is(err, domain.ErrInvalidPayment) {
@@ -640,7 +640,7 @@ func TestHandleNanoResult_Success(t *testing.T) {
 		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, orders, nano, pub)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -649,7 +649,7 @@ func TestHandleNanoResult_Success(t *testing.T) {
 
 	auth := nanoAuth("test-key")
 	ts := "1725440123456"
-	paid, err := svc.HandleNanoResult(context.Background(), auth, service.NanoResult{
+	paid, err := svc.HandleNanoResult(t.Context(), auth, service.NanoResult{
 		ResultCode: "0000", ShopCode: "240000005", CompOrderNo: created.ID,
 		ReqPayAmt: "70000", TranNo: "2409030071109",
 		Timestamp: ts,
@@ -679,7 +679,7 @@ func TestHandleNanoResult_AmountMismatch(t *testing.T) {
 		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, orders, nano, nil)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -687,7 +687,7 @@ func TestHandleNanoResult_AmountMismatch(t *testing.T) {
 	}
 	auth := nanoAuth("test-key")
 	ts := "1725440123456"
-	_, err = svc.HandleNanoResult(context.Background(), auth, service.NanoResult{
+	_, err = svc.HandleNanoResult(t.Context(), auth, service.NanoResult{
 		ResultCode: "0000", ShopCode: "240000005", CompOrderNo: created.ID, ReqPayAmt: "1",
 		Timestamp: ts,
 		HashValue: checkout.NanoHash(auth.Ver, auth.LoginID, auth.ShopCode, "1", ts, auth.APIKey),
@@ -707,13 +707,13 @@ func TestHandleNanoResult_FailureMarksFailed(t *testing.T) {
 		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, orders, nano, nil)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
 		t.Fatalf("CreatePayment: %v", err)
 	}
-	paid, err := svc.HandleNanoResult(context.Background(), nanoAuth("test-key"), service.NanoResult{
+	paid, err := svc.HandleNanoResult(t.Context(), nanoAuth("test-key"), service.NanoResult{
 		ResultCode: "9999", ShopCode: "240000005", CompOrderNo: created.ID, ReqPayAmt: "70000",
 	})
 	if err != nil {
@@ -734,7 +734,7 @@ func TestHandleNanoResult_ForgedSuccessMissingFieldsRejected(t *testing.T) {
 		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, orders, nano, nil)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -743,7 +743,7 @@ func TestHandleNanoResult_ForgedSuccessMissingFieldsRejected(t *testing.T) {
 	auth := nanoAuth("test-key")
 
 	// Minimal forgery: resultCode + payment id only (shopcode/amount omitted).
-	_, err = svc.HandleNanoResult(context.Background(), auth, service.NanoResult{
+	_, err = svc.HandleNanoResult(t.Context(), auth, service.NanoResult{
 		ResultCode: "0000", CompOrderNo: created.ID,
 	})
 	if !errors.Is(err, domain.ErrInvalidPayment) {
@@ -751,7 +751,7 @@ func TestHandleNanoResult_ForgedSuccessMissingFieldsRejected(t *testing.T) {
 	}
 
 	// Full field forgery without valid hashValue.
-	_, err = svc.HandleNanoResult(context.Background(), auth, service.NanoResult{
+	_, err = svc.HandleNanoResult(t.Context(), auth, service.NanoResult{
 		ResultCode: "0000", ShopCode: "240000005", CompOrderNo: created.ID,
 		ReqPayAmt: "70000", Timestamp: "1725440123456", HashValue: "deadbeef",
 	})
@@ -759,7 +759,7 @@ func TestHandleNanoResult_ForgedSuccessMissingFieldsRejected(t *testing.T) {
 		t.Fatalf("bad hash err = %v, want ErrInvalidPayment", err)
 	}
 
-	got, err := svc.GetPayment(context.Background(), created.ID, "cust_1")
+	got, err := svc.GetPayment(t.Context(), created.ID, "cust_1")
 	if err != nil {
 		t.Fatalf("GetPayment: %v", err)
 	}
@@ -778,7 +778,7 @@ func TestHandleNanoResult_MissingShopCodeRejected(t *testing.T) {
 		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, orders, nano, nil)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
@@ -786,7 +786,7 @@ func TestHandleNanoResult_MissingShopCodeRejected(t *testing.T) {
 	}
 	auth := nanoAuth("test-key")
 	ts := "1725440123456"
-	_, err = svc.HandleNanoResult(context.Background(), auth, service.NanoResult{
+	_, err = svc.HandleNanoResult(t.Context(), auth, service.NanoResult{
 		ResultCode: "0000", CompOrderNo: created.ID, ReqPayAmt: "70000",
 		Timestamp: ts,
 		HashValue: checkout.NanoHash(auth.Ver, auth.LoginID, auth.ShopCode, "70000", ts, auth.APIKey),
@@ -806,14 +806,14 @@ func TestHandleNanoResult_ShopCodeMismatch(t *testing.T) {
 		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, orders, nano, nil)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord_1", CustomerID: "cust_1", BearerToken: "token",
 	})
 	if err != nil {
 		t.Fatalf("CreatePayment: %v", err)
 	}
 	auth := nanoAuth("test-key")
-	_, err = svc.HandleNanoResult(context.Background(), auth, service.NanoResult{
+	_, err = svc.HandleNanoResult(t.Context(), auth, service.NanoResult{
 		ResultCode: "0000", ShopCode: "wrong-shop", CompOrderNo: created.ID, ReqPayAmt: "70000",
 	})
 	if !errors.Is(err, domain.ErrInvalidPayment) {

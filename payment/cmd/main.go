@@ -46,6 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// CLI process lifetime root for signal handling.
 	interrupt, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 

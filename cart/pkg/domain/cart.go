@@ -15,6 +15,9 @@ var (
 // active, sellable product variant.
 const ReasonVariantNotFound = "variant_not_found"
 
+// ReasonInsufficientStock is returned when requested quantity exceeds available.
+const ReasonInsufficientStock = "insufficient_stock"
+
 type StoredItem struct {
 	SkuID    string
 	SKU      string

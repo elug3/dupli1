@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -32,10 +31,10 @@ func TestManagerCanManageCustomerPassword(t *testing.T) {
 	manager, _ := domain.NewUser(uuid.New().String(), "mgr@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
 	customer, _ := domain.NewUser(uuid.New().String(), "cust@example.com", "password", domain.AccountTypeCustomer)
-	_ = repo.Save(context.Background(), manager)
-	_ = repo.Save(context.Background(), customer)
+	_ = repo.Save(t.Context(), manager)
+	_ = repo.Save(t.Context(), customer)
 
-	token, _ := accessGen.Generate(context.Background(), manager.ID, manager.Permissions)
+	token, _ := accessGen.Generate(t.Context(), manager.ID, manager.Permissions)
 	body, _ := json.Marshal(map[string]string{"password": "newsecret1"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/users/"+customer.ID+"/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -60,10 +59,10 @@ func TestManagerCannotManageAdminPassword(t *testing.T) {
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
 	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
-	_ = repo.Save(context.Background(), manager)
-	_ = repo.Save(context.Background(), admin)
+	_ = repo.Save(t.Context(), manager)
+	_ = repo.Save(t.Context(), admin)
 
-	token, _ := accessGen.Generate(context.Background(), manager.ID, manager.Permissions)
+	token, _ := accessGen.Generate(t.Context(), manager.ID, manager.Permissions)
 	body, _ := json.Marshal(map[string]string{"password": "newsecret1"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/users/"+admin.ID+"/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -88,10 +87,10 @@ func TestAdminCanManageManagerPassword(t *testing.T) {
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
 	manager, _ := domain.NewUser(uuid.New().String(), "mgr@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.UserPasswordUpdate, permissions.UserStatusUpdate)
-	_ = repo.Save(context.Background(), admin)
-	_ = repo.Save(context.Background(), manager)
+	_ = repo.Save(t.Context(), admin)
+	_ = repo.Save(t.Context(), manager)
 
-	token, _ := accessGen.Generate(context.Background(), admin.ID, admin.Permissions)
+	token, _ := accessGen.Generate(t.Context(), admin.ID, admin.Permissions)
 	body, _ := json.Marshal(map[string]string{"password": "newsecret1"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/users/"+manager.ID+"/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -115,10 +114,10 @@ func TestAdminCannotManageOwnerPassword(t *testing.T) {
 	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
 	owner, _ := domain.NewUser(uuid.New().String(), "owner@dupli1.com", "password", domain.AccountTypeManager, permissions.All)
-	_ = repo.Save(context.Background(), admin)
-	_ = repo.Save(context.Background(), owner)
+	_ = repo.Save(t.Context(), admin)
+	_ = repo.Save(t.Context(), owner)
 
-	token, _ := accessGen.Generate(context.Background(), admin.ID, admin.Permissions)
+	token, _ := accessGen.Generate(t.Context(), admin.ID, admin.Permissions)
 	body, _ := json.Marshal(map[string]string{"password": "newsecret1"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/users/"+owner.ID+"/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -142,10 +141,10 @@ func TestOwnerCanManageAdminPassword(t *testing.T) {
 	owner, _ := domain.NewUser(uuid.New().String(), "owner@dupli1.com", "password", domain.AccountTypeManager, permissions.All)
 	admin, _ := domain.NewUser(uuid.New().String(), "admin@dupli1.com", "password", domain.AccountTypeManager,
 		permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})...)
-	_ = repo.Save(context.Background(), owner)
-	_ = repo.Save(context.Background(), admin)
+	_ = repo.Save(t.Context(), owner)
+	_ = repo.Save(t.Context(), admin)
 
-	token, _ := accessGen.Generate(context.Background(), owner.ID, owner.Permissions)
+	token, _ := accessGen.Generate(t.Context(), owner.ID, owner.Permissions)
 	body, _ := json.Marshal(map[string]string{"password": "newsecret1"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/users/"+admin.ID+"/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

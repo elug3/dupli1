@@ -1,7 +1,6 @@
 package pg
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -25,7 +24,7 @@ func requireDSN(t *testing.T) string {
 // with a SET statement, so it holds for every connection the pool opens.
 func freshSchema(t *testing.T, dsn, schema string) *pgxpool.Pool {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	admin, err := pgxpool.Connect(ctx, withPostgresSSLMode(dsn))
 	if err != nil {
@@ -75,7 +74,7 @@ func TestMigrateOnEmptyDatabase(t *testing.T) {
 		t.Fatalf("migrate on empty database returned error: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	var columns int
 	if err := pool.QueryRow(ctx, `
 		SELECT count(*) FROM information_schema.columns
@@ -121,7 +120,7 @@ func TestSaveAndLoadOrderItemProductSnapshot(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	order, err := domain.NewOrder("ord-snap-1", "cust-1", "res-1", []domain.OrderItem{{
 		SkuID:          "sku-bag-1",
@@ -162,7 +161,7 @@ func TestListAllReturnsOrdersAcrossCustomers(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	for _, spec := range []struct {
 		id, customer string
@@ -205,7 +204,7 @@ func TestSaveAndLoadOrderShipmentTracking(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	order, err := domain.NewOrder("ord-ship-1", "cust-1", "res-ship-1", []domain.OrderItem{{
 		SkuID: "sku-ship-1", SKU: "BAG-001", Quantity: 1, UnitPriceCents: 50000,

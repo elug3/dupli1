@@ -26,7 +26,7 @@ func captureLog(t *testing.T) *bytes.Buffer {
 func TestDispatchLogsHandlerError(t *testing.T) {
 	buf := captureLog(t)
 
-	dispatch(context.Background(), func(context.Context, string, []byte) error {
+	dispatch(t.Context(), func(context.Context, string, []byte) error {
 		return errors.New("telegram api status 500")
 	}, "order.paid", []byte(`{}`))
 
@@ -42,7 +42,7 @@ func TestDispatchLogsHandlerError(t *testing.T) {
 func TestDispatchSilentOnSuccess(t *testing.T) {
 	buf := captureLog(t)
 
-	dispatch(context.Background(), func(context.Context, string, []byte) error {
+	dispatch(t.Context(), func(context.Context, string, []byte) error {
 		return nil
 	}, "order.paid", []byte(`{}`))
 
@@ -54,7 +54,7 @@ func TestDispatchSilentOnSuccess(t *testing.T) {
 func TestDispatchNilHandler(t *testing.T) {
 	buf := captureLog(t)
 
-	dispatch(context.Background(), nil, "order.paid", []byte(`{}`))
+	dispatch(t.Context(), nil, "order.paid", []byte(`{}`))
 
 	if buf.Len() != 0 {
 		t.Fatalf("log output = %q, want empty for nil handler", buf.String())

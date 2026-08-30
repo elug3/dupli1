@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -15,7 +16,7 @@ import (
 
 type failingViewStore struct{}
 
-func (failingViewStore) RecordUniqueView(guestID, productID string) (bool, int64, error) {
+func (failingViewStore) RecordUniqueView(ctx context.Context, guestID, productID string) (bool, int64, error) {
 	return false, 0, errors.New("view store down")
 }
 

@@ -15,7 +15,7 @@ func TestManualViewCountSmoke(t *testing.T) {
 	}
 	defer store.Close()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	id := "SMK-VIEWCOUNT-001"
 	store.pool.Exec(ctx, `DELETE FROM product_views WHERE product_id = $1`, id)
 	store.pool.Exec(ctx, `DELETE FROM products WHERE id = $1`, id)
@@ -26,7 +26,7 @@ func TestManualViewCountSmoke(t *testing.T) {
 	defer store.pool.Exec(ctx, `DELETE FROM product_views WHERE product_id = $1`, id)
 	defer store.pool.Exec(ctx, `DELETE FROM products WHERE id = $1`, id)
 
-	got1, _, err := store.RecordUniqueView("1.2.3.4", id)
+	got1, _, err := store.RecordUniqueView(ctx, "1.2.3.4", id)
 	if err != nil {
 		t.Fatalf("first RecordUniqueView: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestManualViewCountSmoke(t *testing.T) {
 		t.Fatalf("want first view to increment")
 	}
 
-	got2, _, err := store.RecordUniqueView("1.2.3.4", id)
+	got2, _, err := store.RecordUniqueView(ctx, "1.2.3.4", id)
 	if err != nil {
 		t.Fatalf("second RecordUniqueView: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestManualViewCountSmoke(t *testing.T) {
 		t.Fatalf("want same guest repeat to be deduped")
 	}
 
-	got3, _, err := store.RecordUniqueView("5.6.7.8", id)
+	got3, _, err := store.RecordUniqueView(ctx, "5.6.7.8", id)
 	if err != nil {
 		t.Fatalf("third RecordUniqueView: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestManualViewCountSmoke(t *testing.T) {
 		t.Fatalf("want different guest to increment")
 	}
 
-	prod, err := store.GetProduct(id)
+	prod, err := store.GetProduct(ctx, id)
 	if err != nil {
 		t.Fatalf("GetProduct: %v", err)
 	}

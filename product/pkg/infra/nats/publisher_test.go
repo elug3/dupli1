@@ -8,7 +8,7 @@ import (
 
 func TestFlushContextUsesExistingDeadline(t *testing.T) {
 	deadline := time.Now().Add(time.Minute)
-	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	ctx, cancel := context.WithDeadline(t.Context(), deadline)
 	defer cancel()
 
 	flushCtx, flushCancel := flushContext(ctx)
@@ -24,7 +24,8 @@ func TestFlushContextUsesExistingDeadline(t *testing.T) {
 }
 
 func TestFlushContextAddsDeadlineWhenMissing(t *testing.T) {
-	ctx := context.Background()
+	// test harness: no HTTP request context
+	ctx := t.Context()
 
 	flushCtx, cancel := flushContext(ctx)
 	defer cancel()

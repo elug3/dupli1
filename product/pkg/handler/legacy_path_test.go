@@ -39,7 +39,7 @@ func TestAdminListsProductsAtDocumentedPath(t *testing.T) {
 
 func TestAdminCreatesProductAtDocumentedPath(t *testing.T) {
 	store := memory.NewProductStore()
-	if _, err := store.Catalog.CreateStyle(domain.Style{BrandCode: "GUC", Code: "TOTE01", Name: "Tote"}); err != nil {
+	if _, err := store.Catalog.CreateStyle(t.Context(), domain.Style{BrandCode: "GUC", Code: "TOTE01", Name: "Tote"}); err != nil {
 		t.Fatal(err)
 	}
 	mux := newAccessControlMux(store)

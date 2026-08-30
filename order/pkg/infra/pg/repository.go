@@ -22,6 +22,7 @@ type Repository struct {
 
 func NewRepository(connString string) (*Repository, error) {
 	connString = withPostgresSSLMode(connString)
+	// Pool connect at process start; no request context available.
 	pool, err := pgxpool.Connect(context.Background(), connString)
 	if err != nil {
 		return nil, fmt.Errorf("connect order database: %w", err)
@@ -42,6 +43,7 @@ func (r *Repository) Close() {
 }
 
 func (r *Repository) migrate() error {
+	// Startup schema migration; no request-scoped context to propagate.
 	ctx := context.Background()
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS id_sequences (

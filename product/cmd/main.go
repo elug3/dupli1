@@ -62,6 +62,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// signal.NotifyContext root: CLI process lifetime, not an HTTP request.
 	interrupt, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 

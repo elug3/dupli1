@@ -1,7 +1,6 @@
 package pg
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -21,7 +20,7 @@ func requireProductDSN(t *testing.T) string {
 
 func freshInventorySchema(t *testing.T, dsn, schema string) *pgxpool.Pool {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	admin, err := pgxpool.Connect(ctx, withPostgresSSLMode(dsn))
 	if err != nil {
@@ -64,7 +63,7 @@ func freshInventorySchema(t *testing.T, dsn, schema string) *pgxpool.Pool {
 func TestMigrateSeedsReservationSequenceFromExistingRows(t *testing.T) {
 	dsn := requireProductDSN(t)
 	pool := freshInventorySchema(t, dsn, "inv_seq_seed_test")
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Now().UTC()
 
 	if _, err := pool.Exec(ctx, `CREATE TABLE product_variants (sku_id TEXT PRIMARY KEY, sku TEXT NOT NULL)`); err != nil {
@@ -128,7 +127,7 @@ func TestMigrateSeedsReservationSequenceFromExistingRows(t *testing.T) {
 func TestMigrateRepairsStaleReservationSequence(t *testing.T) {
 	dsn := requireProductDSN(t)
 	pool := freshInventorySchema(t, dsn, "inv_seq_stale_test")
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Now().UTC()
 
 	if _, err := pool.Exec(ctx, `CREATE TABLE product_variants (sku_id TEXT PRIMARY KEY, sku TEXT NOT NULL)`); err != nil {

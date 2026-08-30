@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+
 	"github.com/elug3/dupli1/cart/pkg/domain"
 	"github.com/elug3/dupli1/cart/pkg/ports"
 )
@@ -26,4 +28,17 @@ func unavailableFromStored(item domain.StoredItem) domain.UnavailableItem {
 		SKU:    item.SKU,
 		Reason: domain.ReasonVariantNotFound,
 	}
+}
+
+// InsufficientStockError is returned when a cart mutation requests more units
+// than available (including missing stock rows, treated as available 0).
+type InsufficientStockError struct {
+	SkuID        string
+	SKU          string
+	Requested    int
+	AvailableQty int
+}
+
+func (e *InsufficientStockError) Error() string {
+	return fmt.Sprintf("insufficient stock: requested %d, available %d", e.Requested, e.AvailableQty)
 }

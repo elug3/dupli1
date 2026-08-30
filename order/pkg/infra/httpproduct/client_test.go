@@ -1,7 +1,6 @@
 package httpproduct
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -29,7 +28,7 @@ func TestClientGetVariantMapsProductNameAndImageURL(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := NewClient(srv.URL, srv.Client())
-	info, err := client.GetVariant(context.Background(), "BAG-001")
+	info, err := client.GetVariant(t.Context(), "BAG-001")
 	if err != nil {
 		t.Fatalf("GetVariant: %v", err)
 	}
@@ -51,7 +50,7 @@ func TestClientGetVariantBySkuIDNotFound(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := NewClient(srv.URL, srv.Client())
-	_, err := client.GetVariantBySkuID(context.Background(), "missing")
+	_, err := client.GetVariantBySkuID(t.Context(), "missing")
 	if !errors.Is(err, ports.ErrVariantNotFound) {
 		t.Fatalf("want ErrVariantNotFound, got %v", err)
 	}

@@ -34,11 +34,11 @@ func NewProductSearchService(store ports.ProductStore, eventPublisher ...ports.E
 	return s
 }
 
-func (s *ProductSearchService) SearchProducts(filter map[string]string) ([]domain.Product, error) {
+func (s *ProductSearchService) SearchProducts(ctx context.Context, filter map[string]string) ([]domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	results, _, err := s.store.SearchProducts(filter)
+	results, _, err := s.store.SearchProducts(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -46,20 +46,20 @@ func (s *ProductSearchService) SearchProducts(filter map[string]string) ([]domai
 	if category == "" {
 		category = "all"
 	}
-	if err := s.publishSearchEvent(category, filter, len(results)); err != nil {
+	if err := s.publishSearchEvent(ctx, category, filter, len(results)); err != nil {
 		return nil, err
 	}
 	return results, nil
 }
 
-func (s *ProductSearchService) CreateProduct(p domain.Product) (*domain.Product, error) {
+func (s *ProductSearchService) CreateProduct(ctx context.Context, p domain.Product) (*domain.Product, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	return s.store.CreateProduct(p)
+	return s.store.CreateProduct(ctx, p)
 }
 
-func (s *ProductSearchService) publishSearchEvent(category string, filter map[string]string, resultCount int) error {
+func (s *ProductSearchService) publishSearchEvent(ctx context.Context, category string, filter map[string]string, resultCount int) error {
 	if s.eventPublisher == nil {
 		return nil
 	}
@@ -70,7 +70,7 @@ func (s *ProductSearchService) publishSearchEvent(category string, filter map[st
 	}
 
 	eventType := productSearchSubjectPrefix + category
-	return s.eventPublisher.Publish(context.Background(), eventType, productSearchEvent{
+	return s.eventPublisher.Publish(ctx, eventType, productSearchEvent{
 		EventType:   eventType,
 		Category:    category,
 		Filters:     filters,

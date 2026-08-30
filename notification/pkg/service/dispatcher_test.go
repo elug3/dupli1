@@ -47,7 +47,7 @@ func TestDispatcherOrderCreated(t *testing.T) {
 		t.Fatalf("marshal payload: %v", err)
 	}
 
-	if err := dispatcher.HandleForTest(context.Background(), service.SubjectOrderCreated, payload); err != nil {
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderCreated, payload); err != nil {
 		t.Fatalf("handle order event: %v", err)
 	}
 	if notifier.chatID != "-100123" {
@@ -88,7 +88,7 @@ func TestDispatcherOrderPaid(t *testing.T) {
 		t.Fatalf("marshal payload: %v", err)
 	}
 
-	if err := dispatcher.HandleForTest(context.Background(), service.SubjectOrderPaid, payload); err != nil {
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderPaid, payload); err != nil {
 		t.Fatalf("handle order paid: %v", err)
 	}
 	if !strings.Contains(notifier.message, "Order paid") || !strings.Contains(notifier.message, "action required") {
@@ -119,7 +119,7 @@ func TestDispatcherUsesDynamicRouting(t *testing.T) {
 		"total_cents": 1000,
 		"occurred_at": time.Now().UTC(),
 	})
-	if err := dispatcher.HandleForTest(context.Background(), service.SubjectOrderCreated, orderPayload); err != nil {
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderCreated, orderPayload); err != nil {
 		t.Fatalf("handle order: %v", err)
 	}
 	if notifier.chatID != "-dynamic-order" {
@@ -136,7 +136,7 @@ func TestDispatcherUsesDynamicRouting(t *testing.T) {
 		"price":       1000.0,
 		"occurred_at": time.Now().UTC(),
 	})
-	if err := dispatcher.HandleForTest(context.Background(), service.SubjectProductCreated, productPayload); err != nil {
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectProductCreated, productPayload); err != nil {
 		t.Fatalf("handle product: %v", err)
 	}
 	if notifier.chatID != "-dynamic-product" {
@@ -163,7 +163,7 @@ func TestDispatcherEscapesHTMLInOrderFields(t *testing.T) {
 		t.Fatalf("marshal payload: %v", err)
 	}
 
-	if err := dispatcher.HandleForTest(context.Background(), service.SubjectOrderCreated, payload); err != nil {
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderCreated, payload); err != nil {
 		t.Fatalf("handle order: %v", err)
 	}
 	if strings.Contains(notifier.message, "<script>") {
@@ -194,7 +194,7 @@ func TestDispatcherFallsBackToOccurredAt(t *testing.T) {
 		t.Fatalf("marshal payload: %v", err)
 	}
 
-	if err := dispatcher.HandleForTest(context.Background(), service.SubjectOrderStatusUpdate, payload); err != nil {
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderStatusUpdate, payload); err != nil {
 		t.Fatalf("handle order update: %v", err)
 	}
 	if !strings.Contains(notifier.message, "Created:") || !strings.Contains(notifier.message, "12:15 KST") {
@@ -230,7 +230,7 @@ func TestDispatcherProductCreated(t *testing.T) {
 		t.Fatalf("marshal payload: %v", err)
 	}
 
-	if err := dispatcher.HandleForTest(context.Background(), service.SubjectProductCreated, payload); err != nil {
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectProductCreated, payload); err != nil {
 		t.Fatalf("handle product event: %v", err)
 	}
 	if notifier.chatID != "-100456" {

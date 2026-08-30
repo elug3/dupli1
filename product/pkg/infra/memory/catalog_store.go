@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -70,7 +71,8 @@ func styleKey(brand, code string) string {
 	return brand + "|" + code
 }
 
-func (s *CatalogStore) ListBrands() ([]domain.Brand, error) {
+func (s *CatalogStore) ListBrands(ctx context.Context) ([]domain.Brand, error) {
+	_ = ctx
 	out := make([]domain.Brand, 0, len(s.Brands))
 	for _, b := range s.Brands {
 		out = append(out, b)
@@ -79,7 +81,8 @@ func (s *CatalogStore) ListBrands() ([]domain.Brand, error) {
 	return out, nil
 }
 
-func (s *CatalogStore) GetBrand(code string) (*domain.Brand, error) {
+func (s *CatalogStore) GetBrand(ctx context.Context, code string) (*domain.Brand, error) {
+	_ = ctx
 	b, ok := s.Brands[domain.NormalizeCode(code)]
 	if !ok {
 		return nil, domain.ErrMasterNotFound
@@ -87,7 +90,8 @@ func (s *CatalogStore) GetBrand(code string) (*domain.Brand, error) {
 	return &b, nil
 }
 
-func (s *CatalogStore) CreateBrand(b domain.Brand) (*domain.Brand, error) {
+func (s *CatalogStore) CreateBrand(ctx context.Context, b domain.Brand) (*domain.Brand, error) {
+	_ = ctx
 	b.Code = domain.NormalizeCode(b.Code)
 	b.Name = strings.TrimSpace(b.Name)
 	if !domain.ValidBrandCode(b.Code) {
@@ -103,7 +107,8 @@ func (s *CatalogStore) CreateBrand(b domain.Brand) (*domain.Brand, error) {
 	return &b, nil
 }
 
-func (s *CatalogStore) UpdateBrandName(code, name string) (*domain.Brand, error) {
+func (s *CatalogStore) UpdateBrandName(ctx context.Context, code, name string) (*domain.Brand, error) {
+	_ = ctx
 	code = domain.NormalizeCode(code)
 	name = strings.TrimSpace(name)
 	b, ok := s.Brands[code]
@@ -118,7 +123,8 @@ func (s *CatalogStore) UpdateBrandName(code, name string) (*domain.Brand, error)
 	return &b, nil
 }
 
-func (s *CatalogStore) DeleteBrand(code string) error {
+func (s *CatalogStore) DeleteBrand(ctx context.Context, code string) error {
+	_ = ctx
 	code = domain.NormalizeCode(code)
 	if _, ok := s.Brands[code]; !ok {
 		return domain.ErrMasterNotFound
@@ -137,7 +143,8 @@ func (s *CatalogStore) DeleteBrand(code string) error {
 	return nil
 }
 
-func (s *CatalogStore) ListStyles(brandCode string) ([]domain.Style, error) {
+func (s *CatalogStore) ListStyles(ctx context.Context, brandCode string) ([]domain.Style, error) {
+	_ = ctx
 	brandCode = domain.NormalizeCode(brandCode)
 	var out []domain.Style
 	for _, st := range s.Styles {
@@ -149,7 +156,8 @@ func (s *CatalogStore) ListStyles(brandCode string) ([]domain.Style, error) {
 	return out, nil
 }
 
-func (s *CatalogStore) GetStyle(brandCode, code string) (*domain.Style, error) {
+func (s *CatalogStore) GetStyle(ctx context.Context, brandCode, code string) (*domain.Style, error) {
+	_ = ctx
 	st, ok := s.Styles[styleKey(domain.NormalizeCode(brandCode), domain.NormalizeCode(code))]
 	if !ok {
 		return nil, domain.ErrMasterNotFound
@@ -157,7 +165,8 @@ func (s *CatalogStore) GetStyle(brandCode, code string) (*domain.Style, error) {
 	return &st, nil
 }
 
-func (s *CatalogStore) CreateStyle(st domain.Style) (*domain.Style, error) {
+func (s *CatalogStore) CreateStyle(ctx context.Context, st domain.Style) (*domain.Style, error) {
+	_ = ctx
 	st.BrandCode = domain.NormalizeCode(st.BrandCode)
 	st.Code = domain.NormalizeCode(st.Code)
 	st.Name = strings.TrimSpace(st.Name)
@@ -181,7 +190,8 @@ func (s *CatalogStore) CreateStyle(st domain.Style) (*domain.Style, error) {
 	return &st, nil
 }
 
-func (s *CatalogStore) UpdateStyleName(brandCode, code, name string) (*domain.Style, error) {
+func (s *CatalogStore) UpdateStyleName(ctx context.Context, brandCode, code, name string) (*domain.Style, error) {
+	_ = ctx
 	key := styleKey(domain.NormalizeCode(brandCode), domain.NormalizeCode(code))
 	st, ok := s.Styles[key]
 	if !ok {
@@ -196,7 +206,8 @@ func (s *CatalogStore) UpdateStyleName(brandCode, code, name string) (*domain.St
 	return &st, nil
 }
 
-func (s *CatalogStore) DeleteStyle(brandCode, code string) error {
+func (s *CatalogStore) DeleteStyle(ctx context.Context, brandCode, code string) error {
+	_ = ctx
 	key := styleKey(domain.NormalizeCode(brandCode), domain.NormalizeCode(code))
 	if _, ok := s.Styles[key]; !ok {
 		return domain.ErrMasterNotFound
@@ -210,7 +221,8 @@ func (s *CatalogStore) DeleteStyle(brandCode, code string) error {
 	return nil
 }
 
-func (s *CatalogStore) ListColors() ([]domain.Color, error) {
+func (s *CatalogStore) ListColors(ctx context.Context) ([]domain.Color, error) {
+	_ = ctx
 	out := make([]domain.Color, 0, len(s.Colors))
 	for _, c := range s.Colors {
 		out = append(out, c)
@@ -219,7 +231,8 @@ func (s *CatalogStore) ListColors() ([]domain.Color, error) {
 	return out, nil
 }
 
-func (s *CatalogStore) GetColor(code string) (*domain.Color, error) {
+func (s *CatalogStore) GetColor(ctx context.Context, code string) (*domain.Color, error) {
+	_ = ctx
 	c, ok := s.Colors[domain.NormalizeCode(code)]
 	if !ok {
 		return nil, domain.ErrMasterNotFound
@@ -227,7 +240,8 @@ func (s *CatalogStore) GetColor(code string) (*domain.Color, error) {
 	return &c, nil
 }
 
-func (s *CatalogStore) CreateColor(c domain.Color) (*domain.Color, error) {
+func (s *CatalogStore) CreateColor(ctx context.Context, c domain.Color) (*domain.Color, error) {
+	_ = ctx
 	c.Code = domain.NormalizeCode(c.Code)
 	c.Name = strings.TrimSpace(c.Name)
 	if !domain.ValidSegmentCode(c.Code) {
@@ -243,7 +257,8 @@ func (s *CatalogStore) CreateColor(c domain.Color) (*domain.Color, error) {
 	return &c, nil
 }
 
-func (s *CatalogStore) UpdateColorName(code, name string) (*domain.Color, error) {
+func (s *CatalogStore) UpdateColorName(ctx context.Context, code, name string) (*domain.Color, error) {
+	_ = ctx
 	code = domain.NormalizeCode(code)
 	c, ok := s.Colors[code]
 	if !ok {
@@ -258,7 +273,8 @@ func (s *CatalogStore) UpdateColorName(code, name string) (*domain.Color, error)
 	return &c, nil
 }
 
-func (s *CatalogStore) DeleteColor(code string) error {
+func (s *CatalogStore) DeleteColor(ctx context.Context, code string) error {
+	_ = ctx
 	code = domain.NormalizeCode(code)
 	if _, ok := s.Colors[code]; !ok {
 		return domain.ErrMasterNotFound
@@ -272,7 +288,8 @@ func (s *CatalogStore) DeleteColor(code string) error {
 	return nil
 }
 
-func (s *CatalogStore) ListSizes() ([]domain.Size, error) {
+func (s *CatalogStore) ListSizes(ctx context.Context) ([]domain.Size, error) {
+	_ = ctx
 	out := make([]domain.Size, 0, len(s.Sizes))
 	for _, sz := range s.Sizes {
 		out = append(out, sz)
@@ -281,7 +298,8 @@ func (s *CatalogStore) ListSizes() ([]domain.Size, error) {
 	return out, nil
 }
 
-func (s *CatalogStore) GetSize(code string) (*domain.Size, error) {
+func (s *CatalogStore) GetSize(ctx context.Context, code string) (*domain.Size, error) {
+	_ = ctx
 	sz, ok := s.Sizes[domain.NormalizeCode(code)]
 	if !ok {
 		return nil, domain.ErrMasterNotFound
@@ -289,7 +307,8 @@ func (s *CatalogStore) GetSize(code string) (*domain.Size, error) {
 	return &sz, nil
 }
 
-func (s *CatalogStore) CreateSize(sz domain.Size) (*domain.Size, error) {
+func (s *CatalogStore) CreateSize(ctx context.Context, sz domain.Size) (*domain.Size, error) {
+	_ = ctx
 	sz.Code = domain.NormalizeCode(sz.Code)
 	sz.Name = strings.TrimSpace(sz.Name)
 	if !domain.ValidSegmentCode(sz.Code) {
@@ -305,7 +324,8 @@ func (s *CatalogStore) CreateSize(sz domain.Size) (*domain.Size, error) {
 	return &sz, nil
 }
 
-func (s *CatalogStore) UpdateSizeName(code, name string) (*domain.Size, error) {
+func (s *CatalogStore) UpdateSizeName(ctx context.Context, code, name string) (*domain.Size, error) {
+	_ = ctx
 	code = domain.NormalizeCode(code)
 	sz, ok := s.Sizes[code]
 	if !ok {
@@ -320,7 +340,8 @@ func (s *CatalogStore) UpdateSizeName(code, name string) (*domain.Size, error) {
 	return &sz, nil
 }
 
-func (s *CatalogStore) DeleteSize(code string) error {
+func (s *CatalogStore) DeleteSize(ctx context.Context, code string) error {
+	_ = ctx
 	code = domain.NormalizeCode(code)
 	if _, ok := s.Sizes[code]; !ok {
 		return domain.ErrMasterNotFound
@@ -334,7 +355,8 @@ func (s *CatalogStore) DeleteSize(code string) error {
 	return nil
 }
 
-func (s *CatalogStore) ListEditions() ([]domain.Edition, error) {
+func (s *CatalogStore) ListEditions(ctx context.Context) ([]domain.Edition, error) {
+	_ = ctx
 	out := make([]domain.Edition, 0, len(s.Editions))
 	for _, e := range s.Editions {
 		out = append(out, e)
@@ -343,7 +365,8 @@ func (s *CatalogStore) ListEditions() ([]domain.Edition, error) {
 	return out, nil
 }
 
-func (s *CatalogStore) GetEdition(code string) (*domain.Edition, error) {
+func (s *CatalogStore) GetEdition(ctx context.Context, code string) (*domain.Edition, error) {
+	_ = ctx
 	e, ok := s.Editions[domain.NormalizeCode(code)]
 	if !ok {
 		return nil, domain.ErrMasterNotFound
@@ -351,7 +374,8 @@ func (s *CatalogStore) GetEdition(code string) (*domain.Edition, error) {
 	return &e, nil
 }
 
-func (s *CatalogStore) CreateEdition(e domain.Edition) (*domain.Edition, error) {
+func (s *CatalogStore) CreateEdition(ctx context.Context, e domain.Edition) (*domain.Edition, error) {
+	_ = ctx
 	e.Code = domain.NormalizeCode(e.Code)
 	e.Name = strings.TrimSpace(e.Name)
 	if !domain.ValidSegmentCode(e.Code) {
@@ -367,7 +391,8 @@ func (s *CatalogStore) CreateEdition(e domain.Edition) (*domain.Edition, error) 
 	return &e, nil
 }
 
-func (s *CatalogStore) UpdateEditionName(code, name string) (*domain.Edition, error) {
+func (s *CatalogStore) UpdateEditionName(ctx context.Context, code, name string) (*domain.Edition, error) {
+	_ = ctx
 	code = domain.NormalizeCode(code)
 	e, ok := s.Editions[code]
 	if !ok {
@@ -382,7 +407,8 @@ func (s *CatalogStore) UpdateEditionName(code, name string) (*domain.Edition, er
 	return &e, nil
 }
 
-func (s *CatalogStore) DeleteEdition(code string) error {
+func (s *CatalogStore) DeleteEdition(ctx context.Context, code string) error {
+	_ = ctx
 	code = domain.NormalizeCode(code)
 	if _, ok := s.Editions[code]; !ok {
 		return domain.ErrMasterNotFound
@@ -415,14 +441,17 @@ func listTerms(m map[string]domain.CatalogTerm, seedOrder []domain.CatalogTerm) 
 	return append(out, rest...)
 }
 
-func (s *CatalogStore) ListSubCategories() ([]domain.CatalogTerm, error) {
+func (s *CatalogStore) ListSubCategories(ctx context.Context) ([]domain.CatalogTerm, error) {
+	_ = ctx
 	return listTerms(s.SubCategories, domain.SeedSubCategories), nil
 }
 
-func (s *CatalogStore) ListBagStyles() ([]domain.CatalogTerm, error) {
+func (s *CatalogStore) ListBagStyles(ctx context.Context) ([]domain.CatalogTerm, error) {
+	_ = ctx
 	return listTerms(s.BagStyles, domain.SeedBagStyles), nil
 }
 
-func (s *CatalogStore) ListTargets() ([]domain.CatalogTerm, error) {
+func (s *CatalogStore) ListTargets(ctx context.Context) ([]domain.CatalogTerm, error) {
+	_ = ctx
 	return listTerms(s.Targets, domain.SeedTargets), nil
 }

@@ -222,6 +222,19 @@ func (h *Handler) adminCart(w http.ResponseWriter, r *http.Request) {
 }
 
 func respondServiceError(w http.ResponseWriter, err error) {
+	var insufficient *service.InsufficientStockError
+	if errors.As(err, &insufficient) {
+		respondJSON(w, http.StatusBadRequest, map[string]any{
+			"error":         insufficient.Error(),
+			"code":          http.StatusBadRequest,
+			"reason":        domain.ReasonInsufficientStock,
+			"sku_id":        insufficient.SkuID,
+			"sku":           insufficient.SKU,
+			"available_qty": insufficient.AvailableQty,
+			"requested":     insufficient.Requested,
+		})
+		return
+	}
 	var unavailable *service.UnavailableVariantsError
 	if errors.As(err, &unavailable) && len(unavailable.Items) > 0 {
 		respondJSON(w, http.StatusUnprocessableEntity, map[string]any{
