@@ -47,7 +47,7 @@ func ResetAdminAccount(ctx context.Context, dbURL, adminID, email string) (strin
 			return "", fmt.Errorf("create admin: %w", err)
 		}
 	} else {
-		user.Email = email
+		user.Email = domain.NormalizeEmail(email)
 		user.SetPermissions(adminPerms)
 		user.AccountType = domain.AccountTypeManager
 		if err := user.UpdatePassword(plainPassword); err != nil {

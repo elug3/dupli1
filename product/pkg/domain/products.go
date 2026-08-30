@@ -68,7 +68,10 @@ type Product struct {
 	// WishlistCount is unique owners who wishlisted this parent (denormalized).
 	WishlistCount int64 `json:"wishlistCount"`
 	CreatedAt     string `json:"createdAt"`
-	CreatedBy     string `json:"createdBy,omitempty"`
+	// UpdatedAt is server-set on every write (create and update); never taken
+	// from an incoming request body.
+	UpdatedAt string `json:"updatedAt,omitempty"`
+	CreatedBy string `json:"createdBy,omitempty"`
 
 	// Summary fields derived from variants (not separate storage).
 	DefaultImageURL string    `json:"defaultImageUrl,omitempty"`

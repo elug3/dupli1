@@ -28,7 +28,7 @@ Open highlights:
 - [x] Product images CDN applied on prod (A2–A3) — `imageUrls` use CloudFront
 - [x] Card PG / NANO (A4) — NANO when configured; launch without NANO = Bypass
 - [x] Telegram wired (A7); gateway uses `nginx.ecs.conf` (A8)
-- [ ] Deploy payment build so prod `dev_simulate_success` is `false` (A5 — needs `PAYMENT_ALLOW_DEV_SIMULATE` unset)
+- [x] A5 — moot: dev simulate removed from the codebase entirely (merged into Bypass); no flag to leave unset
 - [ ] Catalog prices not zeroed (A9) — sample product currently `price: 0`
 - [ ] Prod money-path smoke — Bypass path via `scripts/smoke-money-path.sh` (A10, B)
 - [ ] Frontends: canonical paths, parent pricing, `skuId` (D, E)
@@ -83,6 +83,32 @@ Completeness / code-quality follow-ups for `dupli1-notification`. Design: [notif
 - [ ] **PG repository tests** — upsert pending, accept/reject, unique chat/user constraints.
 - [ ] **Structured logging (v1.1)** — replace `log.Printf` with shared zerolog (covered under v1.1 logging slice).
 
+## Database schema (reviewed 2026-08-30)
+
+Cross-service review of each service's inline Postgres schema (auth, cart, order, payment,
+notification, product all migrate their own DB on startup — no separate migration tool; see
+`CLAUDE.md`). Safe/low-risk items fixed same-day (migrations verified against live dev DBs,
+run twice each for idempotency); the two structural items are intentionally left open.
+
+### Correctness risks
+
+- [x] **`users.email` unique with no case normalization** — fixed: `domain.NormalizeEmail` lowercases on every write path (`NewUser`, admin reset); `FindByEmail` matches `LOWER(email) = LOWER($1)`; `auth/pkg/bootstrap/migrate.go` backfills existing rows and adds `ux_users_email_lower` (case-insensitive unique index), skipping the index — and logging — if an unresolved pre-existing collision remains.
+- [x] **Status columns have no DB-level enum guard** — fixed: `CHECK` constraints added on `orders.status`, `checkout_sessions.status` (`order/pkg/infra/pg/repository.go`), `payments.status` (`payment/pkg/infra/pg/repository.go`), and `reservations.status` (`product/pkg/infra/pg/inventory_store.go`). Postgres has no `ADD CONSTRAINT IF NOT EXISTS`, so each checks `pg_constraint` first (same pattern as product's SKU-master FKs).
+- [ ] **`DeleteProduct`'s FK workaround is fragile** — `product/pkg/infra/pg/product_store.go` manually deletes `stock_items` rows before the `products → product_variants` cascade runs, to route around `stock_items`'s `ON DELETE RESTRICT`. A future RESTRICT FK added elsewhere to `product_variants` would start failing deletes with a raw FK error unless this method is updated too — needs a code comment pointer (or a central list of "things that block variant deletion"). Not fixed — documentation/process fix, not a schema change.
+
+### Consistency with project conventions
+
+- [ ] **`products.price` / `official_price` break the KRW `_cents` convention** — stored as `NUMERIC(10,2)` (`product/pkg/infra/pg/product_store.go`) while every other money field in the codebase (`orders.*_cents`, `payments.amount_cents`, `order_items.unit_price_cents`) is a whole-won `BIGINT`, per the "Currency: KRW only" rule in `CLAUDE.md`. Deliberately **not fixed** — needs its own migration plan (domain struct, JSON API shape, search/sort queries, possibly frontend consumers); too invasive for a routine schema cleanup, especially on v1.0 release day.
+- [ ] **Two different ID-sequencing mechanisms** — order and product use a hand-rolled `id_sequences` table; payment uses a native Postgres `SEQUENCE`. Both work; pick one pattern for new services to avoid a third variant appearing. Not fixed — no functional benefit to migrating existing services, just a convention pick for the future.
+
+### Missing indexes / cleanup gaps
+
+- [x] **No index on `payments.customer_id`** — fixed: `idx_payments_customer_id` added in `payment/pkg/infra/pg/repository.go`.
+- [x] **No index backing the `telegram_subscriptions` status filter** — fixed: `telegram_subscriptions_status_idx` on `(status, created_at DESC)` added in `notification/pkg/infra/pg/telegram_repository.go`, matching `List(status)`'s query shape.
+- [ ] **Outbox tables have no purge path** — `order_outbox` / `payment_outbox` (order and payment repositories) only ever grow; published rows are never archived or deleted. Not fixed — needs a retention job/worker, not just a schema tweak.
+- [x] **`order_idempotency_keys` has no expiry or supporting index** — index on `created_at` added in `order/pkg/infra/pg/repository.go` (`idx_order_idempotency_created_at`); the TTL sweep itself is still unwritten.
+- [x] **`products` has no `updated_at`** — fixed: column added (`DEFAULT NOW()`), `UpdateProduct` now sets `updated_at = NOW()` on every write, and `domain.Product.UpdatedAt` (`updatedAt` in JSON) surfaces it through the API. Not backfilled into the in-memory product store (already doesn't track `CreatedAt` either — pre-existing gap, out of scope here).
+
 ## Temporary / ops
 
 - [ ] **Re-lock auth register** — `AUTH_OPEN_REGISTER` is temporarily **true** (public customer signup). Set `false` / remove when storefront no longer needs open registration; restore Bearer + `user.create` only.
@@ -96,7 +122,7 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 
 - [x] Checkout `DELETE …/items/by-sku-id/{id}` ownership ABAC
 - [x] Payment `CompletePayment` republishes `payment.succeeded` after prior publish failure
-- [x] Gate `simulate-success` behind dev-only flag (NANO unset + `PAYMENT_ALLOW_DEV_SIMULATE`)
+- [x] Gate `simulate-success` behind dev-only flag (NANO unset + `PAYMENT_ALLOW_DEV_SIMULATE`) — since removed entirely; dev testing merged into Bypass
 - [x] Product search pagination (`limit`/`offset`) + filter indexes
 - [x] Order list / expiry batch item load + pending `payment_due_at` index
 - [x] Cart enrichment parallelized (bounded concurrency)

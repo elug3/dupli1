@@ -20,10 +20,12 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-// FindByEmail finds a user by email.
+// FindByEmail finds a user by email, case-insensitively — matches on
+// LOWER(email) so callers don't need to normalize case themselves, and
+// backs onto the ux_users_email_lower index created in migrateSchema.
 func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `SELECT id, email, password, account_type, permissions, is_active, locked_at, failed_login_attempts
-	          FROM users WHERE email = $1`
+	          FROM users WHERE LOWER(email) = LOWER($1)`
 	row := r.db.QueryRowContext(ctx, query, email)
 	return scanUser(row)
 }

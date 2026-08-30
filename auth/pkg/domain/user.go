@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/elug3/dupli1/shared/pkg/permissions"
@@ -19,6 +20,15 @@ type User struct {
 	FailedLoginAttempts int
 }
 
+// NormalizeEmail trims whitespace and lowercases an email address so
+// "Alice@x.com" and "alice@x.com" are always treated as the same account.
+// Every path that sets User.Email (creation, admin reset, lookups) should
+// route through this so the DB's case-insensitive unique index and the
+// application layer agree on one canonical form.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 // NewUser creates a new user, hashing the plaintext password with bcrypt.
 func NewUser(id, email, password, accountType string, perms ...string) (*User, error) {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -27,7 +37,7 @@ func NewUser(id, email, password, accountType string, perms ...string) (*User, e
 	}
 	return &User{
 		ID:          id,
-		Email:       email,
+		Email:       NormalizeEmail(email),
 		Password:    string(hashed),
 		AccountType: accountType,
 		Permissions: permissions.Dedupe(perms),
