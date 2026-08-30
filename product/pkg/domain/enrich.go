@@ -94,6 +94,7 @@ func (existing Product) MergeUpdate(incoming Product) Product {
 	merged.BrandCode = existing.BrandCode
 	merged.StyleCode = existing.StyleCode
 	merged.CreatedAt = existing.CreatedAt
+	merged.UpdatedAt = existing.UpdatedAt
 	merged.CreatedBy = existing.CreatedBy
 	merged.ViewCount = existing.ViewCount
 	merged.SoldCount = existing.SoldCount

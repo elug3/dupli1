@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/lib/pq"
@@ -43,6 +44,12 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	if err := expandLegacyPermissionValues(ctx, db); err != nil {
+		return err
+	}
+	if err := normalizeUserEmailCase(ctx, db); err != nil {
+		return err
+	}
+	if err := createEmailLowerUniqueIndex(ctx, db); err != nil {
 		return err
 	}
 
@@ -191,6 +198,75 @@ func expandLegacyPermissionValues(ctx context.Context, db *sql.DB) error {
 		); err != nil {
 			return fmt.Errorf("expand permissions for %s: %w", item.id, err)
 		}
+	}
+	return nil
+}
+
+// normalizeUserEmailCase lowercases every stored email that isn't already
+// lowercase, so "Alice@x.com" and "alice@x.com" can no longer coexist as
+// distinct accounts (app code now normalizes on write via
+// domain.NormalizeEmail, and FindByEmail matches case-insensitively — this
+// backfills rows written before that). Row-by-row so a genuine pre-existing
+// case collision (two accounts already differing only by case) can't abort
+// the whole migration: that one row is left as-is, logged, and needs manual
+// review rather than a silent automatic pick of which account wins.
+func normalizeUserEmailCase(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `SELECT id, email FROM users WHERE email <> LOWER(email)`)
+	if err != nil {
+		return fmt.Errorf("list users for email normalization: %w", err)
+	}
+
+	type pendingUpdate struct{ id, email string }
+	var updates []pendingUpdate
+	for rows.Next() {
+		var u pendingUpdate
+		if err := rows.Scan(&u.id, &u.email); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan user email: %w", err)
+		}
+		updates = append(updates, u)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("list users for email normalization: %w", err)
+	}
+
+	for _, u := range updates {
+		_, err := db.ExecContext(ctx, `UPDATE users SET email = LOWER(email) WHERE id = $1`, u.id)
+		if err != nil {
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+				log.Printf("auth: user %s email %q collides case-insensitively with an existing account; left unnormalized, needs manual review", u.id, u.email)
+				continue
+			}
+			return fmt.Errorf("normalize email case for %s: %w", u.id, err)
+		}
+	}
+	return nil
+}
+
+// createEmailLowerUniqueIndex adds a case-insensitive unique index on email,
+// the DB-level backstop for domain.NormalizeEmail so a future write that
+// bypasses the application layer can't reintroduce a case-duplicate account.
+// Skips (and logs) if normalizeUserEmailCase left an unresolved collision —
+// index creation would otherwise fail and block every future startup until a
+// human resolves the duplicate.
+func createEmailLowerUniqueIndex(ctx context.Context, db *sql.DB) error {
+	var collisions int
+	err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM (
+			SELECT LOWER(email) FROM users GROUP BY LOWER(email) HAVING COUNT(*) > 1
+		) dupes`).Scan(&collisions)
+	if err != nil {
+		return fmt.Errorf("check email case collisions: %w", err)
+	}
+	if collisions > 0 {
+		log.Printf("auth: %d email(s) still collide case-insensitively; skipping ux_users_email_lower until resolved manually", collisions)
+		return nil
+	}
+
+	if _, err := db.ExecContext(ctx,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email_lower ON users (LOWER(email))`,
+	); err != nil {
+		return fmt.Errorf("create email lower unique index: %w", err)
 	}
 	return nil
 }

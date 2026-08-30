@@ -69,6 +69,7 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payer_email TEXT`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_provider_ref ON payments(provider_ref)`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_one_open_per_order ON payments(order_id) WHERE status = 'requires_payment'`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_one_succeeded_per_order ON payments(order_id) WHERE status = 'succeeded'`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_succeeded_updated ON payments(updated_at) WHERE status = 'succeeded'`,
@@ -87,6 +88,25 @@ func (r *Repository) migrate() error {
 	for _, stmt := range stmts {
 		if _, err := r.pool.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("migrate payment schema: %w", err)
+		}
+	}
+
+	// status is otherwise plain TEXT with validity enforced only in Go
+	// (domain.PaymentStatus); this CHECK makes an invalid value fail loudly at
+	// write time instead of silently corrupting state. Postgres has no ADD
+	// CONSTRAINT IF NOT EXISTS, so existence is checked against pg_constraint first.
+	var exists bool
+	if err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conname = 'payments_status_check')`,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("check payments_status_check: %w", err)
+	}
+	if !exists {
+		if _, err := r.pool.Exec(ctx, `
+			ALTER TABLE payments ADD CONSTRAINT payments_status_check
+			CHECK (status IN ('requires_payment', 'succeeded', 'failed', 'canceled', 'expired'))
+		`); err != nil {
+			return fmt.Errorf("add payments_status_check: %w", err)
 		}
 	}
 	return nil

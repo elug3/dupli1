@@ -63,6 +63,8 @@ func (r *TelegramRepository) migrate() error {
 		 ON telegram_subscriptions (chat_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS telegram_subscriptions_user_id_idx
 		 ON telegram_subscriptions (telegram_user_id) WHERE telegram_user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS telegram_subscriptions_status_idx
+		 ON telegram_subscriptions (status, created_at DESC)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := r.pool.Exec(ctx, stmt); err != nil {

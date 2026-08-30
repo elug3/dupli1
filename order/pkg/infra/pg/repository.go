@@ -99,6 +99,7 @@ func (r *Repository) migrate() error {
 			PRIMARY KEY (customer_id, idempotency_key)
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_order_idempotency_order_id ON order_idempotency_keys(order_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_order_idempotency_created_at ON order_idempotency_keys(created_at)`,
 		`CREATE TABLE IF NOT EXISTS order_outbox (
 			id BIGSERIAL PRIMARY KEY,
 			aggregate_id TEXT NOT NULL,
@@ -113,6 +114,26 @@ func (r *Repository) migrate() error {
 	}
 	for _, stmt := range stmts {
 		if _, err := r.pool.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("migrate order schema: %w", err)
+		}
+	}
+
+	// Status columns are otherwise plain TEXT with validity enforced only in
+	// Go (domain.OrderStatus / domain.CheckoutSessionStatus); these CHECK
+	// constraints make an invalid value fail loudly at write time instead of
+	// silently corrupting state that every downstream query assumes is clean.
+	// Postgres has no ADD CONSTRAINT IF NOT EXISTS, so existence is checked
+	// against pg_constraint first (same pattern as product's SKU-master FKs).
+	checks := []struct{ name, sql string }{
+		{"orders_status_check", `
+			ALTER TABLE orders ADD CONSTRAINT orders_status_check
+			CHECK (status IN ('pending', 'paid', 'in_transit', 'fulfilled', 'canceled'))`},
+		{"checkout_sessions_status_check", `
+			ALTER TABLE checkout_sessions ADD CONSTRAINT checkout_sessions_status_check
+			CHECK (status IN ('open', 'completed', 'expired'))`},
+	}
+	for _, c := range checks {
+		if err := r.addConstraintIfMissing(ctx, c.name, c.sql); err != nil {
 			return fmt.Errorf("migrate order schema: %w", err)
 		}
 	}
@@ -213,6 +234,25 @@ func (r *Repository) promoteSkuIDPrimaryKey(ctx context.Context, table, parentCo
 		return fmt.Errorf("promote %s primary key: %w", table, err)
 	}
 	log.Printf("order: promoted %s primary key to (%s, sku_id)", table, parentCol)
+	return nil
+}
+
+// addConstraintIfMissing adds a named constraint via sql if it doesn't
+// already exist. Postgres has no ADD CONSTRAINT IF NOT EXISTS, so existence
+// is checked against pg_constraint first — safe to call on every startup.
+func (r *Repository) addConstraintIfMissing(ctx context.Context, name, sql string) error {
+	var exists bool
+	if err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conname = $1)`, name,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("check constraint %s: %w", name, err)
+	}
+	if exists {
+		return nil
+	}
+	if _, err := r.pool.Exec(ctx, sql); err != nil {
+		return fmt.Errorf("add constraint %s: %w", name, err)
+	}
 	return nil
 }
 
