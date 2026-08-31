@@ -49,6 +49,8 @@ See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criter
 
 Guest cart, refunds, co-view, legacy alias removal, manager settings, Redis cache — see v1.1 plan “Deferred to v1.2” table.
 
+- [ ] **Promo / referral codes** — harden coupons (expiry, caps, ledger) + sales attribution by code/partner; no separate referral service — [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md)
+
 ## Notification service (reviewed 2026-08-07)
 
 Completeness / code-quality follow-ups for `dupli1-notification`. Design: [notification-telegram-bot.md](notification-telegram-bot.md).
