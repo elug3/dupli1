@@ -454,7 +454,7 @@ resource "aws_ecs_task_definition" "payment" {
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
         { name = "DUPLI1_ORDER_URL", value = "http://order.dupli1.local:8080" },
         { name = "DUPLI1_PAYMENT_PUBLIC_URL", value = "https://dupli1.com" },
-        { name = "NANO_BASE_URL", value = "https://pay.nanopay.co.kr" },
+        { name = "NANO_BASE_URL", value = var.nano_base_url },
         { name = "NANO_SUCCESS_URL", value = "https://dupli1.com/checkout/confirmation" },
         { name = "NANO_FAILURE_URL", value = "https://dupli1.com/checkout" },
       ]
