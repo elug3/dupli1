@@ -251,6 +251,14 @@ resource "aws_ecs_task_definition" "auth" {
           name      = "DUPLI1_WEB_SERVICE_PASSWORD"
           valueFrom = "${aws_secretsmanager_secret.web_service.arn}:DUPLI1_WEB_SERVICE_PASSWORD::"
         },
+        {
+          name      = "DUPLI1_ORDER_SERVICE_EMAIL"
+          valueFrom = "${aws_secretsmanager_secret.order_service.arn}:DUPLI1_ORDER_SERVICE_EMAIL::"
+        },
+        {
+          name      = "DUPLI1_ORDER_SERVICE_PASSWORD"
+          valueFrom = "${aws_secretsmanager_secret.order_service.arn}:DUPLI1_ORDER_SERVICE_PASSWORD::"
+        },
         ],
         # Without this, auth signs with an ephemeral key that changes on every restart.
         var.jwt_private_key_secret_arn == "" ? [] : [
@@ -366,6 +374,14 @@ resource "aws_ecs_task_definition" "order" {
         {
           name      = "JWT_SECRET"
           valueFrom = var.jwt_secret_arn
+        },
+        {
+          name      = "DUPLI1_ORDER_SERVICE_EMAIL"
+          valueFrom = "${aws_secretsmanager_secret.order_service.arn}:DUPLI1_ORDER_SERVICE_EMAIL::"
+        },
+        {
+          name      = "DUPLI1_ORDER_SERVICE_PASSWORD"
+          valueFrom = "${aws_secretsmanager_secret.order_service.arn}:DUPLI1_ORDER_SERVICE_PASSWORD::"
         },
       ]
       logConfiguration = {

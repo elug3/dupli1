@@ -201,6 +201,12 @@ variable "web_service_email" {
   default     = "dupli1-web@web.dupli1.com"
 }
 
+variable "order_service_email" {
+  description = "Email for the dupli1-order service account (product stock reservations)."
+  type        = string
+  default     = "dupli1-order@order.dupli1.com"
+}
+
 variable "github_oidc_extra_subjects" {
   description = "Additional token.actions.githubusercontent.com:sub values for the GitHub Actions deploy role."
   type        = list(string)

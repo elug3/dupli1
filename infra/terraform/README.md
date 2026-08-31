@@ -77,6 +77,29 @@ aws ecs update-service --cluster production --service dupli1-web --force-new-dep
 
 Auth syncs the DB password from the secret on startup. Do not rely on `DUPLI1_WEB_SERVICE_TOKEN` in production (access JWTs expire in ~15 minutes).
 
+## Order service account (stock reservations)
+
+Secret: `dupli1/production/order-service-account` (JSON keys `DUPLI1_ORDER_SERVICE_EMAIL`, `DUPLI1_ORDER_SERVICE_PASSWORD`).
+
+Terraform creates this secret and injects it into:
+
+- `dupli1-auth` — seeds/syncs the machine user (`order.ship`, `order.status.update`, `inventory.reservation.manage`) on boot
+- `dupli1-order` — logs in via `DUPLI1_AUTH_URL` and calls product stock through `DUPLI1_GATEWAY_URL`
+
+Without these credentials, checkout `POST .../complete` fails with `product stock request failed: unauthorized` / web **"internal error"**.
+
+Rotate the password with:
+
+```bash
+EMAIL=dupli1-order@order.dupli1.com
+PASSWORD="$(openssl rand -base64 24)"
+aws secretsmanager put-secret-value --secret-id dupli1/production/order-service-account --secret-string "$(jq -n \
+  --arg e "$EMAIL" --arg p "$PASSWORD" \
+  '{DUPLI1_ORDER_SERVICE_EMAIL:$e,DUPLI1_ORDER_SERVICE_PASSWORD:$p}')"
+aws ecs update-service --cluster production --service dupli1-auth --force-new-deployment
+aws ecs update-service --cluster production --service dupli1-order --force-new-deployment
+```
+
 > **Note:** `dupli1-web` GitHub Actions deploy currently renders env from repo secrets. Prefer this Secrets Manager injection (Terraform task definition) so registration does not depend on short-lived tokens or empty Actions secrets. If the web deploy workflow passes an empty `environment-variables` multiline, it must omit the input entirely — a `::warning::` line breaks `amazon-ecs-render-task-definition`.
 
 ## Monthly cost (dev-sized, us-east-1, 24/7)

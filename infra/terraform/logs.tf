@@ -38,6 +38,7 @@ data "aws_iam_policy_document" "ecs_execution_secrets" {
       var.telegram_secret_arn,
       aws_secretsmanager_secret.product_s3.arn,
       aws_secretsmanager_secret.web_service.arn,
+      aws_secretsmanager_secret.order_service.arn,
       aws_secretsmanager_secret.nano_payment.arn,
     ])
   }
