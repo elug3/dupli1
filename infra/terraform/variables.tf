@@ -201,6 +201,12 @@ variable "web_service_email" {
   default     = "dupli1-web@web.dupli1.com"
 }
 
+variable "nano_base_url" {
+  description = "NANO PG base URL. Use https://dev3.nanopay.co.kr with NANO 연동 테스트 credentials from the 인증결제 API guide; switch to https://pay.nanopay.co.kr after merchant contract."
+  type        = string
+  default     = "https://dev3.nanopay.co.kr"
+}
+
 variable "github_oidc_extra_subjects" {
   description = "Additional token.actions.githubusercontent.com:sub values for the GitHub Actions deploy role."
   type        = list(string)

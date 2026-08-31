@@ -38,19 +38,30 @@ Chat IDs: allowlisted users send `/start` to the bot. User IDs: [@userinfobot](h
 
 Secret: `dupli1/production/nano-payment` (JSON keys `NANO_API_KEY`, `NANO_LOGIN_ID`, `NANO_SHOPCODE`, `NANO_VER`).
 
-Terraform creates an empty shell and injects keys into `dupli1-payment`. Card checkout stays disabled until the secret is filled (empty `NANO_API_KEY` → UnavailableProvider; managers still use Bypass).
+Dupli1 uses **NANO Solution 인증결제** (certified payment API, e.g. guide v2.7) — not 수기결제. Terraform creates the secret shell and injects keys into `dupli1-payment`. Card checkout stays disabled until `NANO_API_KEY` is non-empty.
+
+**연동 테스트** values from the NANO 인증결제 guide (auto-approve on `dev3`; no real charges):
+
+| Key | Test value |
+|-----|------------|
+| `NANO_BASE_URL` | `https://dev3.nanopay.co.kr` (`var.nano_base_url`) |
+| `NANO_VER` | `240000005` |
+| `NANO_SHOPCODE` | `240000005` |
+| `NANO_LOGIN_ID` | `shoptest` |
+| `NANO_API_KEY` | `R7L9PxM5V8K2Jc4N6dWqY1Eb3T5XhZU2` |
 
 ```bash
 aws secretsmanager put-secret-value --secret-id dupli1/production/nano-payment --secret-string '{
-  "NANO_API_KEY":"<from-nano-contract>",
-  "NANO_LOGIN_ID":"<loginId>",
-  "NANO_SHOPCODE":"<shopcode>",
-  "NANO_VER":"<ver>"
+  "NANO_API_KEY":"R7L9PxM5V8K2Jc4N6dWqY1Eb3T5XhZU2",
+  "NANO_LOGIN_ID":"shoptest",
+  "NANO_SHOPCODE":"240000005",
+  "NANO_VER":"240000005"
 }'
+# Task must also set NANO_BASE_URL=https://dev3.nanopay.co.kr for these test credentials.
 aws ecs update-service --cluster production --service dupli1-payment --force-new-deployment
 ```
 
-Also ask NANO to allowlist the production NAT egress IP and register the webhook URL `https://dupli1.com/api/v1/payments/webhooks/nano` if JSON callbacks are needed. Browser return URL is `https://dupli1.com/api/v1/payments/nano/return`.
+After merchant contract, replace secret values with production credentials and set `nano_base_url = "https://pay.nanopay.co.kr"`. Ask NANO to allowlist the production NAT egress IP and register webhook `https://dupli1.com/api/v1/payments/webhooks/nano` if JSON callbacks are needed. Browser return URL is `https://dupli1.com/api/v1/payments/nano/return`.
 
 See [docs/payment-service.md](../../docs/payment-service.md).
 
