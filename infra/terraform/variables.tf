@@ -202,9 +202,9 @@ variable "web_service_email" {
 }
 
 variable "nano_base_url" {
-  description = "NANO PG base URL. Use https://dev3.nanopay.co.kr with NANO 연동 테스트 credentials from the 인증결제 API guide; switch to https://pay.nanopay.co.kr after merchant contract."
+  description = "NANO PG base URL. Production: https://pay.nanopay.co.kr. Use https://dev3.nanopay.co.kr only with NANO 연동 테스트 credentials."
   type        = string
-  default     = "https://dev3.nanopay.co.kr"
+  default     = "https://pay.nanopay.co.kr"
 }
 
 variable "github_oidc_extra_subjects" {
