@@ -162,7 +162,7 @@ sequenceDiagram
 ### Phase 0 — Plan + contracts (this doc)
 
 - [x] This plan
-- [ ] Index in [README.md](README.md) / checklist in [TODO.md](TODO.md)
+- [x] Index in [README.md](README.md) / checklist in [TODO.md](TODO.md)
 - [ ] Resolve open questions (attribution consume timing, fixed discount, partner shape)
 - [ ] OpenAPI / api.md stubs for new coupon fields + stats (when implementation starts)
 
