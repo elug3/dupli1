@@ -23,7 +23,7 @@ type Variant struct {
 	OfficialPrice float64  `json:"officialPrice,omitempty"`
 	Price         float64  `json:"price,omitempty"`
 	Status        string   `json:"status"` // "active" | "draft" | "archived"
-	ImageURLs   []string `json:"imageUrls,omitempty"`
+	ImageURLs     []string `json:"imageUrls,omitempty"`
 	// ProductName is the parent product's display name, populated on public variant reads.
 	ProductName string `json:"productName,omitempty"`
 	CreatedAt   string `json:"createdAt,omitempty"`
@@ -38,14 +38,14 @@ type Variant struct {
 // After the accepted flatten migration, Product becomes the sellable unit and
 // shared copy moves to Style — see docs/product-structure-final-review.md.
 type Product struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Brand       string   `json:"brand"`
-	BrandCode   string   `json:"brandCode,omitempty"`
-	StyleCode   string   `json:"styleCode,omitempty"`
-	Material    string   `json:"material"`
-	Category    string   `json:"category"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Brand       string `json:"brand"`
+	BrandCode   string `json:"brandCode,omitempty"`
+	StyleCode   string `json:"styleCode,omitempty"`
+	Material    string `json:"material"`
+	Category    string `json:"category"`
 	// SubCategory is a bag type under category (handbags, tote, shoulder, cross, mini).
 	SubCategory string `json:"subCategory,omitempty"`
 	// Style is bag occasion / look (casual, evening, business, weekend, statement).
@@ -71,7 +71,7 @@ type Product struct {
 	// Incremented when a reservation is committed (order ship → in_transit), not on payment.
 	SoldCount int64 `json:"soldCount"`
 	// WishlistCount is unique owners who wishlisted this parent (denormalized).
-	WishlistCount int64 `json:"wishlistCount"`
+	WishlistCount int64  `json:"wishlistCount"`
 	CreatedAt     string `json:"createdAt"`
 	// UpdatedAt is server-set on every write (create and update); never taken
 	// from an incoming request body.

@@ -579,7 +579,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
-		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
+			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -634,7 +634,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
-		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
+			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -690,7 +690,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
-		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
+			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
