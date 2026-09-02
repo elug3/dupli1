@@ -128,3 +128,33 @@ func TestNormalizeKRPhone(t *testing.T) {
 		t.Fatalf("got %s", got)
 	}
 }
+
+func TestNanoConfigEnabled(t *testing.T) {
+	if (NanoConfig{}).Enabled() {
+		t.Fatal("empty config must not enable nano")
+	}
+	if !(NanoConfig{ShopCode: "s", LoginID: "l", APIKey: "k"}).Enabled() {
+		t.Fatal("full credentials should enable nano")
+	}
+	partial := []NanoConfig{
+		{ShopCode: "s", LoginID: "l"},
+		{ShopCode: "s", APIKey: "k"},
+		{LoginID: "l", APIKey: "k"},
+		{ShopCode: "  ", LoginID: "l", APIKey: "k"},
+	}
+	for i, cfg := range partial {
+		if cfg.Enabled() {
+			t.Fatalf("partial config %d should not enable nano", i)
+		}
+	}
+}
+
+func TestNanoConfigNormalizedBaseURL(t *testing.T) {
+	if got := (NanoConfig{}).normalizedBaseURL(); got != nanoDefaultTestBase {
+		t.Fatalf("empty base = %q, want sandbox default %q", got, nanoDefaultTestBase)
+	}
+	prod := NanoConfig{BaseURL: "https://pay.nanopay.co.kr/"}.normalizedBaseURL()
+	if prod != "https://pay.nanopay.co.kr" {
+		t.Fatalf("prod base = %q", prod)
+	}
+}
