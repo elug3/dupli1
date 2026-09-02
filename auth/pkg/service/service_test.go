@@ -270,6 +270,15 @@ func (r *mutableUserRepository) Delete(_ context.Context, _ string) error { retu
 
 func (r *mutableUserRepository) ListAll(_ context.Context) ([]*domain.User, error) { return nil, nil }
 
+func TestLogin_UnknownEmailReturnsInvalidCredentials(t *testing.T) {
+	repo := &fakeUserRepository{} // FindByEmail returns nil, nil: no such account
+	svc := NewService(repo, fakeTokenGenerator{})
+
+	if _, err := svc.Login(context.Background(), "nobody@example.com", "whatever"); !errors.Is(err, autherrors.ErrInvalidCredentials) {
+		t.Fatalf("got %v, want ErrInvalidCredentials", err)
+	}
+}
+
 func TestLogin_LocksAccountAfterMaxFailedAttempts(t *testing.T) {
 	user, _ := domain.NewUser("u-lock", "locked@example.com", "correct-pass", domain.AccountTypeCustomer)
 	repo := &mutableUserRepository{user: user}
@@ -357,6 +366,67 @@ func TestLogin_RejectsDeactivatedAccount(t *testing.T) {
 	}
 }
 
+func TestLogin_LockExpiresAndResetsAttempts(t *testing.T) {
+	user, _ := domain.NewUser("u-lock2", "stale@example.com", "correct-pass", domain.AccountTypeCustomer)
+	past := time.Now().Add(-domain.AccountLockDuration - time.Minute)
+	user.LockedAt = &past
+	user.FailedLoginAttempts = maxFailedAttempts
+	repo := &mutableUserRepository{user: user}
+	svc := NewService(repo, fakeTokenGenerator{})
+
+	token, err := svc.Login(context.Background(), "stale@example.com", "correct-pass")
+	if err != nil {
+		t.Fatalf("expected expired lock to allow login, got %v", err)
+	}
+	if token == "" {
+		t.Fatal("expected refresh token")
+	}
+	if repo.user.LockedAt != nil || repo.user.FailedLoginAttempts != 0 {
+		t.Fatalf("expired lock should be cleared: locked_at=%v attempts=%d", repo.user.LockedAt, repo.user.FailedLoginAttempts)
+	}
+}
+
+func TestLogin_LockExpiresButAttemptCanStillFail(t *testing.T) {
+	user, _ := domain.NewUser("u-lock3", "stale2@example.com", "correct-pass", domain.AccountTypeCustomer)
+	past := time.Now().Add(-domain.AccountLockDuration - time.Minute)
+	user.LockedAt = &past
+	user.FailedLoginAttempts = maxFailedAttempts
+	repo := &mutableUserRepository{user: user}
+	svc := NewService(repo, fakeTokenGenerator{})
+
+	if _, err := svc.Login(context.Background(), "stale2@example.com", "wrong"); !errors.Is(err, autherrors.ErrInvalidCredentials) {
+		t.Fatalf("got %v, want ErrInvalidCredentials", err)
+	}
+	if repo.user.IsLocked() {
+		t.Fatal("a single fresh failed attempt after expiry must not re-lock the account")
+	}
+	if repo.user.FailedLoginAttempts != 1 {
+		t.Fatalf("failed attempts = %d, want 1 (counted fresh, not carried over)", repo.user.FailedLoginAttempts)
+	}
+}
+
+func TestGetMe_RejectsDeactivatedAccount(t *testing.T) {
+	user, _ := domain.NewUser("u-off", "off@example.com", "pass", domain.AccountTypeCustomer)
+	user.SetActive(false)
+	repo := &stubUserRepository{user: user}
+	svc := NewService(repo, fakeTokenGenerator{})
+
+	if _, err := svc.GetMe(context.Background(), "access-token"); !errors.Is(err, autherrors.ErrAccountDeactivated) {
+		t.Fatalf("got %v, want ErrAccountDeactivated", err)
+	}
+}
+
+func TestGetMe_RejectsLockedAccount(t *testing.T) {
+	user, _ := domain.NewUser("u-locked", "locked-getme@example.com", "pass", domain.AccountTypeCustomer)
+	user.Lock()
+	repo := &stubUserRepository{user: user}
+	svc := NewService(repo, fakeTokenGenerator{})
+
+	if _, err := svc.GetMe(context.Background(), "access-token"); !errors.Is(err, autherrors.ErrAccountLocked) {
+		t.Fatalf("got %v, want ErrAccountLocked", err)
+	}
+}
+
 func TestRefresh_RejectsDeactivatedAccount(t *testing.T) {
 	user, _ := domain.NewUser("u-off", "off@example.com", "pass", domain.AccountTypeCustomer)
 	user.SetActive(false)
@@ -430,6 +500,59 @@ func TestLogout_RevokesRefreshSession(t *testing.T) {
 	if _, err := svc.Refresh(t.Context(), refreshToken); !errors.Is(err, autherrors.ErrInvalidToken) {
 		t.Fatalf("Refresh after logout: got %v, want ErrInvalidToken", err)
 	}
+}
+
+func TestRefresh_RotatesRefreshTokenAndInvalidatesTheOldOne(t *testing.T) {
+	user, _ := domain.NewUser("u-1", "user@example.com", "pass", domain.AccountTypeCustomer)
+	repo := &stubUserRepository{user: user}
+	sessions := &memorySessionStore{}
+	svc := NewService(
+		repo,
+		fakeTokenGenerator{},
+		WithRefreshTokenGen(sequentialTokenGenerator{}, time.Hour),
+		WithSessionStore(sessions),
+	)
+
+	refreshToken, err := svc.Login(context.Background(), "user@example.com", "pass")
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+
+	_, rotated, err := svc.Refresh(context.Background(), refreshToken)
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if rotated == "" || rotated == refreshToken {
+		t.Fatalf("expected a new, different refresh token; got %q (original %q)", rotated, refreshToken)
+	}
+	if _, ok := sessions.entries[refreshToken]; ok {
+		t.Fatal("original refresh token should be invalidated after rotation")
+	}
+	if _, ok := sessions.entries[rotated]; !ok {
+		t.Fatal("rotated refresh token should be stored")
+	}
+
+	if _, _, err := svc.Refresh(context.Background(), refreshToken); !errors.Is(err, autherrors.ErrInvalidToken) {
+		t.Fatalf("reusing the rotated-away token: got %v, want ErrInvalidToken", err)
+	}
+
+	if _, _, err := svc.Refresh(context.Background(), rotated); err != nil {
+		t.Fatalf("refreshing with the rotated token should still work: %v", err)
+	}
+}
+
+// sequentialTokenGenerator returns a distinct token string on every Generate
+// call, unlike capturingTokenGenerator/fakeTokenGenerator which always return
+// the same fixed string. Rotation tests need each issued refresh token to be
+// a distinct session-store key.
+type sequentialTokenGenerator struct{}
+
+func (sequentialTokenGenerator) Generate(_ context.Context, userID string, _ []string) (string, error) {
+	return userID + "-" + newID(), nil
+}
+
+func (sequentialTokenGenerator) Validate(_ context.Context, token string) (ports.Claims, error) {
+	return ports.Claims{UserID: "u-1"}, nil
 }
 
 func TestSetUserPermissionsRejectsInvalidPermission(t *testing.T) {

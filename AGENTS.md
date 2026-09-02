@@ -118,7 +118,7 @@ cd payment && go test ./...
 ### Gotchas
 
 - **Module paths:** all services use `github.com/elug3/dupli1/<service>` (e.g. `github.com/elug3/dupli1/product`). There is no top-level `go.work`.
-- **Auth token flow:** login returns only a `refresh_token`; call `POST /api/v1/auth/refresh` to obtain a short-lived access token in the `token` field.
+- **Auth token flow:** login returns only a `refresh_token`; call `POST /api/v1/auth/refresh` to obtain a short-lived access token in the `token` field. The refresh token rotates on every call — the response's `refresh_token` field carries the replacement, and the one you sent is invalidated immediately.
 - **Product JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint).
 - **Order JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint), with `JWT_SECRET` HS256 fallback in dev.
 - **Order, cart, and payment** use PostgreSQL when `DUPLI1_ORDER_DB` / `DUPLI1_CART_DB` / `DUPLI1_PAYMENT_DB` are set (Docker Compose); in-memory fallback for tests without a DB URL.

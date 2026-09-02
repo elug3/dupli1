@@ -52,7 +52,7 @@ paths:
 
   /api/v1/auth/refresh:
     post:
-      summary: Exchange a refresh token for an access token
+      summary: Exchange a refresh token for an access token; rotates and returns a new refresh token
       tags: [Auth]
       responses:
         '200':

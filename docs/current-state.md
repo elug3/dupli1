@@ -39,9 +39,9 @@ See [service-layout.md](service-layout.md) for details.
 - **Stack:** Gin, PostgreSQL, Redis, optional NATS
 - **Persistence:** `dupli1_db` on `postgres-auth`
 - **Features:**
-  - Login returns a **refresh token**; `POST /refresh` returns a short-lived **access token** (`token` field)
+  - Login returns a **refresh token**; `POST /refresh` returns a short-lived **access token** (`token` field) plus a **rotated refresh token** (`refresh_token` field) — the token sent in is invalidated immediately
   - RS256 JWT + JWKS at `/api/v1/auth/.well-known/jwks.json`
-  - Access tokens include `type: "access"`; refresh tokens include `type: "refresh"`
+  - Access tokens include `type: "access"`; refresh tokens include `type: "refresh"`; both include a random `jti` so same-second issuances never collide
   - Fine-grained **permissions** stored on users (`users.permissions TEXT[]`); JWT access tokens include `permissions` claim only
   - Permission constants and evaluation in `shared/pkg/permissions` (`github.com/elug3/dupli1/shared`)
   - Wildcards: `*`, `admin.*`, `{resource}.*` (e.g. `product.*`)
@@ -51,10 +51,12 @@ See [service-layout.md](service-layout.md) for details.
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
   - Customer commerce profile at `/api/v1/auth/me/profile` and saved addresses at `/api/v1/auth/me/addresses` — [auth-profile-extension-plan.md](auth-profile-extension-plan.md)
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `manager`)
-  - Login lockout after 5 failed attempts for customers/managers; **admin and owner are never locked**
+  - Login lockout after 5 failed attempts for customers/managers, auto-expiring after 15 minutes; **admin and owner are never locked**
+  - Deactivated/locked accounts are rejected on their very next authenticated request (not just next login/refresh) — `RequireAuth` re-checks account status on every call
   - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`); seeded/synced on auth boot; ECS injects the shared Secrets Manager secret into auth + web (see [infra/terraform/README.md](../infra/terraform/README.md))
   - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage` (`DUPLI1_ORDER_SERVICE_*`); order refreshes a Bearer access token and calls product stock/coupons via **`DUPLI1_GATEWAY_URL`** (`httpstock` / gateway paths)
-  - Login/refresh rate-limited per IP via Redis
+  - Login/refresh rate-limited per IP via Redis; Gin trusts only RFC1918 proxy hops (`SetTrustedProxies`) so a client-supplied `X-Forwarded-For` can't spoof a fresh IP and bypass the limit
+  - Session store falls back to in-memory (with background GC) when no Redis is configured, so `/logout` and refresh-token revocation still work on a single instance instead of silently no-op'ing
   - `user.registered` NATS publish is best-effort: a broker outage is logged and the account still registers
   - Structured **zerolog** logging (`event` field) for session paths, internal errors, and bootstrap — [auth-logging.md](auth-logging.md)
 - **Tests:** `cd auth && go test ./...`

@@ -115,7 +115,8 @@ func (s *ServiceAccountTokenSource) loginLocked(ctx context.Context) error {
 
 func (s *ServiceAccountTokenSource) refreshLocked(ctx context.Context) error {
 	var refreshResp struct {
-		Token string `json:"token"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 	if err := postJSON(ctx, s.client, s.authBaseURL+"/api/v1/auth/refresh", map[string]string{
 		"refresh_token": s.refreshToken,
@@ -127,6 +128,12 @@ func (s *ServiceAccountTokenSource) refreshLocked(ctx context.Context) error {
 	}
 	s.accessToken = refreshResp.Token
 	s.accessExpiry = expiryFromJWT(refreshResp.Token, s.now())
+	// auth rotates the refresh token on every use: the one just spent stops
+	// working, so the replacement must be captured or the next refresh call
+	// would fail and force a full re-login.
+	if refreshResp.RefreshToken != "" {
+		s.refreshToken = refreshResp.RefreshToken
+	}
 	return nil
 }
 

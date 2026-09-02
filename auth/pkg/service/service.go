@@ -141,11 +141,22 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, er
 		return "", fmt.Errorf("find user: %w", err)
 	}
 	if u == nil {
+		// Run a bcrypt comparison anyway so this path takes about as long as
+		// the wrong-password path below — otherwise the timing difference
+		// reveals whether the email is registered.
+		domain.ValidateDummyPassword(password)
 		return "", autherrors.ErrInvalidCredentials
 	}
 
 	if u.IsLocked() {
 		return "", autherrors.ErrAccountLocked
+	}
+	// A lock past AccountLockDuration no longer reports as locked above, but
+	// the stale LockedAt/FailedLoginAttempts still need clearing so this
+	// attempt is scored fresh rather than as an extension of the old streak.
+	if u.LockedAt != nil {
+		u.Unlock()
+		_ = s.userRepo.Save(ctx, u)
 	}
 
 	if !u.IsActive {
@@ -196,42 +207,76 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 	return s.sessionStore.Delete(ctx, refreshToken)
 }
 
-// Refresh validates a refresh token and issues a new short-lived access token.
-func (s *Service) Refresh(ctx context.Context, refreshToken string) (string, error) {
+// Refresh validates a refresh token and issues a new short-lived access
+// token. When a session store is backing refresh tokens, the refresh token
+// itself is rotated: the caller gets a new one back and the one it presented
+// stops working immediately, so a leaked-then-superseded refresh token can't
+// be replayed indefinitely — reuse of an already-rotated token now fails
+// with ErrInvalidToken instead of silently minting another access token.
+func (s *Service) Refresh(ctx context.Context, refreshToken string) (accessToken string, rotatedRefreshToken string, err error) {
 	claims, err := s.refreshTokenGen.Validate(ctx, refreshToken)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	if s.sessionStore != nil {
 		if _, err := s.sessionStore.Get(ctx, refreshToken); err != nil {
 			if errors.Is(err, ports.ErrSessionNotFound) {
-				return "", autherrors.ErrInvalidToken
+				return "", "", autherrors.ErrInvalidToken
 			}
-			return "", fmt.Errorf("session store: %w", err)
+			return "", "", fmt.Errorf("session store: %w", err)
 		}
 	}
 
 	u, err := s.userRepo.FindByID(ctx, claims.UserID)
 	if err != nil {
-		return "", fmt.Errorf("find user: %w", err)
+		return "", "", fmt.Errorf("find user: %w", err)
 	}
 	if u == nil {
-		return "", autherrors.ErrUserNotFound
+		return "", "", autherrors.ErrUserNotFound
 	}
 	if !u.IsActive {
-		return "", autherrors.ErrAccountDeactivated
+		return "", "", autherrors.ErrAccountDeactivated
+	}
+	if u.IsLocked() {
+		return "", "", autherrors.ErrAccountLocked
 	}
 
-	newToken, err := s.tokenGen.Generate(ctx, u.ID, u.Permissions)
+	newAccessToken, err := s.tokenGen.Generate(ctx, u.ID, u.Permissions)
 	if err != nil {
-		return "", fmt.Errorf("generate token: %w", err)
+		return "", "", fmt.Errorf("generate token: %w", err)
 	}
 
-	return newToken, nil
+	rotatedRefreshToken = refreshToken
+	if s.sessionStore != nil {
+		newRefreshToken, err := s.refreshTokenGen.Generate(ctx, u.ID, nil)
+		if err != nil {
+			return "", "", fmt.Errorf("generate refresh token: %w", err)
+		}
+		// Store the replacement before dropping the old one: if Set fails,
+		// the caller's original refresh token is still good and they can
+		// just retry, instead of us deleting their only valid session first.
+		if err := s.sessionStore.Set(ctx, newRefreshToken, u.ID, s.refreshTokenExpiry); err != nil {
+			return "", "", fmt.Errorf("store session: %w", err)
+		}
+		if err := s.sessionStore.Delete(ctx, refreshToken); err != nil {
+			s.logger.Warn().
+				Str("event", "refresh_rotate_old_session_delete_failed").
+				Str("user_id", u.ID).
+				Err(err).
+				Msg("refresh: rotated to a new session but failed to delete the old one")
+		}
+		rotatedRefreshToken = newRefreshToken
+	}
+
+	return newAccessToken, rotatedRefreshToken, nil
 }
 
 // GetMe validates an access token and returns the authenticated user.
+// Every RequireAuth-protected request goes through this, so a deactivated or
+// locked account stops working immediately instead of only on its next
+// login/refresh — its already-issued access tokens are otherwise still good
+// for a full TokenExpiry window.
 func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, error) {
 	claims, err := s.tokenGen.Validate(ctx, accessToken)
 	if err != nil {
@@ -244,6 +289,12 @@ func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, 
 	}
 	if u == nil {
 		return nil, autherrors.ErrUserNotFound
+	}
+	if !u.IsActive {
+		return nil, autherrors.ErrAccountDeactivated
+	}
+	if u.IsLocked() {
+		return nil, autherrors.ErrAccountLocked
 	}
 
 	return u, nil

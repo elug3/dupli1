@@ -103,7 +103,7 @@ Response `200`:
 { "refresh_token": "<token>" }
 ```
 
-Errors: `400` bad request, `401` invalid credentials, `403` locked (customers/managers after 5 failures) or deactivated. **Admin and owner are never locked.**
+Errors: `400` bad request, `401` invalid credentials, `403` locked (customers/managers after 5 failures, auto-expires after 15 min) or deactivated. **Admin and owner are never locked.**
 
 ### POST /api/v1/auth/logout
 
@@ -123,10 +123,12 @@ Request:
 
 Response `200`:
 ```json
-{ "token": "<new_access_token>" }
+{ "token": "<new_access_token>", "refresh_token": "<new_refresh_token>" }
 ```
 
-Errors: `400` bad request, `401` invalid or expired token.
+The refresh token rotates on every call — store `refresh_token` from the response and use it next time; the one just sent no longer works.
+
+Errors: `400` bad request, `401` invalid/expired/already-rotated token, or account deactivated/locked.
 
 ### GET /api/v1/auth/me
 

@@ -24,6 +24,15 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 	}
 
 	r := gin.New()
+	// Gin defaults to trusting every proxy, which makes Context.ClientIP() trust
+	// a caller-supplied X-Forwarded-For outright. Since nginx (api/nginx.conf)
+	// reaches this service over the Docker bridge network and appends to
+	// X-Forwarded-For rather than replacing it, an untrusted default would let
+	// any client spoof a fresh IP per request and bypass the per-IP login /
+	// refresh rate limiter below. Only the private ranges nginx's container
+	// address falls in are trusted, so a directly-connecting public client's
+	// X-Forwarded-For is ignored and its real RemoteAddr is used instead.
+	_ = r.SetTrustedProxies([]string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"})
 	r.Use(gin.Recovery())
 	r.Use(corsMiddleware(corsOrigins))
 

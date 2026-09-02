@@ -430,14 +430,15 @@ func (h *Handler) Refresh(c *gin.Context) {
 		return
 	}
 
-	newToken, err := h.svc.Refresh(c.Request.Context(), payload.RefreshToken)
+	newToken, newRefreshToken, err := h.svc.Refresh(c.Request.Context(), payload.RefreshToken)
 	if err != nil {
-		if errors.Is(err, autherrors.ErrInvalidToken) || errors.Is(err, autherrors.ErrTokenExpired) || errors.Is(err, autherrors.ErrAccountDeactivated) {
+		if errors.Is(err, autherrors.ErrInvalidToken) || errors.Is(err, autherrors.ErrTokenExpired) ||
+			errors.Is(err, autherrors.ErrAccountDeactivated) || errors.Is(err, autherrors.ErrAccountLocked) {
 			h.logger.Warn().
 				Str("event", "refresh_rejected").
 				Str("ip", ip).
 				Err(err).
-				Msg("refresh failed: invalid, expired, or deactivated")
+				Msg("refresh failed: invalid, expired, locked, or deactivated")
 		} else {
 			h.logger.Error().
 				Str("event", "refresh_error").
@@ -454,5 +455,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 		Str("ip", ip).
 		Msg("token refreshed successfully")
 
-	c.JSON(http.StatusOK, gin.H{"token": newToken})
+	// refresh_token is the rotated replacement for the one the caller sent;
+	// the old one no longer works and must be discarded by the client.
+	c.JSON(http.StatusOK, gin.H{"token": newToken, "refresh_token": newRefreshToken})
 }

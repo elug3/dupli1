@@ -22,13 +22,7 @@ func (h *Handler) RequireAuth() gin.HandlerFunc {
 		}
 		u, err := h.svc.GetMe(c.Request.Context(), authHeader[7:])
 		if err != nil {
-			if errors.Is(err, autherrors.ErrInvalidToken) || errors.Is(err, autherrors.ErrTokenExpired) {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-			} else if errors.Is(err, autherrors.ErrUserNotFound) {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
-			} else {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "auth error"})
-			}
+			abortGetMeError(c, err)
 			return
 		}
 		c.Set(callerKey, u)
@@ -51,17 +45,28 @@ func (h *Handler) OptionalAuth() gin.HandlerFunc {
 		}
 		u, err := h.svc.GetMe(c.Request.Context(), authHeader[7:])
 		if err != nil {
-			if errors.Is(err, autherrors.ErrInvalidToken) || errors.Is(err, autherrors.ErrTokenExpired) {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-			} else if errors.Is(err, autherrors.ErrUserNotFound) {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
-			} else {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "auth error"})
-			}
+			abortGetMeError(c, err)
 			return
 		}
 		c.Set(callerKey, u)
 		c.Next()
+	}
+}
+
+// abortGetMeError writes the appropriate error response for a GetMe failure.
+// Shared by RequireAuth and OptionalAuth so both middlewares treat an
+// already-issued token for a since-deactivated/locked account the same way
+// Login and Refresh do.
+func abortGetMeError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, autherrors.ErrInvalidToken), errors.Is(err, autherrors.ErrTokenExpired):
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+	case errors.Is(err, autherrors.ErrUserNotFound):
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+	case errors.Is(err, autherrors.ErrAccountDeactivated), errors.Is(err, autherrors.ErrAccountLocked):
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	default:
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "auth error"})
 	}
 }
 
