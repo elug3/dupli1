@@ -22,6 +22,7 @@ type Repository struct {
 
 func NewRepository(connString string) (*Repository, error) {
 	connString = withPostgresSSLMode(connString)
+	// Pool connect at process start; no request context available.
 	pool, err := pgxpool.Connect(context.Background(), connString)
 	if err != nil {
 		return nil, fmt.Errorf("connect order database: %w", err)
@@ -42,6 +43,7 @@ func (r *Repository) Close() {
 }
 
 func (r *Repository) migrate() error {
+	// Startup schema migration; no request-scoped context to propagate.
 	ctx := context.Background()
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS id_sequences (
@@ -145,6 +147,9 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS recipient_phone TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address JSONB NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_address_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier_note TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`,
@@ -301,9 +306,9 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			id, customer_id, reservation_id, status, coupon_code,
 			subtotal_cents, discount_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
-			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			reservation_id = EXCLUDED.reservation_id,
@@ -321,11 +326,15 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			payment_due_at = EXCLUDED.payment_due_at,
 			shipped_by = EXCLUDED.shipped_by,
 			shipped_at = EXCLUDED.shipped_at,
+			carrier = EXCLUDED.carrier,
+			tracking_number = EXCLUDED.tracking_number,
+			carrier_note = EXCLUDED.carrier_note,
 			updated_at = EXCLUDED.updated_at
 	`, order.ID, order.CustomerID, order.ReservationID, order.Status, order.CouponCode,
 		order.SubtotalCents, order.DiscountCents, order.TotalCents,
 		order.RecipientName, order.RecipientPhone, shippingJSON, order.SourceAddressID,
 		order.PaymentID, order.PaidAt, order.PaymentDueAt, order.ShippedBy, order.ShippedAt,
+		order.Carrier, order.TrackingNumber, order.CarrierNote,
 		order.CreatedAt, order.UpdatedAt)
 	if err != nil {
 		return err
@@ -459,7 +468,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_cents, discount_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
-			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id).Scan(
@@ -467,6 +476,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 		&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -549,7 +559,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_cents, discount_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
-			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
 		FROM orders WHERE customer_id = $1 ORDER BY created_at DESC
 	`, customerID)
@@ -569,6 +579,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -603,7 +614,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_cents, discount_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
-			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
 		FROM orders ORDER BY created_at DESC
 	`)
@@ -623,6 +634,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -657,7 +669,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_cents, discount_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
-			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
 		FROM orders
 		WHERE status = $1 AND payment_due_at < $2
@@ -678,6 +690,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -796,7 +809,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_cents, discount_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
-			payment_id, paid_at, payment_due_at, shipped_by, shipped_at,
+			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
@@ -804,6 +817,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 		&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
+		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if err != nil {

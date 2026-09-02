@@ -71,7 +71,7 @@ func newTestService(t *testing.T) *service.Service {
 
 func TestUpsertItem_BySKU_PersistsResolvedSkuID(t *testing.T) {
 	svc := newTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	cart, err := svc.UpsertItem(ctx, "cust-1", service.ItemInput{SKU: "bot-001-grn", Quantity: 2})
 	if err != nil {
@@ -91,7 +91,7 @@ func TestUpsertItem_BySKU_PersistsResolvedSkuID(t *testing.T) {
 
 func TestUpsertItem_BySkuID_PersistsResolvedSKU(t *testing.T) {
 	svc := newTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	cart, err := svc.UpsertItem(ctx, "cust-2", service.ItemInput{SkuID: "SKUID-GRN", Quantity: 1})
 	if err != nil {
@@ -105,7 +105,7 @@ func TestUpsertItem_BySkuID_PersistsResolvedSKU(t *testing.T) {
 
 func TestUpsertItem_UnknownSkuID_ReturnsNotFound(t *testing.T) {
 	svc := newTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, err := svc.UpsertItem(ctx, "cust-3", service.ItemInput{SkuID: "NOPE", Quantity: 1})
 	if !errors.Is(err, ports.ErrVariantNotFound) {
@@ -122,7 +122,7 @@ func TestUpsertItem_UnknownSkuID_ReturnsNotFound(t *testing.T) {
 
 func TestReplaceItems_MixedIdentifiers(t *testing.T) {
 	svc := newTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	cart, err := svc.ReplaceItems(ctx, "cust-4", []service.ItemInput{
 		{SkuID: "SKUID-GRN", Quantity: 3},
@@ -137,7 +137,7 @@ func TestReplaceItems_MixedIdentifiers(t *testing.T) {
 
 func TestRemoveItemBySkuID(t *testing.T) {
 	svc := newTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := svc.UpsertItem(ctx, "cust-5", service.ItemInput{SkuID: "SKUID-GRN", Quantity: 1}); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
@@ -153,7 +153,7 @@ func TestRemoveItemBySkuID(t *testing.T) {
 
 func TestGetCart_EnrichesStoredItemBySkuIDWhenPresent(t *testing.T) {
 	svc := newTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := svc.UpsertItem(ctx, "cust-6", service.ItemInput{SKU: "BOT-001-GRN", Quantity: 4}); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
@@ -172,7 +172,7 @@ func TestGetCart_EnrichesStoredItemBySkuIDWhenPresent(t *testing.T) {
 }
 
 func TestGetCart_ReportsUnavailableItems(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	variant := &ports.VariantInfo{
 		SkuID:          "SKUID-GRN",
 		SKU:            "BOT-001-GRN",
@@ -217,7 +217,7 @@ func TestGetCart_ReportsUnavailableItems(t *testing.T) {
 
 func TestReplaceItems_CollectsAllUnavailable(t *testing.T) {
 	svc := newTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, err := svc.ReplaceItems(ctx, "cust-batch", []service.ItemInput{
 		{SkuID: "BAD-1", Quantity: 1},
@@ -238,3 +238,59 @@ func TestReplaceItems_CollectsAllUnavailable(t *testing.T) {
 		t.Fatalf("error string = %q, want variant not found", unavailable.Error())
 	}
 }
+
+func TestUpsertItem_RejectsInsufficientStock(t *testing.T) {
+	svc := newTestService(t)
+	ctx := t.Context()
+
+	_, err := svc.UpsertItem(ctx, "cust-stock", service.ItemInput{SkuID: "SKUID-GRN", Quantity: 8})
+	var insufficient *service.InsufficientStockError
+	if !errors.As(err, &insufficient) {
+		t.Fatalf("want InsufficientStockError, got %v", err)
+	}
+	if insufficient.AvailableQty != 7 || insufficient.Requested != 8 {
+		t.Fatalf("unexpected: %+v", insufficient)
+	}
+}
+
+func TestUpsertItem_RejectsZeroAvailable(t *testing.T) {
+	svc := newTestService(t)
+	ctx := t.Context()
+	// Override inventory to zero (missing / OOS).
+	inv := &fakeInventoryClient{
+		bySKU:   map[string]int{"BOT-001-GRN": 0},
+		bySkuID: map[string]int{"SKUID-GRN": 0},
+	}
+	variant := &ports.VariantInfo{
+		SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", ProductID: "BOT-001",
+		UnitPriceCents: 250000,
+	}
+	product := &fakeProductClient{
+		bySKU:   map[string]*ports.VariantInfo{"BOT-001-GRN": variant},
+		bySkuID: map[string]*ports.VariantInfo{"SKUID-GRN": variant},
+	}
+	svc = service.New(memory.NewRepository(), product, inv)
+
+	_, err := svc.UpsertItem(ctx, "cust-oos", service.ItemInput{SkuID: "SKUID-GRN", Quantity: 1})
+	var insufficient *service.InsufficientStockError
+	if !errors.As(err, &insufficient) {
+		t.Fatalf("want InsufficientStockError, got %v", err)
+	}
+	if insufficient.AvailableQty != 0 {
+		t.Fatalf("available = %d, want 0", insufficient.AvailableQty)
+	}
+}
+
+func TestReplaceItems_RejectsOversell(t *testing.T) {
+	svc := newTestService(t)
+	ctx := t.Context()
+
+	_, err := svc.ReplaceItems(ctx, "cust-replace", []service.ItemInput{
+		{SkuID: "SKUID-GRN", Quantity: 99},
+	})
+	var insufficient *service.InsufficientStockError
+	if !errors.As(err, &insufficient) {
+		t.Fatalf("want InsufficientStockError, got %v", err)
+	}
+}
+

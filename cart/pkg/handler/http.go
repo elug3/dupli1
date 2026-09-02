@@ -7,25 +7,22 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/cart/pkg/domain"
 	"github.com/elug3/dupli1/cart/pkg/ports"
 	"github.com/elug3/dupli1/cart/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
-type AccessTokenValidator interface {
-	ValidateAccessToken(token string) (authjwt.Claims, error)
-}
-
 type Handler struct {
 	svc          *service.Service
-	jwtValidator AccessTokenValidator
+	jwtValidator authjwt.AccessTokenValidator
 	settings     settings.Response
 }
 
-func New(svc *service.Service, jwtValidator AccessTokenValidator) *Handler {
+func New(svc *service.Service, jwtValidator authjwt.AccessTokenValidator) *Handler {
 	return &Handler{
 		svc:          svc,
 		jwtValidator: jwtValidator,
@@ -70,26 +67,7 @@ func (h *Handler) settingsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.jwtValidator == nil {
-			respondError(w, http.StatusServiceUnavailable, "auth not configured")
-			return
-		}
-
-		authHeader := r.Header.Get("Authorization")
-		if len(authHeader) < 8 || !strings.EqualFold(authHeader[:7], "bearer ") {
-			respondError(w, http.StatusUnauthorized, "missing or malformed Authorization header")
-			return
-		}
-
-		claims, err := h.jwtValidator.ValidateAccessToken(authHeader[7:])
-		if err != nil {
-			respondError(w, http.StatusUnauthorized, "invalid token")
-			return
-		}
-
-		next(w, r.WithContext(authjwt.WithClaims(r.Context(), claims)))
-	}
+	return authmiddleware.RequireAuth(h.jwtValidator, respondError)(next)
 }
 
 func (h *Handler) cart(w http.ResponseWriter, r *http.Request) {
@@ -222,6 +200,19 @@ func (h *Handler) adminCart(w http.ResponseWriter, r *http.Request) {
 }
 
 func respondServiceError(w http.ResponseWriter, err error) {
+	var insufficient *service.InsufficientStockError
+	if errors.As(err, &insufficient) {
+		respondJSON(w, http.StatusBadRequest, map[string]any{
+			"error":         insufficient.Error(),
+			"code":          http.StatusBadRequest,
+			"reason":        domain.ReasonInsufficientStock,
+			"sku_id":        insufficient.SkuID,
+			"sku":           insufficient.SKU,
+			"available_qty": insufficient.AvailableQty,
+			"requested":     insufficient.Requested,
+		})
+		return
+	}
 	var unavailable *service.UnavailableVariantsError
 	if errors.As(err, &unavailable) && len(unavailable.Items) > 0 {
 		respondJSON(w, http.StatusUnprocessableEntity, map[string]any{

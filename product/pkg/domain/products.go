@@ -23,24 +23,29 @@ type Variant struct {
 	OfficialPrice float64  `json:"officialPrice,omitempty"`
 	Price         float64  `json:"price,omitempty"`
 	Status        string   `json:"status"` // "active" | "draft" | "archived"
-	ImageURLs   []string `json:"imageUrls,omitempty"`
+	ImageURLs     []string `json:"imageUrls,omitempty"`
 	// ProductName is the parent product's display name, populated on public variant reads.
 	ProductName string `json:"productName,omitempty"`
 	CreatedAt   string `json:"createdAt,omitempty"`
+	// AvailableQty is max(0, stock.quantity - stock.reserved). Response-only;
+	// not stored on the variant row. See docs/product-stock-tracking-plan.md.
+	AvailableQty int `json:"availableQty"`
+	// InStock is true when AvailableQty > 0. Response-only.
+	InStock bool `json:"inStock"`
 }
 
 // Product is a parent catalog style. Sellable options live on Variants.
 // After the accepted flatten migration, Product becomes the sellable unit and
 // shared copy moves to Style — see docs/product-structure-final-review.md.
 type Product struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Brand       string   `json:"brand"`
-	BrandCode   string   `json:"brandCode,omitempty"`
-	StyleCode   string   `json:"styleCode,omitempty"`
-	Material    string   `json:"material"`
-	Category    string   `json:"category"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Brand       string `json:"brand"`
+	BrandCode   string `json:"brandCode,omitempty"`
+	StyleCode   string `json:"styleCode,omitempty"`
+	Material    string `json:"material"`
+	Category    string `json:"category"`
 	// SubCategory is a bag type under category (handbags, tote, shoulder, cross, mini).
 	SubCategory string `json:"subCategory,omitempty"`
 	// Style is bag occasion / look (casual, evening, business, weekend, statement).
@@ -66,7 +71,7 @@ type Product struct {
 	// Incremented when a reservation is committed (order ship → in_transit), not on payment.
 	SoldCount int64 `json:"soldCount"`
 	// WishlistCount is unique owners who wishlisted this parent (denormalized).
-	WishlistCount int64 `json:"wishlistCount"`
+	WishlistCount int64  `json:"wishlistCount"`
 	CreatedAt     string `json:"createdAt"`
 	// UpdatedAt is server-set on every write (create and update); never taken
 	// from an incoming request body.
@@ -80,7 +85,9 @@ type Product struct {
 	Variants        []Variant `json:"variants,omitempty"`
 
 	// Legacy display fields mirrored from the default active variant.
-	Color     string   `json:"color,omitempty"`
-	Stock     int      `json:"stock,omitempty"`
+	Color string `json:"color,omitempty"`
+	// Stock is legacy parent-level stock. Availability lives on variants
+	// (availableQty/inStock) via stock_items. Omitted from API responses.
+	Stock     int      `json:"-"`
 	ImageURLs []string `json:"imageUrls,omitempty"`
 }

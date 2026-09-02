@@ -169,6 +169,52 @@ func TestProfileAndAddresses_HTTP(t *testing.T) {
 		}
 	})
 
+	t.Run("address pccc round trip", func(t *testing.T) {
+		w := s.doWithAuth(t, http.MethodPost, "/api/v1/auth/me/addresses", accessToken, map[string]string{
+			"recipient_name":  "Customs User",
+			"recipient_phone": "01041125167",
+			"postal_code":     "06194",
+			"address_line1":   "테헤란로 78길 14-12",
+			"city":            "강남구",
+			"province":        "서울특별시",
+			"pccc":            "p123456789012",
+		})
+		if w.Code != http.StatusCreated {
+			t.Fatalf("POST address with pccc: %d %s", w.Code, w.Body.String())
+		}
+		var addr domain.Address
+		if err := json.Unmarshal(w.Body.Bytes(), &addr); err != nil {
+			t.Fatal(err)
+		}
+		if addr.PCCC != "P123456789012" {
+			t.Fatalf("created address pccc = %q, want P123456789012", addr.PCCC)
+		}
+
+		w = s.doWithAuth(t, http.MethodGet, "/api/v1/auth/me/addresses/"+addr.ID, accessToken, nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET address: %d %s", w.Code, w.Body.String())
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &addr); err != nil {
+			t.Fatal(err)
+		}
+		if addr.PCCC != "P123456789012" {
+			t.Fatalf("GET address pccc = %q, want P123456789012", addr.PCCC)
+		}
+
+		w = s.doWithAuth(t, http.MethodPost, "/api/v1/auth/me/addresses", accessToken, map[string]string{
+			"recipient_name":  "Bad PCCC",
+			"recipient_phone": "01041125167",
+			"postal_code":     "06194",
+			"address_line1":   "Line",
+			"city":            "강남구",
+			"province":        "서울",
+			"pccc":            "invalid",
+		})
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("invalid pccc: want 400, got %d", w.Code)
+		}
+	})
+
 	t.Run("delete address", func(t *testing.T) {
 		w := s.doWithAuth(t, http.MethodDelete, "/api/v1/auth/me/addresses/"+addressID, accessToken, nil)
 		if w.Code != http.StatusNoContent {

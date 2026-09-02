@@ -52,7 +52,9 @@ func (f *fakeStock) CommitReservation(_ context.Context, _ string) error  { retu
 func (f *fakeStock) ReleaseReservation(_ context.Context, _ string) error { return nil }
 
 type fakeProduct struct {
-	price int64
+	price       int64
+	productName string
+	imageURL    string
 }
 
 func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantInfo, error) {
@@ -60,7 +62,13 @@ func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantI
 	if p == 0 {
 		p = 1000
 	}
-	return &ports.VariantInfo{SkuID: "ID-" + sku, SKU: sku, UnitPriceCents: p}, nil
+	return &ports.VariantInfo{
+		SkuID:          "ID-" + sku,
+		SKU:            sku,
+		UnitPriceCents: p,
+		ProductName:    f.productName,
+		ImageURL:       f.imageURL,
+	}, nil
 }
 
 func (f *fakeProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports.VariantInfo, error) {
@@ -68,7 +76,13 @@ func (f *fakeProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports
 	if p == 0 {
 		p = 1000
 	}
-	return &ports.VariantInfo{SkuID: skuID, SKU: "SKU-" + skuID, UnitPriceCents: p}, nil
+	return &ports.VariantInfo{
+		SkuID:          skuID,
+		SKU:            "SKU-" + skuID,
+		UnitPriceCents: p,
+		ProductName:    f.productName,
+		ImageURL:       f.imageURL,
+	}, nil
 }
 
 func newTestHandler(t *testing.T) (*handler.Handler, *service.Service) {
@@ -122,7 +136,7 @@ func newMux(h *handler.Handler) *http.ServeMux {
 // createOrder via the service and return the order ID.
 func seedOrder(t *testing.T, svc *service.Service, customerID string) string {
 	t.Helper()
-	order, err := svc.CreateOrder(context.Background(), service.CreateOrderInput{
+	order, err := svc.CreateOrder(t.Context(), service.CreateOrderInput{
 		CustomerID: customerID,
 		Items:      []domain.OrderItem{{SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}},
 	})
@@ -346,6 +360,17 @@ func TestListAllOrders_OrdersAllPathGone(t *testing.T) {
 	}
 }
 
+func TestListOrders_OrdersMePathGone(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+	token := makeToken(t, "u-1", nil)
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/me", token, nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("GET /api/v1/orders/me: status=%d, want 404", w.Code)
+	}
+}
+
 func TestListAllOrders_OrderManagerReturnsAllCustomers(t *testing.T) {
 	h, svc := newTestHandler(t)
 	mux := newMux(h)
@@ -402,6 +427,45 @@ func TestGetOrder_CustomerCanReadOwnOrder(t *testing.T) {
 	w := do(t, mux, http.MethodGet, "/api/v1/orders/"+orderID, token, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestGetOrder_IncludesProductSnapshotInJSON(t *testing.T) {
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{
+		price:       250000,
+		productName: "Prada Galleria",
+		imageURL:    "https://cdn.example/bag.jpg",
+	})
+	validator := authjwt.NewHMACValidator(testSecret)
+	h := handler.New(svc, validator)
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	token := makeToken(t, "u-1", nil)
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/"+orderID, token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	var body struct {
+		Items []struct {
+			ProductName string `json:"product_name"`
+			ImageURL    string `json:"image_url"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(body.Items))
+	}
+	if body.Items[0].ProductName != "Prada Galleria" {
+		t.Fatalf("product_name = %q, want Prada Galleria", body.Items[0].ProductName)
+	}
+	if body.Items[0].ImageURL != "https://cdn.example/bag.jpg" {
+		t.Fatalf("image_url = %q, want catalog image", body.Items[0].ImageURL)
 	}
 }
 
@@ -463,11 +527,11 @@ func TestUpdateStatus_CustomerForbidden(t *testing.T) {
 func seedPaidOrder(t *testing.T, svc *service.Service, customerID string) string {
 	t.Helper()
 	orderID := seedOrder(t, svc, customerID)
-	order, err := svc.GetOrder(context.Background(), orderID)
+	order, err := svc.GetOrder(t.Context(), orderID)
 	if err != nil {
 		t.Fatalf("GetOrder: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(context.Background(), orderID, "pay-test", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay-test", order.TotalCents); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 	return orderID
@@ -480,7 +544,56 @@ func TestShipOrder_OrderManagerSuccess(t *testing.T) {
 	orderID := seedPaidOrder(t, svc, "u-1")
 	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
 
-	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, nil)
+	body := map[string]string{
+		"carrier":         "cj",
+		"tracking_number": "123456789012",
+	}
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var order domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&order); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if order.Carrier != "cj" || order.TrackingNumber != "123456789012" {
+		t.Fatalf("tracking = %s/%s", order.Carrier, order.TrackingNumber)
+	}
+}
+
+func TestShipOrder_RequiresTracking(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	orderID := seedPaidOrder(t, svc, "u-1")
+	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
+
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, map[string]string{})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestShipOrder_OtherRequiresNote(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	orderID := seedPaidOrder(t, svc, "u-1")
+	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
+
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, map[string]string{
+		"carrier":         "other",
+		"tracking_number": "INTL-1",
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, map[string]string{
+		"carrier":         "other",
+		"tracking_number": "INTL-1",
+		"carrier_note":    "DHL",
+	})
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
@@ -493,7 +606,10 @@ func TestShipOrder_CustomerForbidden(t *testing.T) {
 	orderID := seedPaidOrder(t, svc, "u-1")
 	token := makeToken(t, "u-1", nil)
 
-	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, map[string]string{
+		"carrier":         "cj",
+		"tracking_number": "123456789012",
+	})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", w.Code)
 	}
@@ -531,7 +647,7 @@ func TestCheckoutDeleteBySkuID_ForeignUserForbidden(t *testing.T) {
 	}
 
 	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
-	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
 
@@ -558,7 +674,7 @@ func TestCheckoutDeleteBySkuID_OwnerSuccess(t *testing.T) {
 	}
 
 	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
-	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
 
@@ -566,6 +682,111 @@ func TestCheckoutDeleteBySkuID_OwnerSuccess(t *testing.T) {
 	w = do(t, mux, http.MethodDelete, path, ownerToken, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCompleteCheckoutPersistsPCCCInOrderJSON(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	ownerToken := makeToken(t, "u-1", nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/checkout/sessions", ownerToken, map[string]any{"customer_id": "u-1"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+	var session domain.CheckoutSession
+	if err := json.NewDecoder(w.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+
+	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
+	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
+		t.Fatalf("seed checkout item: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/v1/checkout/sessions/%s/complete", session.ID)
+	body := map[string]any{
+		"recipient_name":  "Test User",
+		"recipient_phone": "01012345678",
+		"shipping_address": map[string]string{
+			"postal_code":   "06194",
+			"address_line1": "테헤란로 78길 14-12",
+			"city":          "강남구",
+			"province":      "서울특별시",
+			"pccc":          "p123456789012",
+		},
+	}
+	w = do(t, mux, http.MethodPost, path, ownerToken, body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("complete status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	var completeResp struct {
+		Order struct {
+			ID              string `json:"id"`
+			ShippingAddress struct {
+				PCCC string `json:"pccc"`
+			} `json:"shipping_address"`
+		} `json:"order"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&completeResp); err != nil {
+		t.Fatalf("decode complete response: %v", err)
+	}
+	if completeResp.Order.ShippingAddress.PCCC != "P123456789012" {
+		t.Fatalf("complete response pccc = %q, want P123456789012", completeResp.Order.ShippingAddress.PCCC)
+	}
+
+	w = do(t, mux, http.MethodGet, "/api/v1/orders/"+completeResp.Order.ID, ownerToken, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET order status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var orderBody struct {
+		ShippingAddress struct {
+			PCCC string `json:"pccc"`
+		} `json:"shipping_address"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&orderBody); err != nil {
+		t.Fatalf("decode order: %v", err)
+	}
+	if orderBody.ShippingAddress.PCCC != "P123456789012" {
+		t.Fatalf("GET order pccc = %q, want P123456789012", orderBody.ShippingAddress.PCCC)
+	}
+}
+
+func TestCompleteCheckoutRejectsMalformedPCCC(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	ownerToken := makeToken(t, "u-1", nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/checkout/sessions", ownerToken, map[string]any{"customer_id": "u-1"})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+	var session domain.CheckoutSession
+	if err := json.NewDecoder(w.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+
+	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
+	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
+		t.Fatalf("seed checkout item: %v", err)
+	}
+
+	path := fmt.Sprintf("/api/v1/checkout/sessions/%s/complete", session.ID)
+	body := map[string]any{
+		"recipient_name":  "Test User",
+		"recipient_phone": "01012345678",
+		"shipping_address": map[string]string{
+			"postal_code":   "06194",
+			"address_line1": "테헤란로 78길 14-12",
+			"city":          "강남구",
+			"province":      "서울특별시",
+			"pccc":          "not-a-pccc",
+		},
+	}
+	w = do(t, mux, http.MethodPost, path, ownerToken, body)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -584,7 +805,7 @@ func TestCompleteCheckoutRejectsInvalidFulfillment(t *testing.T) {
 	}
 
 	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
-	if _, err := svc.UpsertCheckoutItem(context.Background(), session.ID, item); err != nil {
+	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
 

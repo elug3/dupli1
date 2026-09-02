@@ -107,7 +107,7 @@ Owns:
 **Module:** `github.com/elug3/dupli1/order`  
 **Storage:** PostgreSQL (`orders` table set), in-memory fallback when no DB URL is configured (tests)
 
-Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions`). List: `GET /orders` (all, `order.read.all`), `?customer_id=` (ABAC), `/orders/me`. Requires Bearer JWT when `AUTH_JWKS_URL` or `JWT_SECRET` is set (RS256 JWKS from auth; access tokens only).
+Owns orders and checkout sessions at `/api/v1/orders` and `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions`). List: `GET /orders` (all, `order.read.all`), `?customer_id=` (ABAC). Requires Bearer JWT when `AUTH_JWKS_URL` or `JWT_SECRET` is set (RS256 JWKS from auth; access tokens only).
 
 ### Cart (`cart/pkg`)
 
@@ -121,7 +121,7 @@ Owns shopping carts at `/api/v1/cart` (current user) and `/api/v1/cart/customers
 **Module:** `github.com/elug3/dupli1/payment`  
 **Storage:** PostgreSQL (`payments` table set), in-memory fallback when no DB URL is configured (tests)
 
-Bypass + NANO card + local/dev simulate; publishes `payment.succeeded` on NATS. See [payment-service.md](payment-service.md).
+Bypass + NANO card; publishes `payment.succeeded` on NATS. See [payment-service.md](payment-service.md).
 
 ### Notification (`notification/pkg`)
 

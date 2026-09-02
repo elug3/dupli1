@@ -272,11 +272,11 @@ paths:
         schema:
           type: string
     get:
-      summary: Get product detail with variants
+      summary: Get product detail with variants (availableQty/inStock per variant)
       tags: [Product]
       responses:
         '200':
-          description: Success
+          description: Parent + variants; each variant includes availableQty and inStock from stock_items
     put:
       summary: Update a product
       tags: [Product]
@@ -1191,17 +1191,6 @@ paths:
         '200':
           description: Success
 
-  /api/v1/orders/me:
-    get:
-      summary: List the caller's orders
-      tags: [Order]
-      security:
-        - bearerAuth: []
-      description: Lists orders for the JWT subject (sub).
-      responses:
-        '200':
-          description: Success
-
   /api/v1/orders/{id}:
     parameters:
       - name: id
@@ -1282,22 +1271,6 @@ paths:
       security:
         - bearerAuth: []
       description: ABAC on order owner; payment.read.all bypasses it.
-      responses:
-        '200':
-          description: Success
-
-  /api/v1/payments/{id}/simulate-success:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        description: Resource id
-        schema:
-          type: string
-    get:
-      summary: Development-only payment success simulation
-      tags: [Payment]
-      description: Registered only when the dev simulate endpoint is enabled; must stay off in production.
       responses:
         '200':
           description: Success

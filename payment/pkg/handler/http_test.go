@@ -4,18 +4,19 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/payment/pkg/domain"
 	"github.com/elug3/dupli1/payment/pkg/handler"
 	"github.com/elug3/dupli1/payment/pkg/infra/checkout"
 	"github.com/elug3/dupli1/payment/pkg/infra/memory"
 	"github.com/elug3/dupli1/payment/pkg/ports"
 	"github.com/elug3/dupli1/payment/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -24,6 +25,18 @@ type stubOrderClient struct{}
 
 func (s stubOrderClient) GetOrder(_ context.Context, _, _ string) (*ports.OrderSummary, error) {
 	return &ports.OrderSummary{ID: "ord-1", CustomerID: "u-1", Status: "pending", TotalCents: 1000}, nil
+}
+
+// fakeCheckoutProvider is a minimal working ports.CheckoutProvider stand-in for
+// tests that don't care which real provider (NANO, …) is behind credit_card.
+type fakeCheckoutProvider struct{}
+
+func (fakeCheckoutProvider) CreateSession(_ context.Context, input ports.CheckoutSessionInput) (*ports.CheckoutSessionResult, error) {
+	return &ports.CheckoutSessionResult{
+		Provider:    "test",
+		ProviderRef: "test_" + input.PaymentID,
+		CheckoutURL: "http://localhost:8080/test-checkout/" + input.PaymentID,
+	}, nil
 }
 
 func makeToken(t *testing.T, secret, userID string, perms []string) string {
@@ -44,7 +57,7 @@ func makeToken(t *testing.T, secret, userID string, perms []string) string {
 
 func TestSettingsDoesNotRequireAuth(t *testing.T) {
 	repo := memory.NewRepository()
-	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
+	svc := service.New(repo, stubOrderClient{}, fakeCheckoutProvider{}, nil)
 	h := handler.New(svc, authjwt.NewHMACValidator("test-secret"))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -65,44 +78,32 @@ func TestSettingsDoesNotRequireAuth(t *testing.T) {
 	}
 }
 
-func TestSimulateSuccess_DisabledWhenNotDev(t *testing.T) {
+// TestSimulateSuccessRouteRemoved guards against reintroducing the dev-simulate
+// checkout path: local/manual testing now goes through method=bypass instead.
+func TestSimulateSuccessRouteRemoved(t *testing.T) {
 	repo := memory.NewRepository()
-	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
-	h := handler.New(svc, authjwt.NewHMACValidator("test-secret")).WithDevSimulate(false)
-	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
-
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/payments/pay-1/simulate-success", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", rec.Code)
-	}
-}
-
-func TestSimulateSuccess_EnabledInDev(t *testing.T) {
-	repo := memory.NewRepository()
-	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	svc := service.New(repo, stubOrderClient{}, fakeCheckoutProvider{}, nil)
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
 	})
 	if err != nil {
 		t.Fatalf("CreatePayment: %v", err)
 	}
 
-	h := handler.New(svc, authjwt.NewHMACValidator("test-secret")).WithDevSimulate(true)
+	h := handler.New(svc, authjwt.NewHMACValidator("test-secret"))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/payments/"+created.ID+"/simulate-success", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
 
 func TestRequireAuthFailsClosedWithoutValidator(t *testing.T) {
 	repo := memory.NewRepository()
-	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
+	svc := service.New(repo, stubOrderClient{}, fakeCheckoutProvider{}, nil)
 	h := handler.New(svc, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -120,7 +121,7 @@ func TestCreatePayment_BypassRequiresPermission(t *testing.T) {
 	const secret = "test-secret"
 	repo := memory.NewRepository()
 	pub := &recordingPublisher{}
-	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), pub)
+	svc := service.New(repo, stubOrderClient{}, fakeCheckoutProvider{}, pub)
 	h := handler.New(svc, authjwt.NewHMACValidator(secret))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -168,7 +169,7 @@ func TestCreatePayment_BypassRequiresPermission(t *testing.T) {
 func TestCreatePayment_BitcoinNotImplemented(t *testing.T) {
 	const secret = "test-secret"
 	repo := memory.NewRepository()
-	svc := service.New(repo, stubOrderClient{}, checkout.NewDevProvider("http://localhost:8080"), nil)
+	svc := service.New(repo, stubOrderClient{}, fakeCheckoutProvider{}, nil)
 	h := handler.New(svc, authjwt.NewHMACValidator(secret))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -190,7 +191,16 @@ type recordingPublisher struct {
 
 func (p *recordingPublisher) Publish(_ context.Context, subject string, event any) error {
 	if subject == ports.PaymentSucceededSubject {
-		p.events = append(p.events, event.(ports.PaymentSucceededEvent))
+		// The outbox drainer republishes the persisted json.RawMessage as-is.
+		raw, ok := event.(json.RawMessage)
+		if !ok {
+			return fmt.Errorf("unexpected event type %T", event)
+		}
+		var ev ports.PaymentSucceededEvent
+		if err := json.Unmarshal(raw, &ev); err != nil {
+			return fmt.Errorf("decode event: %w", err)
+		}
+		p.events = append(p.events, ev)
 	}
 	return nil
 }
@@ -214,7 +224,7 @@ func TestNanoReturn_SucceedsAndRedirects(t *testing.T) {
 		FailureURL:    "http://localhost:5173/checkout",
 	})
 	svc := service.New(repo, nanoOrderClient{}, nano, pub)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
 	})
 	if err != nil {
@@ -254,7 +264,7 @@ func TestNanoReturn_RejectsForgedMinimalCallback(t *testing.T) {
 		SuccessURL:    "http://localhost:5173/checkout/confirmation",
 	})
 	svc := service.New(repo, nanoOrderClient{}, nano, pub)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
 	})
 	if err != nil {
@@ -286,7 +296,7 @@ func TestNanoWebhook_SucceedsAndReturnsResultCode00(t *testing.T) {
 		PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, nanoOrderClient{}, nano, pub)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
 	})
 	if err != nil {
@@ -328,7 +338,7 @@ func TestNanoWebhook_RejectsForgedCallback(t *testing.T) {
 		PublicBaseURL: "http://localhost:8080",
 	})
 	svc := service.New(repo, nanoOrderClient{}, nano, pub)
-	created, err := svc.CreatePayment(context.Background(), service.CreatePaymentInput{
+	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentInput{
 		OrderID: "ord-1", CustomerID: "u-1", BearerToken: "token",
 	})
 	if err != nil {

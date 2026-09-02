@@ -1,7 +1,6 @@
 package httpproduct
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +9,11 @@ import (
 	"github.com/elug3/dupli1/order/pkg/ports"
 )
 
+// The full HTTP-fetching behavior (decoding, KRW conversion, trailing
+// slash, etc.) is covered by shared/pkg/productclient's own tests. These
+// tests only cover what's specific to this wrapper: mapping the shared
+// superset Variant into order's own ports.VariantInfo (ProductName, not
+// Color), and translating the shared sentinel error into order's own.
 func TestClientGetVariantMapsProductNameAndImageURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/products/variants/by-sku/BAG-001" {
@@ -29,7 +33,7 @@ func TestClientGetVariantMapsProductNameAndImageURL(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := NewClient(srv.URL, srv.Client())
-	info, err := client.GetVariant(context.Background(), "BAG-001")
+	info, err := client.GetVariant(t.Context(), "BAG-001")
 	if err != nil {
 		t.Fatalf("GetVariant: %v", err)
 	}
@@ -51,7 +55,7 @@ func TestClientGetVariantBySkuIDNotFound(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := NewClient(srv.URL, srv.Client())
-	_, err := client.GetVariantBySkuID(context.Background(), "missing")
+	_, err := client.GetVariantBySkuID(t.Context(), "missing")
 	if !errors.Is(err, ports.ErrVariantNotFound) {
 		t.Fatalf("want ErrVariantNotFound, got %v", err)
 	}

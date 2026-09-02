@@ -70,6 +70,12 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/permissions` | Permission constants, `Has`/`HasAny`, wildcard evaluation, legacy role expansion, named bundles |
 | `shared/pkg/authjwt` | JWKS/JWT validation helpers (RS256 via `AUTH_JWKS_URL`; HS256 fallback) |
 | `shared/pkg/settings` | `GET /settings` response helpers used by all services |
+| `shared/pkg/outbox` | Transactional outbox drain/retry loop (`Drainer`), used by `order` and `payment`; each service keeps its own outbox table/SQL behind the `Store` interface |
+| `shared/pkg/events` | NATS subject constants + payload structs for cross-service events (`order.*`, `payment.succeeded`, `product.*`); one canonical contract per publisher/subscriber pair instead of redeclaring subject strings and payload shapes on each side |
+| `shared/pkg/pgsslmode` | Picks `sslmode` for a Postgres connection string (local/docker hosts → `disable`, everything else including RDS → `require`); used by every service's DB bootstrap so the local-hostname list can't drift out of sync per service again |
+| `shared/pkg/natspublisher` | JSON-marshaling NATS event publisher (`New`, `Publish`, `Close`), used by `auth`, `order`, `product`, and `payment` |
+| `shared/pkg/authmiddleware` | Bearer-token HTTP middleware (`RequireAuth`, `OptionalAuth`) parameterized by `authjwt.AccessTokenValidator` and a per-service error-response callback, so each service keeps its own error body shape; used by `cart`, `order`, `payment`, `notification`, `product` |
+| `shared/pkg/productclient` | HTTP client for product's variant-lookup endpoint, returning a superset `Variant`; used by `cart` and `order`, each mapping only the display field it needs (`Color` vs `ProductName`) into its own local `ports.VariantInfo` |
 
 ### Service ownership
 
@@ -79,7 +85,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `product` | stdlib `net/http` | Parent-style + variant(SKU) catalog, images (MinIO/S3), stock & reservations (merged from former `inventory` service) |
 | `order` | stdlib `net/http` | Checkout sessions, order lifecycle, transactional outbox → NATS |
 | `cart` | stdlib `net/http` | Persistent per-customer cart; enriches lines from product |
-| `payment` | stdlib `net/http` | NANO card / manager Bypass / dev simulate; publishes `payment.succeeded` via outbox |
+| `payment` | stdlib `net/http` | NANO card / manager Bypass (also the local/dev testing path); publishes `payment.succeeded` via outbox |
 | `notification` | stdlib `net/http` | NATS subscriber → Telegram ops alerts |
 
 ### Product model

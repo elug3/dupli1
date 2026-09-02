@@ -1,8 +1,8 @@
 # Payment Service
 
-**Status:** Implemented (`payment/`). Credit card uses **NANO Solution certified payment (인증결제)** when `NANO_API_KEY` + shop credentials are set. Local Compose defaults to `PAYMENT_ALLOW_DEV_SIMULATE=true` (simulate URL) when NANO is unset. Ops can still mark paid via **Bypass** (`payment.bypass`).
+**Status:** Implemented (`payment/`). Credit card uses **NANO Solution certified payment (인증결제)** when `NANO_API_KEY` + shop credentials are set. When NANO is unset — including local Compose by default — `credit_card` is unavailable and payments (local testing included) go through **Bypass** (`payment.bypass`).
 
-The **payment service** (`dupli1-payment`) records money for **pending** orders via **NANO card**, manager **Bypass**, or (local only) **dev simulate**. Dupli1 **never** handles card numbers, CVC, or card passwords — NANO hosts the payment window.
+The **payment service** (`dupli1-payment`) records money for **pending** orders via **NANO card** or manager **Bypass**. There is no separate dev-simulate path — local/manual testing uses Bypass too. Dupli1 **never** handles card numbers, CVC, or card passwords — NANO hosts the payment window.
 
 On PG success, payment enqueues **`payment.succeeded`** in a transactional outbox (soft-success even if NATS is briefly down). The **order service** consumes it (queue group + logged handler errors), verifies amount, and moves the order to **`paid`**. A payment reconcile worker re-publishes recent succeeded payments so lost Core NATS deliveries still land (`MarkOrderPaid` is idempotent). The **notification service** sends a Telegram alert to ops. An **order manager** ships the order (`paid` → **`in_transit`**), which **commits** inventory (plan B).
 
@@ -52,11 +52,11 @@ sequenceDiagram
     Client->>Order: checkout complete
     Order-->>Client: order_id (pending, stock reserved)
 
-    Note over Client,Pay: Prod: NANO card or manager Bypass · Local: simulate-success when NANO unset
+    Note over Client,Pay: NANO card when configured · else manager Bypass (also used for local testing)
 
     Client->>Pay: POST /api/v1/payments { order_id, method }
     Pay->>Order: GET order (verify pending + total + recipient for NANO)
-    Pay->>Pay: NANO checkout URL / bypass succeed / simulate URL (dev)
+    Pay->>Pay: NANO checkout URL / bypass succeed
     Pay->>Bus: payment.succeeded { order_id, payment_id, amount_cents }
 
     Bus->>Order: consume payment.succeeded
@@ -97,10 +97,9 @@ sequenceDiagram
 
 ### Payment service owns
 
-- Payment records (NANO card + Bypass + local/dev simulate)
+- Payment records (NANO card + Bypass)
 - NANO checkout bridge + `receiveUrl` / webhook completion
 - Publishing **`payment.succeeded`** (transactional outbox + drain/reconcile workers)
-- Dev/simulate endpoints when `PAYMENT_ALLOW_DEV_SIMULATE=true` and NANO is unset (local only)
 
 ### Order service owns
 
@@ -116,7 +115,7 @@ sequenceDiagram
 
 ### Payment does **not**
 
-- Change order status directly over HTTP (except dev aids)
+- Change order status directly over HTTP
 - Touch inventory
 - Send Telegram
 
@@ -157,7 +156,6 @@ Published when order transitions `pending` → `paid`. Notification formats ops 
 | `GET` | `/api/v1/payments/{id}/nano/checkout` | — | Bridge into NANO cert checkout (when NANO configured) |
 | `POST` | `/api/v1/payments/nano/return` | — | NANO form `receiveUrl` callback → succeed/fail + redirect |
 | `POST` | `/api/v1/payments/webhooks/nano` | — | Optional JSON webhook (register URL with NANO) |
-| `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (`PAYMENT_ALLOW_DEV_SIMULATE`, NANO unset) |
 
 NANO success callbacks (`resultCode=0000`) fail closed unless `shopcode` and `reqPayAmt` match the payment and `hashValue` verifies with `NANO_API_KEY` (request-style digest over callback `timestamp`; confirm against merchant return-hash docs).
 
@@ -166,7 +164,7 @@ NANO success callbacks (`resultCode=0000`) fail closed unless `shopcode` and `re
 { "order_id": "ord_000001", "method": "credit_card" }
 ```
 
-`credit_card` requires order `recipient_name` + `recipient_phone` when NANO is configured (returns `checkout_url` to the NANO bridge). Locally without NANO, `PAYMENT_ALLOW_DEV_SIMULATE=true` returns a simulate URL. Managers with `payment.bypass` may send `method: "bypass"` (+ optional `note`) to mark paid without a PG.
+`credit_card` requires order `recipient_name` + `recipient_phone` when NANO is configured (returns `checkout_url` to the NANO bridge); it responds `501` when NANO is unset. Managers with `payment.bypass` may send `method: "bypass"` (+ optional `note`) to mark paid without a PG — this is also how local/dev environments without NANO pay.
 
 **Bypass response**
 ```json
@@ -224,7 +222,6 @@ NANO success callbacks (`resultCode=0000`) fail closed unless `shopcode` and `re
 | `DUPLI1_PAYMENT_DB` | payment | Postgres `payments` |
 | `DUPLI1_ORDER_URL` | payment | Fetch order for validation |
 | `DUPLI1_PAYMENT_PUBLIC_URL` | payment | Public gateway base for NANO `receiveUrl` + checkout bridge |
-| `PAYMENT_ALLOW_DEV_SIMULATE` | payment | `true` enables simulate when NANO unset (local Compose; **unset on ECS**) |
 | `NANO_BASE_URL` | payment | `https://dev3.nanopay.co.kr` (test) or `https://pay.nanopay.co.kr` (prod) |
 | `NANO_VER` / `NANO_SHOPCODE` / `NANO_LOGIN_ID` / `NANO_API_KEY` | payment | Merchant credentials (prod: Secrets Manager `dupli1/production/nano-payment`) |
 | `NANO_SUCCESS_URL` / `NANO_FAILURE_URL` | payment | Storefront redirects after `nano/return` |
@@ -244,7 +241,7 @@ Local Postgres (payment): `postgres://dupli1:dupli1_dev@localhost:5437/payments?
 | Case | Result |
 |------|--------|
 | Unpaid > 5 min | `canceled`, release stock |
-| Simulate abandoned / never completed | stay `pending` until TTL, then cancel |
+| Checkout abandoned / never completed | stay `pending` until TTL, then cancel |
 | Paid, ops rejects | `canceled` + refund (payment phase 2) |
 | Duplicate `payment.succeeded` | idempotent — order stays `paid` |
 | Replayed `payment.succeeded` after ship | no-op when `payment_id` already set and status ≠ `pending` |

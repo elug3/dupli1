@@ -15,7 +15,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [permissions.md](permissions.md) | Permission catalog and ABAC |
 | [service-layout.md](service-layout.md) | Module / directory layout |
 | [TODO.md](TODO.md) | Living backlog and schedule |
-| [payment-service.md](payment-service.md) | Money path (NANO / Bypass / simulate) |
+| [payment-service.md](payment-service.md) | Money path (NANO / Bypass) |
 | [checkout-session.md](checkout-session.md) | Checkout sessions in order |
 | [cart-service.md](cart-service.md) | Persistent cart |
 | [notification-telegram-bot.md](notification-telegram-bot.md) | Ops Telegram alerts |
@@ -39,6 +39,13 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [product-images-browser-access.md](product-images-browser-access.md) | CloudFront / images |
 | [product-structure-final-review.md](product-structure-final-review.md) | Field ownership locks |
 
+### Product plans (status line first)
+
+| Doc | Topic |
+|-----|-------|
+| [product-stock-tracking-plan.md](product-stock-tracking-plan.md) | Always-tracked SKUs, PDP `inStock`, cart stock-on-add (implemented) |
+| [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md) | Coupons → sales-trackable promo / referral codes (planning) |
+
 ## Release / ops
 
 | Doc | Role |
@@ -56,7 +63,7 @@ These retain design history. Prefer the living docs above for current behavior.
 
 | Doc | Notes |
 |-----|-------|
-| [product-variants-plan.md](product-variants-plan.md) | Historical — parent/variant shipped; prefer sku-system + structure review |
+| [product-variants-plan.md](product-variants-plan.md) | Historical — parent/variant shipped; prefer sku-system + structure review; stock leftovers → [product-stock-tracking-plan.md](product-stock-tracking-plan.md) |
 | [product-guest-views-plan.md](product-guest-views-plan.md) | Phase 1 shipped; guest cart still open |
 | [product-views-recommendations-plan.md](product-views-recommendations-plan.md) | Phases 0–1 shipped; co-view open |
 | [product-sku-master-data-plan.md](product-sku-master-data-plan.md) | A–C shipped; Phase D (admin UI) open |
@@ -65,8 +72,8 @@ These retain design history. Prefer the living docs above for current behavior.
 | [product-multi-category-design.md](product-multi-category-design.md) | Wallets Sep / padded Oct schedule |
 | [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md) | Keep Product/Variant names |
 | [auth-profile-extension-plan.md](auth-profile-extension-plan.md) | Phases A–B shipped; module extract open |
-| [payment-methods-plan.md](payment-methods-plan.md) | Card + Bypass done; Bitcoin planned |
+| [order-tracking-plan.md](order-tracking-plan.md) | Customer order history + required ship tracking |
 | [manager-settings-api.md](manager-settings-api.md) | Sketch only |
 | [frontend-product-variants-migration.md](frontend-product-variants-migration.md) | Sibling frontend migration notes |
 | [quality-performance-review.md](quality-performance-review.md) | Jul 2026 audit (mostly fixed) |
-| [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) | Remaining: H6, Redis cache, frontend paths |
+| [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) | Remaining: Redis cache, frontend paths (H6 done) |

@@ -1,6 +1,6 @@
 # Dupli1 quality and performance review (2026-07-15)
 
-> **Status (2026-08):** Most Critical/High findings below are **Fixed**. Remaining follow-ups: **H6** (request `context` in product PG), Redis catalog cache, frontend legacy paths / `skuId`. See [TODO.md](TODO.md) and [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
+> **Status (2026-08):** Most Critical/High findings below are **Fixed** (including **H6**). Remaining follow-ups: Redis catalog cache, frontend legacy paths / `skuId`. See [TODO.md](TODO.md) and [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 
 Audit of the Go microservice backend (`auth/`, `product/`, `order/`, `cart/`, `payment/`, `notification/`, `shared/`, `api/`). Findings are ordered by severity. Items marked **Fixed** were addressed after the review; the rest remain recommended follow-ups.
 
@@ -15,7 +15,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 | # | Finding | Status |
 |---|---------|--------|
 | C1 | **Client-controlled order prices** — `POST /orders` and checkout item APIs accept `unit_price_cents` from the client; totals and payment amounts derive from that. | **Fixed** — order/checkout resolve prices from product (client `unit_price_cents` ignored) |
-| C2 | **Unauthenticated `simulate-success`** — `GET /api/v1/payments/{id}/simulate-success` completes payment and publishes `payment.succeeded` with no auth. | **Fixed** — route only registered when NANO is unset and `PAYMENT_ALLOW_DEV_SIMULATE` is true |
+| C2 | **Unauthenticated `simulate-success`** — `GET /api/v1/payments/{id}/simulate-success` completes payment and publishes `payment.succeeded` with no auth. | **Fixed**, then **removed** — the whole dev-simulate provider/endpoint was later deleted and merged into Bypass, so the route no longer exists |
 | C3 | **Checkout delete-by-skuId skips ownership check** — `DELETE …/items/by-sku-id/{id}` omitted `withCheckoutSessionAccess`. | **Fixed** |
 | C4 | **Payment succeeded + failed NATS publish = stuck order** — `CompletePayment` saves `succeeded` then publishes; on publish failure, retry returns early without republishing. | **Fixed** — already-succeeded payments republish the event (order `MarkOrderPaid` is idempotent) |
 
@@ -30,7 +30,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 | H3 | NATS subscribers discard handler errors (`_ = handler(...)`) — at-most-once, silent loss | **Fixed** — payment outbox + soft-success + reconcile republish; order logs handler errors and uses queue group |
 | H4 | Internal `err.Error()` returned on many 500 responses (auth, product, order/cart/payment) | **Fixed** — all services return `"internal error"` on unclassified 500s; see [product-error-wrapping.md](product-error-wrapping.md) |
 | H5 | Product PG migrations ignore some `Exec` errors during migrate/seed | **Fixed** — migrate checks ADD COLUMN / UPDATE / INDEX `Exec` errors |
-| H6 | Product stores use `context.Background()` on request-path queries | Open — plumb request context |
+| H6 | Product stores use `context.Background()` on request-path queries | **Fixed** — ports/services/handlers pass `r.Context()`; `Background` only for migrate/seed/CLI/bootstrap/shutdown |
 | H7 | `requireAuth` no-ops when JWT validator is nil (order/cart/payment); product fails closed | **Fixed** — bootstrap requires JWKS/JWT; handlers return 503; Bypass only with `payment.bypass` |
 | H8 | Duplicated `authjwt` in four services — drift risk | **Fixed** — `shared/pkg/authjwt` |
 | H9 | JWKS refresh has no `singleflight` (thundering herd on cold start / key rotation) | **Fixed** — `singleflight` around JWKS refresh |
@@ -79,7 +79,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 | Area | Gap |
 |------|-----|
 | Order | Checkout by-sku-id ABAC (now covered); payment consumer; expiry worker; price trust |
-| Payment | simulate-success gating (now covered); publish-after-save retry (now covered); NANO return/webhook |
+| Payment | publish-after-save retry (now covered); NANO return/webhook |
 | Product | PG store / migrate failure; pagination (now covered at handler level) |
 | Cart | Enrichment failure / partial availability behavior |
 | Notification | NATS subscriber + Telegram client |

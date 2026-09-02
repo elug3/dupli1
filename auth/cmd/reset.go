@@ -27,6 +27,7 @@ func newResetCmd() *cobra.Command {
 				return fmt.Errorf("--email is required")
 			}
 
+			// CLI command root; no request context available.
 			plainPassword, err := bootstrap.ResetAdminAccount(context.Background(), dbURL, adminID, email)
 			if err != nil {
 				return err

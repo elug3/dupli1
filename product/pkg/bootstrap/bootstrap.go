@@ -65,6 +65,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	}
 
 	svc := service.NewProductSearchService(store, imgStore, eventPublisher)
+
 	couponStore, err := pg.NewCouponStore(store.Pool())
 	if err != nil {
 		store.Close()
@@ -78,6 +79,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 	inventorySvc := service.NewInventoryService(inventoryStore, store)
+	svc.WithInventory(inventoryStore)
 
 	catalogStore := pg.NewCatalogStore(store.Pool())
 	catalogSvc := service.NewCatalogService(catalogStore)

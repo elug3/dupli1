@@ -54,7 +54,7 @@ func TestClient_RetriesOnceOnUnauthorized(t *testing.T) {
 	src := &flakyTokenSource{tokens: []string{"stale", "fresh"}}
 	client := httpstock.NewClient(srv.URL, srv.Client(), src)
 
-	id, err := client.Reserve(context.Background(), "ord-1", []ports.StockItem{
+	id, err := client.Reserve(t.Context(), "ord-1", []ports.StockItem{
 		{SKU: "SKU-1", Quantity: 1},
 	})
 	if err != nil {
@@ -76,7 +76,7 @@ func TestClient_CommitReservationAlreadyCommitted(t *testing.T) {
 	defer srv.Close()
 
 	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "fixed")
-	err := client.CommitReservation(context.Background(), "res-1")
+	err := client.CommitReservation(t.Context(), "res-1")
 	if !errors.Is(err, ports.ErrReservationAlreadyCommitted) {
 		t.Fatalf("err = %v, want ErrReservationAlreadyCommitted", err)
 	}
@@ -90,7 +90,7 @@ func TestClient_CommitReservationAlreadyReleased(t *testing.T) {
 	defer srv.Close()
 
 	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "fixed")
-	err := client.CommitReservation(context.Background(), "res-released")
+	err := client.CommitReservation(t.Context(), "res-released")
 	if !errors.Is(err, ports.ErrReservationAlreadyReleased) {
 		t.Fatalf("err = %v, want ErrReservationAlreadyReleased", err)
 	}
@@ -104,7 +104,7 @@ func TestClient_CommitReservationClosed(t *testing.T) {
 	defer srv.Close()
 
 	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "fixed")
-	err := client.CommitReservation(context.Background(), "res-1")
+	err := client.CommitReservation(t.Context(), "res-1")
 	if !errors.Is(err, ports.ErrReservationClosed) {
 		t.Fatalf("err = %v, want ErrReservationClosed", err)
 	}
@@ -118,7 +118,7 @@ func TestClient_UnauthorizedErrorIsClear(t *testing.T) {
 	defer srv.Close()
 
 	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "bad")
-	err := client.CommitReservation(context.Background(), "res-1")
+	err := client.CommitReservation(t.Context(), "res-1")
 	if !errors.Is(err, httpstock.ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
@@ -138,7 +138,7 @@ func TestClient_StaticBearer(t *testing.T) {
 	defer srv.Close()
 
 	client := httpstock.NewClientWithBearer(srv.URL, srv.Client(), "fixed")
-	if err := client.CommitReservation(context.Background(), "res-1"); err != nil {
+	if err := client.CommitReservation(t.Context(), "res-1"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -155,14 +155,14 @@ func TestClient_UsesTokenSource(t *testing.T) {
 	defer srv.Close()
 
 	client := httpstock.NewClient(srv.URL, srv.Client(), httpauth.StaticToken("from-source"))
-	if err := client.ReleaseReservation(context.Background(), "res-1"); err != nil {
+	if err := client.ReleaseReservation(t.Context(), "res-1"); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestClient_NoTokenSource(t *testing.T) {
 	client := httpstock.NewClient("http://example.invalid", nil, nil)
-	_, err := client.Reserve(context.Background(), "ord-1", []ports.StockItem{{SKU: "S", Quantity: 1}})
+	_, err := client.Reserve(t.Context(), "ord-1", []ports.StockItem{{SKU: "S", Quantity: 1}})
 	if !errors.Is(err, httpstock.ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}

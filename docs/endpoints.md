@@ -364,9 +364,8 @@ See [cart-service.md](cart-service.md) for architecture, boundaries with invento
 | `GET` | `/api/v1/payments/{id}/nano/checkout` | — | Bridge into NANO certified card checkout |
 | `POST` | `/api/v1/payments/nano/return` | — | NANO form `receiveUrl` callback |
 | `POST` | `/api/v1/payments/webhooks/nano` | — | Optional NANO JSON webhook |
-| `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (`PAYMENT_ALLOW_DEV_SIMULATE`, NANO unset): mark payment succeeded |
 
-See [payment-service.md](payment-service.md) for NANO / Bypass / local simulate, 5-minute auto-cancel, and `payment.succeeded` → `paid`. Methods (`credit_card` / `bypass` / `bitcoin` planned): [payment-methods-plan.md](payment-methods-plan.md).
+See [payment-service.md](payment-service.md) for NANO / Bypass, 5-minute auto-cancel, and `payment.succeeded` → `paid`. Methods (`credit_card` / `bypass` / `bitcoin` planned): [payment-methods-plan.md](payment-methods-plan.md).
 
 ---
 
@@ -475,7 +474,6 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | `POST` | `/api/v1/orders` | ABAC / `order.create` | Create a new order |
 | `GET` | `/api/v1/orders` | `order.read.all` | List all orders |
 | `GET` | `/api/v1/orders?customer_id={id}` | ABAC / `order.read.all` | List orders for a customer |
-| `GET` | `/api/v1/orders/me` | Bearer | List the caller's orders |
 | `GET` | `/api/v1/orders/{id}` | ABAC / `order.read.all` | Get a single order |
 | `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | Ship order (`paid` → `in_transit`, commit stock) |
 | `PUT` | `/api/v1/orders/{id}/status` | `order.status.update` | Cancel or fulfill |
@@ -516,16 +514,12 @@ Response `200`:
 
 ### GET /api/v1/orders?customer_id=cust-123
 
-ABAC on `customer_id`; `order.read.all` bypasses it.
+ABAC on `customer_id`; `order.read.all` bypasses it. Storefront callers use their own user id here (there is no `/orders/me`).
 
 Response `200`:
 ```json
 { "total": 2, "orders": [ /* order objects */ ] }
 ```
-
-### GET /api/v1/orders/me
-
-Lists orders for the JWT subject (`sub`). Same response shape as list-by-customer.
 
 ### GET /api/v1/orders/{id}
 
@@ -551,7 +545,20 @@ Response `200`: updated order object. Errors: `400` invalid transition, `404` no
 
 Moves a **`paid`** order to **`in_transit`** and commits inventory reservations. Requires `order.ship`.
 
-Response `200`: updated order object with `shipped_by`, `shipped_at`. Errors: `400` invalid state, `404` not found.
+Request body (required):
+```json
+{
+  "carrier": "cj",
+  "tracking_number": "123456789012",
+  "carrier_note": ""
+}
+```
+
+- `carrier` — one of `cj`, `hanjin`, `lotte`, `logen`, `epost`, `other`
+- `tracking_number` — required for every ship
+- `carrier_note` — required when `carrier` is `other` (free-text carrier name); ignored otherwise
+
+Response `200`: updated order object with `shipped_by`, `shipped_at`, `carrier`, `tracking_number`, and optional `carrier_note`. Errors: `400` invalid state or missing/invalid tracking, `404` not found.
 
 Order object shape:
 ```json

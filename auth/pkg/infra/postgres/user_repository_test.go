@@ -32,6 +32,7 @@ func TestMain(m *testing.M) {
 	if err := db.Ping(); err != nil {
 		panic("ping postgres: " + err.Error())
 	}
+	// test harness: no HTTP request context
 	if err := bootstrap.MigrateSchema(context.Background(), db); err != nil {
 		panic("migrate schema: " + err.Error())
 	}
@@ -65,7 +66,7 @@ func newTestUser(t *testing.T) *domain.User {
 
 func TestSave_And_FindByEmail(t *testing.T) {
 	requirePostgres(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	u := newTestUser(t)
 
 	if err := repo.Save(ctx, u); err != nil {
@@ -92,7 +93,7 @@ func TestSave_And_FindByEmail(t *testing.T) {
 
 func TestFindByEmail_NotFound(t *testing.T) {
 	requirePostgres(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	got, err := repo.FindByEmail(ctx, "nobody@example.com")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -104,7 +105,7 @@ func TestFindByEmail_NotFound(t *testing.T) {
 
 func TestSave_And_FindByID(t *testing.T) {
 	requirePostgres(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	u := newTestUser(t)
 
 	if err := repo.Save(ctx, u); err != nil {
@@ -125,7 +126,7 @@ func TestSave_And_FindByID(t *testing.T) {
 
 func TestFindByID_NotFound(t *testing.T) {
 	requirePostgres(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	got, err := repo.FindByID(ctx, uuid.New().String())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -137,7 +138,7 @@ func TestFindByID_NotFound(t *testing.T) {
 
 func TestSave_UpdateExisting(t *testing.T) {
 	requirePostgres(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	u := newTestUser(t)
 
 	if err := repo.Save(ctx, u); err != nil {
@@ -161,7 +162,7 @@ func TestSave_UpdateExisting(t *testing.T) {
 
 func TestSave_DuplicateEmail(t *testing.T) {
 	requirePostgres(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	u1 := newTestUser(t)
 	if err := repo.Save(ctx, u1); err != nil {
 		t.Fatalf("Save u1: %v", err)
@@ -180,7 +181,7 @@ func TestSave_DuplicateEmail(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	requirePostgres(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	u := newTestUser(t)
 
 	if err := repo.Save(ctx, u); err != nil {
@@ -201,7 +202,7 @@ func TestDelete(t *testing.T) {
 
 func TestDelete_NonExistent(t *testing.T) {
 	requirePostgres(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	if err := repo.Delete(ctx, uuid.New().String()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -209,7 +210,7 @@ func TestDelete_NonExistent(t *testing.T) {
 
 func TestPasswordRoundtrip(t *testing.T) {
 	requirePostgres(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	u := newTestUser(t)
 
 	if err := repo.Save(ctx, u); err != nil {

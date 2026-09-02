@@ -1,7 +1,6 @@
 package checkout
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -54,7 +53,7 @@ func TestNanoProviderCreateSession(t *testing.T) {
 		APIKey:        "test-key",
 		PublicBaseURL: "https://dupli1.com",
 	})
-	sess, err := p.CreateSession(context.Background(), ports.CheckoutSessionInput{
+	sess, err := p.CreateSession(t.Context(), ports.CheckoutSessionInput{
 		OrderID:     "ord_1",
 		PaymentID:   "pay_000001",
 		AmountCents: 70000,
@@ -76,7 +75,7 @@ func TestNanoProviderRequiresPayer(t *testing.T) {
 	p := NewNanoProvider(NanoConfig{
 		ShopCode: "240000005", LoginID: "shoptest", APIKey: "k", PublicBaseURL: "http://localhost:8080",
 	})
-	_, err := p.CreateSession(context.Background(), ports.CheckoutSessionInput{
+	_, err := p.CreateSession(t.Context(), ports.CheckoutSessionInput{
 		PaymentID: "pay_1", AmountCents: 1000, OrderName: "", OrderTel: "01012345678",
 	})
 	if err == nil {
@@ -127,5 +126,35 @@ func TestIsMobileUserAgent(t *testing.T) {
 func TestNormalizeKRPhone(t *testing.T) {
 	if got := normalizeKRPhone("010-4112-5167"); got != "01041125167" {
 		t.Fatalf("got %s", got)
+	}
+}
+
+func TestNanoConfigEnabled(t *testing.T) {
+	if (NanoConfig{}).Enabled() {
+		t.Fatal("empty config must not enable nano")
+	}
+	if !(NanoConfig{ShopCode: "s", LoginID: "l", APIKey: "k"}).Enabled() {
+		t.Fatal("full credentials should enable nano")
+	}
+	partial := []NanoConfig{
+		{ShopCode: "s", LoginID: "l"},
+		{ShopCode: "s", APIKey: "k"},
+		{LoginID: "l", APIKey: "k"},
+		{ShopCode: "  ", LoginID: "l", APIKey: "k"},
+	}
+	for i, cfg := range partial {
+		if cfg.Enabled() {
+			t.Fatalf("partial config %d should not enable nano", i)
+		}
+	}
+}
+
+func TestNanoConfigNormalizedBaseURL(t *testing.T) {
+	if got := (NanoConfig{}).normalizedBaseURL(); got != nanoDefaultTestBase {
+		t.Fatalf("empty base = %q, want sandbox default %q", got, nanoDefaultTestBase)
+	}
+	prod := NanoConfig{BaseURL: "https://pay.nanopay.co.kr/"}.normalizedBaseURL()
+	if prod != "https://pay.nanopay.co.kr" {
+		t.Fatalf("prod base = %q", prod)
 	}
 }

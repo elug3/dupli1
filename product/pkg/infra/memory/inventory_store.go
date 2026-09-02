@@ -52,6 +52,25 @@ func (s *InventoryStore) GetItem(ctx context.Context, skuID string) (*domain.Sto
 	return &copied, nil
 }
 
+func (s *InventoryStore) GetItems(ctx context.Context, skuIDs []string) (map[string]*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	out := make(map[string]*domain.StockItem, len(skuIDs))
+	if len(skuIDs) == 0 {
+		return out, nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, id := range skuIDs {
+		if item, ok := s.items[id]; ok {
+			copied := *item
+			out[id] = &copied
+		}
+	}
+	return out, nil
+}
+
 func (s *InventoryStore) SaveItem(ctx context.Context, item *domain.StockItem) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -63,6 +82,49 @@ func (s *InventoryStore) SaveItem(ctx context.Context, item *domain.StockItem) e
 	copied := *item
 	s.items[item.SkuID] = &copied
 	return nil
+}
+
+func (s *InventoryStore) SetQuantity(ctx context.Context, skuID string, quantity int, updatedAt time.Time) (*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	item, ok := s.items[skuID]
+	if !ok {
+		return nil, ports.ErrInventoryItemNotFound
+	}
+	if quantity < item.Reserved {
+		return nil, ports.ErrInsufficientStock
+	}
+	item.Quantity = quantity
+	item.UpdatedAt = updatedAt
+	copied := *item
+	return &copied, nil
+}
+
+func (s *InventoryStore) AdjustQuantity(ctx context.Context, skuID string, delta int, updatedAt time.Time) (*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	item, ok := s.items[skuID]
+	if !ok {
+		return nil, ports.ErrInventoryItemNotFound
+	}
+	nextQuantity := item.Quantity + delta
+	if nextQuantity < 0 || nextQuantity < item.Reserved {
+		return nil, ports.ErrInsufficientStock
+	}
+	item.Quantity = nextQuantity
+	item.UpdatedAt = updatedAt
+	copied := *item
+	return &copied, nil
 }
 
 func (s *InventoryStore) GetReservation(ctx context.Context, id string) (*domain.Reservation, error) {

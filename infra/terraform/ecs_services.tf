@@ -454,7 +454,7 @@ resource "aws_ecs_task_definition" "payment" {
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
         { name = "DUPLI1_ORDER_URL", value = "http://order.dupli1.local:8080" },
         { name = "DUPLI1_PAYMENT_PUBLIC_URL", value = "https://dupli1.com" },
-        { name = "NANO_BASE_URL", value = "https://pay.nanopay.co.kr" },
+        { name = "NANO_BASE_URL", value = var.nano_base_url },
         { name = "NANO_SUCCESS_URL", value = "https://dupli1.com/checkout/confirmation" },
         { name = "NANO_FAILURE_URL", value = "https://dupli1.com/checkout" },
       ]
@@ -516,8 +516,12 @@ resource "aws_ecs_task_definition" "notification" {
         }
       ]
       environment = [
+        # Match nginx upstream dupli1-notification:8080 (default process port is 8084).
+        { name = "DUPLI1_NOTIFICATION_ADDR", value = ":8080" },
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
         { name = "MANAGE_WEB_URL", value = "https://manage.dupli1.com" },
+        # Required for manage-web /telegram (manager JWT via auth JWKS).
+        { name = "AUTH_JWKS_URL", value = "http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json" },
       ]
       secrets = [
         {

@@ -31,8 +31,12 @@ type ServerOptions struct {
 
 func NewServerOptions() *ServerOptions {
 	return &ServerOptions{
-		Addr:            ":8083",
-		GatewayURL:      "http://localhost:8080",
+		Addr: ":8083",
+		// GatewayURL must stay empty unless set via DUPLI1_GATEWAY_URL / -gateway-url.
+		// A localhost default would shadow DUPLI1_PRODUCT_URL (preferred in older ECS
+		// task defs) and make order call itself → 404 → checkout "unavailable items".
+		// Local Compose sets DUPLI1_GATEWAY_URL; bare `go run` can still use ProductURL.
+		ProductURL:      "http://localhost:8081",
 		ReadTimeout:     5 * time.Second,
 		WriteTimeout:    10 * time.Second,
 		IdleTimeout:     120 * time.Second,

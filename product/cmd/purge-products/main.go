@@ -64,6 +64,7 @@ Options:
 		os.Exit(1)
 	}
 
+	// CLI maintenance tool: no HTTP request context.
 	ctx := context.Background()
 
 	conn, err := pgx.Connect(ctx, *productDB)

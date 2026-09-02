@@ -2,7 +2,8 @@ package ports
 
 import (
 	"errors"
-	"time"
+
+	"github.com/elug3/dupli1/shared/pkg/outbox"
 )
 
 var (
@@ -11,22 +12,12 @@ var (
 )
 
 // OutboxEvent is enqueued in the same transaction as an order write.
-type OutboxEvent struct {
-	AggregateID string
-	Subject     string
-	Payload     []byte // JSON bytes matching the published event shape
-}
+// Alias of the shared outbox type — see shared/pkg/outbox.
+type OutboxEvent = outbox.Event
 
 // OutboxMessage is a persisted outbox row awaiting (or completing) publish.
-type OutboxMessage struct {
-	ID          int64
-	AggregateID string
-	Subject     string
-	Payload     []byte
-	CreatedAt   time.Time
-	Attempts    int
-	LastError   string
-}
+// Alias of the shared outbox type — see shared/pkg/outbox.
+type OutboxMessage = outbox.Message
 
 // IdempotencyRecord links a client Idempotency-Key to a created order.
 type IdempotencyRecord struct {

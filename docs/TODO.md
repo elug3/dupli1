@@ -47,7 +47,9 @@ See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criter
 
 ## v1.2 (commerce & product — deferred)
 
-Guest cart, refunds, co-view, legacy alias removal, manager settings, H6, Redis cache — see v1.1 plan “Deferred to v1.2” table.
+Guest cart, refunds, co-view, legacy alias removal, manager settings, Redis cache — see v1.1 plan “Deferred to v1.2” table.
+
+- [ ] **Promo / referral codes** — harden coupons (expiry, caps, ledger) + sales attribution by code/partner; no separate referral service — [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md)
 
 ## Notification service (reviewed 2026-08-07)
 
@@ -129,7 +131,7 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 
 ### Still open (priority)
 
-Implement remaining open items in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md). Money-path Criticals (**C1** pricing, **H7** JWT fail-closed) and most Highs (**H1**/**H3**/**H4**/**H5**/**H8**/**H9**) are **done**; still open: Redis catalog cache, plumb request `context` through product PG stores (**H6**), frontend legacy-path/`skuId` migration.
+Implement remaining open items in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md). Money-path Criticals (**C1** pricing, **H7** JWT fail-closed) and Highs (**H1**/**H3**/**H4**/**H5**/**H6**/**H8**/**H9**) are **done**; still open: Redis catalog cache, frontend legacy-path/`skuId` migration.
 
 - [ ] **API path convention** — `/api/v1/{service_name}/...` only. Canonical paths added; legacy top-level aliases kept until clients migrate, then remove.
   - [x] New canonical paths registered (product / order / cart) with legacy aliases
@@ -157,7 +159,7 @@ Implement remaining open items in [quality-bugs-fix-plan.md](quality-bugs-fix-pl
   - [x] `GET /api/v1/products/variants?sku_ids=` batch public variant lookup (max 50)
   - [ ] Redis catalog cache
   - [ ] Cart client switch from N GETs to batch (optional follow-up)
-- [ ] Plumb request `context` through product PG stores (**H6**)
+- [x] Plumb request `context` through product PG stores (**H6**) — ports/services/handlers pass `r.Context()`; `Background` only for migrate/seed/CLI/bootstrap/shutdown
 - [x] Sanitize product 500 responses (error wrapping) — see [product-error-wrapping.md](product-error-wrapping.md)
 - [x] Sanitize auth/order/cart/payment 500 responses (**H4**) — stop returning raw `err.Error()` to clients
 - [x] Product migrate: check ignored `Exec` errors (**H5**)
@@ -185,7 +187,8 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 
 ## Product API
 
-- [x] **Parent + variants** — implemented; see [product-variants-plan.md](product-variants-plan.md). Remaining: inventory `inStock` enrichment on PDP, drop legacy parent `color`/`stock`/`imageUrls` columns, merge pre-existing duplicate color products.
+- [x] **Parent + variants** — implemented; see [product-variants-plan.md](product-variants-plan.md). Remaining: drop legacy parent `color`/`imageUrls` columns, merge pre-existing duplicate color products.
+- [x] **Product stock tracking** — always-tracked SKUs, PDP `inStock`/`availableQty`, cart stock-on-add; [product-stock-tracking-plan.md](product-stock-tracking-plan.md).
 - [x] **Product attributes memo** — parent `attributes` string map (JSONB); PDP display only — [product-attributes.md](product-attributes.md).
 - [ ] **Auth-aware `GET /api/v1/products/{id}`** — managers should see drafts/cost on PDP without a separate `/manage` path (optional Bearer, same pattern as list search).
 - [x] **Guest session cookie + unique product view counter** — implemented; see [product-guest-views-plan.md](product-guest-views-plan.md). Browser `dupli1_guest` cookie; exact unique views per parent product on public PDP (`viewCount`).
@@ -212,7 +215,7 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 
 ### Found while implementing SkuID + inventory merge (2026-07-10)
 
-- [ ] **Frontend repos (`dupli1-web`, `dupli1-manage-web`) not yet migrated to `skuId`** — PDP variant JSON exposes both `sku` and `skuId`; storefront and admin clients still only send/read `sku`. See the "SkuId migration" section in [frontend-product-variants-migration.md](frontend-product-variants-migration.md).
+- [ ] **Frontend repos (`dupli1-web`, `dupli1-manage-web`) legacy path + `skuId` finish** — clients prefer `skuId` for cart/inventory where known, but still call legacy prefixes (`/api/v1/inventory/*`, `/coupons`, `/catalog`, …). Migrate to canonical `/api/v1/products/…` (and peers), then drop aliases. See [frontend-product-variants-migration.md](frontend-product-variants-migration.md).
 
 ## AWS deployment readiness (reviewed 2026-07-13)
 

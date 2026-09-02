@@ -7,26 +7,22 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
-// AccessTokenValidator validates Bearer access tokens and returns claims.
-type AccessTokenValidator interface {
-	ValidateAccessToken(token string) (authjwt.Claims, error)
-}
-
 type Handler struct {
 	svc          *service.Service
-	jwtValidator AccessTokenValidator
+	jwtValidator authjwt.AccessTokenValidator
 	settings     settings.Response
 }
 
-func New(svc *service.Service, jwtValidator AccessTokenValidator) *Handler {
+func New(svc *service.Service, jwtValidator authjwt.AccessTokenValidator) *Handler {
 	return &Handler{
 		svc:          svc,
 		jwtValidator: jwtValidator,
@@ -45,12 +41,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/orders/health", h.health)
 	mux.HandleFunc("/settings", h.settingsHandler)
 	mux.HandleFunc("/api/v1/orders/settings", h.settingsHandler)
-	// Checkout and /me before /api/v1/orders/ catch-all so they are not shadowed.
+	// Checkout before /api/v1/orders/ catch-all so it is not shadowed.
 	mux.HandleFunc("/api/v1/orders/checkout/sessions", h.requireAuth(h.checkoutSessions))
 	mux.HandleFunc("/api/v1/orders/checkout/sessions/", h.requireAuth(h.checkoutSession))
 	mux.HandleFunc("/api/v1/checkout/sessions", h.requireAuth(h.checkoutSessions))
 	mux.HandleFunc("/api/v1/checkout/sessions/", h.requireAuth(h.checkoutSession))
-	mux.HandleFunc("/api/v1/orders/me", h.requireAuth(h.listMyOrders))
 	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
 	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
 }
@@ -74,26 +69,7 @@ func (h *Handler) settingsHandler(w http.ResponseWriter, r *http.Request) {
 // requireAuth extracts and validates the Bearer token, stores claims in context.
 // Fails closed when no validator is configured (misconfigured deploy).
 func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.jwtValidator == nil {
-			respondError(w, http.StatusServiceUnavailable, "auth not configured")
-			return
-		}
-
-		authHeader := r.Header.Get("Authorization")
-		if len(authHeader) < 8 || !strings.EqualFold(authHeader[:7], "bearer ") {
-			respondError(w, http.StatusUnauthorized, "missing or malformed Authorization header")
-			return
-		}
-
-		claims, err := h.jwtValidator.ValidateAccessToken(authHeader[7:])
-		if err != nil {
-			respondError(w, http.StatusUnauthorized, "invalid token")
-			return
-		}
-
-		next(w, r.WithContext(authjwt.WithClaims(r.Context(), claims)))
-	}
+	return authmiddleware.RequireAuth(h.jwtValidator, respondError)(next)
 }
 
 func (h *Handler) orders(w http.ResponseWriter, r *http.Request) {
@@ -189,24 +165,6 @@ func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) listMyOrders(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	claims, _ := authjwt.FromContext(r.Context())
-	orders, err := h.svc.ListCustomerOrders(r.Context(), claims.UserID)
-	if err != nil {
-		respondServiceError(w, err)
-		return
-	}
-	respondJSON(w, http.StatusOK, map[string]any{
-		"total":  len(orders),
-		"orders": orders,
-	})
-}
-
 func (h *Handler) order(w http.ResponseWriter, r *http.Request) {
 	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/v1/orders/"))
 	if len(parts) == 0 || parts[0] == "" {
@@ -260,7 +218,23 @@ func (h *Handler) shipOrder(w http.ResponseWriter, r *http.Request, orderID stri
 		return
 	}
 
-	order, err := h.svc.ShipOrder(r.Context(), orderID, claims.UserID)
+	var req struct {
+		Carrier        string `json:"carrier"`
+		TrackingNumber string `json:"tracking_number"`
+		CarrierNote    string `json:"carrier_note"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, "carrier and tracking_number are required")
+		return
+	}
+
+	tracking, err := domain.NormalizeShipmentTracking(req.Carrier, req.TrackingNumber, req.CarrierNote)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	order, err := h.svc.ShipOrder(r.Context(), orderID, claims.UserID, tracking)
 	if err != nil {
 		respondServiceError(w, err)
 		return
@@ -325,7 +299,7 @@ func respondServiceError(w http.ResponseWriter, err error) {
 		respondError(w, http.StatusBadGateway, err.Error())
 	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, domain.ErrPaymentAmountMismatch),
 		errors.Is(err, domain.ErrInvalidCheckoutSession), errors.Is(err, domain.ErrEmptyCheckout),
-		errors.Is(err, domain.ErrInvalidFulfillment),
+		errors.Is(err, domain.ErrInvalidFulfillment), errors.Is(err, domain.ErrInvalidShipment),
 		errors.Is(err, domain.ErrSessionNotOpen):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:

@@ -13,7 +13,7 @@ import (
 var usageStr = `
 Usage: dupli1-payment [OPTIONS]
 
-A payment server that records NANO card / Bypass / dev-simulate payments and publishes payment events.
+A payment server that records NANO card / Bypass payments and publishes payment events.
 
 Options:
   -host string
@@ -46,6 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// CLI process lifetime root for signal handling.
 	interrupt, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/elug3/dupli1/notification/pkg/domain"
 	"github.com/elug3/dupli1/notification/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/pgsslmode"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/oklog/ulid/v2"
@@ -21,6 +22,7 @@ type TelegramRepository struct {
 
 func NewTelegramRepository(connString string) (*TelegramRepository, error) {
 	connString = withPostgresSSLMode(connString)
+	// Pool connect at process start; no request context available.
 	pool, err := pgxpool.Connect(context.Background(), connString)
 	if err != nil {
 		return nil, fmt.Errorf("connect notification database: %w", err)
@@ -40,6 +42,7 @@ func (r *TelegramRepository) Close() {
 }
 
 func (r *TelegramRepository) migrate() error {
+	// Startup schema migration; no request-scoped context to propagate.
 	ctx := context.Background()
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS telegram_subscriptions (
@@ -308,12 +311,10 @@ func scanSubscriptions(rows pgx.Rows) ([]domain.TelegramSubscription, error) {
 	return out, rows.Err()
 }
 
+// withPostgresSSLMode picks a safe sslmode for connString — see shared/pkg/pgsslmode.
+// Previously this unconditionally defaulted to "disable" regardless of host,
+// unlike every other service, which is the wrong default for a connection
+// string that omits sslmode and turns out to be a managed database.
 func withPostgresSSLMode(connString string) string {
-	if strings.Contains(connString, "sslmode=") {
-		return connString
-	}
-	if strings.Contains(connString, "?") {
-		return connString + "&sslmode=disable"
-	}
-	return connString + "?sslmode=disable"
+	return pgsslmode.WithSSLMode(connString)
 }

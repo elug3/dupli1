@@ -31,6 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// CLI migration tool: no HTTP request context.
 	ctx := context.Background()
 
 	product, err := pgx.Connect(ctx, *productDB)

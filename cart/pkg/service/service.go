@@ -79,6 +79,9 @@ func (s *Service) ReplaceItems(ctx context.Context, customerID string, inputs []
 		}
 		stored[i].SkuID = info.SkuID
 		stored[i].SKU = info.SKU
+		if err := s.checkAvailableQty(ctx, stored[i]); err != nil {
+			return nil, err
+		}
 	}
 	if len(unavailable) > 0 {
 		return nil, &UnavailableVariantsError{Items: unavailable}
@@ -114,6 +117,9 @@ func (s *Service) UpsertItem(ctx context.Context, customerID string, input ItemI
 	}
 	item.SkuID = info.SkuID
 	item.SKU = info.SKU
+	if err := s.checkAvailableQty(ctx, item); err != nil {
+		return nil, err
+	}
 
 	now := s.now()
 	if err := s.repo.UpsertItem(ctx, customerID, item, now); err != nil {
@@ -266,4 +272,23 @@ func (s *Service) lookupAvailableQty(ctx context.Context, skuID, sku string) (in
 		return s.inventory.GetAvailableQtyBySkuID(ctx, skuID)
 	}
 	return s.inventory.GetAvailableQty(ctx, sku)
+}
+
+func (s *Service) checkAvailableQty(ctx context.Context, item domain.StoredItem) error {
+	if s.inventory == nil {
+		return nil
+	}
+	qty, err := s.lookupAvailableQty(ctx, item.SkuID, item.SKU)
+	if err != nil {
+		return err
+	}
+	if item.Quantity > qty {
+		return &InsufficientStockError{
+			SkuID:        item.SkuID,
+			SKU:          item.SKU,
+			Requested:    item.Quantity,
+			AvailableQty: qty,
+		}
+	}
+	return nil
 }

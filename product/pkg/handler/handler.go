@@ -243,7 +243,7 @@ func (h *Handler) SearchProducts(w http.ResponseWriter, r *http.Request) {
 	filter["limit"] = strconv.Itoa(limit)
 	filter["offset"] = strconv.Itoa(offset)
 
-	results, total, err := h.svc.SearchProducts(filter, public)
+	results, total, err := h.svc.SearchProducts(r.Context(), filter, public)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -303,9 +303,9 @@ func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if claims, ok := authjwt.FromContext(r.Context()); ok && claims.HasPermission(permissions.ProductRead) {
 		manager = true
-		product, err = h.svc.GetProduct(id)
+		product, err = h.svc.GetProduct(r.Context(), id)
 	} else {
-		product, err = h.svc.GetPublicProduct(id)
+		product, err = h.svc.GetPublicProduct(r.Context(), id)
 	}
 	if err != nil {
 		h.respondServiceError(w, err)
@@ -325,7 +325,7 @@ func (h *Handler) recordProductView(w http.ResponseWriter, r *http.Request, prod
 	if minted {
 		h.setGuestCookie(w, guestID)
 	}
-	_, viewCount, err := h.viewStore.RecordUniqueView(guestID, product.ID)
+	_, viewCount, err := h.viewStore.RecordUniqueView(r.Context(), guestID, product.ID)
 	if err != nil {
 		log.Printf("product view: record %s for guest: %v", product.ID, err)
 		return
@@ -353,7 +353,7 @@ func (h *Handler) PublicGetRecommendations(w http.ResponseWriter, r *http.Reques
 		}
 		limit = n
 	}
-	items, err := h.svc.Recommend(id, limit)
+	items, err := h.svc.Recommend(r.Context(), id, limit)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -374,7 +374,7 @@ func (h *Handler) PublicListVariants(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "sku_ids is required")
 		return
 	}
-	items, missing, err := h.svc.GetPublicVariantsBySkuIDs(strings.Split(raw, ","))
+	items, missing, err := h.svc.GetPublicVariantsBySkuIDs(r.Context(), strings.Split(raw, ","))
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -398,7 +398,7 @@ func (h *Handler) PublicGetVariant(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "missing sku")
 		return
 	}
-	variant, err := h.svc.GetPublicVariant(sku)
+	variant, err := h.svc.GetPublicVariant(r.Context(), sku)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -416,7 +416,7 @@ func (h *Handler) PublicGetVariantBySkuID(w http.ResponseWriter, r *http.Request
 		h.respondError(w, http.StatusBadRequest, "missing skuId")
 		return
 	}
-	variant, err := h.svc.GetPublicVariantBySkuID(skuID)
+	variant, err := h.svc.GetPublicVariantBySkuID(r.Context(), skuID)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -437,7 +437,7 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	if claims, ok := authjwt.FromContext(r.Context()); ok {
 		p.CreatedBy = claims.UserID
 	}
-	created, err := h.svc.CreateProduct(p)
+	created, err := h.svc.CreateProduct(r.Context(), p)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -457,7 +457,7 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.ID = id
-	updated, err := h.svc.UpdateProduct(p)
+	updated, err := h.svc.UpdateProduct(r.Context(), p)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -471,7 +471,7 @@ func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "missing product id")
 		return
 	}
-	if err := h.svc.DeleteProduct(id); err != nil {
+	if err := h.svc.DeleteProduct(r.Context(), id); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -479,7 +479,7 @@ func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListCoupons(w http.ResponseWriter, r *http.Request) {
-	coupons := h.couponSvc.List()
+	coupons := h.couponSvc.List(r.Context())
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{
 		"total":   len(coupons),
 		"results": coupons,
@@ -502,7 +502,7 @@ func (h *Handler) CreateCoupon(w http.ResponseWriter, r *http.Request) {
 	if body.Active != nil {
 		active = *body.Active
 	}
-	created, err := h.couponSvc.Create(domain.Coupon{
+	created, err := h.couponSvc.Create(r.Context(), domain.Coupon{
 		Code:        body.Code,
 		Discount:    body.Discount,
 		Description: body.Description,
@@ -532,7 +532,7 @@ func (h *Handler) UpdateCoupon(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	updated, err := h.couponSvc.Update(code, body.Discount, body.Description, body.Expires, body.Active)
+	updated, err := h.couponSvc.Update(r.Context(), code, body.Discount, body.Description, body.Expires, body.Active)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -546,7 +546,7 @@ func (h *Handler) DeleteCoupon(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "missing coupon code")
 		return
 	}
-	if err := h.couponSvc.Delete(code); err != nil {
+	if err := h.couponSvc.Delete(r.Context(), code); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -589,7 +589,7 @@ func (h *Handler) CreateVariant(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	created, err := h.svc.CreateVariant(id, v)
+	created, err := h.svc.CreateVariant(r.Context(), id, v)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -609,7 +609,7 @@ func (h *Handler) UpdateVariant(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	updated, err := h.svc.UpdateVariant(id, sku, v)
+	updated, err := h.svc.UpdateVariant(r.Context(), id, sku, v)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -624,7 +624,7 @@ func (h *Handler) DeleteVariant(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "missing product id or sku")
 		return
 	}
-	if err := h.svc.DeleteVariant(id, sku); err != nil {
+	if err := h.svc.DeleteVariant(r.Context(), id, sku); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -680,7 +680,7 @@ func (h *Handler) RedeemCoupon(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "code is required")
 		return
 	}
-	coupon, ok := h.couponSvc.Redeem(body.Code)
+	coupon, ok := h.couponSvc.Redeem(r.Context(), body.Code)
 	if !ok {
 		h.respondError(w, http.StatusNotFound, "invalid coupon code")
 		return

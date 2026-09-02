@@ -75,7 +75,7 @@ must log in again — do it during a quiet window.
 | `dupli1-product` | Product catalog + inventory |
 | `dupli1-order` | Order / checkout API |
 | `dupli1-cart` | Shopping cart API |
-| `dupli1-payment` | Payments (NANO card / Bypass / dev simulate) |
+| `dupli1-payment` | Payments (NANO card / Bypass) |
 | `dupli1-notification` | NATS → Telegram ops alerts — see [notification-telegram-bot.md](notification-telegram-bot.md) |
 | `dupli1-proxy` | nginx gateway (ALB `/api/*`, `/gateway/*`) |
 | `dupli1-web` | Public storefront (ALB default) |

@@ -14,7 +14,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Inventory (stock, reservations) | Implemented (PostgreSQL, owned by product) |
 | Orders + checkout sessions | Implemented (PostgreSQL) |
 | Shopping cart | Implemented (PostgreSQL) |
-| Payments (NANO card + Bypass + local simulate) | Implemented — see [payment-service.md](payment-service.md) |
+| Payments (NANO card + Bypass) | Implemented — see [payment-service.md](payment-service.md) |
 | Payment methods | Credit card (NANO) + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
 | Notifications | Implemented (NATS → Telegram when configured) |
 | User profiles, chat, analytics | **Profile phase A** in auth (`/me/profile`, `/me/addresses`) — [auth-profile-extension-plan.md](auth-profile-extension-plan.md); guest PDP views + recommendations in product; chat/analytics not started |
@@ -74,9 +74,9 @@ See [service-layout.md](service-layout.md) for details.
   - Dual SKU identity + master dictionaries: [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`; human `sku`; `/api/v1/products/catalog/…`; Phase C enforces existing master codes on create)
   - Variant physical dimensions (`dimensions.widthMm` / `heightMm` / `depthMm`) distinct from letter `size`/`sizeCode` — [product-sku-dimensions.md](product-sku-dimensions.md)
   - Error wrapping: store-boundary sentinels + sanitized 500s — [product-error-wrapping.md](product-error-wrapping.md)
-  - Public: `GET /api/v1/products` (optional `product.read` widens view; filters `q`, `category`, `subcategory`, `style`, `target`, `brand`, `color`, `size`, `material`, `tags`; `sort`/`order` — [product-rich-search.md](product-rich-search.md), [product-master-catalog.md](product-master-catalog.md)), `GET /api/v1/products/{id}` (parent + variants; unique guest `viewCount` via `dupli1_guest` cookie; `soldCount` on reservation commit — [product-sold-count.md](product-sold-count.md); `wishlistCount`), wishlist add/remove/list, `GET /api/v1/products/{id}/recommendations` (content + popularity — [product-recommendations.md](product-recommendations.md)), `GET /api/v1/products/variants?sku_ids=` (batch public variant lookup), coupon redeem
+  - Public: `GET /api/v1/products` (optional `product.read` widens view; filters `q`, `category`, `subcategory`, `style`, `target`, `brand`, `color`, `size`, `material`, `tags`; `sort`/`order` — [product-rich-search.md](product-rich-search.md), [product-master-catalog.md](product-master-catalog.md)), `GET /api/v1/products/{id}` (parent + variants with per-variant `availableQty`/`inStock`; unique guest `viewCount` via `dupli1_guest` cookie; `soldCount` on reservation commit — [product-sold-count.md](product-sold-count.md); `wishlistCount`), wishlist add/remove/list, `GET /api/v1/products/{id}/recommendations` (content + popularity — [product-recommendations.md](product-recommendations.md)), `GET /api/v1/products/variants?sku_ids=` (batch public variant lookup), coupon redeem
   - Admin: per-route permissions (`product.create`, `coupon.read`, …) — see [permissions.md](permissions.md); parent CRUD, variant CRUD at `/api/v1/products/{id}/variants`, images on variant or default variant
-  - Stock and reservations at `/api/v1/products/inventory/*` (merged in from the former standalone `inventory` service; legacy `/api/v1/inventory/*` still aliased), keyed by a canonical ULID `SkuID` with `sku` and `by-sku-id/{skuId}` lookups both supported; reads are public, writes require `inventory.stock.write` or `inventory.reservation.manage`
+  - Stock and reservations at `/api/v1/products/inventory/*` (merged in from the former standalone `inventory` service; legacy `/api/v1/inventory/*` still aliased), keyed by a canonical ULID `SkuID` with `sku` and `by-sku-id/{skuId}` lookups both supported; reads are public, writes require `inventory.stock.write` or `inventory.reservation.manage`. Every variant gets a `stock_items` row on create (qty 0); orphans backfilled on inventory migrate — [product-stock-tracking-plan.md](product-stock-tracking-plan.md)
   - Protected routes validate RS256 via `AUTH_JWKS_URL`; authorization from `permissions` claim
   - Inline schema migration + variant backfill on startup; brand/color/size/edition master tables seeded on migrate
   - Structure review (Product vs sellable SKU, flatten Phase 0 locks): [product-structure-final-review.md](product-structure-final-review.md)
@@ -90,15 +90,16 @@ See [service-layout.md](service-layout.md) for details.
 - **Features:**
   - Checkout sessions at `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions` still aliased; see [checkout-session.md](checkout-session.md))
   - Order lifecycle at `/api/v1/orders` — statuses: `pending`, `paid`, `in_transit`, `fulfilled`, `canceled`
-  - List: `GET /api/v1/orders` (all — requires `order.read.all`); `GET /api/v1/orders?customer_id=` (ABAC); `GET /api/v1/orders/me` (caller's orders). There is no `/orders/all`.
+  - List: `GET /api/v1/orders` (all — requires `order.read.all`); `GET /api/v1/orders?customer_id=` (ABAC). There is no `/orders/all` or `/orders/me`.
   - Consumes **`payment.succeeded`** (NATS) → `paid` (idempotent on `payment_id`; replays after ship/fulfill are no-ops); late payment on auto-`canceled` orders **re-reserves stock** and reopens the payment window before marking `paid`
   - 5-minute unpaid `pending` expiry worker (skips when payment wins the race)
   - Publishes order events via transactional **outbox** (`order.created` / status updates); outbox drain worker
   - Optional `Idempotency-Key` on `POST /api/v1/orders` (replay-safe create)
   - Checkout `complete` snapshots recipient + shipping address (optional prefill from auth profile)
   - Checkout `complete` uses atomic session claim — concurrent completes cannot create duplicate orders
-  - `POST /api/v1/orders/{id}/ship` validates `paid` → `in_transit` **before** committing inventory (plan B)
+  - `POST /api/v1/orders/{id}/ship` validates `paid` → `in_transit` **before** committing inventory (plan B); **requires** `carrier` + `tracking_number` (fixed KR set: `cj`/`hanjin`/`lotte`/`logen`/`epost`/`other`; `carrier_note` required when `other`)
   - Calls product to reserve stock and redeem coupons
+  - Order responses include optional `carrier`, `tracking_number`, `carrier_note` after ship
 - **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS; HS256 fallback in dev). Storefront ABAC on `customer_id`; `order.create` / `order.read.all` bypass ABAC. Ship requires `order.ship`; status changes require `order.status.update`
 - **Tests:** `cd order && go test ./...`
 
@@ -110,6 +111,7 @@ See [service-layout.md](service-layout.md) for details.
   - Persistent per-customer cart at `/api/v1/cart` (see [cart-service.md](cart-service.md))
   - Admin read at `/api/v1/cart/customers/{customer_id}` requires `cart.read` (legacy `/api/v1/carts/{customer_id}` still aliased)
   - Enriches lines from product (price, images, availability)
+  - Upsert/replace reject when quantity exceeds available (`400` `insufficient_stock`)
 - **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS from auth; access tokens only), with `JWT_SECRET` HS256 fallback in dev
 - **Tests:** `cd cart && go test ./...`
 
@@ -118,11 +120,10 @@ See [service-layout.md](service-layout.md) for details.
 - **Host port:** 8087
 - **Persistence:** PostgreSQL (`payments` on `postgres-payment`)
 - **Features:**
-  - **NANO** certified card PG when `NANO_*` credentials set; else manager **Bypass** / local **dev simulate** (see [payment-service.md](payment-service.md))
+  - **NANO** certified card PG when `NANO_*` credentials set; else `credit_card` is unavailable (501) and manager **Bypass** is used, including for local testing (see [payment-service.md](payment-service.md))
   - Default payment currency: **`krw` only** (whole won; `*_cents` fields are KRW minor units = won)
-  - Dev simulate URL `GET /api/v1/payments/{id}/simulate-success` only when **`PAYMENT_ALLOW_DEV_SIMULATE=true`** and NANO unset (Compose default)
   - Publishes **`payment.succeeded`** via transactional **outbox** (soft-success complete; drain + reconcile workers)
-  - **Methods:** `method` on create — `credit_card` (NANO or local simulate), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)
+  - **Methods:** `method` on create — `credit_card` (NANO; 501 when unconfigured), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)
 - **Auth:** Bearer JWT on customer routes; ownership ABAC unless `payment.create` / `payment.read.all`. Bypass requires `payment.bypass`
 - **Tests:** `cd payment && go test ./...`
 
@@ -162,9 +163,9 @@ See [service-layout.md](service-layout.md) for details.
 |---------|--------|---------------|
 | auth | login, refresh, logout, JWKS | register (`user.create` or open register), me, profile/addresses, user admin (permissions) |
 | product | health, product search/PDP, coupon redeem, inventory reads | product/coupon CRUD (per permission), image upload, inventory writes (`inventory.stock.write`, `inventory.reservation.manage`) |
-| order | health only | orders (list all / by customer / me), checkout (ABAC + permissions), ship (`order.ship`) |
+| order | health only | orders (list all / by customer), checkout (ABAC + permissions), ship (`order.ship`) |
 | cart | health only | own cart; admin read (`cart.read`) |
-| payment | health, dev simulate (gated) | payments (ABAC + permissions); Bypass (`payment.bypass`) |
+| payment | health only | payments (ABAC + permissions); Bypass (`payment.bypass`) |
 | notification | health, Telegram webhook | Telegram subscriptions (`notification.telegram.read` / `notification.telegram.manage`) |
 
 Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Permission spec: [permissions.md](permissions.md).

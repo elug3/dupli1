@@ -33,7 +33,6 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		JWKSURL:            opts.JWKSURL,
 		NATSURL:            opts.NATSURL,
 		PublicBaseURL:      opts.PublicBaseURL,
-		AllowDevSimulate:   opts.AllowDevSimulate,
 		Nano: checkout.NanoConfig{
 			BaseURL:       opts.NanoBaseURL,
 			Ver:           opts.NanoVer,
@@ -76,6 +75,7 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) Stop() error {
+	// Graceful shutdown timeout parent after SIGINT; not tied to a request.
 	ctx, cancel := context.WithTimeout(context.Background(), s.opts.ShutdownTimeout)
 	defer cancel()
 

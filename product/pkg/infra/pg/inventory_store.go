@@ -29,6 +29,8 @@ func NewInventoryStore(pool *pgxpool.Pool) (*InventoryStore, error) {
 }
 
 func (s *InventoryStore) migrate() error {
+	// Startup schema migration runs outside any HTTP request; there is no
+	// request-scoped context to propagate (process lifetime only).
 	ctx := context.Background()
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS id_sequences (
@@ -70,7 +72,16 @@ func (s *InventoryStore) migrate() error {
 			 FROM reservations WHERE id ~ '^res_\d+$'),
 			0
 		)
-		ON CONFLICT (name) DO NOTHING`,
+		ON CONFLICT (name) DO UPDATE
+		SET value = GREATEST(id_sequences.value, EXCLUDED.value)`,
+		// Every sellable variant must have a stock row. Missing ⇒ available 0
+		// (not "untracked = infinite"). See docs/product-stock-tracking-plan.md.
+		`INSERT INTO stock_items (sku_id, quantity, reserved, updated_at)
+		SELECT pv.sku_id, 0, 0, NOW()
+		FROM product_variants pv
+		WHERE NOT EXISTS (
+			SELECT 1 FROM stock_items s WHERE s.sku_id = pv.sku_id
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.pool.Exec(ctx, stmt); err != nil {
@@ -133,6 +144,34 @@ func (s *InventoryStore) GetItem(ctx context.Context, skuID string) (*domain.Sto
 	return &item, nil
 }
 
+func (s *InventoryStore) GetItems(ctx context.Context, skuIDs []string) (map[string]*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	out := make(map[string]*domain.StockItem, len(skuIDs))
+	if len(skuIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT s.sku_id, pv.sku, s.quantity, s.reserved, s.updated_at
+		FROM stock_items s JOIN product_variants pv ON pv.sku_id = s.sku_id
+		WHERE s.sku_id = ANY($1)
+	`, skuIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item domain.StockItem
+		if err := rows.Scan(&item.SkuID, &item.SKU, &item.Quantity, &item.Reserved, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		copied := item
+		out[item.SkuID] = &copied
+	}
+	return out, rows.Err()
+}
+
 func (s *InventoryStore) SaveItem(ctx context.Context, item *domain.StockItem) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -147,6 +186,75 @@ func (s *InventoryStore) SaveItem(ctx context.Context, item *domain.StockItem) e
 			updated_at = EXCLUDED.updated_at
 	`, item.SkuID, item.Quantity, item.Reserved, item.UpdatedAt)
 	return err
+}
+
+func (s *InventoryStore) SetQuantity(ctx context.Context, skuID string, quantity int, updatedAt time.Time) (*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	var item domain.StockItem
+	err := s.pool.QueryRow(ctx, `
+		UPDATE stock_items AS s
+		SET quantity = $2, updated_at = $3
+		FROM product_variants AS pv
+		WHERE s.sku_id = $1
+		  AND pv.sku_id = s.sku_id
+		  AND $2 >= s.reserved
+		RETURNING s.sku_id, pv.sku, s.quantity, s.reserved, s.updated_at
+	`, skuID, quantity, updatedAt).Scan(&item.SkuID, &item.SKU, &item.Quantity, &item.Reserved, &item.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var reserved int
+		err := s.pool.QueryRow(ctx, `
+			SELECT reserved FROM stock_items WHERE sku_id = $1
+		`, skuID).Scan(&reserved)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ports.ErrInventoryItemNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, ports.ErrInsufficientStock
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *InventoryStore) AdjustQuantity(ctx context.Context, skuID string, delta int, updatedAt time.Time) (*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	var item domain.StockItem
+	err := s.pool.QueryRow(ctx, `
+		UPDATE stock_items AS s
+		SET quantity = s.quantity + $2, updated_at = $3
+		FROM product_variants AS pv
+		WHERE s.sku_id = $1
+		  AND pv.sku_id = s.sku_id
+		  AND s.quantity + $2 >= 0
+		  AND s.quantity + $2 >= s.reserved
+		RETURNING s.sku_id, pv.sku, s.quantity, s.reserved, s.updated_at
+	`, skuID, delta, updatedAt).Scan(&item.SkuID, &item.SKU, &item.Quantity, &item.Reserved, &item.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var quantity, reserved int
+		err := s.pool.QueryRow(ctx, `
+			SELECT quantity, reserved FROM stock_items WHERE sku_id = $1
+		`, skuID).Scan(&quantity, &reserved)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ports.ErrInventoryItemNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, ports.ErrInsufficientStock
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
 }
 
 func (s *InventoryStore) GetReservation(ctx context.Context, id string) (*domain.Reservation, error) {

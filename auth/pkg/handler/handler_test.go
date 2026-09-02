@@ -124,10 +124,10 @@ func newStack(t *testing.T) *stack {
 	if err != nil {
 		t.Fatalf("NewUser registrar: %v", err)
 	}
-	if err := repo.Save(context.Background(), registrar); err != nil {
+	if err := repo.Save(t.Context(), registrar); err != nil {
 		t.Fatalf("Save registrar: %v", err)
 	}
-	registrarToken, err := accessGen.Generate(context.Background(), registrar.ID, registrar.Permissions)
+	registrarToken, err := accessGen.Generate(t.Context(), registrar.ID, registrar.Permissions)
 	if err != nil {
 		t.Fatalf("Generate registrar token: %v", err)
 	}
@@ -312,7 +312,7 @@ func TestRegister_OpenRegisterAllowsUnauthenticatedCustomer(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	u, err := repo.FindByEmail(context.Background(), "selfserve@example.com")
+	u, err := repo.FindByEmail(t.Context(), "selfserve@example.com")
 	if err != nil || u == nil {
 		t.Fatalf("user not saved: %v", err)
 	}

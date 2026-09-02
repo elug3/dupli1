@@ -472,7 +472,9 @@ Redeem a coupon code. No authentication required.
 
 ### `GET /api/v1/products/{id}`
 
-Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Cart lines use each variant's `sku` (inventory key). Parent `price` is the charged amount; `officialPrice` is display-only. Each variant may include `dimensions` (`widthMm` / `heightMm` / `depthMm` in millimeters) — distinct from letter `size`/`sizeCode`; see [product-sku-dimensions.md](product-sku-dimensions.md).
+Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Cart lines use each variant's `sku` / `skuId` (inventory key). Parent `price` is the charged amount; `officialPrice` is display-only. Each variant may include `dimensions` (`widthMm` / `heightMm` / `depthMm` in millimeters) — distinct from letter `size`/`sizeCode`; see [product-sku-dimensions.md](product-sku-dimensions.md).
+
+Each embedded variant includes stock enrichment: `availableQty` (`max(0, quantity − reserved)`) and `inStock` (`availableQty > 0`). Every sellable SKU has a `stock_items` row (created with qty 0 on variant create; see [product-stock-tracking-plan.md](product-stock-tracking-plan.md)). Legacy parent `stock` is omitted from responses.
 
 On success, the handler ensures a `dupli1_guest` cookie and records a unique view (one count per guest × product). Response includes public `viewCount` and `soldCount` (units committed on ship — [product-sold-count.md](product-sold-count.md)). View-store failures are logged and do not fail the PDP — see [product-guest-views-plan.md](product-guest-views-plan.md).
 
@@ -617,7 +619,7 @@ Release a reservation (return stock).
 
 ## Cart Service — `/api/v1/cart`
 
-PostgreSQL-backed persistent cart. Enriches lines from product (price, images) and inventory (availability). Does **not** reserve stock or create orders.
+PostgreSQL-backed persistent cart. Enriches lines from product (price, images) and inventory (availability). Does **not** reserve stock or create orders. `UpsertItem` / `ReplaceItems` reject when requested quantity exceeds available (including missing stock ⇒ available 0) with `400` and `reason: insufficient_stock`.
 
 When `AUTH_JWKS_URL` or `JWT_SECRET` is set, cart routes require `Authorization: Bearer <access_token>`. The cart owner is the JWT `sub` claim — do not send `customer_id` on `/api/v1/cart` mutations.
 
@@ -722,9 +724,8 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 | POST | `/api/v1/orders` | Create order directly |
 | GET | `/api/v1/orders` | List all orders (`order.read.all`) |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
-| GET | `/api/v1/orders/me` | List the caller's orders |
 | GET | `/api/v1/orders/{id}` | Get order |
-| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship order (`paid` → `in_transit`) |
+| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship order (`paid` → `in_transit`); body requires `carrier` + `tracking_number` (`carrier_note` when `carrier=other`) |
 | PUT | `/api/v1/orders/{id}/status` | `order.status.update` — cancel or fulfill |
 
 **Create order request**
@@ -753,9 +754,9 @@ Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices
 
 ## Payment Service — `/api/v1/payments`
 
-Credit card uses **NANO Solution** certified payment when `NANO_*` credentials are set; otherwise manager **Bypass** or local **dev simulate** (`PAYMENT_ALLOW_DEV_SIMULATE`). Dupli1 never handles card numbers, CVC, or card passwords.
+Credit card uses **NANO Solution** certified payment when `NANO_*` credentials are set; otherwise `credit_card` is unavailable (501) and payments — including local testing — go through manager **Bypass**. Dupli1 never handles card numbers, CVC, or card passwords.
 
-**Methods:** create body accepts `method`: `credit_card` (NANO or local simulate), `bypass` (order manager / `payment.bypass`), `bitcoin` (501 until implemented). See [payment-methods-plan.md](payment-methods-plan.md).
+**Methods:** create body accepts `method`: `credit_card` (NANO; 501 when unconfigured), `bypass` (order manager / `payment.bypass`), `bitcoin` (501 until implemented). See [payment-methods-plan.md](payment-methods-plan.md).
 
 When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront callers may only pay for / read their own orders unless they hold `payment.create` or `payment.read.all`.
 
@@ -763,7 +764,6 @@ When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront calle
 |--------|------|-------------------|
 | POST | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | GET | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
-| GET | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
 
 **Create payment**
 ```json
@@ -847,7 +847,6 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | GET | `/api/v1/orders/settings` | — | order |
 | GET/PUT/POST/DELETE | `/api/v1/orders/checkout/sessions/{id}/...` | ABAC (same as orders) | order |
 | POST/GET | `/api/v1/orders` | ABAC / `order.create` / `order.read.all` | order |
-| GET | `/api/v1/orders/me` | Bearer (own orders) | order |
 | GET | `/api/v1/orders/{id}` | ABAC / `order.read.all` | order |
 | POST | `/api/v1/orders/{id}/ship` | `order.ship` | order |
 | PUT | `/api/v1/orders/{id}/status` | `order.status.update` | order |

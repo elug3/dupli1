@@ -71,8 +71,8 @@ func dimensionArgs(d *domain.Dimensions) (width, height, depth interface{}) {
 	return nullInt(d.WidthMm), nullInt(d.HeightMm), nullInt(d.DepthMm)
 }
 
-func (s *ProductSearchStore) ListVariants(productID string) ([]domain.Variant, error) {
-	rows, err := s.pool.Query(context.Background(),
+func (s *ProductSearchStore) ListVariants(ctx context.Context, productID string) ([]domain.Variant, error) {
+	rows, err := s.pool.Query(ctx,
 		`SELECT `+variantSelectCols+` FROM product_variants
 		 WHERE product_id = $1
 		 ORDER BY created_at ASC, sku ASC`,
@@ -94,8 +94,8 @@ func (s *ProductSearchStore) ListVariants(productID string) ([]domain.Variant, e
 	return results, wrapDB("list variants", rows.Err())
 }
 
-func (s *ProductSearchStore) GetVariant(sku string) (*domain.Variant, error) {
-	row := s.pool.QueryRow(context.Background(),
+func (s *ProductSearchStore) GetVariant(ctx context.Context, sku string) (*domain.Variant, error) {
+	row := s.pool.QueryRow(ctx,
 		`SELECT `+variantSelectCols+` FROM product_variants WHERE sku = $1`, sku,
 	)
 	v, err := scanVariant(row.Scan)
@@ -105,8 +105,8 @@ func (s *ProductSearchStore) GetVariant(sku string) (*domain.Variant, error) {
 	return &v, nil
 }
 
-func (s *ProductSearchStore) GetVariantBySkuID(skuID string) (*domain.Variant, error) {
-	row := s.pool.QueryRow(context.Background(),
+func (s *ProductSearchStore) GetVariantBySkuID(ctx context.Context, skuID string) (*domain.Variant, error) {
+	row := s.pool.QueryRow(ctx,
 		`SELECT `+variantSelectCols+` FROM product_variants WHERE sku_id = $1`, skuID,
 	)
 	v, err := scanVariant(row.Scan)
@@ -116,11 +116,11 @@ func (s *ProductSearchStore) GetVariantBySkuID(skuID string) (*domain.Variant, e
 	return &v, nil
 }
 
-func (s *ProductSearchStore) GetVariantsBySkuIDs(skuIDs []string) ([]domain.Variant, error) {
+func (s *ProductSearchStore) GetVariantsBySkuIDs(ctx context.Context, skuIDs []string) ([]domain.Variant, error) {
 	if len(skuIDs) == 0 {
 		return nil, nil
 	}
-	rows, err := s.pool.Query(context.Background(),
+	rows, err := s.pool.Query(ctx,
 		`SELECT `+variantSelectCols+` FROM product_variants WHERE sku_id = ANY($1)`,
 		toTextArray(skuIDs),
 	)
@@ -184,8 +184,7 @@ func (s *ProductSearchStore) nextVariantSKU(ctx context.Context, productID, bran
 	return "", ports.Invalid(fmt.Sprintf("generate variant sku: exhausted candidates for %s", productID))
 }
 
-func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, error) {
-	ctx := context.Background()
+func (s *ProductSearchStore) CreateVariant(ctx context.Context, v domain.Variant) (*domain.Variant, error) {
 	if v.ProductID == "" {
 		return nil, ports.Invalid("productId is required")
 	}
@@ -231,9 +230,15 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 		v.SkuID = domain.NewSkuID()
 	}
 
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, wrapDB("create variant begin", err)
+	}
+	defer tx.Rollback(ctx)
+
 	var createdAt time.Time
 	w, h, d := dimensionArgs(v.Dimensions)
-	err = s.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO product_variants (sku_id, sku, product_id, color, size, color_code, edition_code, size_code,
 		     width_mm, height_mm, depth_mm, status, image_urls)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
@@ -250,16 +255,31 @@ func (s *ProductSearchStore) CreateVariant(v domain.Variant) (*domain.Variant, e
 		}
 		return nil, wrapDB("create variant", err)
 	}
+
+	// Always-tracked SKU: every variant gets a stock row (qty 0 by default).
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO stock_items (sku_id, quantity, reserved, updated_at)
+		VALUES ($1, 0, 0, NOW())
+		ON CONFLICT (sku_id) DO NOTHING
+	`, v.SkuID); err != nil {
+		return nil, wrapDB("create variant stock", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, wrapDB("create variant commit", err)
+	}
 	v.CreatedAt = createdAt.Format(time.RFC3339)
+	v.AvailableQty = 0
+	v.InStock = false
 	return &v, nil
 }
 
 // UpdateVariant updates a variant by its (immutable) sku. sku_id and sku are never
 // rewritten — codes may be filled when previously blank, but the human sku stays stable.
-func (s *ProductSearchStore) UpdateVariant(v domain.Variant) (*domain.Variant, error) {
+func (s *ProductSearchStore) UpdateVariant(ctx context.Context, v domain.Variant) (*domain.Variant, error) {
 	var createdAt time.Time
 	w, h, d := dimensionArgs(v.Dimensions)
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(ctx,
 		`UPDATE product_variants
 		 SET color=$2, size=$3, color_code=$4, edition_code=$5, size_code=$6,
 		     width_mm=$7, height_mm=$8, depth_mm=$9,
@@ -278,8 +298,8 @@ func (s *ProductSearchStore) UpdateVariant(v domain.Variant) (*domain.Variant, e
 	return &v, nil
 }
 
-func (s *ProductSearchStore) DeleteVariant(sku string) error {
-	cmd, err := s.pool.Exec(context.Background(), `DELETE FROM product_variants WHERE sku = $1`, sku)
+func (s *ProductSearchStore) DeleteVariant(ctx context.Context, sku string) error {
+	cmd, err := s.pool.Exec(ctx, `DELETE FROM product_variants WHERE sku = $1`, sku)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {

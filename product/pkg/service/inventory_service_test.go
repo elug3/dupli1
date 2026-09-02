@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
@@ -22,7 +21,7 @@ func newInventoryTestService(t *testing.T) (*service.InventoryService, *memory.P
 
 func TestInventoryUpsertAndGetItem_ByEitherIdentifier(t *testing.T) {
 	svc, _ := newInventoryTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := svc.UpsertItem(ctx, service.SkuRef{SKU: "BOT-001-GRN"}, 10); err != nil {
 		t.Fatalf("UpsertItem by sku: %v", err)
@@ -47,7 +46,7 @@ func TestInventoryUpsertAndGetItem_ByEitherIdentifier(t *testing.T) {
 
 func TestInventoryGetItem_UnknownReference(t *testing.T) {
 	svc, _ := newInventoryTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := svc.GetItem(ctx, service.SkuRef{SKU: "NOPE"}); err != service.ErrInvalidSKU {
 		t.Fatalf("want ErrInvalidSKU, got %v", err)
@@ -62,7 +61,7 @@ func TestInventoryGetItem_UnknownReference(t *testing.T) {
 
 func TestInventoryAdjustStock_InsufficientStock(t *testing.T) {
 	svc, _ := newInventoryTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := svc.UpsertItem(ctx, service.SkuRef{SkuID: "SKUID-GRN"}, 5); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
@@ -74,7 +73,7 @@ func TestInventoryAdjustStock_InsufficientStock(t *testing.T) {
 
 func TestInventoryReserve_AggregatesMixedIdentifierReferences(t *testing.T) {
 	svc, products := newInventoryTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := svc.UpsertItem(ctx, service.SkuRef{SkuID: "SKUID-GRN"}, 10); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
@@ -120,7 +119,7 @@ func TestInventoryReserve_AggregatesMixedIdentifierReferences(t *testing.T) {
 		t.Fatalf("unexpected stock after commit: %+v", item)
 	}
 
-	got, err := products.GetProduct("BOT-001")
+	got, err := products.GetProduct(ctx, "BOT-001")
 	if err != nil {
 		t.Fatalf("GetProduct: %v", err)
 	}
@@ -131,7 +130,7 @@ func TestInventoryReserve_AggregatesMixedIdentifierReferences(t *testing.T) {
 
 func TestInventoryReleaseReservation(t *testing.T) {
 	svc, products := newInventoryTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := svc.UpsertItem(ctx, service.SkuRef{SkuID: "SKUID-GRN"}, 10); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
@@ -159,7 +158,7 @@ func TestInventoryReleaseReservation(t *testing.T) {
 		t.Fatalf("unexpected stock after release: %+v", item)
 	}
 
-	got, err := products.GetProduct("BOT-001")
+	got, err := products.GetProduct(ctx, "BOT-001")
 	if err != nil {
 		t.Fatalf("GetProduct: %v", err)
 	}
@@ -174,7 +173,7 @@ func TestInventoryReleaseReservation(t *testing.T) {
 
 func TestInventoryReleaseReservation_AlreadyCommitted(t *testing.T) {
 	svc, _ := newInventoryTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := svc.UpsertItem(ctx, service.SkuRef{SkuID: "SKUID-GRN"}, 10); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
@@ -196,7 +195,7 @@ func TestInventoryReleaseReservation_AlreadyCommitted(t *testing.T) {
 
 func TestInventoryCommitReservation_IncrementsSoldCountIdempotent(t *testing.T) {
 	svc, products := newInventoryTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := svc.UpsertItem(ctx, service.SkuRef{SkuID: "SKUID-GRN"}, 10); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
@@ -211,7 +210,7 @@ func TestInventoryCommitReservation_IncrementsSoldCountIdempotent(t *testing.T) 
 	if _, err := svc.CommitReservation(ctx, reservation.ID); err != nil {
 		t.Fatalf("CommitReservation: %v", err)
 	}
-	got, err := products.GetProduct("BOT-001")
+	got, err := products.GetProduct(ctx, "BOT-001")
 	if err != nil {
 		t.Fatalf("GetProduct: %v", err)
 	}
@@ -222,11 +221,66 @@ func TestInventoryCommitReservation_IncrementsSoldCountIdempotent(t *testing.T) 
 	if _, err := svc.CommitReservation(ctx, reservation.ID); err != service.ErrReservationAlreadyCommitted {
 		t.Fatalf("want ErrReservationAlreadyCommitted on double commit, got %v", err)
 	}
-	got, err = products.GetProduct("BOT-001")
+	got, err = products.GetProduct(ctx, "BOT-001")
 	if err != nil {
 		t.Fatalf("GetProduct after double commit: %v", err)
 	}
 	if got.SoldCount != 2 {
 		t.Fatalf("double commit must not re-increment soldCount, got %d", got.SoldCount)
+	}
+}
+
+func TestInventoryUpsertItemPreservesActiveReservation(t *testing.T) {
+	svc, _ := newInventoryTestService(t)
+	ctx := t.Context()
+	ref := service.SkuRef{SkuID: "SKUID-GRN"}
+
+	if _, err := svc.UpsertItem(ctx, ref, 10); err != nil {
+		t.Fatalf("UpsertItem: %v", err)
+	}
+	if _, err := svc.Reserve(ctx, "order-reserve", []service.ReservationItemRef{
+		{Ref: ref, Quantity: 8},
+	}); err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+
+	item, err := svc.UpsertItem(ctx, ref, 20)
+	if err != nil {
+		t.Fatalf("UpsertItem after reserve: %v", err)
+	}
+	if item.Quantity != 20 {
+		t.Fatalf("quantity = %d, want 20", item.Quantity)
+	}
+	if item.Reserved != 8 {
+		t.Fatalf("reserved = %d, want 8 (must not clobber active reservation)", item.Reserved)
+	}
+	if item.Available() != 12 {
+		t.Fatalf("available = %d, want 12", item.Available())
+	}
+}
+
+func TestInventoryAdjustStockPreservesActiveReservation(t *testing.T) {
+	svc, _ := newInventoryTestService(t)
+	ctx := t.Context()
+	ref := service.SkuRef{SkuID: "SKUID-GRN"}
+
+	if _, err := svc.UpsertItem(ctx, ref, 10); err != nil {
+		t.Fatalf("UpsertItem: %v", err)
+	}
+	if _, err := svc.Reserve(ctx, "order-adjust", []service.ReservationItemRef{
+		{Ref: ref, Quantity: 6},
+	}); err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+
+	item, err := svc.AdjustStock(ctx, ref, 5)
+	if err != nil {
+		t.Fatalf("AdjustStock after reserve: %v", err)
+	}
+	if item.Quantity != 15 {
+		t.Fatalf("quantity = %d, want 15", item.Quantity)
+	}
+	if item.Reserved != 6 {
+		t.Fatalf("reserved = %d, want 6", item.Reserved)
 	}
 }

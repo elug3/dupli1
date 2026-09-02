@@ -1,7 +1,6 @@
 package jwt_test
 
 import (
-	"context"
 	"testing"
 
 	jwtinfra "github.com/elug3/dupli1/auth/pkg/infra/jwt"
@@ -10,7 +9,7 @@ import (
 
 func TestRoundtrip_UserIDAndPermissionsPreserved(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, err := gen.Generate(ctx, "user-1", []string{permissions.UserCreate})
 	if err != nil {
@@ -31,7 +30,7 @@ func TestRoundtrip_UserIDAndPermissionsPreserved(t *testing.T) {
 
 func TestGenerate_IncludesPermissionsClaim(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	perms := permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})
 	token, err := gen.Generate(ctx, "user-2", perms)
@@ -50,7 +49,7 @@ func TestGenerate_IncludesPermissionsClaim(t *testing.T) {
 
 func TestGenerate_EmptyPermissionsForCustomer(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, err := gen.Generate(ctx, "user-3", []string{})
 	if err != nil {
@@ -68,7 +67,7 @@ func TestGenerate_EmptyPermissionsForCustomer(t *testing.T) {
 
 func TestRefreshToken_OmitsPermissions(t *testing.T) {
 	gen := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, err := gen.Generate(ctx, "user-1", []string{permissions.All})
 	if err != nil {
@@ -86,7 +85,7 @@ func TestRefreshToken_OmitsPermissions(t *testing.T) {
 
 func TestValidate_WrongSecretReturnsError(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("secret-A", 3600)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, _ := gen.Generate(ctx, "user-1", []string{permissions.UserCreate})
 
@@ -98,7 +97,7 @@ func TestValidate_WrongSecretReturnsError(t *testing.T) {
 
 func TestValidate_ExpiredTokenReturnsError(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", -1)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, err := gen.Generate(ctx, "user-1", []string{permissions.UserCreate})
 	if err != nil {
@@ -113,7 +112,7 @@ func TestValidate_ExpiredTokenReturnsError(t *testing.T) {
 func TestValidate_RejectsWrongTokenType(t *testing.T) {
 	access := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "access")
 	refresh := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	refreshToken, err := refresh.Generate(ctx, "user-1", nil)
 	if err != nil {
@@ -134,7 +133,7 @@ func TestValidate_RejectsWrongTokenType(t *testing.T) {
 
 func TestValidate_TamperedTokenReturnsError(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	token, _ := gen.Generate(ctx, "user-1", []string{permissions.UserCreate})
 

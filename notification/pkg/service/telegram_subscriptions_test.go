@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/elug3/dupli1/notification/pkg/domain"
@@ -14,7 +13,7 @@ import (
 func TestTelegramSubscriptionsAcceptAndRoute(t *testing.T) {
 	repo := memory.NewTelegramRepository()
 	subs := service.NewTelegramSubscriptions(repo)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	pending, err := subs.RegisterFromMessage(ctx, ports.TelegramSubscriptionInput{
 		TelegramUserID: int64Ptr(42),
@@ -61,7 +60,7 @@ func TestTelegramSubscriptionsAcceptAndRoute(t *testing.T) {
 
 func TestTelegramSubscriptionsManualChatID(t *testing.T) {
 	subs := service.NewTelegramSubscriptions(memory.NewTelegramRepository())
-	item, err := subs.CreateManual(context.Background(), ports.TelegramManualInput{
+	item, err := subs.CreateManual(t.Context(), ports.TelegramManualInput{
 		ChatID:       "-100999",
 		ChatLabel:    "Ops",
 		AlertProduct: true,
@@ -78,7 +77,7 @@ func TestTelegramSubscriptionsManualChatID(t *testing.T) {
 func TestTelegramSubscriptionsRejectAndLookup(t *testing.T) {
 	repo := memory.NewTelegramRepository()
 	subs := service.NewTelegramSubscriptions(repo)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	pending, err := subs.RegisterFromMessage(ctx, ports.TelegramSubscriptionInput{
 		TelegramUserID: int64Ptr(55),
@@ -113,7 +112,7 @@ func TestTelegramSubscriptionsRejectAndLookup(t *testing.T) {
 
 func TestTelegramSubscriptionsIsAllowedIncomingEnvAllowlist(t *testing.T) {
 	subs := service.NewTelegramSubscriptions(memory.NewTelegramRepository())
-	ctx := context.Background()
+	ctx := t.Context()
 	env := &ports.TelegramEnvAllowlist{
 		AllowedUserIDs: "123",
 		OrderChatID:    "-100777",
@@ -133,7 +132,7 @@ func TestTelegramSubscriptionsIsAllowedIncomingEnvAllowlist(t *testing.T) {
 func TestTelegramAccessDeniesUnknownAfterRefresh(t *testing.T) {
 	subs := service.NewTelegramSubscriptions(memory.NewTelegramRepository())
 	access := service.NewTelegramAccess(subs, &ports.TelegramEnvAllowlist{})
-	if err := access.Refresh(context.Background()); err != nil {
+	if err := access.Refresh(t.Context()); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	if access.AllowsIncoming(telegram.Chat{ID: 404, Type: "private"}, &telegram.User{ID: 404}) {

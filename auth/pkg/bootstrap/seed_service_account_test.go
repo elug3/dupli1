@@ -49,7 +49,7 @@ func TestSeedWebServiceAccount_CreatesCustomerRegistrar(t *testing.T) {
 		Logger:             zerolog.Nop(),
 	}
 
-	if err := seedWebServiceAccount(context.Background(), cfg, repo); err != nil {
+	if err := seedWebServiceAccount(t.Context(), cfg, repo); err != nil {
 		t.Fatalf("seedWebServiceAccount: %v", err)
 	}
 
@@ -73,12 +73,12 @@ func TestSeedWebServiceAccount_Idempotent(t *testing.T) {
 		Logger:             zerolog.Nop(),
 	}
 
-	if err := seedWebServiceAccount(context.Background(), cfg, repo); err != nil {
+	if err := seedWebServiceAccount(t.Context(), cfg, repo); err != nil {
 		t.Fatalf("first seed: %v", err)
 	}
 	firstID := repo.byEmail["dupli1-web@internal.dupli1"].ID
 
-	if err := seedWebServiceAccount(context.Background(), cfg, repo); err != nil {
+	if err := seedWebServiceAccount(t.Context(), cfg, repo); err != nil {
 		t.Fatalf("second seed: %v", err)
 	}
 	if got := repo.byEmail["dupli1-web@internal.dupli1"].ID; got != firstID {
@@ -93,7 +93,7 @@ func TestSeedWebServiceAccount_SyncsPasswordAndPermissions(t *testing.T) {
 		WebServicePassword: "service-secret",
 		Logger:             zerolog.Nop(),
 	}
-	if err := seedWebServiceAccount(context.Background(), cfg, repo); err != nil {
+	if err := seedWebServiceAccount(t.Context(), cfg, repo); err != nil {
 		t.Fatalf("first seed: %v", err)
 	}
 
@@ -105,7 +105,7 @@ func TestSeedWebServiceAccount_SyncsPasswordAndPermissions(t *testing.T) {
 	repo.byEmail[u.Email] = u
 
 	cfg.WebServicePassword = "rotated-secret"
-	if err := seedWebServiceAccount(context.Background(), cfg, repo); err != nil {
+	if err := seedWebServiceAccount(t.Context(), cfg, repo); err != nil {
 		t.Fatalf("sync seed: %v", err)
 	}
 
@@ -134,7 +134,7 @@ func TestSeedWebServiceAccount_SkipsWhenEmailEmpty(t *testing.T) {
 		Logger:             zerolog.Nop(),
 	}
 
-	if err := seedWebServiceAccount(context.Background(), cfg, repo); err != nil {
+	if err := seedWebServiceAccount(t.Context(), cfg, repo); err != nil {
 		t.Fatalf("seedWebServiceAccount: %v", err)
 	}
 	if len(repo.byEmail) != 0 {
@@ -149,7 +149,7 @@ func TestSeedWebServiceAccount_RequiresPassword(t *testing.T) {
 		Logger:          zerolog.Nop(),
 	}
 
-	if err := seedWebServiceAccount(context.Background(), cfg, repo); err == nil {
+	if err := seedWebServiceAccount(t.Context(), cfg, repo); err == nil {
 		t.Fatal("expected error when password is missing")
 	}
 }

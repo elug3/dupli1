@@ -11,59 +11,59 @@ type fakeProductStore struct {
 	products []domain.Product
 }
 
-func (s fakeProductStore) SearchProducts(filter map[string]string) ([]domain.Product, int, error) {
+func (s fakeProductStore) SearchProducts(ctx context.Context, filter map[string]string) ([]domain.Product, int, error) {
 	return s.products, len(s.products), nil
 }
 
-func (s fakeProductStore) ListProducts() ([]domain.Product, error) {
+func (s fakeProductStore) ListProducts(ctx context.Context) ([]domain.Product, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) GetProduct(id string) (*domain.Product, error) {
+func (s fakeProductStore) GetProduct(ctx context.Context, id string) (*domain.Product, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) GetActiveProduct(id string) (*domain.Product, error) {
+func (s fakeProductStore) GetActiveProduct(ctx context.Context, id string) (*domain.Product, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) CreateProduct(p domain.Product) (*domain.Product, error) {
+func (s fakeProductStore) CreateProduct(ctx context.Context, p domain.Product) (*domain.Product, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) UpdateProduct(p domain.Product) (*domain.Product, error) {
+func (s fakeProductStore) UpdateProduct(ctx context.Context, p domain.Product) (*domain.Product, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) DeleteProduct(id string) error {
+func (s fakeProductStore) DeleteProduct(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s fakeProductStore) ListVariants(productID string) ([]domain.Variant, error) {
+func (s fakeProductStore) ListVariants(ctx context.Context, productID string) ([]domain.Variant, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) GetVariant(sku string) (*domain.Variant, error) {
+func (s fakeProductStore) GetVariant(ctx context.Context, sku string) (*domain.Variant, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) GetVariantBySkuID(skuID string) (*domain.Variant, error) {
+func (s fakeProductStore) GetVariantBySkuID(ctx context.Context, skuID string) (*domain.Variant, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) GetVariantsBySkuIDs(skuIDs []string) ([]domain.Variant, error) {
+func (s fakeProductStore) GetVariantsBySkuIDs(ctx context.Context, skuIDs []string) ([]domain.Variant, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) CreateVariant(v domain.Variant) (*domain.Variant, error) {
+func (s fakeProductStore) CreateVariant(ctx context.Context, v domain.Variant) (*domain.Variant, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) UpdateVariant(v domain.Variant) (*domain.Variant, error) {
+func (s fakeProductStore) UpdateVariant(ctx context.Context, v domain.Variant) (*domain.Variant, error) {
 	return nil, nil
 }
 
-func (s fakeProductStore) DeleteVariant(sku string) error {
+func (s fakeProductStore) DeleteVariant(ctx context.Context, sku string) error {
 	return nil
 }
 
@@ -88,7 +88,7 @@ func TestSearchProductsPublishesEvent(t *testing.T) {
 	publisher := &recordedProductEventPublisher{}
 	svc := NewProductSearchService(store, publisher)
 
-	results, err := svc.SearchProducts(map[string]string{"category": "bags", "brand": "Bottega Veneta"})
+	results, err := svc.SearchProducts(t.Context(), map[string]string{"category": "bags", "brand": "Bottega Veneta"})
 	if err != nil {
 		t.Fatalf("SearchProducts returned error: %v", err)
 	}
