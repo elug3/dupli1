@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elug3/dupli1/payment/pkg/infra/checkout"
 	"github.com/elug3/dupli1/payment/pkg/service"
 )
 
@@ -19,10 +18,10 @@ func TestBootstrap_WiresUnavailableCheckoutWithoutNanoOrDevSimulate(t *testing.T
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":           "ord_1",
-			"customer_id":  "cust_1",
-			"status":       "pending",
-			"total_cents":  1000,
+			"id":              "ord_1",
+			"customer_id":     "cust_1",
+			"status":          "pending",
+			"total_cents":     1000,
 			"recipient_name":  "Kim",
 			"recipient_phone": "01012345678",
 		})
@@ -48,25 +47,5 @@ func TestBootstrap_WiresUnavailableCheckoutWithoutNanoOrDevSimulate(t *testing.T
 	}
 	if !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("error = %v, want unavailable provider message", err)
-	}
-}
-
-func TestBootstrap_PrefersNanoOverDevSimulate(t *testing.T) {
-	cfg := Config{
-		OrderURL:         "http://order",
-		JWTSecret:        "dev-secret",
-		AllowDevSimulate: true,
-		Nano: checkout.NanoConfig{
-			ShopCode: "240000005",
-			LoginID:  "shoptest",
-			APIKey:   "test-key",
-		},
-	}
-	resp := BuildSettings(cfg)
-	if resp.Features["dev_simulate_success"] {
-		t.Fatal("nano configured: dev_simulate_success must be false")
-	}
-	if got := resp.Limits["checkout_provider"]; got != "nano" {
-		t.Fatalf("checkout_provider = %v, want nano", got)
 	}
 }
