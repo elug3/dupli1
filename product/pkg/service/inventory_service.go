@@ -85,19 +85,18 @@ func (s *InventoryService) UpsertItem(ctx context.Context, ref SkuRef, quantity 
 	}
 
 	now := s.now()
-	item, err := s.store.GetItem(ctx, skuID)
-	if err != nil && !errors.Is(err, ports.ErrInventoryItemNotFound) {
-		return nil, err
+	item, err := s.store.SetQuantity(ctx, skuID, quantity, now)
+	if err == nil {
+		return cloneItem(item), nil
 	}
-	if item == nil {
-		item = &domain.StockItem{SkuID: skuID, SKU: sku}
-	}
-	if quantity < item.Reserved {
+	if errors.Is(err, ports.ErrInsufficientStock) {
 		return nil, ErrInsufficientStock
 	}
-	item.Quantity = quantity
-	item.UpdatedAt = now
+	if !errors.Is(err, ports.ErrInventoryItemNotFound) {
+		return nil, err
+	}
 
+	item = &domain.StockItem{SkuID: skuID, SKU: sku, Quantity: quantity, UpdatedAt: now}
 	if err := s.store.SaveItem(ctx, item); err != nil {
 		return nil, err
 	}
@@ -123,21 +122,22 @@ func (s *InventoryService) AdjustStock(ctx context.Context, ref SkuRef, delta in
 		return nil, err
 	}
 
-	item, err := s.store.GetItem(ctx, skuID)
-	if err != nil {
-		if !errors.Is(err, ports.ErrInventoryItemNotFound) {
-			return nil, err
-		}
-		item = &domain.StockItem{SkuID: skuID, SKU: sku}
+	now := s.now()
+	item, err := s.store.AdjustQuantity(ctx, skuID, delta, now)
+	if err == nil {
+		return cloneItem(item), nil
 	}
-
-	nextQuantity := item.Quantity + delta
-	if nextQuantity < 0 || nextQuantity < item.Reserved {
+	if errors.Is(err, ports.ErrInsufficientStock) {
+		return nil, ErrInsufficientStock
+	}
+	if !errors.Is(err, ports.ErrInventoryItemNotFound) {
+		return nil, err
+	}
+	if delta < 0 {
 		return nil, ErrInsufficientStock
 	}
 
-	item.Quantity = nextQuantity
-	item.UpdatedAt = s.now()
+	item = &domain.StockItem{SkuID: skuID, SKU: sku, Quantity: delta, UpdatedAt: now}
 	if err := s.store.SaveItem(ctx, item); err != nil {
 		return nil, err
 	}

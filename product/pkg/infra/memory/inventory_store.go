@@ -84,6 +84,49 @@ func (s *InventoryStore) SaveItem(ctx context.Context, item *domain.StockItem) e
 	return nil
 }
 
+func (s *InventoryStore) SetQuantity(ctx context.Context, skuID string, quantity int, updatedAt time.Time) (*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	item, ok := s.items[skuID]
+	if !ok {
+		return nil, ports.ErrInventoryItemNotFound
+	}
+	if quantity < item.Reserved {
+		return nil, ports.ErrInsufficientStock
+	}
+	item.Quantity = quantity
+	item.UpdatedAt = updatedAt
+	copied := *item
+	return &copied, nil
+}
+
+func (s *InventoryStore) AdjustQuantity(ctx context.Context, skuID string, delta int, updatedAt time.Time) (*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	item, ok := s.items[skuID]
+	if !ok {
+		return nil, ports.ErrInventoryItemNotFound
+	}
+	nextQuantity := item.Quantity + delta
+	if nextQuantity < 0 || nextQuantity < item.Reserved {
+		return nil, ports.ErrInsufficientStock
+	}
+	item.Quantity = nextQuantity
+	item.UpdatedAt = updatedAt
+	copied := *item
+	return &copied, nil
+}
+
 func (s *InventoryStore) GetReservation(ctx context.Context, id string) (*domain.Reservation, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

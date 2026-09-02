@@ -24,6 +24,12 @@ type InventoryStore interface {
 	// from the map (caller treats missing as available 0).
 	GetItems(ctx context.Context, skuIDs []string) (map[string]*domain.StockItem, error)
 	SaveItem(ctx context.Context, item *domain.StockItem) error
+	// SetQuantity updates quantity without touching reserved. Returns
+	// ErrInventoryItemNotFound when the row is missing, ErrInsufficientStock
+	// when quantity would fall below reserved.
+	SetQuantity(ctx context.Context, skuID string, quantity int, updatedAt time.Time) (*domain.StockItem, error)
+	// AdjustQuantity atomically adds delta to quantity without touching reserved.
+	AdjustQuantity(ctx context.Context, skuID string, delta int, updatedAt time.Time) (*domain.StockItem, error)
 	GetReservation(ctx context.Context, id string) (*domain.Reservation, error)
 	SaveReservation(ctx context.Context, reservation *domain.Reservation) error
 	CreateReservation(ctx context.Context, orderID string, items []domain.ReservationItem, now time.Time) (*domain.Reservation, error)

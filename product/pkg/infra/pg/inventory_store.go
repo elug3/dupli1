@@ -188,6 +188,75 @@ func (s *InventoryStore) SaveItem(ctx context.Context, item *domain.StockItem) e
 	return err
 }
 
+func (s *InventoryStore) SetQuantity(ctx context.Context, skuID string, quantity int, updatedAt time.Time) (*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	var item domain.StockItem
+	err := s.pool.QueryRow(ctx, `
+		UPDATE stock_items AS s
+		SET quantity = $2, updated_at = $3
+		FROM product_variants AS pv
+		WHERE s.sku_id = $1
+		  AND pv.sku_id = s.sku_id
+		  AND $2 >= s.reserved
+		RETURNING s.sku_id, pv.sku, s.quantity, s.reserved, s.updated_at
+	`, skuID, quantity, updatedAt).Scan(&item.SkuID, &item.SKU, &item.Quantity, &item.Reserved, &item.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var reserved int
+		err := s.pool.QueryRow(ctx, `
+			SELECT reserved FROM stock_items WHERE sku_id = $1
+		`, skuID).Scan(&reserved)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ports.ErrInventoryItemNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, ports.ErrInsufficientStock
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *InventoryStore) AdjustQuantity(ctx context.Context, skuID string, delta int, updatedAt time.Time) (*domain.StockItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	var item domain.StockItem
+	err := s.pool.QueryRow(ctx, `
+		UPDATE stock_items AS s
+		SET quantity = s.quantity + $2, updated_at = $3
+		FROM product_variants AS pv
+		WHERE s.sku_id = $1
+		  AND pv.sku_id = s.sku_id
+		  AND s.quantity + $2 >= 0
+		  AND s.quantity + $2 >= s.reserved
+		RETURNING s.sku_id, pv.sku, s.quantity, s.reserved, s.updated_at
+	`, skuID, delta, updatedAt).Scan(&item.SkuID, &item.SKU, &item.Quantity, &item.Reserved, &item.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var quantity, reserved int
+		err := s.pool.QueryRow(ctx, `
+			SELECT quantity, reserved FROM stock_items WHERE sku_id = $1
+		`, skuID).Scan(&quantity, &reserved)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ports.ErrInventoryItemNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, ports.ErrInsufficientStock
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (s *InventoryStore) GetReservation(ctx context.Context, id string) (*domain.Reservation, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
