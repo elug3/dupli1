@@ -1,6 +1,8 @@
 package jwt
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"time"
 
 	"github.com/elug3/dupli1/shared/pkg/permissions"
@@ -12,6 +14,13 @@ func buildMapClaims(userID string, tokenType string, expiry time.Time, userPermi
 		"sub": userID,
 		"exp": expiry.Unix(),
 		"iat": time.Now().Unix(),
+		// jti makes every issued token unique even when the same user is
+		// issued two tokens within the same second (same sub/type/iat/exp
+		// would otherwise sign to the byte-identical JWT). Refresh-token
+		// rotation depends on this: the session store is keyed by the token
+		// string, so a collision would make "issue the replacement" and
+		// "delete the original" collapse into deleting the only session.
+		"jti": newJTI(),
 	}
 	if tokenType != "" {
 		claims["type"] = tokenType
@@ -20,6 +29,12 @@ func buildMapClaims(userID string, tokenType string, expiry time.Time, userPermi
 		claims["permissions"] = permissions.Dedupe(userPermissions)
 	}
 	return claims
+}
+
+func newJTI() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func claimsFromMap(mapClaims jwt.MapClaims) []string {

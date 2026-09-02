@@ -104,9 +104,9 @@ Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](doc
 
 Authorization uses fine-grained **permissions** in the JWT (`permissions` claim), not legacy roles. See [docs/permissions.md](docs/permissions.md).
 
-**Token flow:** `POST /login` returns `{ "refresh_token": "..." }`. Call `POST /refresh` with that token to get `{ "token": "<access_jwt>" }`. Send the access token as `Authorization: Bearer <token>` on protected routes.
+**Token flow:** `POST /login` returns `{ "refresh_token": "..." }`. Call `POST /refresh` with that token to get `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`. Send the access token as `Authorization: Bearer <token>` on protected routes.
 
-Login and refresh are rate-limited per IP via Redis.
+Refresh tokens rotate on every use — the token you sent stops working and the response's `refresh_token` must be used for the next refresh. Login and refresh are rate-limited per IP via Redis.
 
 Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on startup when `JWT_PRIVATE_KEY_FILE` is not set.
 

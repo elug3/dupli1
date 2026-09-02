@@ -106,7 +106,9 @@ Both order and payment use a **transactional outbox** pattern: event rows are wr
 
 ### Auth token flow
 
-`POST /login` → `{ "refresh_token": "..." }`. Call `POST /refresh` with that token → `{ "token": "<access_jwt>" }`. Send as `Authorization: Bearer <token>` on protected routes. Access tokens carry a `permissions` string array claim (no `roles`).
+`POST /login` → `{ "refresh_token": "..." }`. Call `POST /refresh` with that token → `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`. Send as `Authorization: Bearer <token>` on protected routes. Access tokens carry a `permissions` string array claim (no `roles`).
+
+Refresh tokens rotate on every use: `/refresh` invalidates the token it was given and returns a new one, which the caller must store and use next time. Reusing an already-rotated refresh token fails with `401`.
 
 ### Authorization
 
