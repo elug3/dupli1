@@ -14,6 +14,7 @@ import (
 
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/outbox"
 )
 
 const (
@@ -28,6 +29,7 @@ type Service struct {
 	stock          ports.StockClient
 	product        ports.ProductClient
 	eventPublisher ports.EventPublisher
+	outboxDrainer  *outbox.Drainer
 	couponClient   ports.CouponClient
 	checkoutTTL    time.Duration
 	now            func() time.Time
@@ -73,14 +75,14 @@ type orderEvent struct {
 }
 
 type idempotencyFingerprint struct {
-	CustomerID    string `json:"customer_id"`
-	CouponCode    string `json:"coupon_code,omitempty"`
-	DiscountCents int64  `json:"discount_cents,omitempty"`
-	RecipientName string `json:"recipient_name,omitempty"`
-	RecipientPhone string `json:"recipient_phone,omitempty"`
+	CustomerID      string                 `json:"customer_id"`
+	CouponCode      string                 `json:"coupon_code,omitempty"`
+	DiscountCents   int64                  `json:"discount_cents,omitempty"`
+	RecipientName   string                 `json:"recipient_name,omitempty"`
+	RecipientPhone  string                 `json:"recipient_phone,omitempty"`
 	ShippingAddress domain.ShippingAddress `json:"shipping_address,omitempty"`
-	SourceAddressID string `json:"source_address_id,omitempty"`
-	Items         []struct {
+	SourceAddressID string                 `json:"source_address_id,omitempty"`
+	Items           []struct {
 		SkuID    string `json:"sku_id,omitempty"`
 		SKU      string `json:"sku,omitempty"`
 		Quantity int    `json:"quantity"`
@@ -110,6 +112,7 @@ func NewWithCheckout(
 	if len(eventPublisher) > 0 {
 		s.eventPublisher = eventPublisher[0]
 	}
+	s.outboxDrainer = outbox.NewDrainer(s.repo, s.eventPublisher, "order outbox drain")
 	if s.checkoutTTL <= 0 {
 		s.checkoutTTL = domain.DefaultCheckoutTTL
 	}
@@ -521,67 +524,16 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 
 // StartOutboxWorker periodically publishes pending outbox rows.
 func (s *Service) StartOutboxWorker(ctx context.Context, interval time.Duration) {
-	if interval <= 0 {
-		interval = 2 * time.Second
-	}
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := s.DrainOutbox(ctx); err != nil {
-					log.Printf("order outbox drain: %v", err)
-				}
-			}
-		}
-	}()
+	s.outboxDrainer.StartWorker(ctx, interval)
 }
 
 func (s *Service) tryDrainOutbox(ctx context.Context) {
-	if err := s.DrainOutbox(ctx); err != nil {
-		log.Printf("order outbox drain: %v", err)
-	}
+	s.outboxDrainer.TryDrain(ctx)
 }
 
 // DrainOutbox publishes pending outbox messages. Failures are recorded and retried later.
 func (s *Service) DrainOutbox(ctx context.Context) error {
-	if s.eventPublisher == nil {
-		// No broker configured: mark pending rows published so they do not accumulate in tests.
-		msgs, err := s.repo.ListPendingOutbox(ctx, 100)
-		if err != nil {
-			return err
-		}
-		for _, msg := range msgs {
-			if err := s.repo.MarkOutboxPublished(ctx, msg.ID); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	msgs, err := s.repo.ListPendingOutbox(ctx, 50)
-	if err != nil {
-		return err
-	}
-	var firstErr error
-	for _, msg := range msgs {
-		if err := s.eventPublisher.Publish(ctx, msg.Subject, json.RawMessage(msg.Payload)); err != nil {
-			_ = s.repo.RecordOutboxAttempt(ctx, msg.ID, err.Error())
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		if err := s.repo.MarkOutboxPublished(ctx, msg.ID); err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-		}
-	}
-	return firstErr
+	return s.outboxDrainer.Drain(ctx)
 }
 
 // priceItems resolves each line from the product catalog and ignores any client unit_price_cents.
