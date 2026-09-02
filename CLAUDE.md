@@ -73,6 +73,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/outbox` | Transactional outbox drain/retry loop (`Drainer`), used by `order` and `payment`; each service keeps its own outbox table/SQL behind the `Store` interface |
 | `shared/pkg/events` | NATS subject constants + payload structs for cross-service events (`order.*`, `payment.succeeded`, `product.*`); one canonical contract per publisher/subscriber pair instead of redeclaring subject strings and payload shapes on each side |
 | `shared/pkg/pgsslmode` | Picks `sslmode` for a Postgres connection string (local/docker hosts → `disable`, everything else including RDS → `require`); used by every service's DB bootstrap so the local-hostname list can't drift out of sync per service again |
+| `shared/pkg/natspublisher` | JSON-marshaling NATS event publisher (`New`, `Publish`, `Close`), used by `auth`, `order`, `product`, and `payment` |
 
 ### Service ownership
 
