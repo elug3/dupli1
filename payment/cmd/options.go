@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/elug3/dupli1/payment/pkg"
@@ -73,13 +72,6 @@ func applyEnv(opts *payment.ServerOptions) {
 	}
 	if v := os.Getenv("NATS_URL"); v != "" {
 		opts.NATSURL = v
-	}
-	// Explicit opt-in for local simulate-success. Prod must leave this unset when NANO is live.
-	if v := os.Getenv("PAYMENT_ALLOW_DEV_SIMULATE"); v != "" {
-		switch strings.ToLower(strings.TrimSpace(v)) {
-		case "1", "true", "yes", "on":
-			opts.AllowDevSimulate = true
-		}
 	}
 	if v := os.Getenv("DUPLI1_PAYMENT_PUBLIC_URL"); v != "" {
 		opts.PublicBaseURL = v

@@ -88,6 +88,26 @@ func (s *InventoryStore) migrate() error {
 			return fmt.Errorf("migrate inventory schema: %w", err)
 		}
 	}
+
+	// status is otherwise plain TEXT with validity enforced only in Go
+	// (domain.ReservationStatus); this CHECK makes an invalid value fail
+	// loudly at write time instead of silently corrupting state. Postgres has
+	// no ADD CONSTRAINT IF NOT EXISTS, so existence is checked against
+	// pg_constraint first (same pattern as the SKU-master FKs in taxonomy.go).
+	var exists bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conname = 'reservations_status_check')`,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("check reservations_status_check: %w", err)
+	}
+	if !exists {
+		if _, err := s.pool.Exec(ctx, `
+			ALTER TABLE reservations ADD CONSTRAINT reservations_status_check
+			CHECK (status IN ('active', 'committed', 'released'))
+		`); err != nil {
+			return fmt.Errorf("add reservations_status_check: %w", err)
+		}
+	}
 	return nil
 }
 

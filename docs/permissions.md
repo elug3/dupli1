@@ -189,7 +189,7 @@ Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
 
 **Default storefront:** authenticated user with empty `permissions` may create/read **only their own** payments (ownership enforced in service).
 
-NANO return/webhook and gated dev simulate endpoints are **unauthenticated** (callback / webhook secret / dev-only). Bypass requires `payment.bypass`.
+NANO return/webhook endpoints are **unauthenticated** (callback / webhook secret). Bypass requires `payment.bypass`.
 
 ---
 
@@ -299,7 +299,6 @@ registered as an alias.
 |--------|------|-------------------|
 | `POST` | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | `GET` | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
-| `GET` | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
 
 ---
 

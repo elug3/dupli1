@@ -1275,22 +1275,6 @@ paths:
         '200':
           description: Success
 
-  /api/v1/payments/{id}/simulate-success:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        description: Resource id
-        schema:
-          type: string
-    get:
-      summary: Development-only payment success simulation
-      tags: [Payment]
-      description: Registered only when the dev simulate endpoint is enabled; must stay off in production.
-      responses:
-        '200':
-          description: Success
-
   /api/v1/notification/health:
     get:
       summary: Notification service health

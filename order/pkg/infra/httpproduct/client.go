@@ -2,85 +2,46 @@ package httpproduct
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/elug3/dupli1/order/pkg/ports"
-	"github.com/elug3/dupli1/shared/pkg/money"
+	"github.com/elug3/dupli1/shared/pkg/productclient"
 )
 
+// Client resolves product variants for order pricing/display. Delegates
+// the actual HTTP fetch to shared/pkg/productclient and maps its superset
+// Variant into order's own ports.VariantInfo (which carries ProductName,
+// not Color).
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	inner *productclient.Client
 }
 
 func NewClient(baseURL string, httpClient *http.Client) *Client {
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
-	return &Client{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: httpClient,
-	}
-}
-
-type variantResponse struct {
-	SkuID       string   `json:"skuId"`
-	SKU         string   `json:"sku"`
-	ProductID   string   `json:"productId"`
-	Price       float64  `json:"price"`
-	Status      string   `json:"status"`
-	ProductName string   `json:"productName"`
-	ImageURLs   []string `json:"imageUrls"`
+	return &Client{inner: productclient.NewClient(baseURL, httpClient)}
 }
 
 func (c *Client) GetVariant(ctx context.Context, sku string) (*ports.VariantInfo, error) {
-	return c.fetchVariant(ctx, "/api/v1/products/variants/by-sku/"+sku)
+	return toVariantInfo(c.inner.GetVariant(ctx, sku))
 }
 
 func (c *Client) GetVariantBySkuID(ctx context.Context, skuID string) (*ports.VariantInfo, error) {
-	return c.fetchVariant(ctx, "/api/v1/products/variants/by-sku-id/"+skuID)
+	return toVariantInfo(c.inner.GetVariantBySkuID(ctx, skuID))
 }
 
-func (c *Client) fetchVariant(ctx context.Context, path string) (*ports.VariantInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+func toVariantInfo(v *productclient.Variant, err error) (*ports.VariantInfo, error) {
 	if err != nil {
+		if errors.Is(err, productclient.ErrVariantNotFound) {
+			return nil, ports.ErrVariantNotFound
+		}
 		return nil, err
 	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, ports.ErrVariantNotFound
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("product request failed: %s", resp.Status)
-	}
-
-	var body variantResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, err
-	}
-
 	return &ports.VariantInfo{
-		SkuID:          body.SkuID,
-		SKU:            strings.ToUpper(strings.TrimSpace(body.SKU)),
-		ProductID:      body.ProductID,
-		UnitPriceCents: money.FromProductPrice(body.Price),
-		ProductName:    body.ProductName,
-		ImageURL:       firstOf(body.ImageURLs),
+		SkuID:          v.SkuID,
+		SKU:            v.SKU,
+		ProductID:      v.ProductID,
+		UnitPriceCents: v.UnitPriceCents,
+		ProductName:    v.ProductName,
+		ImageURL:       v.ImageURL,
 	}, nil
-}
-
-func firstOf(ss []string) string {
-	if len(ss) > 0 {
-		return ss[0]
-	}
-	return ""
 }

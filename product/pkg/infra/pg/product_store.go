@@ -70,6 +70,7 @@ func (s *ProductSearchStore) migrate() error {
 		{"created_by", "TEXT NOT NULL DEFAULT ''"},
 		{"official_price", "NUMERIC(10,2) NOT NULL DEFAULT 0"},
 		{"attributes", "JSONB NOT NULL DEFAULT '{}'::jsonb"},
+		{"updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()"},
 	} {
 		if _, err := s.pool.Exec(ctx, fmt.Sprintf(
 			"ALTER TABLE products ADD COLUMN IF NOT EXISTS %s %s", col.name, col.def,
@@ -411,11 +412,11 @@ func scanAttributesJSON(raw []byte) map[string]string {
 	return out
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price, official_price, status, capacity, tags, attributes, view_count, sold_count, wishlist_count, created_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price, official_price, status, capacity, tags, attributes, view_count, sold_count, wishlist_count, created_at, updated_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
-	var createdAt time.Time
+	var createdAt, updatedAt time.Time
 	var tags pgtype.TextArray
 	var capacity string
 	var brandCode, styleCode *string
@@ -426,7 +427,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category,
 		&subCategory, &bagStyle, &target,
 		&p.Price, &p.OfficialPrice,
-		&p.Status, &capacity, &tags, &attrsRaw, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &p.CreatedBy,
+		&p.Status, &capacity, &tags, &attrsRaw, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &updatedAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err
@@ -444,6 +445,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	p.Tags = scanTextArray(tags)
 	p.Attributes = scanAttributesJSON(attrsRaw)
 	p.CreatedAt = createdAt.Format(time.RFC3339)
+	p.UpdatedAt = updatedAt.Format(time.RFC3339)
 	return p, nil
 }
 
@@ -771,7 +773,7 @@ func (s *ProductSearchStore) UpdateProduct(ctx context.Context, p domain.Product
 		`UPDATE products
 		 SET name=$2, description=$3, brand=$4, material=$5, category=$6,
 		     sub_category=$7, bag_style=$8, target=$9, price=$10, official_price=$11,
-		     status=$12, capacity=$13, tags=$14, attributes=$15
+		     status=$12, capacity=$13, tags=$14, attributes=$15, updated_at=NOW()
 		 WHERE id=$1
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description,

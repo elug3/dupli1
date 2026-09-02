@@ -16,7 +16,7 @@ type CheckoutSessionInput struct {
 }
 
 type CheckoutSessionResult struct {
-	Provider    string // domain provider id (dev, nano, …)
+	Provider    string // domain provider id (nano, …)
 	ProviderRef string
 	CheckoutURL string
 }

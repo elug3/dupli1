@@ -1,6 +1,8 @@
 # Plan: Payment Methods
 
-**Status:** Design + Bypass + **NANO certified card** implemented. Local `credit_card` uses **dev simulate** when NANO credentials are unset (`PAYMENT_ALLOW_DEV_SIMULATE`). Bitcoin is still spec-only (do not implement yet).
+**Status:** Design + Bypass + **NANO certified card** implemented. Bitcoin is still spec-only (do not implement yet).
+
+**Update:** the **dev simulate** provider/endpoint described throughout this plan (provider `dev`, `GET .../simulate-success`) was **removed** and merged into Bypass — local/dev `credit_card` testing without NANO now uses `method=bypass` like everywhere else. Treat every `dev`/`simulate` mention below as historical design context, not current behavior; see [payment-service.md](payment-service.md) for as-built.
 
 **Related:** [payment-service.md](payment-service.md), [permissions.md](permissions.md), [checkout-session.md](checkout-session.md), [auth-profile-extension-plan.md](auth-profile-extension-plan.md), [current-state.md](current-state.md).
 

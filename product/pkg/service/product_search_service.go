@@ -11,31 +11,22 @@ import (
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/events"
 	"github.com/google/uuid"
 )
 
 const (
-	productCreatedSubject       = "product.created"
-	productUpdatedSubject       = "product.updated"
-	productDeletedSubject       = "product.deleted"
-	productImageUploadedSubject = "product.image_uploaded"
-	variantCreatedSubject       = "product.variant_created"
-	variantUpdatedSubject       = "product.variant_updated"
-	variantDeletedSubject       = "product.variant_deleted"
+	// Subject aliases of the shared event contract — see shared/pkg/events.
+	productCreatedSubject       = events.ProductCreated
+	productUpdatedSubject       = events.ProductUpdated
+	productDeletedSubject       = events.ProductDeleted
+	productImageUploadedSubject = events.ProductImage
+	// Variant subjects have no cross-service subscriber today, so they stay
+	// local rather than move into shared/pkg/events.
+	variantCreatedSubject = "product.variant_created"
+	variantUpdatedSubject = "product.variant_updated"
+	variantDeletedSubject = "product.variant_deleted"
 )
-
-type productEvent struct {
-	EventType string    `json:"event_type"`
-	ProductID string    `json:"product_id"`
-	SKU       string    `json:"sku,omitempty"`
-	Name      string    `json:"name"`
-	Brand     string    `json:"brand"`
-	Category  string    `json:"category"`
-	Status    string    `json:"status"`
-	Price     float64   `json:"price"`
-	ImageURL  string    `json:"image_url,omitempty"`
-	Occurred  time.Time `json:"occurred_at"`
-}
 
 type ProductSearchService struct {
 	store          ports.ProductStore
@@ -475,7 +466,7 @@ func (s *ProductSearchService) publish(ctx context.Context, subject string, prod
 	if s.eventPublisher == nil || product == nil {
 		return nil
 	}
-	return s.eventPublisher.Publish(ctx, subject, productEvent{
+	return s.eventPublisher.Publish(ctx, subject, events.Product{
 		EventType: subject,
 		ProductID: product.ID,
 		SKU:       sku,
