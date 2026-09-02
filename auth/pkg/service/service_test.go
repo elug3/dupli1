@@ -50,8 +50,8 @@ func (g fakeTokenGenerator) Validate(ctx context.Context, token string) (ports.C
 }
 
 type capturingTokenGenerator struct {
-	capturedUserID        string
-	capturedPermissions   []string
+	capturedUserID      string
+	capturedPermissions []string
 }
 
 func (g *capturingTokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string) (string, error) {
@@ -174,7 +174,7 @@ func TestRefresh_FetchesFreshPermissionsFromDB(t *testing.T) {
 
 	gen.capturedUserID = "u-2"
 
-	if _, err := svc.Refresh(t.Context(), "any-token"); err != nil {
+	if _, _, err := svc.Refresh(t.Context(), "any-token"); err != nil {
 		t.Fatalf("Refresh returned error: %v", err)
 	}
 	if !permissions.Has(gen.capturedPermissions, permissions.AdminAll) {
@@ -434,7 +434,7 @@ func TestRefresh_RejectsDeactivatedAccount(t *testing.T) {
 	gen := &capturingTokenGenerator{capturedUserID: "u-off"}
 	svc := NewService(repo, fakeTokenGenerator{}, WithRefreshTokenGen(gen, time.Hour))
 
-	if _, err := svc.Refresh(t.Context(), "refresh-token"); !errors.Is(err, autherrors.ErrAccountDeactivated) {
+	if _, _, err := svc.Refresh(t.Context(), "refresh-token"); !errors.Is(err, autherrors.ErrAccountDeactivated) {
 		t.Fatalf("got %v, want ErrAccountDeactivated", err)
 	}
 }
@@ -497,7 +497,7 @@ func TestLogout_RevokesRefreshSession(t *testing.T) {
 		t.Fatal("refresh token should be removed after logout")
 	}
 
-	if _, err := svc.Refresh(t.Context(), refreshToken); !errors.Is(err, autherrors.ErrInvalidToken) {
+	if _, _, err := svc.Refresh(t.Context(), refreshToken); !errors.Is(err, autherrors.ErrInvalidToken) {
 		t.Fatalf("Refresh after logout: got %v, want ErrInvalidToken", err)
 	}
 }

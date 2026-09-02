@@ -103,10 +103,10 @@ func TestServiceAccountTokenSource_CapturesRotatedRefreshToken(t *testing.T) {
 	src := httpauth.NewServiceAccountTokenSource(srv.URL, "order@svc", "secret", srv.Client())
 	// Skew is 60s and the fake token expires in 30s, so each Token() call
 	// forces a fresh refresh — driving two rotations without Invalidate().
-	if _, err := src.Token(context.Background()); err != nil {
+	if _, err := src.Token(t.Context()); err != nil {
 		t.Fatalf("first Token: %v", err)
 	}
-	if _, err := src.Token(context.Background()); err != nil {
+	if _, err := src.Token(t.Context()); err != nil {
 		t.Fatalf("second Token: %v", err)
 	}
 
