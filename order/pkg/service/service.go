@@ -14,14 +14,16 @@ import (
 
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/events"
 	"github.com/elug3/dupli1/shared/pkg/outbox"
 )
 
+// Subject aliases of the shared event contract — see shared/pkg/events.
 const (
-	orderCreatedSubject     = "order.created"
-	orderUpdatedSubject     = "order.status_updated"
-	orderPaidSubject        = "order.paid"
-	paymentSucceededSubject = "payment.succeeded"
+	orderCreatedSubject     = events.OrderCreated
+	orderUpdatedSubject     = events.OrderStatusUpdate
+	orderPaidSubject        = events.OrderPaid
+	paymentSucceededSubject = events.PaymentSucceeded
 )
 
 type Service struct {
@@ -52,26 +54,6 @@ type CompleteCheckoutInput struct {
 	RecipientPhone  string
 	ShippingAddress domain.ShippingAddress
 	SourceAddressID string
-}
-
-type orderItemEvent struct {
-	SkuID          string `json:"sku_id,omitempty"`
-	SKU            string `json:"sku"`
-	Quantity       int    `json:"quantity"`
-	UnitPriceCents int64  `json:"unit_price_cents"`
-}
-
-type orderEvent struct {
-	EventType     string             `json:"event_type"`
-	OrderID       string             `json:"order_id"`
-	CustomerID    string             `json:"customer_id"`
-	Status        domain.OrderStatus `json:"status"`
-	SubtotalCents int64              `json:"subtotal_cents"`
-	DiscountCents int64              `json:"discount_cents"`
-	TotalCents    int64              `json:"total_cents"`
-	Items         []orderItemEvent   `json:"items"`
-	CreatedAt     time.Time          `json:"created_at"`
-	Occurred      time.Time          `json:"occurred_at"`
 }
 
 type idempotencyFingerprint struct {
@@ -495,20 +477,20 @@ func (s *Service) outboxEvents(order *domain.Order, subjects ...string) ([]ports
 }
 
 func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte, error) {
-	items := make([]orderItemEvent, len(order.Items))
+	items := make([]events.OrderItem, len(order.Items))
 	for i, item := range order.Items {
-		items[i] = orderItemEvent{
+		items[i] = events.OrderItem{
 			SkuID:          item.SkuID,
 			SKU:            item.SKU,
 			Quantity:       item.Quantity,
 			UnitPriceCents: item.UnitPriceCents,
 		}
 	}
-	payload, err := json.Marshal(orderEvent{
+	payload, err := json.Marshal(events.Order{
 		EventType:     subject,
 		OrderID:       order.ID,
 		CustomerID:    order.CustomerID,
-		Status:        order.Status,
+		Status:        string(order.Status),
 		SubtotalCents: order.SubtotalCents,
 		DiscountCents: order.DiscountCents,
 		TotalCents:    order.TotalCents,

@@ -71,6 +71,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/authjwt` | JWKS/JWT validation helpers (RS256 via `AUTH_JWKS_URL`; HS256 fallback) |
 | `shared/pkg/settings` | `GET /settings` response helpers used by all services |
 | `shared/pkg/outbox` | Transactional outbox drain/retry loop (`Drainer`), used by `order` and `payment`; each service keeps its own outbox table/SQL behind the `Store` interface |
+| `shared/pkg/events` | NATS subject constants + payload structs for cross-service events (`order.*`, `payment.succeeded`, `product.*`); one canonical contract per publisher/subscriber pair instead of redeclaring subject strings and payload shapes on each side |
 
 ### Service ownership
 

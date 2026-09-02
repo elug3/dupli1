@@ -9,17 +9,19 @@ import (
 	"time"
 
 	"github.com/elug3/dupli1/notification/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/events"
 	"github.com/elug3/dupli1/shared/pkg/money"
 )
 
+// Subject aliases of the shared event contract — see shared/pkg/events.
 const (
-	SubjectOrderCreated      = "order.created"
-	SubjectOrderStatusUpdate = "order.status_updated"
-	SubjectOrderPaid         = "order.paid"
-	SubjectProductCreated    = "product.created"
-	SubjectProductUpdated    = "product.updated"
-	SubjectProductDeleted    = "product.deleted"
-	SubjectProductImage      = "product.image_uploaded"
+	SubjectOrderCreated      = events.OrderCreated
+	SubjectOrderStatusUpdate = events.OrderStatusUpdate
+	SubjectOrderPaid         = events.OrderPaid
+	SubjectProductCreated    = events.ProductCreated
+	SubjectProductUpdated    = events.ProductUpdated
+	SubjectProductDeleted    = events.ProductDeleted
+	SubjectProductImage      = events.ProductImage
 )
 
 type ChatRouting interface {
@@ -77,27 +79,8 @@ func (d *Dispatcher) handle(ctx context.Context, subject string, payload []byte)
 	}
 }
 
-type orderEvent struct {
-	EventType     string          `json:"event_type"`
-	OrderID       string          `json:"order_id"`
-	CustomerID    string          `json:"customer_id"`
-	Status        string          `json:"status"`
-	SubtotalCents int64           `json:"subtotal_cents"`
-	DiscountCents int64           `json:"discount_cents"`
-	TotalCents    int64           `json:"total_cents"`
-	Items         []orderItemView `json:"items"`
-	CreatedAt     time.Time       `json:"created_at"`
-	Occurred      time.Time       `json:"occurred_at"`
-}
-
-type orderItemView struct {
-	SKU            string `json:"sku"`
-	Quantity       int    `json:"quantity"`
-	UnitPriceCents int64  `json:"unit_price_cents"`
-}
-
 func (d *Dispatcher) handleOrder(ctx context.Context, subject string, payload []byte) error {
-	var event orderEvent
+	var event events.Order
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("decode order event: %w", err)
 	}
@@ -115,20 +98,8 @@ func (d *Dispatcher) handleOrder(ctx context.Context, subject string, payload []
 	return nil
 }
 
-type productEvent struct {
-	EventType string    `json:"event_type"`
-	ProductID string    `json:"product_id"`
-	Name      string    `json:"name"`
-	Brand     string    `json:"brand"`
-	Category  string    `json:"category"`
-	Status    string    `json:"status"`
-	Price     float64   `json:"price"`
-	ImageURL  string    `json:"image_url,omitempty"`
-	Occurred  time.Time `json:"occurred_at"`
-}
-
 func (d *Dispatcher) handleProduct(ctx context.Context, subject string, payload []byte) error {
-	var event productEvent
+	var event events.Product
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("decode product event: %w", err)
 	}
@@ -164,7 +135,7 @@ func (d *Dispatcher) productChatID(ctx context.Context) string {
 	return strings.TrimSpace(d.cfg.ProductChatID)
 }
 
-func formatOrderMessage(subject string, event orderEvent, manageWebURL string) string {
+func formatOrderMessage(subject string, event events.Order, manageWebURL string) string {
 	items := make([]string, 0, len(event.Items))
 	for _, item := range event.Items {
 		items = append(items, fmt.Sprintf("%d× %s", item.Quantity, escapeHTML(item.SKU)))
@@ -238,7 +209,7 @@ func formatManageOrderLink(manageWebURL, orderID string) string {
 	return fmt.Sprintf("<a href=\"%s\">View order in manage-web</a>\n", url)
 }
 
-func formatProductMessage(subject string, event productEvent) string {
+func formatProductMessage(subject string, event events.Product) string {
 	price := money.FormatKRW(money.FromProductPrice(event.Price))
 	name := escapeHTML(event.Name)
 	brand := escapeHTML(event.Brand)
