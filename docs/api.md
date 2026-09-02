@@ -751,9 +751,9 @@ Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices
 
 ## Payment Service — `/api/v1/payments`
 
-Credit card uses **NANO Solution** certified payment when `NANO_*` credentials are set; otherwise manager **Bypass** or local **dev simulate** (`PAYMENT_ALLOW_DEV_SIMULATE`). Dupli1 never handles card numbers, CVC, or card passwords.
+Credit card uses **NANO Solution** certified payment when `NANO_*` credentials are set; otherwise `credit_card` is unavailable (501) and payments — including local testing — go through manager **Bypass**. Dupli1 never handles card numbers, CVC, or card passwords.
 
-**Methods:** create body accepts `method`: `credit_card` (NANO or local simulate), `bypass` (order manager / `payment.bypass`), `bitcoin` (501 until implemented). See [payment-methods-plan.md](payment-methods-plan.md).
+**Methods:** create body accepts `method`: `credit_card` (NANO; 501 when unconfigured), `bypass` (order manager / `payment.bypass`), `bitcoin` (501 until implemented). See [payment-methods-plan.md](payment-methods-plan.md).
 
 When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront callers may only pay for / read their own orders unless they hold `payment.create` or `payment.read.all`.
 
@@ -761,7 +761,6 @@ When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront calle
 |--------|------|-------------------|
 | POST | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | GET | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
-| GET | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
 
 **Create payment**
 ```json

@@ -70,6 +70,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/permissions` | Permission constants, `Has`/`HasAny`, wildcard evaluation, legacy role expansion, named bundles |
 | `shared/pkg/authjwt` | JWKS/JWT validation helpers (RS256 via `AUTH_JWKS_URL`; HS256 fallback) |
 | `shared/pkg/settings` | `GET /settings` response helpers used by all services |
+| `shared/pkg/outbox` | Transactional outbox drain/retry loop (`Drainer`), used by `order` and `payment`; each service keeps its own outbox table/SQL behind the `Store` interface |
 
 ### Service ownership
 
@@ -79,7 +80,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `product` | stdlib `net/http` | Parent-style + variant(SKU) catalog, images (MinIO/S3), stock & reservations (merged from former `inventory` service) |
 | `order` | stdlib `net/http` | Checkout sessions, order lifecycle, transactional outbox → NATS |
 | `cart` | stdlib `net/http` | Persistent per-customer cart; enriches lines from product |
-| `payment` | stdlib `net/http` | NANO card / manager Bypass / dev simulate; publishes `payment.succeeded` via outbox |
+| `payment` | stdlib `net/http` | NANO card / manager Bypass (also the local/dev testing path); publishes `payment.succeeded` via outbox |
 | `notification` | stdlib `net/http` | NATS subscriber → Telegram ops alerts |
 
 ### Product model

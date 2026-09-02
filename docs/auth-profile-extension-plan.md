@@ -1,8 +1,8 @@
 # Auth profile extension plan
 
-> **Phases A+B shipped** (auth profile/addresses + order checkout snapshot). Remaining: optional profile module extraction. As-built endpoints: [endpoints.md](endpoints.md) Auth section.
+> **Phases A+B shipped** (auth profile/addresses + order checkout snapshot). Remaining: optional profile module extraction — **Phase D now has a concrete extraction plan** (file move table, framework/auth wiring notes, migration steps), not yet implemented. As-built endpoints: [endpoints.md](endpoints.md) Auth section.
 
-**Status:** Phase A implemented in `auth/` (profile + addresses). **Phase B** implemented in `order/` (checkout snapshot). Profile module extraction remains planned.
+**Status:** Phase A implemented in `auth/` (profile + addresses). **Phase B** implemented in `order/` (checkout snapshot). Phase D (profile module extraction) is planned in detail below but not started; wishlists were evaluated for inclusion and intentionally excluded (see Phase D decision log).
 
 **Related:** [payment-service.md](payment-service.md), [payment-methods-plan.md](payment-methods-plan.md), [checkout-session.md](checkout-session.md), [permissions.md](permissions.md), [current-state.md](current-state.md).
 
@@ -265,34 +265,79 @@ When to split (any of):
 - Compliance wants PII in a separate DB / retention policy
 - Auth deploy cadence should not ship with profile changes
 
+**Scope decision:** wishlists (`product/pkg/infra/pg/wishlist_store.go`) were evaluated for inclusion and rejected — see decision log. This extraction moves `customer_profiles` + `customer_addresses` only, both entities together (they're 1:1/1:N off the same `user_id` and already share one file/route group; splitting display-name/phone from addresses into different services would cut across a currently-atomic record for no reason).
+
 ### Target shape
 
 ```text
-profile/                    # new Go module (like cart/, payment/)
-  cmd/
-  pkg/
-    domain/
-    service/
-    infra/pg/               # postgres-profile (new Compose DB)
-    handler/
+profile/                          # new Go module (like cart/, payment/)
+├── go.mod                        # replace github.com/elug3/dupli1/shared => ../shared
+├── cmd/{main.go,options.go}      # env config, starts server
+└── pkg/
+    ├── domain/profile.go         # Profile, Address, ProfileView, validators
+    ├── ports/profile_repository.go
+    ├── service/profile.go
+    ├── infra/postgres/profile_repository.go
+    ├── infra/memory/profile_repository.go   # for DB-less tests, same convention as order/cart/payment
+    ├── handler/profile.go        # net/http, NOT gin — see framework note
+    └── bootstrap/{bootstrap.go,settings.go,router.go}
 
-Gateway:  /api/v1/profile/me/…   (or keep /api/v1/auth/me/profile via proxy alias)
-Auth:     identity only
+Gateway:  /api/v1/profile/me/…   (frontend switches from /api/v1/auth/me/… )
+Auth:     identity only (users, JWT/JWKS, login/refresh/logout, permissions admin, account locking)
+```
+
+**Framework note:** `auth`'s current profile handlers are Gin (`*gin.Context`), because they live inside `auth`, which is the one Gin service. Every other service — including the three this new service sits next to (`cart`, `order`, `product`) — is stdlib `net/http` + `shared/pkg/authjwt`. The extraction should rewrite `pkg/handler/profile.go` to stdlib for consistency: business logic (`domain`/`service`/`ports`/`infra`) is framework-agnostic and moves verbatim; only the ~7 handler functions' signatures and JSON decode/respond boilerplate change.
+
+**Auth wiring note:** `profile` doesn't issue tokens, so unlike `auth`'s own `RequireAuth()` (which validates against its local signing key as the issuer), `profile` validates the way `cart`/`order`/`product`/`payment` already do: `authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)` in `bootstrap.go` (mirrors `cart/pkg/bootstrap/bootstrap.go:60`), fetching RS256 keys from `AUTH_JWKS_URL=http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json`. Ownership check stays trivial — `caller.ID` from `authjwt.Claims.UserID` compared to the row's `user_id`, same ABAC as today, no new permission.
+
+### File move table
+
+| From (`auth`) | To (`profile`) | Change needed |
+|---|---|---|
+| `pkg/domain/profile.go` | `pkg/domain/profile.go` | Verbatim move |
+| `pkg/ports/profile_repository.go` | `pkg/ports/profile_repository.go` | Verbatim move |
+| `pkg/service/profile.go` | `pkg/service/profile.go` | Verbatim move |
+| `pkg/infra/postgres/profile_repository.go` | `pkg/infra/postgres/profile_repository.go` | Verbatim move — same `customer_profiles`/`customer_addresses` DDL |
+| `pkg/infra/memory/profile_repository.go` | `pkg/infra/memory/profile_repository.go` | Verbatim move |
+| `pkg/handler/profile.go` | `pkg/handler/profile.go` | **Rewrite Gin → stdlib** (see framework note) |
+| `authed.GET/PATCH/POST/DELETE("/me/...")` block in `auth/pkg/bootstrap/router.go` | new `profile/pkg/bootstrap/router.go` | Route table carries over 1:1, mounted under `/api/v1/profile` instead of `/api/v1/auth` |
+
+Routes carried over unchanged (path shape, just a new prefix):
+```
+GET    /me/profile
+PATCH  /me/profile
+GET    /me/addresses
+POST   /me/addresses
+GET    /me/addresses/{id}
+PATCH  /me/addresses/{id}
+DELETE /me/addresses/{id}
+POST   /me/addresses/{id}/default
 ```
 
 ### Extraction steps
 
-1. **Freeze APIs** — JSON shapes from phase A become the contract.
-2. **New database** `profile` on `postgres-profile`; migrate `customer_profiles` + `customer_addresses`.
-3. **Dual-write or migration script** — copy rows from `dupli1_db` once.
-4. **Deploy `dupli1-profile`** — validate JWT via `AUTH_JWKS_URL` (same as cart/order).
-5. **nginx** — route `/api/v1/profile/` or proxy alias for backward compat.
-6. **Remove** profile tables from auth DB after cutover.
-7. **Events** — `profile.updated` from new service; auth publishes `user.registered` only.
+1. **Freeze APIs** — JSON shapes from phase A become the contract (no field changes during the move).
+2. **Scaffold `profile/`** per Target shape above; `go.mod` module `github.com/elug3/dupli1/profile`.
+3. **New database**: `postgres-profile` in `docker-compose.yml` (next open dev port — `5439`, db `profiles`, following the existing per-service port sequence), plus a `dupli1-profile` compose block modeled on `dupli1-product`'s (JWKS validator env vars, not `JWT_SECRET`-as-issuer). `profile` bootstraps its own tables on startup via the same `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` inline pattern every service already uses — no new migration tooling.
+4. **One-time data copy** — both source and destination are Postgres with identical schema, so this is a straight dump/restore, not a transform:
+   ```bash
+   pg_dump --table=customer_profiles --table=customer_addresses \
+     postgres://dupli1:dupli1_dev@localhost:5432/dupli1_db | \
+     psql postgres://dupli1:dupli1_dev@localhost:5439/profiles
+   ```
+5. **Deploy `dupli1-profile` dual-run** — both `auth` and `profile` serve profile/address data from their own copies; do not cut traffic yet.
+6. **nginx** — add `/api/v1/profile` location block (points at `dupli1-profile:8080`); frontend switches its address-book calls from `/api/v1/auth/me/...` to `/api/v1/profile/me/...`.
+7. **Verify** — confirm reads/writes against `profile` match expectations before touching `auth`. No other service reads these tables server-side today (`order` never calls `auth` at checkout — the client sends `shipping_address` directly), so there's no other consumer to coordinate.
+8. **Remove** `pkg/domain/profile.go`, `pkg/service/profile.go`, `pkg/handler/profile.go`, `pkg/infra/*/profile_repository.go`, and the router block from `auth`; drop `customer_profiles`/`customer_addresses` from `auth`'s DB after cutover is confirmed stable.
+9. **Events** — `profile.updated` from new service (still optional/deferred, per phase A.2); auth publishes `user.registered` only.
 
 ### Backward compatibility
 
-Keep **`/api/v1/auth/me/profile`** as a gateway alias to profile service for one release if clients already shipped.
+Keep **`/api/v1/auth/me/profile`** as a gateway alias to the profile service for one release if clients already shipped against it.
+
+### Out of scope for this extraction
+
+The address-validation logic (`krPhoneDigits`/`postalCodeRE`/`pcccRE` regexes and normalizers) is duplicated today between `auth/pkg/domain/profile.go` and `order/pkg/domain/shipping.go` — `order` keeps its own copy regardless of who owns the address book, because it needs an immutable per-order snapshot independent of later address edits. Moving the owning service doesn't fix the duplication; that's a separate follow-up (hoist the shared normalize/validate functions into `shared/pkg/...`) worth doing opportunistically but tracked independently of this plan.
 
 ### What stays in auth forever
 
@@ -338,9 +383,12 @@ Keep **`/api/v1/auth/me/profile`** as a gateway alias to profile service for one
 
 ### Phase D — Profile module
 
-- [ ] Separate service + DB + gateway routes
-- [ ] Migration runbook
-- [ ] Deprecate in-auth tables
+- [ ] Scaffold `profile/` service (hexagonal layout, stdlib `net/http` handlers)
+- [ ] `postgres-profile` DB + `dupli1-profile` compose block + nginx `/api/v1/profile` route
+- [ ] Move domain/ports/service/infra verbatim; rewrite handler layer off Gin
+- [ ] One-time data copy (`customer_profiles` + `customer_addresses`) + dual-run verification
+- [ ] Cut frontend over to `/api/v1/profile/me/...`; drop tables + code from `auth`
+- [ ] Docs: this file, [current-state.md](current-state.md), [api.md](api.md), [endpoints.md](endpoints.md), [openapi.yaml](openapi.yaml), [service-layout.md](service-layout.md), `CLAUDE.md` service table + dev DB credentials table
 
 ---
 
@@ -355,6 +403,8 @@ Keep **`/api/v1/auth/me/profile`** as a gateway alias to profile service for one
 | Email on profile | No | Single source: `users.email` |
 | Module package path | `auth/pkg/.../profile` | Clean cut for phase D |
 | Guest checkout | Checkout-only fields | No profile row without user |
+| Wishlists in profile module | No — stays in `product` | Wishlist count is maintained transactionally with `products.wishlist_count` in one DB tx (`product/pkg/infra/pg/wishlist_store.go`); splitting it out costs that atomicity for either eventual consistency or a cross-service dual write. Wishlist also supports **guest** owners (`"g:"+guestID` cookie, no `user_id` at all), which doesn't fit a service modeled around authenticated identity |
+| Handler framework for `profile` | stdlib `net/http`, not Gin | Matches `cart`/`order`/`product`/`payment` (4 of 5 non-auth services); `auth` is the Gin outlier because it's the token issuer, not a pattern worth propagating |
 
 ---
 

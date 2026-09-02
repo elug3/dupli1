@@ -285,7 +285,7 @@ sequenceDiagram
     Order->>Product: reserve stock (/api/v1/products/inventory/reservations)
     Order-->>Client: pending order
 
-    Client->>Pay: POST /api/v1/payments (NANO card / Bypass / local simulate)
+    Client->>Pay: POST /api/v1/payments (NANO card / Bypass)
     Note over Client,Pay: see payment-service.md
 
     Client->>Cart: DELETE /api/v1/cart

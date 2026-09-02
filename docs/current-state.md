@@ -14,7 +14,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Inventory (stock, reservations) | Implemented (PostgreSQL, owned by product) |
 | Orders + checkout sessions | Implemented (PostgreSQL) |
 | Shopping cart | Implemented (PostgreSQL) |
-| Payments (NANO card + Bypass + local simulate) | Implemented — see [payment-service.md](payment-service.md) |
+| Payments (NANO card + Bypass) | Implemented — see [payment-service.md](payment-service.md) |
 | Payment methods | Credit card (NANO) + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
 | Notifications | Implemented (NATS → Telegram when configured) |
 | User profiles, chat, analytics | **Profile phase A** in auth (`/me/profile`, `/me/addresses`) — [auth-profile-extension-plan.md](auth-profile-extension-plan.md); guest PDP views + recommendations in product; chat/analytics not started |
@@ -118,11 +118,10 @@ See [service-layout.md](service-layout.md) for details.
 - **Host port:** 8087
 - **Persistence:** PostgreSQL (`payments` on `postgres-payment`)
 - **Features:**
-  - **NANO** certified card PG when `NANO_*` credentials set; else manager **Bypass** / local **dev simulate** (see [payment-service.md](payment-service.md))
+  - **NANO** certified card PG when `NANO_*` credentials set; else `credit_card` is unavailable (501) and manager **Bypass** is used, including for local testing (see [payment-service.md](payment-service.md))
   - Default payment currency: **`krw` only** (whole won; `*_cents` fields are KRW minor units = won)
-  - Dev simulate URL `GET /api/v1/payments/{id}/simulate-success` only when **`PAYMENT_ALLOW_DEV_SIMULATE=true`** and NANO unset (Compose default)
   - Publishes **`payment.succeeded`** via transactional **outbox** (soft-success complete; drain + reconcile workers)
-  - **Methods:** `method` on create — `credit_card` (NANO or local simulate), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)
+  - **Methods:** `method` on create — `credit_card` (NANO; 501 when unconfigured), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)
 - **Auth:** Bearer JWT on customer routes; ownership ABAC unless `payment.create` / `payment.read.all`. Bypass requires `payment.bypass`
 - **Tests:** `cd payment && go test ./...`
 
@@ -164,7 +163,7 @@ See [service-layout.md](service-layout.md) for details.
 | product | health, product search/PDP, coupon redeem, inventory reads | product/coupon CRUD (per permission), image upload, inventory writes (`inventory.stock.write`, `inventory.reservation.manage`) |
 | order | health only | orders (list all / by customer), checkout (ABAC + permissions), ship (`order.ship`) |
 | cart | health only | own cart; admin read (`cart.read`) |
-| payment | health, dev simulate (gated) | payments (ABAC + permissions); Bypass (`payment.bypass`) |
+| payment | health only | payments (ABAC + permissions); Bypass (`payment.bypass`) |
 | notification | health, Telegram webhook | Telegram subscriptions (`notification.telegram.read` / `notification.telegram.manage`) |
 
 Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Permission spec: [permissions.md](permissions.md).

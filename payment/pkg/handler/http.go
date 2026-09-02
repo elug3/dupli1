@@ -24,11 +24,10 @@ type AccessTokenValidator interface {
 }
 
 type Handler struct {
-	svc              *service.Service
-	jwtValidator     AccessTokenValidator
-	allowDevSimulate bool
-	nano             *checkout.NanoProvider
-	settings         settings.Response
+	svc          *service.Service
+	jwtValidator AccessTokenValidator
+	nano         *checkout.NanoProvider
+	settings     settings.Response
 }
 
 func New(svc *service.Service, jwtValidator AccessTokenValidator) *Handler {
@@ -37,12 +36,6 @@ func New(svc *service.Service, jwtValidator AccessTokenValidator) *Handler {
 		jwtValidator: jwtValidator,
 		settings:     settings.NewResponse("payment"),
 	}
-}
-
-// WithDevSimulate enables GET /api/v1/payments/{id}/simulate-success (local/dev only).
-func (h *Handler) WithDevSimulate(allow bool) *Handler {
-	h.allowDevSimulate = allow
-	return h
 }
 
 // WithNano enables NANO certified-payment bridge + return/webhook routes.
@@ -156,15 +149,6 @@ func (h *Handler) paymentRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(parts) == 2 && parts[1] == "simulate-success" && r.Method == http.MethodGet {
-		if !h.allowDevSimulate {
-			respondError(w, http.StatusNotFound, "not found")
-			return
-		}
-		h.simulateSuccess(w, r, parts[0])
-		return
-	}
-
 	if len(parts) == 3 && parts[1] == "nano" && parts[2] == "checkout" && r.Method == http.MethodGet {
 		h.nanoCheckout(w, r, parts[0])
 		return
@@ -192,18 +176,6 @@ func (h *Handler) getPayment(w http.ResponseWriter, r *http.Request, paymentID s
 		return
 	}
 	respondJSON(w, http.StatusOK, payment)
-}
-
-func (h *Handler) simulateSuccess(w http.ResponseWriter, r *http.Request, paymentID string) {
-	payment, err := h.svc.CompletePayment(r.Context(), paymentID)
-	if err != nil {
-		respondServiceError(w, err)
-		return
-	}
-	respondJSON(w, http.StatusOK, map[string]any{
-		"message": "Payment received — we're preparing your order.",
-		"payment": payment,
-	})
 }
 
 // nanoCheckout bridges the browser into NANO certified checkout (PC or mobile).

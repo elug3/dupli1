@@ -313,9 +313,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
       AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
       NATS_URL: nats://nats:4222
-      # Local Compose only — leave unset on ECS. Ignored when NANO_* credentials are set.
-      PAYMENT_ALLOW_DEV_SIMULATE: ${PAYMENT_ALLOW_DEV_SIMULATE:-true}
-      # NANO Solution certified card PG (optional). When set, credit_card uses NANO.
+      # NANO Solution certified card PG (optional). When set, credit_card uses NANO;
+      # otherwise credit_card is unavailable and card testing uses method=bypass instead.
       # Test creds from NANO API guide; production uses Secrets Manager.
       NANO_BASE_URL: ${NANO_BASE_URL:-}
       NANO_VER: ${NANO_VER:-}

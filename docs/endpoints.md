@@ -362,9 +362,8 @@ See [cart-service.md](cart-service.md) for architecture, boundaries with invento
 | `GET` | `/api/v1/payments/{id}/nano/checkout` | — | Bridge into NANO certified card checkout |
 | `POST` | `/api/v1/payments/nano/return` | — | NANO form `receiveUrl` callback |
 | `POST` | `/api/v1/payments/webhooks/nano` | — | Optional NANO JSON webhook |
-| `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (`PAYMENT_ALLOW_DEV_SIMULATE`, NANO unset): mark payment succeeded |
 
-See [payment-service.md](payment-service.md) for NANO / Bypass / local simulate, 5-minute auto-cancel, and `payment.succeeded` → `paid`. Methods (`credit_card` / `bypass` / `bitcoin` planned): [payment-methods-plan.md](payment-methods-plan.md).
+See [payment-service.md](payment-service.md) for NANO / Bypass, 5-minute auto-cancel, and `payment.succeeded` → `paid`. Methods (`credit_card` / `bypass` / `bitcoin` planned): [payment-methods-plan.md](payment-methods-plan.md).
 
 ---
 

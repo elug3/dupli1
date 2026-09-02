@@ -25,12 +25,8 @@ type Config struct {
 	JWKSURL            string
 	NATSURL            string
 	PublicBaseURL      string
-	// AllowDevSimulate enables the local simulate-success checkout path and
-	// GET /api/v1/payments/{id}/simulate-success. It must be set explicitly
-	// (PAYMENT_ALLOW_DEV_SIMULATE). Ignored when NANO credentials are configured.
-	AllowDevSimulate bool
-	Nano             checkout.NanoConfig
-	HTTPClient       *http.Client
+	Nano               checkout.NanoConfig
+	HTTPClient         *http.Client
 }
 
 type App struct {
@@ -75,17 +71,10 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 	var nanoProvider *checkout.NanoProvider
 	var checkoutProvider ports.CheckoutProvider
-	switch {
-	case nanoCfg.Enabled():
+	if nanoCfg.Enabled() {
 		nanoProvider = checkout.NewNanoProvider(nanoCfg)
 		checkoutProvider = nanoProvider
-	case cfg.AllowDevSimulate:
-		publicURL := cfg.PublicBaseURL
-		if publicURL == "" {
-			publicURL = "http://localhost:8080"
-		}
-		checkoutProvider = checkout.NewDevProvider(publicURL)
-	default:
+	} else {
 		checkoutProvider = checkout.NewUnavailableProvider(
 			"card checkout is not configured; set NANO_* credentials or use method=bypass (payment.bypass)",
 		)
@@ -120,8 +109,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 
 	h := handler.New(svc, jwtValidator).
-		WithSettings(BuildSettings(cfg)).
-		WithDevSimulate(cfg.AllowDevSimulate && !nanoCfg.Enabled())
+		WithSettings(BuildSettings(cfg))
 	if nanoProvider != nil {
 		h = h.WithNano(nanoProvider)
 	}

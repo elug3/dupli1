@@ -12,22 +12,25 @@ import (
 	"github.com/elug3/dupli1/payment/pkg/domain"
 	"github.com/elug3/dupli1/payment/pkg/infra/checkout"
 	"github.com/elug3/dupli1/payment/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/outbox"
 )
 
 type Service struct {
-	repo     ports.Repository
-	orders   ports.OrderClient
-	checkout ports.CheckoutProvider
-	events   ports.EventPublisher
-	now      func() time.Time
+	repo          ports.Repository
+	orders        ports.OrderClient
+	checkout      ports.CheckoutProvider
+	events        ports.EventPublisher
+	outboxDrainer *outbox.Drainer
+	now           func() time.Time
 }
 
 func New(repo ports.Repository, orders ports.OrderClient, checkout ports.CheckoutProvider, events ports.EventPublisher) *Service {
 	return &Service{
-		repo:     repo,
-		orders:   orders,
-		checkout: checkout,
-		events:   events,
+		repo:          repo,
+		orders:        orders,
+		checkout:      checkout,
+		events:        events,
+		outboxDrainer: outbox.NewDrainer(repo, events, "payment outbox drain"),
 		now: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -107,15 +110,7 @@ func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInpu
 		return nil, err
 	}
 
-	provider := session.Provider
-	if provider == "" {
-		provider = domain.ProviderDev
-		if strings.HasPrefix(session.ProviderRef, "nano_") {
-			provider = domain.ProviderNano
-		}
-	}
-
-	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalCents, domain.DefaultCurrency, provider, session.ProviderRef, session.CheckoutURL, now)
+	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalCents, domain.DefaultCurrency, session.Provider, session.ProviderRef, session.CheckoutURL, now)
 	if err != nil {
 		return nil, err
 	}
@@ -351,23 +346,7 @@ func (s *Service) paymentSucceededOutbox(payment *domain.Payment) ([]ports.Outbo
 
 // StartOutboxWorker periodically publishes pending outbox rows.
 func (s *Service) StartOutboxWorker(ctx context.Context, interval time.Duration) {
-	if interval <= 0 {
-		interval = 2 * time.Second
-	}
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := s.DrainOutbox(ctx); err != nil {
-					log.Printf("payment outbox drain: %v", err)
-				}
-			}
-		}
-	}()
+	s.outboxDrainer.StartWorker(ctx, interval)
 }
 
 // StartReconcileWorker re-publishes recent succeeded payments so order can catch
@@ -396,52 +375,12 @@ func (s *Service) StartReconcileWorker(ctx context.Context, interval, lookback t
 }
 
 func (s *Service) tryDrainOutbox(ctx context.Context) {
-	if err := s.DrainOutbox(ctx); err != nil {
-		log.Printf("payment outbox drain: %v", err)
-	}
+	s.outboxDrainer.TryDrain(ctx)
 }
 
 // DrainOutbox publishes pending outbox messages. Failures are recorded and retried later.
 func (s *Service) DrainOutbox(ctx context.Context) error {
-	if s.events == nil {
-		msgs, err := s.repo.ListPendingOutbox(ctx, 100)
-		if err != nil {
-			return err
-		}
-		for _, msg := range msgs {
-			if err := s.repo.MarkOutboxPublished(ctx, msg.ID); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	msgs, err := s.repo.ListPendingOutbox(ctx, 50)
-	if err != nil {
-		return err
-	}
-	var firstErr error
-	for _, msg := range msgs {
-		var event ports.PaymentSucceededEvent
-		if err := json.Unmarshal(msg.Payload, &event); err != nil {
-			_ = s.repo.RecordOutboxAttempt(ctx, msg.ID, err.Error())
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		if err := s.events.Publish(ctx, msg.Subject, event); err != nil {
-			_ = s.repo.RecordOutboxAttempt(ctx, msg.ID, err.Error())
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		if err := s.repo.MarkOutboxPublished(ctx, msg.ID); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	return firstErr
+	return s.outboxDrainer.Drain(ctx)
 }
 
 // ReconcileSucceededPayments republishes payment.succeeded for recent succeeded rows.

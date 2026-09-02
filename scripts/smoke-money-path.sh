@@ -20,9 +20,8 @@
 #   SKU_ID          existing variant to buy; when unset a throwaway product is created
 #   QUANTITY        units to buy (default 1)
 #
-# The run creates a customer account and a real order. Without a card PG it pays via
-# manager Bypass and asserts simulate-success is disabled. With PAYMENT_ALLOW_DEV_SIMULATE
-# (local Compose) it uses the simulate URL.
+# The run creates a customer account and a real order. Without a card PG (NANO
+# unconfigured, the default) it pays via manager Bypass.
 set -uo pipefail
 
 BASE=${BASE:-http://localhost:8080}
@@ -174,34 +173,14 @@ check "customer bypass rejected" \
     "{\"order_id\":\"$ORDER_ID\",\"method\":\"bypass\",\"note\":\"smoke test\"}")" 403
 
 step "Pay"
-# Prefer local simulate when PAYMENT_ALLOW_DEV_SIMULATE is on; otherwise manager Bypass
-# (v1.0 launch — no card PG).
-SETTINGS=$(api GET /api/v1/payments/settings)
-SIMULATE=$(echo "$SETTINGS" | field 'd.get("features",{}).get("dev_simulate_success",False)')
-
-if [ "$SIMULATE" = "True" ]; then
-  payment=$(api POST /api/v1/payments "$CUSTOMER" "{\"order_id\":\"$ORDER_ID\",\"method\":\"credit_card\"}")
-  PAYMENT_ID=$(echo "$payment" | field 'd["id"]')
-  CHECKOUT_URL=$(echo "$payment" | field 'd.get("checkout_url","")')
-  [ -n "$PAYMENT_ID" ] && pass "payment $PAYMENT_ID" || { fail "create payment: $payment"; exit 1; }
-
-  case "$CHECKOUT_URL" in
-    *"/simulate-success")
-      pass "dev simulate endpoint in use (PAYMENT_ALLOW_DEV_SIMULATE)"
-      check "simulate success" "$(curl -s -o /dev/null -w '%{http_code}' "$CHECKOUT_URL")" 200
-      ;;
-    *)
-      fail "unexpected checkout_url: $CHECKOUT_URL"
-      ;;
-  esac
-else
-  pass "no card PG configured — paying with manager Bypass"
-  payment=$(api POST /api/v1/payments "$OWNER" \
-    "{\"order_id\":\"$ORDER_ID\",\"method\":\"bypass\",\"note\":\"smoke: no PG yet\"}")
-  PAYMENT_ID=$(echo "$payment" | field 'd["id"]')
-  [ -n "$PAYMENT_ID" ] && pass "bypass payment $PAYMENT_ID" || { fail "bypass payment: $payment"; exit 1; }
-  check "simulate-success disabled" "$(status_of GET /api/v1/payments/does-not-exist/simulate-success)" 404
-fi
+# NANO card checkout needs a signed browser round-trip a curl script can't drive, so
+# this always pays via manager Bypass (also the v1.0 launch default — no card PG yet).
+pass "paying with manager Bypass"
+payment=$(api POST /api/v1/payments "$OWNER" \
+  "{\"order_id\":\"$ORDER_ID\",\"method\":\"bypass\",\"note\":\"smoke test\"}")
+PAYMENT_ID=$(echo "$payment" | field 'd["id"]')
+[ -n "$PAYMENT_ID" ] && pass "bypass payment $PAYMENT_ID" || { fail "bypass payment: $payment"; exit 1; }
+check "simulate-success route removed" "$(status_of GET /api/v1/payments/does-not-exist/simulate-success)" 404
 
 step "Order reaches paid (payment.succeeded consumer)"
 order_status=""

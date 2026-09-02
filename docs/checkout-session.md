@@ -4,7 +4,7 @@ Checkout sessions provide a multi-step purchase flow inside the **order service*
 
 For a **persistent** shopping cart (saved across sessions), use the **cart service** first — see [cart-service.md](cart-service.md).
 
-For **payment** after checkout, see [payment-service.md](payment-service.md) (NANO card / Bypass / local simulate; 5-minute unpaid window).
+For **payment** after checkout, see [payment-service.md](payment-service.md) (NANO card / Bypass; 5-minute unpaid window).
 
 Recipient name, phone, and shipping address are snapshotted on checkout **complete** (optional prefill from auth profile) — see [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
 
@@ -222,7 +222,7 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
 }
 ```
 
-After completion, the order is **`pending`** with inventory reserved. The customer must pay within **5 minutes** via the payment service (NANO card, manager Bypass, or local simulate); see [payment-service.md](payment-service.md). Only `dupli1-payment` confirms the order after a successful payment — not manual status updates.
+After completion, the order is **`pending`** with inventory reserved. The customer must pay within **5 minutes** via the payment service (NANO card or manager Bypass); see [payment-service.md](payment-service.md). Only `dupli1-payment` confirms the order after a successful payment — not manual status updates.
 
 When completion fails because one or more session lines no longer resolve to sellable variants, the response is **`422`** with `error: "variant not found"` and `unavailable_items` (same shape as cart / item mutations). This is distinct from empty cart, expired session, or stock exhaustion.
 
