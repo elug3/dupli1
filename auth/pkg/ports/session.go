@@ -15,4 +15,7 @@ type SessionStore interface {
 	// Get returns ErrSessionNotFound when the key does not exist or has expired.
 	Get(ctx context.Context, key string) (string, error)
 	Delete(ctx context.Context, key string) error
+	// Rotate atomically stores newKey and removes oldKey. Returns ErrSessionNotFound
+	// when oldKey is absent or expired so concurrent refresh replays fail closed.
+	Rotate(ctx context.Context, oldKey, newKey, value string, expiry time.Duration) error
 }

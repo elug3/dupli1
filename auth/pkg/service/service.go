@@ -253,18 +253,11 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (accessToken
 		if err != nil {
 			return "", "", fmt.Errorf("generate refresh token: %w", err)
 		}
-		// Store the replacement before dropping the old one: if Set fails,
-		// the caller's original refresh token is still good and they can
-		// just retry, instead of us deleting their only valid session first.
-		if err := s.sessionStore.Set(ctx, newRefreshToken, u.ID, s.refreshTokenExpiry); err != nil {
-			return "", "", fmt.Errorf("store session: %w", err)
-		}
-		if err := s.sessionStore.Delete(ctx, refreshToken); err != nil {
-			s.logger.Warn().
-				Str("event", "refresh_rotate_old_session_delete_failed").
-				Str("user_id", u.ID).
-				Err(err).
-				Msg("refresh: rotated to a new session but failed to delete the old one")
+		if err := s.sessionStore.Rotate(ctx, refreshToken, newRefreshToken, u.ID, s.refreshTokenExpiry); err != nil {
+			if errors.Is(err, ports.ErrSessionNotFound) {
+				return "", "", autherrors.ErrInvalidToken
+			}
+			return "", "", fmt.Errorf("rotate session: %w", err)
 		}
 		rotatedRefreshToken = newRefreshToken
 	}

@@ -37,3 +37,28 @@ func (sc *SessionCache) Get(ctx context.Context, key string) (string, error) {
 func (sc *SessionCache) Delete(ctx context.Context, key string) error {
 	return sc.client.Del(ctx, key).Err()
 }
+
+var rotateSessionScript = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[2])
+redis.call('DEL', KEYS[1])
+return 1
+`)
+
+// Rotate atomically replaces oldKey with newKey.
+func (sc *SessionCache) Rotate(ctx context.Context, oldKey, newKey, value string, expiry time.Duration) error {
+	ttlSec := int64(expiry / time.Second)
+	if ttlSec < 1 {
+		ttlSec = 1
+	}
+	n, err := rotateSessionScript.Run(ctx, sc.client, []string{oldKey, newKey}, value, ttlSec).Int64()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ports.ErrSessionNotFound
+	}
+	return nil
+}
