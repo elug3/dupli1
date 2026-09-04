@@ -287,3 +287,41 @@ func TestSetQuantityPreservesReserved(t *testing.T) {
 		t.Fatalf("after SetQuantity: quantity=%d reserved=%d, want 20/8", item.Quantity, item.Reserved)
 	}
 }
+
+func TestEnsureItemDoesNotClobberReserved(t *testing.T) {
+	dsn := requireProductDSN(t)
+	pool := freshInventorySchema(t, dsn, "inv_ensure_item_test")
+	ctx := t.Context()
+	now := time.Now().UTC()
+
+	if _, err := pool.Exec(ctx, `CREATE TABLE product_variants (sku_id TEXT PRIMARY KEY, sku TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create product_variants: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO product_variants (sku_id, sku) VALUES ('sku-1', 'TEST-1')
+	`); err != nil {
+		t.Fatalf("insert variant: %v", err)
+	}
+
+	store, err := NewInventoryStore(pool)
+	if err != nil {
+		t.Fatalf("NewInventoryStore: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO stock_items (sku_id, quantity, reserved, updated_at)
+		VALUES ('sku-1', 0, 8, $1)
+	`, now); err != nil {
+		t.Fatalf("insert stock: %v", err)
+	}
+
+	if err := store.EnsureItem(ctx, "sku-1", "TEST-1", now); err != nil {
+		t.Fatalf("EnsureItem: %v", err)
+	}
+	item, err := store.SetQuantity(ctx, "sku-1", 100, now)
+	if err != nil {
+		t.Fatalf("SetQuantity: %v", err)
+	}
+	if item.Quantity != 100 || item.Reserved != 8 {
+		t.Fatalf("after EnsureItem+SetQuantity: quantity=%d reserved=%d, want 100/8", item.Quantity, item.Reserved)
+	}
+}

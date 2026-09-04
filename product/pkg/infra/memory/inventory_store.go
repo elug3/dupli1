@@ -84,6 +84,25 @@ func (s *InventoryStore) SaveItem(ctx context.Context, item *domain.StockItem) e
 	return nil
 }
 
+func (s *InventoryStore) EnsureItem(ctx context.Context, skuID, sku string, updatedAt time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.items[skuID]; ok {
+		return nil
+	}
+	s.items[skuID] = &domain.StockItem{
+		SkuID:     skuID,
+		SKU:       sku,
+		UpdatedAt: updatedAt,
+	}
+	return nil
+}
+
 func (s *InventoryStore) SetQuantity(ctx context.Context, skuID string, quantity int, updatedAt time.Time) (*domain.StockItem, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

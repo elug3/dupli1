@@ -24,6 +24,9 @@ type InventoryStore interface {
 	// from the map (caller treats missing as available 0).
 	GetItems(ctx context.Context, skuIDs []string) (map[string]*domain.StockItem, error)
 	SaveItem(ctx context.Context, item *domain.StockItem) error
+	// EnsureItem inserts a zero-quantity stock row when missing. Existing
+	// rows (including reserved) are left unchanged.
+	EnsureItem(ctx context.Context, skuID, sku string, updatedAt time.Time) error
 	// SetQuantity updates quantity without touching reserved. Returns
 	// ErrInventoryItemNotFound when the row is missing, ErrInsufficientStock
 	// when quantity would fall below reserved.

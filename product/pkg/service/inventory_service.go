@@ -96,8 +96,11 @@ func (s *InventoryService) UpsertItem(ctx context.Context, ref SkuRef, quantity 
 		return nil, err
 	}
 
-	item = &domain.StockItem{SkuID: skuID, SKU: sku, Quantity: quantity, UpdatedAt: now}
-	if err := s.store.SaveItem(ctx, item); err != nil {
+	if err := s.store.EnsureItem(ctx, skuID, sku, now); err != nil {
+		return nil, err
+	}
+	item, err = s.store.SetQuantity(ctx, skuID, quantity, now)
+	if err != nil {
 		return nil, err
 	}
 	return cloneItem(item), nil
@@ -137,8 +140,11 @@ func (s *InventoryService) AdjustStock(ctx context.Context, ref SkuRef, delta in
 		return nil, ErrInsufficientStock
 	}
 
-	item = &domain.StockItem{SkuID: skuID, SKU: sku, Quantity: delta, UpdatedAt: now}
-	if err := s.store.SaveItem(ctx, item); err != nil {
+	if err := s.store.EnsureItem(ctx, skuID, sku, now); err != nil {
+		return nil, err
+	}
+	item, err = s.store.AdjustQuantity(ctx, skuID, delta, now)
+	if err != nil {
 		return nil, err
 	}
 	return cloneItem(item), nil

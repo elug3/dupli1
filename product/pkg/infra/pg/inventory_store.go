@@ -188,6 +188,19 @@ func (s *InventoryStore) SaveItem(ctx context.Context, item *domain.StockItem) e
 	return err
 }
 
+func (s *InventoryStore) EnsureItem(ctx context.Context, skuID, _ string, updatedAt time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO stock_items (sku_id, quantity, reserved, updated_at)
+		VALUES ($1, 0, 0, $2)
+		ON CONFLICT (sku_id) DO NOTHING
+	`, skuID, updatedAt)
+	return err
+}
+
 func (s *InventoryStore) SetQuantity(ctx context.Context, skuID string, quantity int, updatedAt time.Time) (*domain.StockItem, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

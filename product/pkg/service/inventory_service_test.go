@@ -284,3 +284,31 @@ func TestInventoryAdjustStockPreservesActiveReservation(t *testing.T) {
 		t.Fatalf("reserved = %d, want 6", item.Reserved)
 	}
 }
+
+func TestInventoryUpsertItemCreatesMissingRow(t *testing.T) {
+	svc, _ := newInventoryTestService(t)
+	ctx := t.Context()
+	ref := service.SkuRef{SkuID: "SKUID-GRN"}
+
+	item, err := svc.UpsertItem(ctx, ref, 25)
+	if err != nil {
+		t.Fatalf("UpsertItem on missing row: %v", err)
+	}
+	if item.Quantity != 25 || item.Reserved != 0 {
+		t.Fatalf("unexpected created item: %+v", item)
+	}
+
+	if _, err := svc.Reserve(ctx, "order-new-row", []service.ReservationItemRef{
+		{Ref: ref, Quantity: 5},
+	}); err != nil {
+		t.Fatalf("Reserve after create: %v", err)
+	}
+
+	item, err = svc.UpsertItem(ctx, ref, 30)
+	if err != nil {
+		t.Fatalf("UpsertItem after reserve: %v", err)
+	}
+	if item.Quantity != 30 || item.Reserved != 5 {
+		t.Fatalf("quantity/reserved = %d/%d, want 30/5", item.Quantity, item.Reserved)
+	}
+}
