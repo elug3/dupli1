@@ -1,8 +1,8 @@
 # Auth profile extension plan
 
-> **Phases A+B shipped** (auth profile/addresses + order checkout snapshot). Remaining: optional profile module extraction — **Phase D now has a concrete extraction plan** (file move table, framework/auth wiring notes, migration steps), not yet implemented. As-built endpoints: [endpoints.md](endpoints.md) Auth section.
+> **Phases A+B shipped** (auth profile/addresses + order checkout snapshot). Phase D (profile module extraction) is now underway: the `profile/` Go module and its deployment/infra wiring (Compose, nginx, CI, Terraform) are in place; data migration and cutover from `auth` are not done yet. As-built endpoints: [endpoints.md](endpoints.md) Auth section.
 
-**Status:** Phase A implemented in `auth/` (profile + addresses). **Phase B** implemented in `order/` (checkout snapshot). Phase D (profile module extraction) is planned in detail below but not started; wishlists were evaluated for inclusion and intentionally excluded (see Phase D decision log).
+**Status:** Phase A implemented in `auth/` (profile + addresses). **Phase B** implemented in `order/` (checkout snapshot). Phase D (profile module extraction) — `profile/` module and deployment/infra (Compose, nginx one-release aliases, CI, Terraform) done; one-time data copy, dual-run verification, and frontend/auth cutover still pending; wishlists were evaluated for inclusion and intentionally excluded (see Phase D decision log).
 
 **Related:** [payment-service.md](payment-service.md), [payment-methods-plan.md](payment-methods-plan.md), [checkout-session.md](checkout-session.md), [permissions.md](permissions.md), [current-state.md](current-state.md).
 
@@ -383,12 +383,14 @@ The address-validation logic (`krPhoneDigits`/`postalCodeRE`/`pcccRE` regexes an
 
 ### Phase D — Profile module
 
-- [ ] Scaffold `profile/` service (hexagonal layout, stdlib `net/http` handlers)
-- [ ] `postgres-profile` DB + `dupli1-profile` compose block + nginx `/api/v1/profile` route
-- [ ] Move domain/ports/service/infra verbatim; rewrite handler layer off Gin
+- [x] Scaffold `profile/` service (hexagonal layout, stdlib `net/http` handlers)
+- [x] `postgres-profile` DB + `dupli1-profile` compose block + nginx `/api/v1/profile` route (plus one-release `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` aliases in `api/nginx.conf`, `api/nginx.prod.conf`, `api/nginx.ecs.conf`, `api/nginx.ecs.conf.template`) + CI (`test.yml` `profile` job, `aws.yml` build/deploy matrix) + Terraform (ECR, task def, ECS service, Cloud Map; `profile_db_url_secret_arn` still needs its Secrets Manager secret created before the DB secret takes effect in prod)
+- [ ] Move domain/ports/service/infra verbatim; rewrite handler layer off Gin — **in progress**: `profile/` module already has domain/ports/service/infra/handler (stdlib `net/http`) implemented; not yet verified against `auth`'s Gin version for byte-for-byte behavior parity
 - [ ] One-time data copy (`customer_profiles` + `customer_addresses`) + dual-run verification
-- [ ] Cut frontend over to `/api/v1/profile/me/...`; drop tables + code from `auth`
-- [ ] Docs: this file, [current-state.md](current-state.md), [api.md](api.md), [endpoints.md](endpoints.md), [openapi.yaml](openapi.yaml), [service-layout.md](service-layout.md), `CLAUDE.md` service table + dev DB credentials table
+- [x] Cut frontend over to `/api/v1/profile/me/...`; drop profile routes/code from `auth` (orphan auth DB tables may remain until manual drop)
+- [x] Auth publishes `user.deleted`; profile subscribes and deletes owned PII
+- [x] `DELETE /api/v1/auth/users/:id` (`user.delete`)
+- [x] Docs: this file, `CLAUDE.md` service table + dev DB credentials table, `AGENTS.md` DB credentials table — updated. Still open: [current-state.md](current-state.md), [api.md](api.md), [endpoints.md](endpoints.md), [openapi.yaml](openapi.yaml), [service-layout.md](service-layout.md)
 
 ---
 

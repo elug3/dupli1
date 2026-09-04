@@ -198,20 +198,22 @@ Return the currently authenticated user's **account** (credentials tier — not 
 
 ---
 
-### Customer profile — `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses`
+### Customer profile — `/api/v1/profile/me/profile` and `/api/v1/profile/me/addresses`
+
+Served by the **`profile`** service. For one release, nginx also aliases the legacy `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` paths to `dupli1-profile`.
 
 Commerce PII (display name, phone, saved addresses) for checkout prefill. Bearer access token; self-service only (no new permission). See [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/auth/me/profile` | Profile + embedded `addresses` |
-| `PATCH` | `/api/v1/auth/me/profile` | Merge-patch `display_name`, `phone` |
-| `GET` | `/api/v1/auth/me/addresses` | `{ "addresses": [ … ] }` |
-| `POST` | `/api/v1/auth/me/addresses` | Create (max 10) |
-| `GET` | `/api/v1/auth/me/addresses/{id}` | One address |
-| `PATCH` | `/api/v1/auth/me/addresses/{id}` | Partial update |
-| `DELETE` | `/api/v1/auth/me/addresses/{id}` | Remove |
-| `POST` | `/api/v1/auth/me/addresses/{id}/default` | Set sole default |
+| `GET` | `/api/v1/profile/me/profile` | Profile + embedded `addresses` |
+| `PATCH` | `/api/v1/profile/me/profile` | Merge-patch `display_name`, `phone` |
+| `GET` | `/api/v1/profile/me/addresses` | `{ "addresses": [ … ] }` |
+| `POST` | `/api/v1/profile/me/addresses` | Create (max 10) |
+| `GET` | `/api/v1/profile/me/addresses/{id}` | One address |
+| `PATCH` | `/api/v1/profile/me/addresses/{id}` | Partial update |
+| `DELETE` | `/api/v1/profile/me/addresses/{id}` | Remove |
+| `POST` | `/api/v1/profile/me/addresses/{id}/default` | Set sole default |
 
 ---
 

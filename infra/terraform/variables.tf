@@ -94,6 +94,12 @@ variable "payment_db_url_secret_arn" {
   default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/payments-db-url-XxgHJp"
 }
 
+variable "profile_db_url_secret_arn" {
+  description = "Secrets Manager ARN for profile DUPLI1_PROFILE_DB. Not yet provisioned in Secrets Manager — create dupli1/production/profile-db-url before applying, then set this default (or pass via tfvars)."
+  type        = string
+  default     = ""
+}
+
 variable "jwt_secret_arn" {
   description = "Secrets Manager ARN for JWT_SECRET (HS256 fallback)."
   type        = string
