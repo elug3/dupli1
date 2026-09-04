@@ -6,7 +6,7 @@ Guidance for AI agents working in the Dupli1 repository.
 
 Dupli1 is a Go microservice backend for a fashion bag marketplace. The repo contains:
 
-- Six HTTP services in `auth/`, `product/`, `order/`, `cart/`, `payment/`, `notification/` (each with `cmd/` + `pkg/`). `product` also owns stock/reservations (the former standalone `inventory` service was merged in).
+- HTTP services in `auth/`, `product/`, `order/`, `cart/`, `payment/`, `notification/`, `profile/` (each with `cmd/` + `pkg/`). `product` also owns stock/reservations (the former standalone `inventory` service was merged in). `profile` (customer display name/phone + saved addresses) was extracted from `auth` per [docs/auth-profile-extension-plan.md](docs/auth-profile-extension-plan.md) Phase D — the auth code path is not removed yet.
 - nginx gateway in `api/` (`dupli1-proxy` in Docker Compose)
 - Docker Compose for local development
 - Terraform and GitHub Actions for AWS ECS deployment
@@ -56,6 +56,7 @@ Docker Compose provides Postgres instances per service:
 | `postgres-cart` | 5436 | `cart` | `dupli1` | `dupli1_dev` |
 | `postgres-payment` | 5437 | `payments` | `dupli1` | `dupli1_dev` |
 | `postgres-notification` | 5438 | `notifications` | `dupli1` | `dupli1_dev` |
+| `postgres-profile` | 5439 | `profiles` | `dupli1` | `dupli1_dev` |
 
 Connection strings:
 
@@ -65,6 +66,7 @@ Connection strings:
 - Cart: `postgres://dupli1:dupli1_dev@localhost:5436/cart?sslmode=disable`
 - Payment: `postgres://dupli1:dupli1_dev@localhost:5437/payments?sslmode=disable`
 - Notification: `postgres://dupli1:dupli1_dev@localhost:5438/notifications?sslmode=disable`
+- Profile: `postgres://dupli1:dupli1_dev@localhost:5439/profiles?sslmode=disable`
 
 Production uses **Amazon RDS** — see [docs/deployment-aws.md](docs/deployment-aws.md) and [infra/terraform/README.md](infra/terraform/README.md).
 
@@ -89,6 +91,7 @@ Direct service ports (bypass gateway):
 | `dupli1-cart` | 8086 |
 | `dupli1-payment` | 8087 |
 | `dupli1-notification` | 8084 |
+| `dupli1-profile` | 8088 |
 
 ### Running a single service (without Docker)
 
@@ -113,6 +116,7 @@ cd product && go test ./...
 cd order && go test ./...
 cd cart && go test ./...
 cd payment && go test ./...
+cd profile && go test ./...
 ```
 
 ### Gotchas

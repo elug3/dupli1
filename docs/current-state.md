@@ -49,7 +49,8 @@ See [service-layout.md](service-layout.md) for details.
   - Register: **temporary open customer signup** via `AUTH_OPEN_REGISTER` (default on); anonymous callers create `customer` only. Set `AUTH_OPEN_REGISTER=false` to require `user.create` again. Authenticated `user.create` still follows ABAC for other account types.
   - Auth ABAC hierarchy governs who may manage whom
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
-  - Customer commerce profile at `/api/v1/auth/me/profile` and saved addresses at `/api/v1/auth/me/addresses` — [auth-profile-extension-plan.md](auth-profile-extension-plan.md)
+  - Customer commerce profile/addresses moved to **`profile`** service (`/api/v1/profile/me/…`); one-release gateway aliases keep `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` — [auth-profile-extension-plan.md](auth-profile-extension-plan.md)
+  - `DELETE /api/v1/auth/users/:id` (`user.delete`) publishes `user.deleted` so profile drops owned PII
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `manager`)
   - Login lockout after 5 failed attempts for customers/managers, auto-expiring after 15 minutes; **admin and owner are never locked**
   - Deactivated/locked accounts are rejected on their very next authenticated request (not just next login/refresh) — `RequireAuth` re-checks account status on every call

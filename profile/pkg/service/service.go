@@ -1,3 +1,6 @@
+// Package service implements the profile service's use cases: profile
+// merge-patch and saved-address CRUD, plus cross-service cleanup when a
+// user account is deleted upstream.
 package service
 
 import (
@@ -6,10 +9,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elug3/dupli1/auth/pkg/autherrors"
-	"github.com/elug3/dupli1/auth/pkg/domain"
-	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/profile/pkg/apperrors"
+	"github.com/elug3/dupli1/profile/pkg/domain"
+	"github.com/elug3/dupli1/profile/pkg/ports"
 )
+
+// Service implements customer profile and saved-address use cases.
+type Service struct {
+	repo ports.ProfileRepository
+}
+
+// New creates a profile Service backed by repo.
+func New(repo ports.ProfileRepository) *Service {
+	return &Service{repo: repo}
+}
 
 // ProfilePatch is a merge-patch payload for customer profile fields.
 type ProfilePatch struct {
@@ -31,22 +44,22 @@ type AddressInput struct {
 	IsDefault      *bool  `json:"is_default"`
 }
 
-func (s *Service) requireProfileRepo() error {
-	if s.profileRepo == nil {
+func (s *Service) requireRepo() error {
+	if s.repo == nil {
 		return errors.New("profile repository not configured")
 	}
 	return nil
 }
 
 func (s *Service) GetProfileView(ctx context.Context, userID string) (*domain.ProfileView, error) {
-	if err := s.requireProfileRepo(); err != nil {
+	if err := s.requireRepo(); err != nil {
 		return nil, err
 	}
-	profile, err := s.profileRepo.GetProfile(ctx, userID)
+	profile, err := s.repo.GetProfile(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	addresses, err := s.profileRepo.ListAddresses(ctx, userID)
+	addresses, err := s.repo.ListAddresses(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +84,7 @@ func (s *Service) GetProfileView(ctx context.Context, userID string) (*domain.Pr
 }
 
 func (s *Service) PatchProfile(ctx context.Context, userID string, patch ProfilePatch) (*domain.ProfileView, error) {
-	if err := s.requireProfileRepo(); err != nil {
+	if err := s.requireRepo(); err != nil {
 		return nil, err
 	}
 	if patch.DisplayName == nil && patch.Phone == nil {
@@ -79,7 +92,7 @@ func (s *Service) PatchProfile(ctx context.Context, userID string, patch Profile
 	}
 
 	now := time.Now().UTC()
-	profile, err := s.profileRepo.GetProfile(ctx, userID)
+	profile, err := s.repo.GetProfile(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -105,17 +118,17 @@ func (s *Service) PatchProfile(ctx context.Context, userID string, patch Profile
 	if profile.CreatedAt.IsZero() {
 		profile.CreatedAt = now
 	}
-	if err := s.profileRepo.UpsertProfile(ctx, profile); err != nil {
+	if err := s.repo.UpsertProfile(ctx, profile); err != nil {
 		return nil, err
 	}
 	return s.GetProfileView(ctx, userID)
 }
 
 func (s *Service) ListAddresses(ctx context.Context, userID string) ([]*domain.Address, error) {
-	if err := s.requireProfileRepo(); err != nil {
+	if err := s.requireRepo(); err != nil {
 		return nil, err
 	}
-	addresses, err := s.profileRepo.ListAddresses(ctx, userID)
+	addresses, err := s.repo.ListAddresses(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,10 +139,10 @@ func (s *Service) ListAddresses(ctx context.Context, userID string) ([]*domain.A
 }
 
 func (s *Service) GetAddress(ctx context.Context, userID, addressID string) (*domain.Address, error) {
-	if err := s.requireProfileRepo(); err != nil {
+	if err := s.requireRepo(); err != nil {
 		return nil, err
 	}
-	a, err := s.profileRepo.GetAddress(ctx, userID, addressID)
+	a, err := s.repo.GetAddress(ctx, userID, addressID)
 	if err != nil {
 		return nil, err
 	}
@@ -140,15 +153,15 @@ func (s *Service) GetAddress(ctx context.Context, userID, addressID string) (*do
 }
 
 func (s *Service) CreateAddress(ctx context.Context, userID string, input AddressInput) (*domain.Address, error) {
-	if err := s.requireProfileRepo(); err != nil {
+	if err := s.requireRepo(); err != nil {
 		return nil, err
 	}
-	count, err := s.profileRepo.CountAddresses(ctx, userID)
+	count, err := s.repo.CountAddresses(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	if count >= domain.MaxAddressesPerUser {
-		return nil, autherrors.ErrAddressLimitReached
+		return nil, apperrors.ErrAddressLimitReached
 	}
 
 	validated, err := domain.ValidateAddressInput(
@@ -159,7 +172,7 @@ func (s *Service) CreateAddress(ctx context.Context, userID string, input Addres
 		return nil, err
 	}
 
-	id, err := s.profileRepo.NextAddressID(ctx)
+	id, err := s.repo.NextAddressID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +184,7 @@ func (s *Service) CreateAddress(ctx context.Context, userID string, input Addres
 		isDefault = true
 	}
 	if isDefault {
-		if err := s.profileRepo.ClearDefaultAddresses(ctx, userID); err != nil {
+		if err := s.repo.ClearDefaultAddresses(ctx, userID); err != nil {
 			return nil, err
 		}
 	}
@@ -182,17 +195,17 @@ func (s *Service) CreateAddress(ctx context.Context, userID string, input Addres
 	validated.IsDefault = isDefault
 	validated.CreatedAt = now
 	validated.UpdatedAt = now
-	if err := s.profileRepo.SaveAddress(ctx, validated); err != nil {
+	if err := s.repo.SaveAddress(ctx, validated); err != nil {
 		return nil, err
 	}
 	return validated, nil
 }
 
 func (s *Service) PatchAddress(ctx context.Context, userID, addressID string, input AddressInput) (*domain.Address, error) {
-	if err := s.requireProfileRepo(); err != nil {
+	if err := s.requireRepo(); err != nil {
 		return nil, err
 	}
-	existing, err := s.profileRepo.GetAddress(ctx, userID, addressID)
+	existing, err := s.repo.GetAddress(ctx, userID, addressID)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +262,7 @@ func (s *Service) PatchAddress(ctx context.Context, userID, addressID string, in
 	}
 
 	if input.IsDefault != nil && *input.IsDefault {
-		if err := s.profileRepo.ClearDefaultAddresses(ctx, userID); err != nil {
+		if err := s.repo.ClearDefaultAddresses(ctx, userID); err != nil {
 			return nil, err
 		}
 		validated.IsDefault = true
@@ -261,37 +274,47 @@ func (s *Service) PatchAddress(ctx context.Context, userID, addressID string, in
 	validated.UserID = userID
 	validated.CreatedAt = existing.CreatedAt
 	validated.UpdatedAt = time.Now().UTC()
-	if err := s.profileRepo.SaveAddress(ctx, validated); err != nil {
+	if err := s.repo.SaveAddress(ctx, validated); err != nil {
 		return nil, err
 	}
 	return validated, nil
 }
 
 func (s *Service) DeleteAddress(ctx context.Context, userID, addressID string) error {
-	if err := s.requireProfileRepo(); err != nil {
+	if err := s.requireRepo(); err != nil {
 		return err
 	}
-	return s.profileRepo.DeleteAddress(ctx, userID, addressID)
+	return s.repo.DeleteAddress(ctx, userID, addressID)
 }
 
 func (s *Service) SetDefaultAddress(ctx context.Context, userID, addressID string) (*domain.Address, error) {
-	if err := s.requireProfileRepo(); err != nil {
+	if err := s.requireRepo(); err != nil {
 		return nil, err
 	}
-	existing, err := s.profileRepo.GetAddress(ctx, userID, addressID)
+	existing, err := s.repo.GetAddress(ctx, userID, addressID)
 	if err != nil {
 		return nil, err
 	}
 	if existing == nil {
 		return nil, ports.ErrAddressNotFound
 	}
-	if err := s.profileRepo.ClearDefaultAddresses(ctx, userID); err != nil {
+	if err := s.repo.ClearDefaultAddresses(ctx, userID); err != nil {
 		return nil, err
 	}
 	existing.IsDefault = true
 	existing.UpdatedAt = time.Now().UTC()
-	if err := s.profileRepo.SaveAddress(ctx, existing); err != nil {
+	if err := s.repo.SaveAddress(ctx, existing); err != nil {
 		return nil, err
 	}
 	return existing, nil
+}
+
+// DeleteUserData permanently removes userID's profile and saved addresses.
+// Called when the owning user account is deleted (see
+// shared/pkg/events.UserDeleted).
+func (s *Service) DeleteUserData(ctx context.Context, userID string) error {
+	if err := s.requireRepo(); err != nil {
+		return err
+	}
+	return s.repo.DeleteUserData(ctx, userID)
 }

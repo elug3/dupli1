@@ -1,3 +1,9 @@
+// Package postgres implements ports.ProfileRepository against a PostgreSQL
+// database, using database/sql + lib/pq (matching auth, the service this
+// module was extracted from). Unlike auth's copy of this schema, the tables
+// here carry no REFERENCES to a users table: profile owns no foreign key
+// into auth's database, so account deletion is cleaned up via the
+// shared/pkg/events.UserDeleted NATS event instead of an ON DELETE CASCADE.
 package postgres
 
 import (
@@ -5,8 +11,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/elug3/dupli1/auth/pkg/domain"
-	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/profile/pkg/domain"
+	"github.com/elug3/dupli1/profile/pkg/ports"
 )
 
 // ProfileRepository implements ports.ProfileRepository using PostgreSQL.
@@ -14,9 +20,54 @@ type ProfileRepository struct {
 	db *sql.DB
 }
 
-// NewProfileRepository creates a profile repository.
+// NewProfileRepository creates a profile repository. Call Migrate to ensure
+// the schema exists before use.
 func NewProfileRepository(db *sql.DB) *ProfileRepository {
 	return &ProfileRepository{db: db}
+}
+
+// Migrate creates/updates the profile service's schema. Safe to call on
+// every startup.
+func Migrate(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS id_sequences (
+			name TEXT PRIMARY KEY,
+			value BIGINT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS customer_profiles (
+			user_id      TEXT PRIMARY KEY,
+			display_name TEXT NOT NULL DEFAULT '',
+			phone        TEXT NOT NULL DEFAULT '',
+			created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE TABLE IF NOT EXISTS customer_addresses (
+			id              TEXT PRIMARY KEY,
+			user_id         TEXT NOT NULL,
+			label           TEXT NOT NULL DEFAULT '',
+			recipient_name  TEXT NOT NULL,
+			recipient_phone TEXT NOT NULL,
+			postal_code     TEXT NOT NULL,
+			address_line1   TEXT NOT NULL,
+			address_line2   TEXT NOT NULL DEFAULT '',
+			city            TEXT NOT NULL,
+			province        TEXT NOT NULL,
+			pccc            TEXT NOT NULL DEFAULT '',
+			is_default      BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`ALTER TABLE customer_addresses ADD COLUMN IF NOT EXISTS pccc TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_customer_addresses_user_id ON customer_addresses (user_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_addresses_one_default
+			ON customer_addresses (user_id) WHERE is_default`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("migrate profile schema: %w", err)
+		}
+	}
+	return nil
 }
 
 func (r *ProfileRepository) GetProfile(ctx context.Context, userID string) (*domain.Profile, error) {
@@ -163,6 +214,29 @@ func (r *ProfileRepository) NextAddressID(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("next address id: %w", err)
 	}
 	return fmt.Sprintf("addr_%06d", seq), nil
+}
+
+// DeleteUserData removes userID's profile and all saved addresses in a
+// single transaction. There is no FK from customer_addresses/
+// customer_profiles to a users table in this database, so this is the only
+// cleanup path — it runs in response to shared/pkg/events.UserDeleted.
+func (r *ProfileRepository) DeleteUserData(ctx context.Context, userID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete user data: begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM customer_addresses WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("delete user addresses: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM customer_profiles WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("delete user profile: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete user data: commit: %w", err)
+	}
+	return nil
 }
 
 type addressScanner interface {

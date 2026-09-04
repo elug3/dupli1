@@ -99,6 +99,22 @@ services:
       timeout: 5s
       retries: 10
 
+  postgres-profile:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: profiles
+      POSTGRES_USER: dupli1
+      POSTGRES_PASSWORD: dupli1_dev
+    ports:
+      - "5439:5432"
+    volumes:
+      - postgres-profile-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dupli1 -d profiles"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     ports:
@@ -373,6 +389,35 @@ services:
       retries: 10
       start_period: 20s
 
+  dupli1-profile:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: profile
+    ports:
+      - "8088:8080"
+    environment:
+      DUPLI1_PROFILE_ADDR: :8080
+      DUPLI1_PROFILE_DB: postgres://dupli1:dupli1_dev@postgres-profile:5432/profiles?sslmode=disable
+      AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
+      NATS_URL: nats://nats:4222
+    depends_on:
+      postgres-profile:
+        condition: service_healthy
+      dupli1-auth:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
   dupli1-proxy:
     build:
       context: .
@@ -394,6 +439,8 @@ services:
         condition: service_healthy
       dupli1-payment:
         condition: service_healthy
+      dupli1-profile:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
@@ -403,4 +450,5 @@ volumes:
   postgres-cart-data:
   postgres-payment-data:
   postgres-notification-data:
+  postgres-profile-data:
   minio-data:

@@ -50,6 +50,22 @@ server {
         proxy_pass $$upstream;
     }
 
+    location /api/v1/profile {
+        set $$upstream http://profile.${SERVICE_DOMAIN}:8080;
+        proxy_pass $$upstream;
+    }
+
+    # One-release aliases — clients still calling auth-hosted paths.
+    location /api/v1/auth/me/profile {
+        set $$upstream http://profile.${SERVICE_DOMAIN}:8080;
+        proxy_pass $$upstream;
+    }
+
+    location /api/v1/auth/me/addresses {
+        set $$upstream http://profile.${SERVICE_DOMAIN}:8080;
+        proxy_pass $$upstream;
+    }
+
     location /api/v1/products {
         set $$upstream http://product.${SERVICE_DOMAIN}:8080;
         proxy_pass $$upstream;

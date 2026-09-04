@@ -107,7 +107,6 @@ func newStack(t *testing.T) *stack {
 	svc := service.NewService(
 		repo,
 		accessGen,
-		service.WithProfileRepository(memory.NewProfileRepository()),
 		service.WithRefreshTokenGen(refreshGen, time.Hour),
 		service.WithSessionStore(sessions),
 	)

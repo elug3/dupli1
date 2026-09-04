@@ -4,37 +4,23 @@ import (
 	"context"
 	"testing"
 
-	"github.com/elug3/dupli1/auth/pkg/autherrors"
-	"github.com/elug3/dupli1/auth/pkg/domain"
-	"github.com/elug3/dupli1/auth/pkg/infra/memory"
-	jwtgen "github.com/elug3/dupli1/auth/pkg/infra/jwt"
-	"github.com/elug3/dupli1/auth/pkg/ports"
-	"github.com/elug3/dupli1/auth/pkg/service"
+	"github.com/elug3/dupli1/profile/pkg/apperrors"
+	"github.com/elug3/dupli1/profile/pkg/domain"
+	"github.com/elug3/dupli1/profile/pkg/infra/memory"
+	"github.com/elug3/dupli1/profile/pkg/ports"
+	"github.com/elug3/dupli1/profile/pkg/service"
 	"github.com/google/uuid"
 )
 
-type stubUserRepo struct{}
-
-func (stubUserRepo) FindByEmail(context.Context, string) (*domain.User, error) { return nil, nil }
-func (stubUserRepo) FindByID(context.Context, string) (*domain.User, error)    { return nil, nil }
-func (stubUserRepo) ListAll(context.Context) ([]*domain.User, error)          { return nil, nil }
-func (stubUserRepo) Save(context.Context, *domain.User) error                 { return nil }
-func (stubUserRepo) Delete(context.Context, string) error                     { return nil }
-
 func newProfileService(t *testing.T) (*service.Service, ports.ProfileRepository) {
 	t.Helper()
-	profileRepo := memory.NewProfileRepository()
-	svc := service.NewService(
-		stubUserRepo{},
-		jwtgen.NewTokenGenerator("secret", 900),
-		service.WithProfileRepository(profileRepo),
-	)
-	return svc, profileRepo
+	repo := memory.NewProfileRepository()
+	return service.New(repo), repo
 }
 
 func TestPatchProfile_CreateAndUpdate(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := t.Context()
+	ctx := context.Background()
 	userID := uuid.New().String()
 
 	name := "윤라희"
@@ -62,7 +48,7 @@ func TestPatchProfile_CreateAndUpdate(t *testing.T) {
 
 func TestCreateAddress_DefaultFirst(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := t.Context()
+	ctx := context.Background()
 	userID := uuid.New().String()
 
 	addr, err := svc.CreateAddress(ctx, userID, service.AddressInput{
@@ -91,7 +77,7 @@ func TestCreateAddress_DefaultFirst(t *testing.T) {
 
 func TestCreateAddress_Limit(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := t.Context()
+	ctx := context.Background()
 	userID := uuid.New().String()
 
 	input := service.AddressInput{
@@ -107,14 +93,14 @@ func TestCreateAddress_Limit(t *testing.T) {
 			t.Fatalf("create %d: %v", i, err)
 		}
 	}
-	if _, err := svc.CreateAddress(ctx, userID, input); err != autherrors.ErrAddressLimitReached {
+	if _, err := svc.CreateAddress(ctx, userID, input); err != apperrors.ErrAddressLimitReached {
 		t.Fatalf("want limit error, got %v", err)
 	}
 }
 
 func TestPatchAddress_PartialUpdate(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := t.Context()
+	ctx := context.Background()
 	userID := uuid.New().String()
 
 	created, err := svc.CreateAddress(ctx, userID, service.AddressInput{
@@ -142,7 +128,7 @@ func TestPatchAddress_PartialUpdate(t *testing.T) {
 
 func TestCreateAndPatchAddress_PCCC(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := t.Context()
+	ctx := context.Background()
 	userID := uuid.New().String()
 
 	created, err := svc.CreateAddress(ctx, userID, service.AddressInput{
@@ -177,7 +163,7 @@ func TestCreateAndPatchAddress_PCCC(t *testing.T) {
 
 func TestPatchAddress_NotFound(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := t.Context()
+	ctx := context.Background()
 	userID := uuid.New().String()
 
 	_, err := svc.PatchAddress(ctx, userID, "addr_missing", service.AddressInput{
@@ -190,7 +176,7 @@ func TestPatchAddress_NotFound(t *testing.T) {
 
 func TestDeleteAddress(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := t.Context()
+	ctx := context.Background()
 	userID := uuid.New().String()
 
 	addr, err := svc.CreateAddress(ctx, userID, service.AddressInput{
@@ -214,7 +200,7 @@ func TestDeleteAddress(t *testing.T) {
 
 func TestPatchProfile_InvalidPhone(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := t.Context()
+	ctx := context.Background()
 	userID := uuid.New().String()
 
 	bad := "not-a-phone"
@@ -226,7 +212,7 @@ func TestPatchProfile_InvalidPhone(t *testing.T) {
 
 func TestSetDefaultAddress(t *testing.T) {
 	svc, _ := newProfileService(t)
-	ctx := t.Context()
+	ctx := context.Background()
 	userID := uuid.New().String()
 
 	a1, err := svc.CreateAddress(ctx, userID, service.AddressInput{
@@ -262,5 +248,42 @@ func TestSetDefaultAddress(t *testing.T) {
 	}
 	if check.IsDefault {
 		t.Fatal("a1 should no longer be default")
+	}
+}
+
+func TestDeleteUserData(t *testing.T) {
+	svc, _ := newProfileService(t)
+	ctx := context.Background()
+	userID := uuid.New().String()
+
+	name := "윤라희"
+	if _, err := svc.PatchProfile(ctx, userID, service.ProfilePatch{DisplayName: &name}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateAddress(ctx, userID, service.AddressInput{
+		RecipientName: "A", RecipientPhone: "01011112222", PostalCode: "06194",
+		AddressLine1: "One", City: "강남구", Province: "서울",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.DeleteUserData(ctx, userID); err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := svc.GetProfileView(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.DisplayName != "" || view.Phone != "" {
+		t.Fatalf("profile fields should be cleared: %+v", view)
+	}
+	if len(view.Addresses) != 0 {
+		t.Fatalf("addresses should be gone: %+v", view.Addresses)
+	}
+
+	// Deleting again is a no-op, not an error.
+	if err := svc.DeleteUserData(ctx, userID); err != nil {
+		t.Fatalf("second delete should not error: %v", err)
 	}
 }

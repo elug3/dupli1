@@ -20,6 +20,7 @@ const (
 	UserPermissionsUpdate = "user.permissions.update"
 	UserPasswordUpdate    = "user.password.update"
 	UserStatusUpdate      = "user.status.update"
+	UserDelete            = "user.delete"
 )
 
 // Product catalog permissions (product service).
@@ -84,6 +85,7 @@ var Catalog = []string{
 	UserPermissionsUpdate,
 	UserPasswordUpdate,
 	UserStatusUpdate,
+	UserDelete,
 	ProductCreate,
 	ProductUpdate,
 	ProductDelete,

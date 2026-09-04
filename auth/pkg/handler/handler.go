@@ -413,6 +413,34 @@ func (h *Handler) SetUserStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, toUserResponse(u))
 }
 
+// DeleteUser permanently removes a user. Requires user.delete.
+func (h *Handler) DeleteUser(c *gin.Context) {
+	userID := c.Param("id")
+	caller := callerFromContext(c)
+	target, err := h.svc.FindUserByID(c.Request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, autherrors.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		} else {
+			h.respondInternalError(c, "delete_user_lookup_error", err)
+		}
+		return
+	}
+	if !domain.CanManageUser(caller, target) {
+		c.JSON(http.StatusForbidden, gin.H{"error": autherrors.ErrManagementForbidden.Error()})
+		return
+	}
+	if err := h.svc.DeleteUser(c.Request.Context(), userID); err != nil {
+		if errors.Is(err, autherrors.ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		} else {
+			h.respondInternalError(c, "delete_user_error", err)
+		}
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 // Refresh exchanges a refresh token for a new short-lived access token.
 func (h *Handler) Refresh(c *gin.Context) {
 	ip := c.ClientIP()

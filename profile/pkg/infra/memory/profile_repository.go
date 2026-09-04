@@ -7,16 +7,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/elug3/dupli1/auth/pkg/domain"
-	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/profile/pkg/domain"
+	"github.com/elug3/dupli1/profile/pkg/ports"
 )
 
-// ProfileRepository is an in-memory profile store for tests.
+// ProfileRepository is an in-memory profile store for tests and the
+// no-database fallback.
 type ProfileRepository struct {
-	mu         sync.Mutex
-	profiles   map[string]*domain.Profile
-	addresses  map[string]*domain.Address
-	addrSeq    int64
+	mu        sync.Mutex
+	profiles  map[string]*domain.Profile
+	addresses map[string]*domain.Address
+	addrSeq   int64
 }
 
 // NewProfileRepository creates an empty in-memory profile repository.
@@ -125,4 +126,17 @@ func (r *ProfileRepository) NextAddressID(_ context.Context) (string, error) {
 	defer r.mu.Unlock()
 	r.addrSeq++
 	return fmt.Sprintf("addr_%06d", r.addrSeq), nil
+}
+
+// DeleteUserData removes userID's profile and all saved addresses.
+func (r *ProfileRepository) DeleteUserData(_ context.Context, userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, a := range r.addresses {
+		if a.UserID == userID {
+			delete(r.addresses, id)
+		}
+	}
+	delete(r.profiles, userID)
+	return nil
 }

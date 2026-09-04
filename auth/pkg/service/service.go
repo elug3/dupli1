@@ -11,6 +11,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/autherrors"
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/events"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/rs/zerolog"
 )
@@ -31,7 +32,6 @@ const (
 // Service holds all auth business logic.
 type Service struct {
 	userRepo           ports.UserRepository
-	profileRepo        ports.ProfileRepository
 	tokenGen           ports.TokenGenerator
 	refreshTokenGen    ports.TokenGenerator
 	sessionStore       ports.SessionStore
@@ -42,13 +42,6 @@ type Service struct {
 
 // ServiceOption configures a Service.
 type ServiceOption func(*Service)
-
-// WithProfileRepository enables customer profile and address APIs.
-func WithProfileRepository(repo ports.ProfileRepository) ServiceOption {
-	return func(s *Service) {
-		s.profileRepo = repo
-	}
-}
 
 // WithRefreshTokenGen sets the token generator and expiry used for refresh tokens.
 func WithRefreshTokenGen(gen ports.TokenGenerator, expiry time.Duration) ServiceOption {
@@ -395,6 +388,31 @@ func (s *Service) ListUsers(ctx context.Context) ([]*domain.User, error) {
 	return users, nil
 }
 
+// DeleteUser permanently removes a user and publishes user.deleted so
+// downstream services (profile) can drop owned PII. The account row is
+// already gone before the event is published — a broker outage must not
+// undo the delete; profile retains orphan rows until a later retry/replay.
+func (s *Service) DeleteUser(ctx context.Context, userID string) error {
+	u, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("find user: %w", err)
+	}
+	if u == nil {
+		return autherrors.ErrUserNotFound
+	}
+	if err := s.userRepo.Delete(ctx, userID); err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+	if err := s.publishUserDeleted(ctx, userID); err != nil {
+		s.logger.Error().
+			Str("event", "user_deleted_publish_failed").
+			Str("user_id", userID).
+			Err(err).
+			Msg("user deleted but user.deleted publish failed")
+	}
+	return nil
+}
+
 func (s *Service) publishUserRegistered(ctx context.Context, u *domain.User) error {
 	if s.eventPublisher == nil {
 		return nil
@@ -406,5 +424,16 @@ func (s *Service) publishUserRegistered(ctx context.Context, u *domain.User) err
 		Email:       u.Email,
 		AccountType: u.AccountType,
 		Occurred:    time.Now().UTC(),
+	})
+}
+
+func (s *Service) publishUserDeleted(ctx context.Context, userID string) error {
+	if s.eventPublisher == nil {
+		return nil
+	}
+	return s.eventPublisher.Publish(ctx, events.UserDeleted, events.UserDeletedEvent{
+		EventType: events.UserDeleted,
+		UserID:    userID,
+		Occurred:  time.Now().UTC(),
 	})
 }
