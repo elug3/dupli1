@@ -153,3 +153,49 @@ func TestSeedWebServiceAccount_RequiresPassword(t *testing.T) {
 		t.Fatal("expected error when password is missing")
 	}
 }
+
+func TestSeedOrderServiceAccount_CreatesAndSyncs(t *testing.T) {
+	repo := newSeedFakeRepo()
+	cfg := Config{
+		OrderServiceEmail:    "dupli1-order@order.dupli1.com",
+		OrderServicePassword: "order-secret",
+		Logger:               zerolog.Nop(),
+	}
+
+	if err := seedOrderServiceAccount(t.Context(), cfg, repo); err != nil {
+		t.Fatalf("seedOrderServiceAccount: %v", err)
+	}
+	u := repo.byEmail["dupli1-order@order.dupli1.com"]
+	if u == nil {
+		t.Fatal("order service account was not created")
+	}
+	for _, p := range []string{
+		permissions.OrderShip,
+		permissions.OrderStatusUpdate,
+		permissions.InventoryReservationManage,
+	} {
+		if !u.HasPermission(p) {
+			t.Fatalf("missing permission %s in %v", p, u.Permissions)
+		}
+	}
+
+	firstID := u.ID
+	u.SetPermissions(nil)
+	_ = u.UpdatePassword("old-password")
+	repo.byEmail[u.Email] = u
+
+	cfg.OrderServicePassword = "rotated-order-secret"
+	if err := seedOrderServiceAccount(t.Context(), cfg, repo); err != nil {
+		t.Fatalf("sync seed: %v", err)
+	}
+	got := repo.byEmail["dupli1-order@order.dupli1.com"]
+	if got.ID != firstID {
+		t.Fatalf("sync changed user id: %s -> %s", firstID, got.ID)
+	}
+	if !got.ValidatePassword("rotated-order-secret") {
+		t.Fatal("password was not rotated")
+	}
+	if !hasExactPermissions(got, orderServicePermissions) {
+		t.Fatalf("permissions = %v", got.Permissions)
+	}
+}
