@@ -515,6 +515,48 @@ func TestMe(t *testing.T) {
 	})
 }
 
+func TestMe_RejectsLockedAndDeactivatedAccounts(t *testing.T) {
+	const email, password = "me-guard@example.com", "supersecret"
+
+	t.Run("locked account returns 403", func(t *testing.T) {
+		s := newStack(t)
+		accessToken := s.registerLoginRefresh(t, email, password)
+
+		user, err := s.repo.FindByEmail(t.Context(), email)
+		if err != nil || user == nil {
+			t.Fatalf("FindByEmail: %v", err)
+		}
+		user.Lock()
+		if err := s.repo.Save(t.Context(), user); err != nil {
+			t.Fatalf("Save locked user: %v", err)
+		}
+
+		w := s.doWithAuth(t, http.MethodGet, "/api/v1/auth/me", accessToken, nil)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("locked /me: want 403, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("deactivated account returns 403", func(t *testing.T) {
+		s := newStack(t)
+		accessToken := s.registerLoginRefresh(t, "deactivated-me@example.com", password)
+
+		user, err := s.repo.FindByEmail(t.Context(), "deactivated-me@example.com")
+		if err != nil || user == nil {
+			t.Fatalf("FindByEmail: %v", err)
+		}
+		user.SetActive(false)
+		if err := s.repo.Save(t.Context(), user); err != nil {
+			t.Fatalf("Save deactivated user: %v", err)
+		}
+
+		w := s.doWithAuth(t, http.MethodGet, "/api/v1/auth/me", accessToken, nil)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("deactivated /me: want 403, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
 // ---- POST /logout ----------------------------------------------------------
 
 func TestLogout(t *testing.T) {
