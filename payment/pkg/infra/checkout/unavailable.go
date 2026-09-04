@@ -8,7 +8,8 @@ import (
 )
 
 // UnavailableProvider rejects credit-card checkout when no PG is configured
-// and dev simulate is disabled (typical production until a PG is contracted).
+// (typical until a PG is contracted; use method=bypass for manager-recorded
+// payments in the meantime, including local development).
 type UnavailableProvider struct {
 	Reason string
 }

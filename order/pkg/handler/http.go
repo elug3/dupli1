@@ -7,26 +7,22 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
-// AccessTokenValidator validates Bearer access tokens and returns claims.
-type AccessTokenValidator interface {
-	ValidateAccessToken(token string) (authjwt.Claims, error)
-}
-
 type Handler struct {
 	svc          *service.Service
-	jwtValidator AccessTokenValidator
+	jwtValidator authjwt.AccessTokenValidator
 	settings     settings.Response
 }
 
-func New(svc *service.Service, jwtValidator AccessTokenValidator) *Handler {
+func New(svc *service.Service, jwtValidator authjwt.AccessTokenValidator) *Handler {
 	return &Handler{
 		svc:          svc,
 		jwtValidator: jwtValidator,
@@ -73,26 +69,7 @@ func (h *Handler) settingsHandler(w http.ResponseWriter, r *http.Request) {
 // requireAuth extracts and validates the Bearer token, stores claims in context.
 // Fails closed when no validator is configured (misconfigured deploy).
 func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.jwtValidator == nil {
-			respondError(w, http.StatusServiceUnavailable, "auth not configured")
-			return
-		}
-
-		authHeader := r.Header.Get("Authorization")
-		if len(authHeader) < 8 || !strings.EqualFold(authHeader[:7], "bearer ") {
-			respondError(w, http.StatusUnauthorized, "missing or malformed Authorization header")
-			return
-		}
-
-		claims, err := h.jwtValidator.ValidateAccessToken(authHeader[7:])
-		if err != nil {
-			respondError(w, http.StatusUnauthorized, "invalid token")
-			return
-		}
-
-		next(w, r.WithContext(authjwt.WithClaims(r.Context(), claims)))
-	}
+	return authmiddleware.RequireAuth(h.jwtValidator, respondError)(next)
 }
 
 func (h *Handler) orders(w http.ResponseWriter, r *http.Request) {

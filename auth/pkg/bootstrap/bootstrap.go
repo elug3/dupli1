@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/elug3/dupli1/auth/pkg/handler"
 	jwtinfra "github.com/elug3/dupli1/auth/pkg/infra/jwt"
+	memoryinfra "github.com/elug3/dupli1/auth/pkg/infra/memory"
 	natsinfra "github.com/elug3/dupli1/auth/pkg/infra/nats"
 	"github.com/elug3/dupli1/auth/pkg/infra/postgres"
 	redisinfra "github.com/elug3/dupli1/auth/pkg/infra/redis"
@@ -17,6 +19,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
+
+// sessionGCInterval is how often the in-memory session store fallback sweeps
+// expired refresh-token sessions when no Redis is configured.
+const sessionGCInterval = 10 * time.Minute
 
 // App holds wired auth service dependencies and the HTTP router.
 type App struct {
@@ -80,17 +86,27 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	}
 
 	userRepo := postgres.NewUserRepository(db)
-	profileRepo := postgres.NewProfileRepository(db)
 
 	var sessionStore ports.SessionStore
 	if redisClient != nil {
 		sessionStore = redisinfra.NewSessionCache(redisClient)
+	} else {
+		// Without this, a nil sessionStore makes Logout a silent no-op and
+		// Refresh skips revocation checks entirely — "logged out" refresh
+		// tokens would keep minting access tokens until they naturally
+		// expire. Fall back to an in-memory store so revocation still works
+		// on a single instance; only cross-replica/restart durability is lost.
+		cfg.Logger.Warn().
+			Str("event", "auth_session_store_in_memory_fallback").
+			Msg("no Redis configured — refresh-token session revocation is tracked in-memory only and will not survive a restart or work across multiple auth replicas")
+		mem := memoryinfra.NewSessionStore()
+		mem.GC(ctx, sessionGCInterval)
+		sessionStore = mem
 	}
 
 	svc := service.NewService(
 		userRepo,
 		accessTokenGen,
-		service.WithProfileRepository(profileRepo),
 		service.WithRefreshTokenGen(refreshTokenGen, cfg.RefreshTokenExpiry),
 		service.WithSessionStore(sessionStore),
 		service.WithEventPublisher(eventPublisher),

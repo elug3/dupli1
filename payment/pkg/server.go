@@ -33,7 +33,6 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		JWKSURL:            opts.JWKSURL,
 		NATSURL:            opts.NATSURL,
 		PublicBaseURL:      opts.PublicBaseURL,
-		AllowDevSimulate:   opts.AllowDevSimulate,
 		Nano: checkout.NanoConfig{
 			BaseURL:       opts.NanoBaseURL,
 			Ver:           opts.NanoVer,

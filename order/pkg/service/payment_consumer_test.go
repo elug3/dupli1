@@ -10,6 +10,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
 	"github.com/elug3/dupli1/order/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/events"
 )
 
 type expiryStock struct {
@@ -179,11 +180,11 @@ func TestHandlePaymentSucceededMarksOrderPaid(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	payload, err := json.Marshal(map[string]any{
-		"event_type":   "payment.succeeded",
-		"order_id":     order.ID,
-		"payment_id":   "pay-nano-1",
-		"amount_cents": order.TotalCents,
+	payload, err := json.Marshal(events.PaymentSucceededEvent{
+		EventType:   events.PaymentSucceeded,
+		OrderID:     order.ID,
+		PaymentID:   "pay-nano-1",
+		AmountCents: order.TotalCents,
 	})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)

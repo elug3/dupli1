@@ -7,7 +7,8 @@ info:
 
     **Token flow**
     1. `POST /login` → `refresh_token` (RS256 JWT, ~24h)
-    2. `POST /refresh` → `token` (access JWT, ~15min)
+    2. `POST /refresh` → `token` (access JWT, ~15min) + a rotated `refresh_token`; the token
+       sent in the request is invalidated immediately, so the caller must store the new one
     3. Send `Authorization: Bearer <token>` on protected routes
 
     Access tokens are RS256 JWTs verifiable via `GET /.well-known/jwks.json`.
@@ -124,7 +125,12 @@ paths:
       tags: [Tokens]
       summary: Exchange refresh token for access token
       operationId: authRefresh
-      description: Rate limited to 30 requests per 60 seconds per client IP when Redis is available.
+      description: |
+        Rate limited to 30 requests per 60 seconds per client IP when Redis is available.
+        The refresh token rotates on every call: the token in the request is invalidated
+        immediately and the response carries its replacement. Reusing an already-rotated
+        (or otherwise revoked) refresh token, or one for a deactivated/locked account,
+        returns 401.
       requestBody:
         required: true
         content:
@@ -425,7 +431,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: RS256 access token from POST /api/v1/auth/refresh
+      description: |
+        RS256 access token from POST /api/v1/auth/refresh. Every request re-checks
+        the account: a still-unexpired token for a since-deactivated or since-locked
+        account is rejected with 403 (not just 401), on any bearer-protected endpoint.
 
   parameters:
     UserId:
@@ -537,10 +546,16 @@ components:
 
     AccessTokenResponse:
       type: object
-      required: [token]
+      required: [token, refresh_token]
       properties:
         token:
           type: string
+        refresh_token:
+          type: string
+          description: >-
+            Rotated replacement for the refresh token sent in the request.
+            The one sent is invalidated immediately; store this one for the
+            next refresh call.
 
     User:
       type: object

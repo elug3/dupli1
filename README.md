@@ -12,7 +12,7 @@ Go microservice backend for a fashion bag marketplace. Services behind an nginx 
 | `dupli1-product` | 8081 | Bag catalog, coupons, product CRUD, image upload, stock and reservation APIs |
 | `dupli1-order` | 8083 | Checkout sessions and order lifecycle (PostgreSQL) |
 | `dupli1-cart` | 8086 | Shopping cart (PostgreSQL) |
-| `dupli1-payment` | 8087 | Payments — NANO card, manager Bypass, local dev simulate when gated |
+| `dupli1-payment` | 8087 | Payments — NANO card, manager Bypass |
 | `dupli1-notification` | 8084 | NATS subscriber → Telegram ops alerts when configured |
 | `dupli1-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
 | `postgres-auth` | 5432 | Auth DB (`dupli1_db`) |
@@ -64,7 +64,7 @@ dupli1/
 ├── product/              # Product catalog (also stock/reservations)
 ├── order/                # Order + checkout
 ├── cart/                 # Shopping cart
-├── payment/              # Payments (NANO card / Bypass / local dev simulate)
+├── payment/              # Payments (NANO card / Bypass)
 ├── notification/         # NATS → Telegram ops alerts
 ├── api/
 │   ├── nginx.conf        # Gateway routing
@@ -104,9 +104,9 @@ Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](doc
 
 Authorization uses fine-grained **permissions** in the JWT (`permissions` claim), not legacy roles. See [docs/permissions.md](docs/permissions.md).
 
-**Token flow:** `POST /login` returns `{ "refresh_token": "..." }`. Call `POST /refresh` with that token to get `{ "token": "<access_jwt>" }`. Send the access token as `Authorization: Bearer <token>` on protected routes.
+**Token flow:** `POST /login` returns `{ "refresh_token": "..." }`. Call `POST /refresh` with that token to get `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`. Send the access token as `Authorization: Bearer <token>` on protected routes.
 
-Login and refresh are rate-limited per IP via Redis.
+Refresh tokens rotate on every use — the token you sent stops working and the response's `refresh_token` must be used for the next refresh. Login and refresh are rate-limited per IP via Redis.
 
 Tokens are signed with RS256. In dev, an ephemeral 2048-bit key is generated on startup when `JWT_PRIVATE_KEY_FILE` is not set.
 
@@ -175,7 +175,7 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | POST | `/api/v1/orders/{id}/ship` | Ship order (`paid` → `in_transit`, commit stock) |
 | PUT | `/api/v1/orders/{id}/status` | Fulfill or cancel order |
 
-See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow. See [docs/cart-service.md](docs/cart-service.md) for the persistent cart. See [docs/payment-service.md](docs/payment-service.md) for payment (NANO card, Bypass, local dev simulate).
+See [docs/checkout-session.md](docs/checkout-session.md) for the checkout flow. See [docs/cart-service.md](docs/cart-service.md) for the persistent cart. See [docs/payment-service.md](docs/payment-service.md) for payment (NANO card, Bypass).
 
 ### Cart (`dupli1-cart` :8086)
 
@@ -196,7 +196,7 @@ Full design (boundaries vs inventory/order, data model, checkout handoff): [docs
 
 ### Payment (`dupli1-payment` :8087)
 
-Credit card uses **NANO Solution** certified payment when `NANO_*` is configured; otherwise manager **Bypass** (`payment.bypass`). Local Compose enables `PAYMENT_ALLOW_DEV_SIMULATE=true` for the simulate-success path when NANO is unset. Unpaid `pending` orders auto-cancel after **5 minutes**. [docs/payment-service.md](docs/payment-service.md).
+Credit card uses **NANO Solution** certified payment when `NANO_*` is configured; otherwise `credit_card` is unavailable and manager **Bypass** (`payment.bypass`) is used, including for local testing. Unpaid `pending` orders auto-cancel after **5 minutes**. [docs/payment-service.md](docs/payment-service.md).
 
 ### Product IDs and variants
 

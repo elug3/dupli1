@@ -19,8 +19,8 @@ Authorization: Bearer <access_token>
 **Token flow**
 
 1. `POST /api/v1/auth/login` → `{ "refresh_token": "<jwt>" }`
-2. `POST /api/v1/auth/refresh` with that refresh token → `{ "token": "<access_jwt>" }`
-3. Use the access token on protected routes until it expires (default 15 min), then refresh again.
+2. `POST /api/v1/auth/refresh` with that refresh token → `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`
+3. Use the access token on protected routes until it expires (default 15 min), then refresh again — using the `refresh_token` the previous refresh returned. Refresh tokens rotate on every use: the one just spent stops working, so the caller must store the new one. Reusing an already-rotated refresh token returns `401`.
 
 **Access token claims**
 
@@ -30,8 +30,9 @@ Authorization: Bearer <access_token>
 | `type` | string | `"access"` |
 | `permissions` | string[] | Fine-grained authorization strings such as `product.create`, `order.ship`, `*` |
 | `exp`, `iat` | number | Standard JWT timestamps |
+| `jti` | string | Random per-token ID; makes every issued token unique even if minted in the same second |
 
-Refresh tokens contain `sub` and `type: "refresh"` only. Permissions are loaded from the database on every refresh.
+Refresh tokens contain `sub`, `type: "refresh"`, and `jti` only. Permissions are loaded from the database on every refresh.
 
 Protected routes check the `permissions` claim. See [permissions.md](permissions.md) for the full catalog and endpoint matrix.
 
@@ -165,7 +166,7 @@ Authenticate and receive a refresh token.
 | `401` | Invalid credentials |
 | `403` | Account locked (customers/managers after 5 failed attempts) or deactivated |
 
-**Lockout:** after **5** consecutive failed logins, `customer` and manager-tier accounts set `locked_at` and further logins return `403`. **Admin** and **owner** accounts are never locked (failed attempts do not set `locked_at`; a stale lock is cleared on the next login attempt). See [permissions.md](permissions.md).
+**Lockout:** after **5** consecutive failed logins, `customer` and manager-tier accounts set `locked_at` and further logins return `403` for **15 minutes**, after which the lock auto-expires and failed-attempt counting starts fresh. **Admin** and **owner** accounts are never locked (failed attempts do not set `locked_at`; a stale lock is cleared on the next login attempt). See [permissions.md](permissions.md).
 
 ---
 
@@ -192,30 +193,33 @@ Return the currently authenticated user's **account** (credentials tier — not 
 | Status | Meaning |
 |--------|---------|
 | `401` | Missing, malformed, or expired access token |
+| `403` | Account deactivated or locked since the access token was issued |
 | `404` | User no longer exists |
 
 ---
 
-### Customer profile — `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses`
+### Customer profile — `/api/v1/profile/me/profile` and `/api/v1/profile/me/addresses`
+
+Served by the **`profile`** service. For one release, nginx also aliases the legacy `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` paths to `dupli1-profile`.
 
 Commerce PII (display name, phone, saved addresses) for checkout prefill. Bearer access token; self-service only (no new permission). See [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/auth/me/profile` | Profile + embedded `addresses` |
-| `PATCH` | `/api/v1/auth/me/profile` | Merge-patch `display_name`, `phone` |
-| `GET` | `/api/v1/auth/me/addresses` | `{ "addresses": [ … ] }` |
-| `POST` | `/api/v1/auth/me/addresses` | Create (max 10) |
-| `GET` | `/api/v1/auth/me/addresses/{id}` | One address |
-| `PATCH` | `/api/v1/auth/me/addresses/{id}` | Partial update |
-| `DELETE` | `/api/v1/auth/me/addresses/{id}` | Remove |
-| `POST` | `/api/v1/auth/me/addresses/{id}/default` | Set sole default |
+| `GET` | `/api/v1/profile/me/profile` | Profile + embedded `addresses` |
+| `PATCH` | `/api/v1/profile/me/profile` | Merge-patch `display_name`, `phone` |
+| `GET` | `/api/v1/profile/me/addresses` | `{ "addresses": [ … ] }` |
+| `POST` | `/api/v1/profile/me/addresses` | Create (max 10) |
+| `GET` | `/api/v1/profile/me/addresses/{id}` | One address |
+| `PATCH` | `/api/v1/profile/me/addresses/{id}` | Partial update |
+| `DELETE` | `/api/v1/profile/me/addresses/{id}` | Remove |
+| `POST` | `/api/v1/profile/me/addresses/{id}/default` | Set sole default |
 
 ---
 
 ### `POST /api/v1/auth/refresh`
 
-Exchange a refresh token for a new access token.
+Exchange a refresh token for a new access token. The refresh token **rotates**: the one sent in the request is invalidated immediately, and the response carries its replacement. Callers must store the returned `refresh_token` and use it next time — resending the token just spent (or any earlier one) fails with `401`.
 
 **Request body**
 ```json
@@ -225,7 +229,8 @@ Exchange a refresh token for a new access token.
 **Response `200`**
 ```json
 {
-  "token": "<access_jwt>"
+  "token": "<access_jwt>",
+  "refresh_token": "<new_jwt>"
 }
 ```
 
@@ -233,7 +238,7 @@ Exchange a refresh token for a new access token.
 | Status | Meaning |
 |--------|---------|
 | `400` | Missing or malformed body |
-| `401` | Refresh token invalid or expired |
+| `401` | Refresh token invalid, expired, already rotated/revoked, or the account is deactivated/locked |
 
 ---
 
@@ -751,9 +756,9 @@ Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices
 
 ## Payment Service — `/api/v1/payments`
 
-Credit card uses **NANO Solution** certified payment when `NANO_*` credentials are set; otherwise manager **Bypass** or local **dev simulate** (`PAYMENT_ALLOW_DEV_SIMULATE`). Dupli1 never handles card numbers, CVC, or card passwords.
+Credit card uses **NANO Solution** certified payment when `NANO_*` credentials are set; otherwise `credit_card` is unavailable (501) and payments — including local testing — go through manager **Bypass**. Dupli1 never handles card numbers, CVC, or card passwords.
 
-**Methods:** create body accepts `method`: `credit_card` (NANO or local simulate), `bypass` (order manager / `payment.bypass`), `bitcoin` (501 until implemented). See [payment-methods-plan.md](payment-methods-plan.md).
+**Methods:** create body accepts `method`: `credit_card` (NANO; 501 when unconfigured), `bypass` (order manager / `payment.bypass`), `bitcoin` (501 until implemented). See [payment-methods-plan.md](payment-methods-plan.md).
 
 When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront callers may only pay for / read their own orders unless they hold `payment.create` or `payment.read.all`.
 
@@ -761,7 +766,6 @@ When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront calle
 |--------|------|-------------------|
 | POST | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | GET | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
-| GET | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
 
 **Create payment**
 ```json

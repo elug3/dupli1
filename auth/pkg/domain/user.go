@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/elug3/dupli1/shared/pkg/permissions"
@@ -19,6 +20,15 @@ type User struct {
 	FailedLoginAttempts int
 }
 
+// NormalizeEmail trims whitespace and lowercases an email address so
+// "Alice@x.com" and "alice@x.com" are always treated as the same account.
+// Every path that sets User.Email (creation, admin reset, lookups) should
+// route through this so the DB's case-insensitive unique index and the
+// application layer agree on one canonical form.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 // NewUser creates a new user, hashing the plaintext password with bcrypt.
 func NewUser(id, email, password, accountType string, perms ...string) (*User, error) {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -27,7 +37,7 @@ func NewUser(id, email, password, accountType string, perms ...string) (*User, e
 	}
 	return &User{
 		ID:          id,
-		Email:       email,
+		Email:       NormalizeEmail(email),
 		Password:    string(hashed),
 		AccountType: accountType,
 		Permissions: permissions.Dedupe(perms),
@@ -35,13 +45,20 @@ func NewUser(id, email, password, accountType string, perms ...string) (*User, e
 	}, nil
 }
 
+// AccountLockDuration is how long a failed-login lockout lasts before it
+// automatically lifts. There is no unlock endpoint, so a permanent lock would
+// leave a customer's account (or one an attacker deliberately locks, knowing
+// only the email address) unrecoverable through the API.
+const AccountLockDuration = 15 * time.Minute
+
 // IsLocked reports whether the account is currently locked.
 // Admin and owner accounts are never considered locked (see IsLockExempt).
+// A lock automatically expires after AccountLockDuration.
 func (u *User) IsLocked() bool {
 	if u == nil || u.IsLockExempt() {
 		return false
 	}
-	return u.LockedAt != nil
+	return u.LockedAt != nil && time.Since(*u.LockedAt) < AccountLockDuration
 }
 
 // IsLockExempt reports whether failed-login lockout must not apply.
@@ -82,6 +99,19 @@ func (u *User) HasPermission(required ...string) bool {
 // ValidatePassword checks the provided plaintext password against the stored bcrypt hash.
 func (u *User) ValidatePassword(pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(pw)) == nil
+}
+
+// dummyPasswordHash is a bcrypt hash (at bcrypt.DefaultCost, same as every
+// real account) of a placeholder password nobody's account uses.
+const dummyPasswordHash = "$2a$10$.R70sTG1DFOsiLclagRoHOsSzV5rBKgnzOLALTGxxTA5QSqJ2v5HW"
+
+// ValidateDummyPassword runs a bcrypt comparison against a fixed placeholder
+// hash nothing can match. Login calls this on its "no such account" path so
+// that path costs about the same as ValidatePassword against a real account
+// — otherwise the response-time gap tells an unauthenticated caller whether
+// an email is registered.
+func ValidateDummyPassword(pw string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(dummyPasswordHash), []byte(pw)) == nil
 }
 
 // SetPermissions replaces the user's permission list.

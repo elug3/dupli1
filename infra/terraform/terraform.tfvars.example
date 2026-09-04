@@ -19,6 +19,12 @@ image_tag                  = "latest"
 # Secrets Manager ARNs (defaults match production; override if rotated)
 # telegram_secret_arn = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/telegram-XXXX"
 
+# profile_db_url_secret_arn has no production default yet — create the
+# dupli1/production/profile-db-url secret (DUPLI1_PROFILE_DB connection
+# string) and set this once it exists. Until then the profile ECS task
+# starts without a DB secret and falls back to an in-memory repository.
+# profile_db_url_secret_arn = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/profile-db-url-XXXX"
+
 # Product images CDN (CloudFront + OAC). Requires ACM SAN or *.dupli1.com.
 # product_images_cdn_aliases = ["images.dupli1.com"]
 # product_images_cdn_aliases = []  # use *.cloudfront.net only

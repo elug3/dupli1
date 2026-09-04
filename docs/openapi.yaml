@@ -52,7 +52,7 @@ paths:
 
   /api/v1/auth/refresh:
     post:
-      summary: Exchange a refresh token for an access token
+      summary: Exchange a refresh token for an access token; rotates and returns a new refresh token
       tags: [Auth]
       responses:
         '200':
@@ -1271,22 +1271,6 @@ paths:
       security:
         - bearerAuth: []
       description: ABAC on order owner; payment.read.all bypasses it.
-      responses:
-        '200':
-          description: Success
-
-  /api/v1/payments/{id}/simulate-success:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        description: Resource id
-        schema:
-          type: string
-    get:
-      summary: Development-only payment success simulation
-      tags: [Payment]
-      description: Registered only when the dev simulate endpoint is enabled; must stay off in production.
       responses:
         '200':
           description: Success

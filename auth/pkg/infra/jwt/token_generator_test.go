@@ -141,3 +141,23 @@ func TestValidate_TamperedTokenReturnsError(t *testing.T) {
 		t.Fatal("expected error for tampered token, got nil")
 	}
 }
+
+func TestGenerate_TokensIssuedInSameSecondAreUnique(t *testing.T) {
+	// Refresh rotation stores sessions keyed by the full token string. Without
+	// a unique jti claim, two tokens minted for the same user in the same
+	// second would be byte-identical and rotation would delete the only session.
+	gen := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
+	ctx := t.Context()
+
+	t1, err := gen.Generate(ctx, "user-1", nil)
+	if err != nil {
+		t.Fatalf("first Generate: %v", err)
+	}
+	t2, err := gen.Generate(ctx, "user-1", nil)
+	if err != nil {
+		t.Fatalf("second Generate: %v", err)
+	}
+	if t1 == t2 {
+		t.Fatalf("refresh tokens are identical: %q", t1)
+	}
+}

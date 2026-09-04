@@ -24,6 +24,15 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 	}
 
 	r := gin.New()
+	// Gin defaults to trusting every proxy, which makes Context.ClientIP() trust
+	// a caller-supplied X-Forwarded-For outright. Since nginx (api/nginx.conf)
+	// reaches this service over the Docker bridge network and appends to
+	// X-Forwarded-For rather than replacing it, an untrusted default would let
+	// any client spoof a fresh IP per request and bypass the per-IP login /
+	// refresh rate limiter below. Only the private ranges nginx's container
+	// address falls in are trusted, so a directly-connecting public client's
+	// X-Forwarded-For is ignored and its real RemoteAddr is used instead.
+	_ = r.SetTrustedProxies([]string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"})
 	r.Use(gin.Recovery())
 	r.Use(corsMiddleware(corsOrigins))
 
@@ -66,14 +75,6 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 		authed := v1.Group("", h.RequireAuth())
 		{
 			authed.GET("/me", h.Me)
-			authed.GET("/me/profile", h.GetProfile)
-			authed.PATCH("/me/profile", h.PatchProfile)
-			authed.GET("/me/addresses", h.ListAddresses)
-			authed.POST("/me/addresses", h.CreateAddress)
-			authed.POST("/me/addresses/:id/default", h.SetDefaultAddress)
-			authed.GET("/me/addresses/:id", h.GetAddress)
-			authed.PATCH("/me/addresses/:id", h.PatchAddress)
-			authed.DELETE("/me/addresses/:id", h.DeleteAddress)
 		}
 
 		userRead := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserRead))
@@ -94,6 +95,11 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 		userMgmtStatus := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserStatusUpdate))
 		{
 			userMgmtStatus.PATCH("/users/:id/status", h.SetUserStatus)
+		}
+
+		userDelete := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserDelete))
+		{
+			userDelete.DELETE("/users/:id", h.DeleteUser)
 		}
 	}
 

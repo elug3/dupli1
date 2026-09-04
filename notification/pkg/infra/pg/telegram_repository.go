@@ -10,6 +10,7 @@ import (
 
 	"github.com/elug3/dupli1/notification/pkg/domain"
 	"github.com/elug3/dupli1/notification/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/pgsslmode"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/oklog/ulid/v2"
@@ -63,6 +64,8 @@ func (r *TelegramRepository) migrate() error {
 		 ON telegram_subscriptions (chat_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS telegram_subscriptions_user_id_idx
 		 ON telegram_subscriptions (telegram_user_id) WHERE telegram_user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS telegram_subscriptions_status_idx
+		 ON telegram_subscriptions (status, created_at DESC)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := r.pool.Exec(ctx, stmt); err != nil {
@@ -308,12 +311,10 @@ func scanSubscriptions(rows pgx.Rows) ([]domain.TelegramSubscription, error) {
 	return out, rows.Err()
 }
 
+// withPostgresSSLMode picks a safe sslmode for connString — see shared/pkg/pgsslmode.
+// Previously this unconditionally defaulted to "disable" regardless of host,
+// unlike every other service, which is the wrong default for a connection
+// string that omits sslmode and turns out to be a managed database.
 func withPostgresSSLMode(connString string) string {
-	if strings.Contains(connString, "sslmode=") {
-		return connString
-	}
-	if strings.Contains(connString, "?") {
-		return connString + "&sslmode=disable"
-	}
-	return connString + "?sslmode=disable"
+	return pgsslmode.WithSSLMode(connString)
 }

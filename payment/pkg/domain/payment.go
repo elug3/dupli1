@@ -29,7 +29,6 @@ const (
 
 // Provider identifiers stored on the payment row.
 const (
-	ProviderDev    = "dev"
 	ProviderBypass = "bypass"
 	ProviderNano   = "nano"
 )

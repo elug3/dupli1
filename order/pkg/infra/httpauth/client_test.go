@@ -66,6 +66,61 @@ func TestServiceAccountTokenSource_CachesAndRefreshes(t *testing.T) {
 	}
 }
 
+func TestServiceAccountTokenSource_CapturesRotatedRefreshToken(t *testing.T) {
+	var refreshTokensSeen []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/auth/login" && r.Method == http.MethodPost:
+			_ = json.NewEncoder(w).Encode(map[string]string{"refresh_token": "refresh-1"})
+		case r.URL.Path == "/api/v1/auth/refresh" && r.Method == http.MethodPost:
+			var body struct {
+				RefreshToken string `json:"refresh_token"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			refreshTokensSeen = append(refreshTokensSeen, body.RefreshToken)
+
+			// auth rejects a rotated-away token; only the latest one works.
+			if body.RefreshToken != "refresh-1" && body.RefreshToken != "refresh-2" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid token"})
+				return
+			}
+			next := "refresh-2"
+			if body.RefreshToken == "refresh-2" {
+				next = "refresh-3"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"token":         fakeAccessToken(t, time.Now().Add(30*time.Second).Unix()),
+				"refresh_token": next,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	src := httpauth.NewServiceAccountTokenSource(srv.URL, "order@svc", "secret", srv.Client())
+	// Skew is 60s and the fake token expires in 30s, so each Token() call
+	// forces a fresh refresh — driving two rotations without Invalidate().
+	if _, err := src.Token(t.Context()); err != nil {
+		t.Fatalf("first Token: %v", err)
+	}
+	if _, err := src.Token(t.Context()); err != nil {
+		t.Fatalf("second Token: %v", err)
+	}
+
+	want := []string{"refresh-1", "refresh-2"}
+	if len(refreshTokensSeen) != len(want) {
+		t.Fatalf("refresh tokens seen = %v, want %v", refreshTokensSeen, want)
+	}
+	for i, tok := range want {
+		if refreshTokensSeen[i] != tok {
+			t.Fatalf("refresh call %d used %q, want %q (rotated token wasn't captured)", i+1, refreshTokensSeen[i], tok)
+		}
+	}
+}
+
 func TestServiceAccountTokenSource_ReloginWhenRefreshFails(t *testing.T) {
 	var logins atomic.Int32
 	var refreshes atomic.Int32

@@ -10,9 +10,8 @@ type ServerOptions struct {
 	JWKSURL            string
 	NATSURL            string
 	PublicBaseURL      string
-	AllowDevSimulate   bool // PAYMENT_ALLOW_DEV_SIMULATE — local/dev only
 	// NANO Solution certified payment (인증결제). When API key + shop are set,
-	// credit_card uses NANO instead of dev simulate / unavailable.
+	// credit_card uses NANO instead of being unavailable (use method=bypass otherwise).
 	NanoBaseURL     string
 	NanoVer         string
 	NanoShopCode    string

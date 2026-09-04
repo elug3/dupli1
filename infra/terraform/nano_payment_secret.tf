@@ -1,5 +1,7 @@
 # NANO Solution certified payment (인증결제) credentials for dupli1-payment.
 # Operators put real values after contract; the initial version is an empty shell.
+# 연동 테스트 (인증결제 API guide): NANO_VER/SHOPCODE=240000005, LOGIN_ID=shoptest,
+# API_KEY=R7L9PxM5V8K2Jc4N6dWqY1Eb3T5XhZU2 with BaseURL https://dev3.nanopay.co.kr.
 
 resource "aws_secretsmanager_secret" "nano_payment" {
   name        = "${var.project_name}/${var.environment}/nano-payment"

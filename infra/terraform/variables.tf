@@ -94,6 +94,12 @@ variable "payment_db_url_secret_arn" {
   default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/payments-db-url-XxgHJp"
 }
 
+variable "profile_db_url_secret_arn" {
+  description = "Secrets Manager ARN for profile DUPLI1_PROFILE_DB. Not yet provisioned in Secrets Manager — create dupli1/production/profile-db-url before applying, then set this default (or pass via tfvars)."
+  type        = string
+  default     = ""
+}
+
 variable "jwt_secret_arn" {
   description = "Secrets Manager ARN for JWT_SECRET (HS256 fallback)."
   type        = string
@@ -201,10 +207,10 @@ variable "web_service_email" {
   default     = "dupli1-web@web.dupli1.com"
 }
 
-variable "order_service_email" {
-  description = "Email for the dupli1-order service account (product stock reservations)."
+variable "nano_base_url" {
+  description = "NANO PG base URL. Production: https://pay.nanopay.co.kr. Use https://dev3.nanopay.co.kr only with NANO 연동 테스트 credentials."
   type        = string
-  default     = "dupli1-order@order.dupli1.com"
+  default     = "https://pay.nanopay.co.kr"
 }
 
 variable "github_oidc_extra_subjects" {

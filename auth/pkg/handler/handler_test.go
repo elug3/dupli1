@@ -107,7 +107,6 @@ func newStack(t *testing.T) *stack {
 	svc := service.NewService(
 		repo,
 		accessGen,
-		service.WithProfileRepository(memory.NewProfileRepository()),
 		service.WithRefreshTokenGen(refreshGen, time.Hour),
 		service.WithSessionStore(sessions),
 	)
@@ -516,6 +515,48 @@ func TestMe(t *testing.T) {
 	})
 }
 
+func TestMe_RejectsLockedAndDeactivatedAccounts(t *testing.T) {
+	const email, password = "me-guard@example.com", "supersecret"
+
+	t.Run("locked account returns 403", func(t *testing.T) {
+		s := newStack(t)
+		accessToken := s.registerLoginRefresh(t, email, password)
+
+		user, err := s.repo.FindByEmail(t.Context(), email)
+		if err != nil || user == nil {
+			t.Fatalf("FindByEmail: %v", err)
+		}
+		user.Lock()
+		if err := s.repo.Save(t.Context(), user); err != nil {
+			t.Fatalf("Save locked user: %v", err)
+		}
+
+		w := s.doWithAuth(t, http.MethodGet, "/api/v1/auth/me", accessToken, nil)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("locked /me: want 403, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("deactivated account returns 403", func(t *testing.T) {
+		s := newStack(t)
+		accessToken := s.registerLoginRefresh(t, "deactivated-me@example.com", password)
+
+		user, err := s.repo.FindByEmail(t.Context(), "deactivated-me@example.com")
+		if err != nil || user == nil {
+			t.Fatalf("FindByEmail: %v", err)
+		}
+		user.SetActive(false)
+		if err := s.repo.Save(t.Context(), user); err != nil {
+			t.Fatalf("Save deactivated user: %v", err)
+		}
+
+		w := s.doWithAuth(t, http.MethodGet, "/api/v1/auth/me", accessToken, nil)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("deactivated /me: want 403, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
 // ---- POST /logout ----------------------------------------------------------
 
 func TestLogout(t *testing.T) {
@@ -599,6 +640,56 @@ func TestRefresh(t *testing.T) {
 		}
 		if resp.Token == "" {
 			t.Error("token is empty")
+		}
+	})
+
+	t.Run("rotates the refresh token and invalidates the old one", func(t *testing.T) {
+		w := s.doWithAuth(t, http.MethodPost, "/api/v1/auth/register", s.registrarToken, map[string]string{
+			"email": "rotate@example.com", "password": "supersecret",
+		})
+		if w.Code != http.StatusCreated {
+			t.Fatalf("register: want 201, got %d", w.Code)
+		}
+
+		w = s.do(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+			"email": "rotate@example.com", "password": "supersecret",
+		})
+		var loginResp struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(w.Body).Decode(&loginResp); err != nil {
+			t.Fatalf("decode login response: %v", err)
+		}
+
+		w = s.do(t, http.MethodPost, "/api/v1/auth/refresh", map[string]string{
+			"refresh_token": loginResp.RefreshToken,
+		})
+		if w.Code != http.StatusOK {
+			t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var refreshResp struct {
+			Token        string `json:"token"`
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(w.Body).Decode(&refreshResp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if refreshResp.RefreshToken == "" || refreshResp.RefreshToken == loginResp.RefreshToken {
+			t.Fatalf("expected a new, different refresh token; got %q (original %q)", refreshResp.RefreshToken, loginResp.RefreshToken)
+		}
+
+		w = s.do(t, http.MethodPost, "/api/v1/auth/refresh", map[string]string{
+			"refresh_token": loginResp.RefreshToken,
+		})
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("reusing the rotated-away token: want 401, got %d", w.Code)
+		}
+
+		w = s.do(t, http.MethodPost, "/api/v1/auth/refresh", map[string]string{
+			"refresh_token": refreshResp.RefreshToken,
+		})
+		if w.Code != http.StatusOK {
+			t.Errorf("refreshing with the rotated token: want 200, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 

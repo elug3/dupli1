@@ -14,7 +14,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Inventory (stock, reservations) | Implemented (PostgreSQL, owned by product) |
 | Orders + checkout sessions | Implemented (PostgreSQL) |
 | Shopping cart | Implemented (PostgreSQL) |
-| Payments (NANO card + Bypass + local simulate) | Implemented — see [payment-service.md](payment-service.md) |
+| Payments (NANO card + Bypass) | Implemented — see [payment-service.md](payment-service.md) |
 | Payment methods | Credit card (NANO) + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
 | Notifications | Implemented (NATS → Telegram when configured) |
 | User profiles, chat, analytics | **Profile phase A** in auth (`/me/profile`, `/me/addresses`) — [auth-profile-extension-plan.md](auth-profile-extension-plan.md); guest PDP views + recommendations in product; chat/analytics not started |
@@ -39,9 +39,9 @@ See [service-layout.md](service-layout.md) for details.
 - **Stack:** Gin, PostgreSQL, Redis, optional NATS
 - **Persistence:** `dupli1_db` on `postgres-auth`
 - **Features:**
-  - Login returns a **refresh token**; `POST /refresh` returns a short-lived **access token** (`token` field)
+  - Login returns a **refresh token**; `POST /refresh` returns a short-lived **access token** (`token` field) plus a **rotated refresh token** (`refresh_token` field) — the token sent in is invalidated immediately
   - RS256 JWT + JWKS at `/api/v1/auth/.well-known/jwks.json`
-  - Access tokens include `type: "access"`; refresh tokens include `type: "refresh"`
+  - Access tokens include `type: "access"`; refresh tokens include `type: "refresh"`; both include a random `jti` so same-second issuances never collide
   - Fine-grained **permissions** stored on users (`users.permissions TEXT[]`); JWT access tokens include `permissions` claim only
   - Permission constants and evaluation in `shared/pkg/permissions` (`github.com/elug3/dupli1/shared`)
   - Wildcards: `*`, `admin.*`, `{resource}.*` (e.g. `product.*`)
@@ -49,12 +49,15 @@ See [service-layout.md](service-layout.md) for details.
   - Register: **temporary open customer signup** via `AUTH_OPEN_REGISTER` (default on); anonymous callers create `customer` only. Set `AUTH_OPEN_REGISTER=false` to require `user.create` again. Authenticated `user.create` still follows ABAC for other account types.
   - Auth ABAC hierarchy governs who may manage whom
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
-  - Customer commerce profile at `/api/v1/auth/me/profile` and saved addresses at `/api/v1/auth/me/addresses` — [auth-profile-extension-plan.md](auth-profile-extension-plan.md)
+  - Customer commerce profile/addresses moved to **`profile`** service (`/api/v1/profile/me/…`); one-release gateway aliases keep `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` — [auth-profile-extension-plan.md](auth-profile-extension-plan.md)
+  - `DELETE /api/v1/auth/users/:id` (`user.delete`) publishes `user.deleted` so profile drops owned PII
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `manager`)
-  - Login lockout after 5 failed attempts for customers/managers; **admin and owner are never locked**
+  - Login lockout after 5 failed attempts for customers/managers, auto-expiring after 15 minutes; **admin and owner are never locked**
+  - Deactivated/locked accounts are rejected on their very next authenticated request (not just next login/refresh) — `RequireAuth` re-checks account status on every call
   - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`); seeded/synced on auth boot; ECS injects the shared Secrets Manager secret into auth + web (see [infra/terraform/README.md](../infra/terraform/README.md))
   - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage` (`DUPLI1_ORDER_SERVICE_*`); order refreshes a Bearer access token and calls product stock/coupons via **`DUPLI1_GATEWAY_URL`** (`httpstock` / gateway paths)
-  - Login/refresh rate-limited per IP via Redis
+  - Login/refresh rate-limited per IP via Redis; Gin trusts only RFC1918 proxy hops (`SetTrustedProxies`) so a client-supplied `X-Forwarded-For` can't spoof a fresh IP and bypass the limit
+  - Session store falls back to in-memory (with background GC) when no Redis is configured, so `/logout` and refresh-token revocation still work on a single instance instead of silently no-op'ing
   - `user.registered` NATS publish is best-effort: a broker outage is logged and the account still registers
   - Structured **zerolog** logging (`event` field) for session paths, internal errors, and bootstrap — [auth-logging.md](auth-logging.md)
 - **Tests:** `cd auth && go test ./...`
@@ -118,11 +121,10 @@ See [service-layout.md](service-layout.md) for details.
 - **Host port:** 8087
 - **Persistence:** PostgreSQL (`payments` on `postgres-payment`)
 - **Features:**
-  - **NANO** certified card PG when `NANO_*` credentials set; else manager **Bypass** / local **dev simulate** (see [payment-service.md](payment-service.md))
+  - **NANO** certified card PG when `NANO_*` credentials set; else `credit_card` is unavailable (501) and manager **Bypass** is used, including for local testing (see [payment-service.md](payment-service.md))
   - Default payment currency: **`krw` only** (whole won; `*_cents` fields are KRW minor units = won)
-  - Dev simulate URL `GET /api/v1/payments/{id}/simulate-success` only when **`PAYMENT_ALLOW_DEV_SIMULATE=true`** and NANO unset (Compose default)
   - Publishes **`payment.succeeded`** via transactional **outbox** (soft-success complete; drain + reconcile workers)
-  - **Methods:** `method` on create — `credit_card` (NANO or local simulate), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)
+  - **Methods:** `method` on create — `credit_card` (NANO; 501 when unconfigured), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)
 - **Auth:** Bearer JWT on customer routes; ownership ABAC unless `payment.create` / `payment.read.all`. Bypass requires `payment.bypass`
 - **Tests:** `cd payment && go test ./...`
 
@@ -164,7 +166,7 @@ See [service-layout.md](service-layout.md) for details.
 | product | health, product search/PDP, coupon redeem, inventory reads | product/coupon CRUD (per permission), image upload, inventory writes (`inventory.stock.write`, `inventory.reservation.manage`) |
 | order | health only | orders (list all / by customer), checkout (ABAC + permissions), ship (`order.ship`) |
 | cart | health only | own cart; admin read (`cart.read`) |
-| payment | health, dev simulate (gated) | payments (ABAC + permissions); Bypass (`payment.bypass`) |
+| payment | health only | payments (ABAC + permissions); Bypass (`payment.bypass`) |
 | notification | health, Telegram webhook | Telegram subscriptions (`notification.telegram.read` / `notification.telegram.manage`) |
 
 Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Permission spec: [permissions.md](permissions.md).

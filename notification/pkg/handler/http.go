@@ -11,21 +11,18 @@ import (
 	"github.com/elug3/dupli1/notification/pkg/ports"
 	"github.com/elug3/dupli1/notification/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 	"github.com/jackc/pgx/v4"
 )
 
-type AccessTokenValidator interface {
-	ValidateAccessToken(token string) (authjwt.Claims, error)
-}
-
 type Handler struct {
 	telegramSubs           *service.TelegramSubscriptions
 	updateProcessor        *telegram.UpdateProcessor
-	webhookSecret            string
-	jwtValidator             AccessTokenValidator
-	settings                 settings.Response
+	webhookSecret          string
+	jwtValidator           authjwt.AccessTokenValidator
+	settings               settings.Response
 	onSubscriptionsChanged func()
 }
 
@@ -33,7 +30,7 @@ type Options struct {
 	TelegramSubs           *service.TelegramSubscriptions
 	UpdateProcessor        *telegram.UpdateProcessor
 	WebhookSecret          string
-	JWTValidator           AccessTokenValidator
+	JWTValidator           authjwt.AccessTokenValidator
 	Settings               settings.Response
 	OnSubscriptionsChanged func()
 }
@@ -260,23 +257,7 @@ func (h *Handler) notifyChanged() {
 }
 
 func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.jwtValidator == nil {
-			respondError(w, http.StatusServiceUnavailable, "auth not configured")
-			return
-		}
-		authHeader := r.Header.Get("Authorization")
-		if len(authHeader) < 8 || !strings.EqualFold(authHeader[:7], "bearer ") {
-			respondError(w, http.StatusUnauthorized, "missing or malformed Authorization header")
-			return
-		}
-		claims, err := h.jwtValidator.ValidateAccessToken(authHeader[7:])
-		if err != nil {
-			respondError(w, http.StatusUnauthorized, "invalid token")
-			return
-		}
-		next(w, r.WithContext(authjwt.WithClaims(r.Context(), claims)))
-	}
+	return authmiddleware.RequireAuth(h.jwtValidator, respondError)(next)
 }
 
 func (h *Handler) canRead(r *http.Request) bool {

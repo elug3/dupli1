@@ -99,6 +99,7 @@ Phase 1 introduces `shared/pkg/permissions` (Go module `github.com/elug3/dupli1/
 | `user.permissions.update` | Replace a user's permission list (`PATCH …/permissions`) |
 | `user.password.update` | Set another user's password |
 | `user.status.update` | Activate or deactivate a user |
+| `user.delete` | Permanently delete a user (publishes `user.deleted` for profile cleanup) |
 
 **ABAC (auth service only):** user management follows a role hierarchy independent of downstream services:
 
@@ -189,7 +190,7 @@ Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
 
 **Default storefront:** authenticated user with empty `permissions` may create/read **only their own** payments (ownership enforced in service).
 
-NANO return/webhook and gated dev simulate endpoints are **unauthenticated** (callback / webhook secret / dev-only). Bypass requires `payment.bypass`.
+NANO return/webhook endpoints are **unauthenticated** (callback / webhook secret). Bypass requires `payment.bypass`.
 
 ---
 
@@ -205,6 +206,7 @@ NANO return/webhook and gated dev simulate endpoints are **unauthenticated** (ca
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` |
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `user.status.update` |
+| `DELETE` | `/api/v1/auth/users/:id` | `user.delete` |
 
 **Temporary:** `AUTH_OPEN_REGISTER=true` allows unauthenticated customer signup (empty permissions). Re-lock with `AUTH_OPEN_REGISTER=false`.
 
@@ -299,7 +301,6 @@ registered as an alias.
 |--------|------|-------------------|
 | `POST` | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | `GET` | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
-| `GET` | `/api/v1/payments/{id}/simulate-success` | — (dev only) |
 
 ---
 
@@ -312,7 +313,7 @@ Code-defined sets for common job functions. Assigning a bundle expands to explic
 | `catalog_editor` | `product.create`, `product.update`, `product.read`, `product.variant.create`, `product.variant.update`, `product.image.upload`, `product.master.read`, `product.master.write` |
 | `catalog_admin` | `product.*`, `coupon.*` |
 | `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass` |
-| `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update` |
+| `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update`, `user.delete` |
 | `customer_registrar` | `user.create` |
 
 API exposure of bundles is deferred; Phase 2 seeds and migrations use these expansions directly.

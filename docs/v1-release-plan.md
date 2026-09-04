@@ -23,9 +23,9 @@ v1.1 platform work starts only after the v1.0 tag — see [v1.1-release-plan.md]
 
 ## Verdict
 
-The **money path is implemented**: cart → checkout/order → NANO card / Bypass / local simulate → `payment.succeeded` → `paid` → ship → stock commit. Critical money/auth bugs from the Jul review (server-side pricing, JWT fail-closed, outboxes) are done. Backend hardening (section C) is **done in the repo**.
+The **money path is implemented**: cart → checkout/order → NANO card / Bypass → `payment.succeeded` → `paid` → ship → stock commit. Critical money/auth bugs from the Jul review (server-side pricing, JWT fail-closed, outboxes) are done. Backend hardening (section C) is **done in the repo**.
 
-**v1.0 target is 2026-08-30** — ship only when all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed. Product images CDN, persistent JWT, Telegram wiring, and gateway ECS conf are done; **external card PG beyond NANO is waived for launch** when NANO is unset (pay path = Bypass). Remaining: disable prod simulate (A5), catalog prices (A9), prod smoke (Bypass path), and `dupli1-web` / `dupli1-manage-web` alignment. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, Bypass (or NANO) pay, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
+**v1.0 target is 2026-08-30** — ship only when all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed. Product images CDN, persistent JWT, Telegram wiring, and gateway ECS conf are done; **external card PG beyond NANO is waived for launch** when NANO is unset (pay path = Bypass). Dev simulate has been removed from the codebase (A5 is moot — merged into Bypass). Remaining: catalog prices (A9), prod smoke (Bypass path), and `dupli1-web` / `dupli1-manage-web` alignment. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, Bypass (or NANO) pay, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
 
 ---
 
@@ -38,7 +38,7 @@ The **money path is implemented**: cart → checkout/order → NANO card / Bypas
 | Inventory | Stock + reserve/commit/release in product service |
 | Cart | JWT cart; server-sourced prices |
 | Order | Checkout sessions; idempotency; unpaid expiry; ship + stock commit |
-| Payment | NANO card (when configured) + Bypass + gated local simulate; KRW; outbox/reconcile |
+| Payment | NANO card (when configured) + Bypass (also used for local testing); KRW; outbox/reconcile |
 | Notification | Telegram on order/product events |
 | AWS | ECS/ALB/RDS/Secrets; cart + payment on ECS; HTTPS on ALB |
 
@@ -72,9 +72,9 @@ Money-path Criticals **C1 / H1 / H3 / H7** are fixed in code — re-verify on th
 3. [x] **Card PG** — **NANO** is the credit-card adapter when `NANO_*` is set. Launch without NANO uses manager **Bypass**. (Historical Stripe adapter was removed.)
 4. [x] **Persistent JWT signing key** — secret `dupli1/production/jwt-private-key` wired; prod `ephemeral_jwt_key` is `false`.
 5. [x] **Telegram** — Secrets Manager wired into `dupli1-notification`.
-6. **Smoke the money path on prod** — add to cart → checkout → **Bypass pay** → `paid` → ship → stock committed / `soldCount` up. Confirm `dev_simulate_success` is `false`.
+6. **Smoke the money path on prod** — add to cart → checkout → **Bypass pay** → `paid` → ship → stock committed / `soldCount` up.
 7. **Confirm catalog prices** — spot-check non-zero `price` / `officialPrice` after earlier wipe + migrate (live catalog currently has `price: 0` on the sample bag — A9).
-8. **A5** — after deploying payment with `PAYMENT_ALLOW_DEV_SIMULATE` unset, confirm simulate is off.
+8. ~~**A5** — after deploying payment with `PAYMENT_ALLOW_DEV_SIMULATE` unset, confirm simulate is off.~~ Moot: dev simulate was removed from the codebase entirely.
 
 Step-by-step commands and verification for all of these: [launch runbook](#launch-runbook-section-a) below.
 
@@ -176,7 +176,7 @@ Summary — ship when all are true:
 
 - [ ] Storefront can browse bags, see images, add to cart, checkout; pay via **Bypass** (or future PG) → order `paid`
 - [ ] Ops can ship → `in_transit` and stock commits
-- [ ] Bypass works for managers only; simulate-success off in prod (`PAYMENT_ALLOW_DEV_SIMULATE` unset)
+- [x] Bypass works for managers only; dev simulate removed from the codebase entirely (nothing to gate)
 - [ ] Telegram (or accepted alternative) fires on `order.paid`
 - [ ] No known zeroed catalog prices on live products
 - [ ] Frontends use canonical paths + parent pricing (+ `skuId` preferred)
@@ -256,15 +256,14 @@ Verify a PDP image URL returns `200` from a plain browser fetch (no signature), 
 
 Credit card uses **NANO Solution 인증결제** when `NANO_*` credentials are set (prod: Secrets Manager `dupli1/production/nano-payment`). Without NANO, ops marks orders paid with **Bypass** (`payment.bypass`). The historical Stripe adapter was removed.
 
-**Important:** `simulate-success` requires an explicit `PAYMENT_ALLOW_DEV_SIMULATE=true`
-(Compose sets this for local). On ECS leave it **unset** so prod cannot simulate.
-Verify after deploying that payment build:
+**Note:** the dev-simulate checkout path (provider `dev`, `GET .../simulate-success`) has
+been removed from the codebase — there is no flag to gate and nothing for prod to
+accidentally expose. Verify checkout provider after deploying that payment build:
 
 ```bash
 curl -s https://dupli1.com/api/v1/payments/settings \
-  | jq '{dev_simulate_success: .features.dev_simulate_success,
-         checkout_provider: .limits.checkout_provider}'
-# want: dev_simulate_success false; checkout_provider "nano" when NANO wired, else Bypass-only
+  | jq '.limits.checkout_provider'
+# want: "nano" when NANO wired, else "none" (Bypass-only)
 ```
 
 Bypass stays gated on `payment.bypass` ([payment-service.md](payment-service.md),
@@ -303,10 +302,11 @@ the commit, `method=bypass` is refused for a plain customer, and `confirmed` is 
 BASE=https://dupli1.com SKU_ID=<existing skuId> scripts/smoke-money-path.sh
 ```
 
-It registers a throwaway customer and creates a real order. With NANO configured the
-script follows the card checkout bridge; without NANO it uses Bypass (manager token) or
-the gated dev simulate endpoint. Omitting `SKU_ID` makes it seed its own
-`SMK`-brand product, which is what you want locally but not in the live catalog.
+It registers a throwaway customer and creates a real order, then pays via manager
+Bypass — NANO's certified checkout needs a signed browser round-trip a curl script
+can't drive, so it isn't exercised here even when NANO is configured. Omitting
+`SKU_ID` makes it seed its own `SMK`-brand product, which is what you want locally
+but not in the live catalog.
 
 Finally confirm the `order.paid` Telegram alert arrived.
 

@@ -9,14 +9,8 @@ import (
 
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/events"
 )
-
-type paymentSucceededEvent struct {
-	EventType   string `json:"event_type"`
-	OrderID     string `json:"order_id"`
-	PaymentID   string `json:"payment_id"`
-	AmountCents int64  `json:"amount_cents"`
-}
 
 // RegisterPaymentConsumer subscribes to payment.succeeded and marks orders paid.
 func (s *Service) RegisterPaymentConsumer(ctx context.Context, subscriber ports.EventSubscriber) error {
@@ -24,7 +18,7 @@ func (s *Service) RegisterPaymentConsumer(ctx context.Context, subscriber ports.
 }
 
 func (s *Service) handlePaymentSucceeded(ctx context.Context, _ string, payload []byte) error {
-	var event paymentSucceededEvent
+	var event events.PaymentSucceededEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("decode payment.succeeded: %w", err)
 	}

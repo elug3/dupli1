@@ -11,6 +11,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/autherrors"
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/events"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/rs/zerolog"
 )
@@ -31,7 +32,6 @@ const (
 // Service holds all auth business logic.
 type Service struct {
 	userRepo           ports.UserRepository
-	profileRepo        ports.ProfileRepository
 	tokenGen           ports.TokenGenerator
 	refreshTokenGen    ports.TokenGenerator
 	sessionStore       ports.SessionStore
@@ -42,13 +42,6 @@ type Service struct {
 
 // ServiceOption configures a Service.
 type ServiceOption func(*Service)
-
-// WithProfileRepository enables customer profile and address APIs.
-func WithProfileRepository(repo ports.ProfileRepository) ServiceOption {
-	return func(s *Service) {
-		s.profileRepo = repo
-	}
-}
 
 // WithRefreshTokenGen sets the token generator and expiry used for refresh tokens.
 func WithRefreshTokenGen(gen ports.TokenGenerator, expiry time.Duration) ServiceOption {
@@ -141,11 +134,22 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, er
 		return "", fmt.Errorf("find user: %w", err)
 	}
 	if u == nil {
+		// Run a bcrypt comparison anyway so this path takes about as long as
+		// the wrong-password path below — otherwise the timing difference
+		// reveals whether the email is registered.
+		domain.ValidateDummyPassword(password)
 		return "", autherrors.ErrInvalidCredentials
 	}
 
 	if u.IsLocked() {
 		return "", autherrors.ErrAccountLocked
+	}
+	// A lock past AccountLockDuration no longer reports as locked above, but
+	// the stale LockedAt/FailedLoginAttempts still need clearing so this
+	// attempt is scored fresh rather than as an extension of the old streak.
+	if u.LockedAt != nil {
+		u.Unlock()
+		_ = s.userRepo.Save(ctx, u)
 	}
 
 	if !u.IsActive {
@@ -196,42 +200,69 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 	return s.sessionStore.Delete(ctx, refreshToken)
 }
 
-// Refresh validates a refresh token and issues a new short-lived access token.
-func (s *Service) Refresh(ctx context.Context, refreshToken string) (string, error) {
+// Refresh validates a refresh token and issues a new short-lived access
+// token. When a session store is backing refresh tokens, the refresh token
+// itself is rotated: the caller gets a new one back and the one it presented
+// stops working immediately, so a leaked-then-superseded refresh token can't
+// be replayed indefinitely — reuse of an already-rotated token now fails
+// with ErrInvalidToken instead of silently minting another access token.
+func (s *Service) Refresh(ctx context.Context, refreshToken string) (accessToken string, rotatedRefreshToken string, err error) {
 	claims, err := s.refreshTokenGen.Validate(ctx, refreshToken)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	if s.sessionStore != nil {
 		if _, err := s.sessionStore.Get(ctx, refreshToken); err != nil {
 			if errors.Is(err, ports.ErrSessionNotFound) {
-				return "", autherrors.ErrInvalidToken
+				return "", "", autherrors.ErrInvalidToken
 			}
-			return "", fmt.Errorf("session store: %w", err)
+			return "", "", fmt.Errorf("session store: %w", err)
 		}
 	}
 
 	u, err := s.userRepo.FindByID(ctx, claims.UserID)
 	if err != nil {
-		return "", fmt.Errorf("find user: %w", err)
+		return "", "", fmt.Errorf("find user: %w", err)
 	}
 	if u == nil {
-		return "", autherrors.ErrUserNotFound
+		return "", "", autherrors.ErrUserNotFound
 	}
 	if !u.IsActive {
-		return "", autherrors.ErrAccountDeactivated
+		return "", "", autherrors.ErrAccountDeactivated
+	}
+	if u.IsLocked() {
+		return "", "", autherrors.ErrAccountLocked
 	}
 
-	newToken, err := s.tokenGen.Generate(ctx, u.ID, u.Permissions)
+	newAccessToken, err := s.tokenGen.Generate(ctx, u.ID, u.Permissions)
 	if err != nil {
-		return "", fmt.Errorf("generate token: %w", err)
+		return "", "", fmt.Errorf("generate token: %w", err)
 	}
 
-	return newToken, nil
+	rotatedRefreshToken = refreshToken
+	if s.sessionStore != nil {
+		newRefreshToken, err := s.refreshTokenGen.Generate(ctx, u.ID, nil)
+		if err != nil {
+			return "", "", fmt.Errorf("generate refresh token: %w", err)
+		}
+		if err := s.sessionStore.Rotate(ctx, refreshToken, newRefreshToken, u.ID, s.refreshTokenExpiry); err != nil {
+			if errors.Is(err, ports.ErrSessionNotFound) {
+				return "", "", autherrors.ErrInvalidToken
+			}
+			return "", "", fmt.Errorf("rotate session: %w", err)
+		}
+		rotatedRefreshToken = newRefreshToken
+	}
+
+	return newAccessToken, rotatedRefreshToken, nil
 }
 
 // GetMe validates an access token and returns the authenticated user.
+// Every RequireAuth-protected request goes through this, so a deactivated or
+// locked account stops working immediately instead of only on its next
+// login/refresh — its already-issued access tokens are otherwise still good
+// for a full TokenExpiry window.
 func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, error) {
 	claims, err := s.tokenGen.Validate(ctx, accessToken)
 	if err != nil {
@@ -244,6 +275,12 @@ func (s *Service) GetMe(ctx context.Context, accessToken string) (*domain.User, 
 	}
 	if u == nil {
 		return nil, autherrors.ErrUserNotFound
+	}
+	if !u.IsActive {
+		return nil, autherrors.ErrAccountDeactivated
+	}
+	if u.IsLocked() {
+		return nil, autherrors.ErrAccountLocked
 	}
 
 	return u, nil
@@ -344,6 +381,31 @@ func (s *Service) ListUsers(ctx context.Context) ([]*domain.User, error) {
 	return users, nil
 }
 
+// DeleteUser permanently removes a user and publishes user.deleted so
+// downstream services (profile) can drop owned PII. The account row is
+// already gone before the event is published — a broker outage must not
+// undo the delete; profile retains orphan rows until a later retry/replay.
+func (s *Service) DeleteUser(ctx context.Context, userID string) error {
+	u, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("find user: %w", err)
+	}
+	if u == nil {
+		return autherrors.ErrUserNotFound
+	}
+	if err := s.userRepo.Delete(ctx, userID); err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+	if err := s.publishUserDeleted(ctx, userID); err != nil {
+		s.logger.Error().
+			Str("event", "user_deleted_publish_failed").
+			Str("user_id", userID).
+			Err(err).
+			Msg("user deleted but user.deleted publish failed")
+	}
+	return nil
+}
+
 func (s *Service) publishUserRegistered(ctx context.Context, u *domain.User) error {
 	if s.eventPublisher == nil {
 		return nil
@@ -355,5 +417,16 @@ func (s *Service) publishUserRegistered(ctx context.Context, u *domain.User) err
 		Email:       u.Email,
 		AccountType: u.AccountType,
 		Occurred:    time.Now().UTC(),
+	})
+}
+
+func (s *Service) publishUserDeleted(ctx context.Context, userID string) error {
+	if s.eventPublisher == nil {
+		return nil
+	}
+	return s.eventPublisher.Publish(ctx, events.UserDeleted, events.UserDeletedEvent{
+		EventType: events.UserDeleted,
+		UserID:    userID,
+		Occurred:  time.Now().UTC(),
 	})
 }

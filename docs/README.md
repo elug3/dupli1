@@ -15,7 +15,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [permissions.md](permissions.md) | Permission catalog and ABAC |
 | [service-layout.md](service-layout.md) | Module / directory layout |
 | [TODO.md](TODO.md) | Living backlog and schedule |
-| [payment-service.md](payment-service.md) | Money path (NANO / Bypass / simulate) |
+| [payment-service.md](payment-service.md) | Money path (NANO / Bypass) |
 | [checkout-session.md](checkout-session.md) | Checkout sessions in order |
 | [cart-service.md](cart-service.md) | Persistent cart |
 | [notification-telegram-bot.md](notification-telegram-bot.md) | Ops Telegram alerts |

@@ -40,14 +40,16 @@ Each service also registers `/health` and `/settings` directly for internal/side
 | `POST` | `/api/v1/auth/logout` | — | Invalidate the current session |
 | `POST` | `/api/v1/auth/refresh` | — | Exchange a refresh token for a new access token |
 | `GET` | `/api/v1/auth/me` | Bearer | Return the authenticated user's account (email, permissions) |
-| `GET` | `/api/v1/auth/me/profile` | Bearer | Customer commerce profile + saved addresses |
-| `PATCH` | `/api/v1/auth/me/profile` | Bearer | Update `display_name` / `phone` (merge patch) |
-| `GET` | `/api/v1/auth/me/addresses` | Bearer | List saved addresses |
-| `POST` | `/api/v1/auth/me/addresses` | Bearer | Create address (max 10; first is default) |
-| `GET` | `/api/v1/auth/me/addresses/:id` | Bearer | Get one address |
-| `PATCH` | `/api/v1/auth/me/addresses/:id` | Bearer | Update address |
-| `DELETE` | `/api/v1/auth/me/addresses/:id` | Bearer | Delete address |
-| `POST` | `/api/v1/auth/me/addresses/:id/default` | Bearer | Set default address |
+| `GET` | `/api/v1/profile/me/profile` | Bearer | Customer commerce profile + saved addresses (`profile` service) |
+| `PATCH` | `/api/v1/profile/me/profile` | Bearer | Update `display_name` / `phone` (merge patch) |
+| `GET` | `/api/v1/profile/me/addresses` | Bearer | List saved addresses |
+| `POST` | `/api/v1/profile/me/addresses` | Bearer | Create address (max 10; first is default) |
+| `GET` | `/api/v1/profile/me/addresses/:id` | Bearer | Get one address |
+| `PATCH` | `/api/v1/profile/me/addresses/:id` | Bearer | Update address |
+| `DELETE` | `/api/v1/profile/me/addresses/:id` | Bearer | Delete address |
+| `POST` | `/api/v1/profile/me/addresses/:id/default` | Bearer | Set default address |
+| (alias) | `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses…` | Bearer | One-release nginx aliases → `dupli1-profile` |
+| `DELETE` | `/api/v1/auth/users/:id` | `user.delete` | Permanently delete user; publishes `user.deleted` |
 | `GET` | `/api/v1/auth/users` | `user.read` | List users (filtered by auth ABAC hierarchy) |
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` | Replace a user's permissions (optional `account_type`) |
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` | Set a new password for a user |
@@ -103,7 +105,7 @@ Response `200`:
 { "refresh_token": "<token>" }
 ```
 
-Errors: `400` bad request, `401` invalid credentials, `403` locked (customers/managers after 5 failures) or deactivated. **Admin and owner are never locked.**
+Errors: `400` bad request, `401` invalid credentials, `403` locked (customers/managers after 5 failures, auto-expires after 15 min) or deactivated. **Admin and owner are never locked.**
 
 ### POST /api/v1/auth/logout
 
@@ -123,10 +125,12 @@ Request:
 
 Response `200`:
 ```json
-{ "token": "<new_access_token>" }
+{ "token": "<new_access_token>", "refresh_token": "<new_refresh_token>" }
 ```
 
-Errors: `400` bad request, `401` invalid or expired token.
+The refresh token rotates on every call — store `refresh_token` from the response and use it next time; the one just sent no longer works.
+
+Errors: `400` bad request, `401` invalid/expired/already-rotated token, or account deactivated/locked.
 
 ### GET /api/v1/auth/me
 
@@ -362,9 +366,8 @@ See [cart-service.md](cart-service.md) for architecture, boundaries with invento
 | `GET` | `/api/v1/payments/{id}/nano/checkout` | — | Bridge into NANO certified card checkout |
 | `POST` | `/api/v1/payments/nano/return` | — | NANO form `receiveUrl` callback |
 | `POST` | `/api/v1/payments/webhooks/nano` | — | Optional NANO JSON webhook |
-| `GET` | `/api/v1/payments/{id}/simulate-success` | — | Dev only (`PAYMENT_ALLOW_DEV_SIMULATE`, NANO unset): mark payment succeeded |
 
-See [payment-service.md](payment-service.md) for NANO / Bypass / local simulate, 5-minute auto-cancel, and `payment.succeeded` → `paid`. Methods (`credit_card` / `bypass` / `bitcoin` planned): [payment-methods-plan.md](payment-methods-plan.md).
+See [payment-service.md](payment-service.md) for NANO / Bypass, 5-minute auto-cancel, and `payment.succeeded` → `paid`. Methods (`credit_card` / `bypass` / `bitcoin` planned): [payment-methods-plan.md](payment-methods-plan.md).
 
 ---
 

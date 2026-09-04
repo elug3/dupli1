@@ -229,3 +229,86 @@ func TestInventoryCommitReservation_IncrementsSoldCountIdempotent(t *testing.T) 
 		t.Fatalf("double commit must not re-increment soldCount, got %d", got.SoldCount)
 	}
 }
+
+func TestInventoryUpsertItemPreservesActiveReservation(t *testing.T) {
+	svc, _ := newInventoryTestService(t)
+	ctx := t.Context()
+	ref := service.SkuRef{SkuID: "SKUID-GRN"}
+
+	if _, err := svc.UpsertItem(ctx, ref, 10); err != nil {
+		t.Fatalf("UpsertItem: %v", err)
+	}
+	if _, err := svc.Reserve(ctx, "order-reserve", []service.ReservationItemRef{
+		{Ref: ref, Quantity: 8},
+	}); err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+
+	item, err := svc.UpsertItem(ctx, ref, 20)
+	if err != nil {
+		t.Fatalf("UpsertItem after reserve: %v", err)
+	}
+	if item.Quantity != 20 {
+		t.Fatalf("quantity = %d, want 20", item.Quantity)
+	}
+	if item.Reserved != 8 {
+		t.Fatalf("reserved = %d, want 8 (must not clobber active reservation)", item.Reserved)
+	}
+	if item.Available() != 12 {
+		t.Fatalf("available = %d, want 12", item.Available())
+	}
+}
+
+func TestInventoryAdjustStockPreservesActiveReservation(t *testing.T) {
+	svc, _ := newInventoryTestService(t)
+	ctx := t.Context()
+	ref := service.SkuRef{SkuID: "SKUID-GRN"}
+
+	if _, err := svc.UpsertItem(ctx, ref, 10); err != nil {
+		t.Fatalf("UpsertItem: %v", err)
+	}
+	if _, err := svc.Reserve(ctx, "order-adjust", []service.ReservationItemRef{
+		{Ref: ref, Quantity: 6},
+	}); err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+
+	item, err := svc.AdjustStock(ctx, ref, 5)
+	if err != nil {
+		t.Fatalf("AdjustStock after reserve: %v", err)
+	}
+	if item.Quantity != 15 {
+		t.Fatalf("quantity = %d, want 15", item.Quantity)
+	}
+	if item.Reserved != 6 {
+		t.Fatalf("reserved = %d, want 6", item.Reserved)
+	}
+}
+
+func TestInventoryUpsertItemCreatesMissingRow(t *testing.T) {
+	svc, _ := newInventoryTestService(t)
+	ctx := t.Context()
+	ref := service.SkuRef{SkuID: "SKUID-GRN"}
+
+	item, err := svc.UpsertItem(ctx, ref, 25)
+	if err != nil {
+		t.Fatalf("UpsertItem on missing row: %v", err)
+	}
+	if item.Quantity != 25 || item.Reserved != 0 {
+		t.Fatalf("unexpected created item: %+v", item)
+	}
+
+	if _, err := svc.Reserve(ctx, "order-new-row", []service.ReservationItemRef{
+		{Ref: ref, Quantity: 5},
+	}); err != nil {
+		t.Fatalf("Reserve after create: %v", err)
+	}
+
+	item, err = svc.UpsertItem(ctx, ref, 30)
+	if err != nil {
+		t.Fatalf("UpsertItem after reserve: %v", err)
+	}
+	if item.Quantity != 30 || item.Reserved != 5 {
+		t.Fatalf("quantity/reserved = %d/%d, want 30/5", item.Quantity, item.Reserved)
+	}
+}

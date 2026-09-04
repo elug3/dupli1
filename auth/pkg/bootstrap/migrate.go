@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/lib/pq"
@@ -45,6 +46,12 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 	if err := expandLegacyPermissionValues(ctx, db); err != nil {
 		return err
 	}
+	if err := normalizeUserEmailCase(ctx, db); err != nil {
+		return err
+	}
+	if err := createEmailLowerUniqueIndex(ctx, db); err != nil {
+		return err
+	}
 
 	backfill := []string{
 		// Rename legacy account_type "admin" → "manager" (admin is a permission tier, not an account type).
@@ -62,44 +69,9 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
-	profileStmts := []string{
-		`CREATE TABLE IF NOT EXISTS id_sequences (
-			name TEXT PRIMARY KEY,
-			value BIGINT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS customer_profiles (
-			user_id      TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-			display_name TEXT NOT NULL DEFAULT '',
-			phone        TEXT NOT NULL DEFAULT '',
-			created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)`,
-		`CREATE TABLE IF NOT EXISTS customer_addresses (
-			id              TEXT PRIMARY KEY,
-			user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-			label           TEXT NOT NULL DEFAULT '',
-			recipient_name  TEXT NOT NULL,
-			recipient_phone TEXT NOT NULL,
-			postal_code     TEXT NOT NULL,
-			address_line1   TEXT NOT NULL,
-			address_line2   TEXT NOT NULL DEFAULT '',
-			city            TEXT NOT NULL,
-			province        TEXT NOT NULL,
-			pccc            TEXT NOT NULL DEFAULT '',
-			is_default      BOOLEAN NOT NULL DEFAULT FALSE,
-			created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)`,
-		`ALTER TABLE customer_addresses ADD COLUMN IF NOT EXISTS pccc TEXT NOT NULL DEFAULT ''`,
-		`CREATE INDEX IF NOT EXISTS idx_customer_addresses_user_id ON customer_addresses (user_id)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_addresses_one_default
-			ON customer_addresses (user_id) WHERE is_default`,
-	}
-	for _, stmt := range profileStmts {
-		if _, err := db.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("migrate profile schema: %w", err)
-		}
-	}
+	// customer_profiles / customer_addresses now live in the profile service
+	// DB. Existing auth DBs may still have orphan copies from before the
+	// cutover; leave them untouched here (manual drop after verified migrate).
 
 	return nil
 }
@@ -191,6 +163,75 @@ func expandLegacyPermissionValues(ctx context.Context, db *sql.DB) error {
 		); err != nil {
 			return fmt.Errorf("expand permissions for %s: %w", item.id, err)
 		}
+	}
+	return nil
+}
+
+// normalizeUserEmailCase lowercases every stored email that isn't already
+// lowercase, so "Alice@x.com" and "alice@x.com" can no longer coexist as
+// distinct accounts (app code now normalizes on write via
+// domain.NormalizeEmail, and FindByEmail matches case-insensitively — this
+// backfills rows written before that). Row-by-row so a genuine pre-existing
+// case collision (two accounts already differing only by case) can't abort
+// the whole migration: that one row is left as-is, logged, and needs manual
+// review rather than a silent automatic pick of which account wins.
+func normalizeUserEmailCase(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `SELECT id, email FROM users WHERE email <> LOWER(email)`)
+	if err != nil {
+		return fmt.Errorf("list users for email normalization: %w", err)
+	}
+
+	type pendingUpdate struct{ id, email string }
+	var updates []pendingUpdate
+	for rows.Next() {
+		var u pendingUpdate
+		if err := rows.Scan(&u.id, &u.email); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan user email: %w", err)
+		}
+		updates = append(updates, u)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("list users for email normalization: %w", err)
+	}
+
+	for _, u := range updates {
+		_, err := db.ExecContext(ctx, `UPDATE users SET email = LOWER(email) WHERE id = $1`, u.id)
+		if err != nil {
+			if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+				log.Printf("auth: user %s email %q collides case-insensitively with an existing account; left unnormalized, needs manual review", u.id, u.email)
+				continue
+			}
+			return fmt.Errorf("normalize email case for %s: %w", u.id, err)
+		}
+	}
+	return nil
+}
+
+// createEmailLowerUniqueIndex adds a case-insensitive unique index on email,
+// the DB-level backstop for domain.NormalizeEmail so a future write that
+// bypasses the application layer can't reintroduce a case-duplicate account.
+// Skips (and logs) if normalizeUserEmailCase left an unresolved collision —
+// index creation would otherwise fail and block every future startup until a
+// human resolves the duplicate.
+func createEmailLowerUniqueIndex(ctx context.Context, db *sql.DB) error {
+	var collisions int
+	err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM (
+			SELECT LOWER(email) FROM users GROUP BY LOWER(email) HAVING COUNT(*) > 1
+		) dupes`).Scan(&collisions)
+	if err != nil {
+		return fmt.Errorf("check email case collisions: %w", err)
+	}
+	if collisions > 0 {
+		log.Printf("auth: %d email(s) still collide case-insensitively; skipping ux_users_email_lower until resolved manually", collisions)
+		return nil
+	}
+
+	if _, err := db.ExecContext(ctx,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email_lower ON users (LOWER(email))`,
+	); err != nil {
+		return fmt.Errorf("create email lower unique index: %w", err)
 	}
 	return nil
 }

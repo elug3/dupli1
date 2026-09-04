@@ -9,6 +9,11 @@ import (
 	"github.com/elug3/dupli1/order/pkg/ports"
 )
 
+// The full HTTP-fetching behavior (decoding, KRW conversion, trailing
+// slash, etc.) is covered by shared/pkg/productclient's own tests. These
+// tests only cover what's specific to this wrapper: mapping the shared
+// superset Variant into order's own ports.VariantInfo (ProductName, not
+// Color), and translating the shared sentinel error into order's own.
 func TestClientGetVariantMapsProductNameAndImageURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/products/variants/by-sku/BAG-001" {

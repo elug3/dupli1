@@ -70,17 +70,24 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/permissions` | Permission constants, `Has`/`HasAny`, wildcard evaluation, legacy role expansion, named bundles |
 | `shared/pkg/authjwt` | JWKS/JWT validation helpers (RS256 via `AUTH_JWKS_URL`; HS256 fallback) |
 | `shared/pkg/settings` | `GET /settings` response helpers used by all services |
+| `shared/pkg/outbox` | Transactional outbox drain/retry loop (`Drainer`), used by `order` and `payment`; each service keeps its own outbox table/SQL behind the `Store` interface |
+| `shared/pkg/events` | NATS subject constants + payload structs for cross-service events (`order.*`, `payment.succeeded`, `product.*`); one canonical contract per publisher/subscriber pair instead of redeclaring subject strings and payload shapes on each side |
+| `shared/pkg/pgsslmode` | Picks `sslmode` for a Postgres connection string (local/docker hosts → `disable`, everything else including RDS → `require`); used by every service's DB bootstrap so the local-hostname list can't drift out of sync per service again |
+| `shared/pkg/natspublisher` | JSON-marshaling NATS event publisher (`New`, `Publish`, `Close`), used by `auth`, `order`, `product`, and `payment` |
+| `shared/pkg/authmiddleware` | Bearer-token HTTP middleware (`RequireAuth`, `OptionalAuth`) parameterized by `authjwt.AccessTokenValidator` and a per-service error-response callback, so each service keeps its own error body shape; used by `cart`, `order`, `payment`, `notification`, `product` |
+| `shared/pkg/productclient` | HTTP client for product's variant-lookup endpoint, returning a superset `Variant`; used by `cart` and `order`, each mapping only the display field it needs (`Color` vs `ProductName`) into its own local `ports.VariantInfo` |
 
 ### Service ownership
 
 | Service | Framework | Key responsibility |
 |---------|-----------|--------------------|
-| `auth` | Gin | RS256 JWT + JWKS, fine-grained permissions, user admin, customer profile + saved addresses |
+| `auth` | Gin | RS256 JWT + JWKS, fine-grained permissions, user admin. Customer profile + saved addresses code still lives here too (not yet removed — see [docs/auth-profile-extension-plan.md](docs/auth-profile-extension-plan.md) Phase D) but `profile` is now the wired service for that traffic |
 | `product` | stdlib `net/http` | Parent-style + variant(SKU) catalog, images (MinIO/S3), stock & reservations (merged from former `inventory` service) |
 | `order` | stdlib `net/http` | Checkout sessions, order lifecycle, transactional outbox → NATS |
 | `cart` | stdlib `net/http` | Persistent per-customer cart; enriches lines from product |
-| `payment` | stdlib `net/http` | NANO card / manager Bypass / dev simulate; publishes `payment.succeeded` via outbox |
+| `payment` | stdlib `net/http` | NANO card / manager Bypass (also the local/dev testing path); publishes `payment.succeeded` via outbox |
 | `notification` | stdlib `net/http` | NATS subscriber → Telegram ops alerts |
+| `profile` | stdlib `net/http` | Customer commerce profile (display name, phone) + saved addresses; subscribes `user.deleted` from auth to cascade-delete. Extracted per [docs/auth-profile-extension-plan.md](docs/auth-profile-extension-plan.md) Phase D |
 
 ### Product model
 
@@ -106,7 +113,9 @@ Both order and payment use a **transactional outbox** pattern: event rows are wr
 
 ### Auth token flow
 
-`POST /login` → `{ "refresh_token": "..." }`. Call `POST /refresh` with that token → `{ "token": "<access_jwt>" }`. Send as `Authorization: Bearer <token>` on protected routes. Access tokens carry a `permissions` string array claim (no `roles`).
+`POST /login` → `{ "refresh_token": "..." }`. Call `POST /refresh` with that token → `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`. Send as `Authorization: Bearer <token>` on protected routes. Access tokens carry a `permissions` string array claim (no `roles`).
+
+Refresh tokens rotate on every use: `/refresh` invalidates the token it was given and returns a new one, which the caller must store and use next time. Reusing an already-rotated refresh token fails with `401`.
 
 ### Authorization
 
@@ -140,6 +149,7 @@ Order, cart, and payment use PostgreSQL when their `DUPLI1_*_DB` env var is set;
 | cart | 5436 | `cart` | `dupli1` | `dupli1_dev` |
 | payment | 5437 | `payments` | `dupli1` | `dupli1_dev` |
 | notification | 5438 | `notifications` | `dupli1` | `dupli1_dev` |
+| profile | 5439 | `profiles` | `dupli1` | `dupli1_dev` |
 
 Seeded owner: `admin@dupli1.com` / `password`.
 

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elug3/dupli1/auth/pkg/domain"
+	"github.com/elug3/dupli1/profile/pkg/domain"
 )
 
 func TestNormalizeKRPhone(t *testing.T) {

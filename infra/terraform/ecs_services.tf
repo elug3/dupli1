@@ -119,6 +119,26 @@ resource "aws_service_discovery_service" "notification" {
   }
 }
 
+resource "aws_service_discovery_service" "profile" {
+  name = "profile"
+
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
 data "aws_service_discovery_service" "auth" {
   name         = "auth"
   namespace_id = var.service_discovery_namespace_id
@@ -444,6 +464,62 @@ resource "aws_ecs_task_definition" "cart" {
   ])
 }
 
+resource "aws_ecs_task_definition" "profile" {
+  family                   = "${var.project_name}-profile"
+  network_mode             = local.common_task.network_mode
+  requires_compatibilities = local.common_task.requires_compatibilities
+  execution_role_arn       = local.common_task.execution_role_arn
+  cpu                      = "256"
+  memory                   = "512"
+
+  container_definitions = jsonencode([
+    {
+      name      = "profile"
+      image     = local.service_images.profile
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "DUPLI1_PROFILE_ADDR", value = ":8080" },
+        { name = "AUTH_JWKS_URL", value = "http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json" },
+        { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
+      ]
+      # NOTE: DUPLI1_PROFILE_DB is only injected once profile_db_url_secret_arn
+      # is set (create dupli1/production/profile-db-url in Secrets Manager and
+      # pass the ARN via var.profile_db_url_secret_arn). Until then the task
+      # starts with no secrets block for the DB and profile falls back to its
+      # in-memory repository, which does not persist across restarts.
+      secrets = concat(
+        var.profile_db_url_secret_arn == "" ? [] : [
+          {
+            name      = "DUPLI1_PROFILE_DB"
+            valueFrom = var.profile_db_url_secret_arn
+          },
+        ],
+        [
+          {
+            name      = "JWT_SECRET"
+            valueFrom = var.jwt_secret_arn
+          },
+        ]
+      )
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.services["profile"].name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    }
+  ])
+}
+
 resource "aws_ecs_task_definition" "payment" {
   family                   = "${var.project_name}-payment"
   network_mode             = local.common_task.network_mode
@@ -470,7 +546,7 @@ resource "aws_ecs_task_definition" "payment" {
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
         { name = "DUPLI1_ORDER_URL", value = "http://order.dupli1.local:8080" },
         { name = "DUPLI1_PAYMENT_PUBLIC_URL", value = "https://dupli1.com" },
-        { name = "NANO_BASE_URL", value = "https://pay.nanopay.co.kr" },
+        { name = "NANO_BASE_URL", value = var.nano_base_url },
         { name = "NANO_SUCCESS_URL", value = "https://dupli1.com/checkout/confirmation" },
         { name = "NANO_FAILURE_URL", value = "https://dupli1.com/checkout" },
       ]
@@ -798,6 +874,38 @@ resource "aws_ecs_service" "cart" {
   depends_on = [
     aws_ecs_service.auth,
     aws_ecs_service.product,
+    aws_iam_role_policy.ecs_execution_secrets,
+  ]
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
+}
+
+resource "aws_ecs_service" "profile" {
+  name            = "dupli1-profile"
+  cluster         = data.aws_ecs_cluster.production.id
+  task_definition = aws_ecs_task_definition.profile.arn
+  desired_count   = var.desired_count
+
+  capacity_provider_strategy {
+    capacity_provider = aws_ecs_capacity_provider.ec2.name
+    weight            = 1
+    base              = 1
+  }
+
+  network_configuration {
+    subnets         = local.private_network.subnets
+    security_groups = local.private_network.security_groups
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.profile.arn
+  }
+
+  depends_on = [
+    aws_ecs_service.auth,
+    aws_ecs_service.nats,
     aws_iam_role_policy.ecs_execution_secrets,
   ]
 

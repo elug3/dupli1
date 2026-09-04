@@ -6,7 +6,7 @@ Guidance for AI agents working in the Dupli1 repository.
 
 Dupli1 is a Go microservice backend for a fashion bag marketplace. The repo contains:
 
-- Six HTTP services in `auth/`, `product/`, `order/`, `cart/`, `payment/`, `notification/` (each with `cmd/` + `pkg/`). `product` also owns stock/reservations (the former standalone `inventory` service was merged in).
+- HTTP services in `auth/`, `product/`, `order/`, `cart/`, `payment/`, `notification/`, `profile/` (each with `cmd/` + `pkg/`). `product` also owns stock/reservations (the former standalone `inventory` service was merged in). `profile` (customer display name/phone + saved addresses) was extracted from `auth` per [docs/auth-profile-extension-plan.md](docs/auth-profile-extension-plan.md) Phase D — the auth code path is not removed yet.
 - nginx gateway in `api/` (`dupli1-proxy` in Docker Compose)
 - Docker Compose for local development
 - Terraform and GitHub Actions for AWS ECS deployment
@@ -56,6 +56,7 @@ Docker Compose provides Postgres instances per service:
 | `postgres-cart` | 5436 | `cart` | `dupli1` | `dupli1_dev` |
 | `postgres-payment` | 5437 | `payments` | `dupli1` | `dupli1_dev` |
 | `postgres-notification` | 5438 | `notifications` | `dupli1` | `dupli1_dev` |
+| `postgres-profile` | 5439 | `profiles` | `dupli1` | `dupli1_dev` |
 
 Connection strings:
 
@@ -65,6 +66,7 @@ Connection strings:
 - Cart: `postgres://dupli1:dupli1_dev@localhost:5436/cart?sslmode=disable`
 - Payment: `postgres://dupli1:dupli1_dev@localhost:5437/payments?sslmode=disable`
 - Notification: `postgres://dupli1:dupli1_dev@localhost:5438/notifications?sslmode=disable`
+- Profile: `postgres://dupli1:dupli1_dev@localhost:5439/profiles?sslmode=disable`
 
 Production uses **Amazon RDS** — see [docs/deployment-aws.md](docs/deployment-aws.md) and [infra/terraform/README.md](infra/terraform/README.md).
 
@@ -89,6 +91,7 @@ Direct service ports (bypass gateway):
 | `dupli1-cart` | 8086 |
 | `dupli1-payment` | 8087 |
 | `dupli1-notification` | 8084 |
+| `dupli1-profile` | 8088 |
 
 ### Running a single service (without Docker)
 
@@ -113,17 +116,18 @@ cd product && go test ./...
 cd order && go test ./...
 cd cart && go test ./...
 cd payment && go test ./...
+cd profile && go test ./...
 ```
 
 ### Gotchas
 
 - **Module paths:** all services use `github.com/elug3/dupli1/<service>` (e.g. `github.com/elug3/dupli1/product`). There is no top-level `go.work`.
-- **Auth token flow:** login returns only a `refresh_token`; call `POST /api/v1/auth/refresh` to obtain a short-lived access token in the `token` field.
+- **Auth token flow:** login returns only a `refresh_token`; call `POST /api/v1/auth/refresh` to obtain a short-lived access token in the `token` field. The refresh token rotates on every call — the response's `refresh_token` field carries the replacement, and the one you sent is invalidated immediately.
 - **Product JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint).
 - **Order JWT:** protected routes validate RS256 via `AUTH_JWKS_URL` (set in Compose to auth's JWKS endpoint), with `JWT_SECRET` HS256 fallback in dev.
 - **Order, cart, and payment** use PostgreSQL when `DUPLI1_ORDER_DB` / `DUPLI1_CART_DB` / `DUPLI1_PAYMENT_DB` are set (Docker Compose); in-memory fallback for tests without a DB URL.
-- **Payment flow:** `POST /api/v1/payments` → **NANO card** (`credit_card`) when configured, manager **Bypass** (`payment.bypass`), or local **dev simulate**. On success, payment publishes **`payment.succeeded`**; order service marks order **`paid`**. Ship via `POST /api/v1/orders/{id}/ship` → **`in_transit`** (commits stock). See [docs/payment-service.md](docs/payment-service.md).
+- **Payment flow:** `POST /api/v1/payments` → **NANO card** (`credit_card`) when configured, else manager **Bypass** (`payment.bypass`) — also how local/dev testing pays. On success, payment publishes **`payment.succeeded`**; order service marks order **`paid`**. Ship via `POST /api/v1/orders/{id}/ship` → **`in_transit`** (commits stock). See [docs/payment-service.md](docs/payment-service.md).
 - **Notification** subscribes to NATS (e.g. `order.paid` → Telegram when configured).
 - **Redis and NATS** are optional for auth (rate limits, session cache, events); Redis and NATS are wired in Compose. Order and payment use NATS for payment events.
-- **SMTP and OAuth providers** are external. Credit card uses **NANO Solution 인증결제** when `NANO_*` credentials are set (prod: Secrets Manager `dupli1/production/nano-payment`). Without NANO, manager **Bypass** remains available; local Compose uses **`PAYMENT_ALLOW_DEV_SIMULATE=true`** for simulate-success.
+- **SMTP and OAuth providers** are external. Credit card uses **NANO Solution 인증결제** when `NANO_*` credentials are set (prod: Secrets Manager `dupli1/production/nano-payment`). Without NANO, `credit_card` is unavailable and manager **Bypass** is used instead, including in local Compose.
 - **Local gateway DNS resolver:** `api/nginx.conf` (the local `dupli1-proxy` config; production uses `api/nginx.prod.conf`) uses variable `proxy_pass` with a `resolver`. It must list **only** Docker's embedded DNS `127.0.0.11`. Do not add the AWS VPC resolver `10.0.0.2` here — it's unreachable in local Compose, so nginx round-robins onto a dead resolver and returns intermittent `SERVFAIL` → `502 {"error":"bad gateway"}` on ~half of requests. After editing this file, rebuild the proxy: `sudo docker compose up -d --build dupli1-proxy`.
