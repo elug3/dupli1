@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/elug3/dupli1/auth/pkg/autherrors"
 	"github.com/elug3/dupli1/auth/pkg/domain"
+	memoryinfra "github.com/elug3/dupli1/auth/pkg/infra/memory"
 	"github.com/elug3/dupli1/auth/pkg/ports"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
@@ -469,6 +471,18 @@ func (s *memorySessionStore) Delete(_ context.Context, key string) error {
 	return nil
 }
 
+func (s *memorySessionStore) Rotate(_ context.Context, oldKey, newKey, value string, _ time.Duration) error {
+	if s.entries == nil {
+		return ports.ErrSessionNotFound
+	}
+	if _, ok := s.entries[oldKey]; !ok {
+		return ports.ErrSessionNotFound
+	}
+	s.entries[newKey] = value
+	delete(s.entries, oldKey)
+	return nil
+}
+
 func TestLogout_RevokesRefreshSession(t *testing.T) {
 	user, _ := domain.NewUser("u-1", "user@example.com", "pass", domain.AccountTypeCustomer)
 	repo := &stubUserRepository{user: user}
@@ -538,6 +552,66 @@ func TestRefresh_RotatesRefreshTokenAndInvalidatesTheOldOne(t *testing.T) {
 
 	if _, _, err := svc.Refresh(context.Background(), rotated); err != nil {
 		t.Fatalf("refreshing with the rotated token should still work: %v", err)
+	}
+}
+
+func TestRefresh_ConcurrentRefreshOnlyOneSucceeds(t *testing.T) {
+	user, _ := domain.NewUser("u-1", "user@example.com", "pass", domain.AccountTypeCustomer)
+	repo := &stubUserRepository{user: user}
+	sessions := memoryinfra.NewSessionStore()
+	svc := NewService(
+		repo,
+		fakeTokenGenerator{},
+		WithRefreshTokenGen(sequentialTokenGenerator{}, time.Hour),
+		WithSessionStore(sessions),
+	)
+
+	refreshToken, err := svc.Login(context.Background(), "user@example.com", "pass")
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+
+	const attempts = 8
+	type result struct {
+		rotated string
+		err     error
+	}
+	results := make([]result, attempts)
+	var wg sync.WaitGroup
+	wg.Add(attempts)
+	for i := range attempts {
+		go func(idx int) {
+			defer wg.Done()
+			_, rotated, err := svc.Refresh(context.Background(), refreshToken)
+			results[idx] = result{rotated: rotated, err: err}
+		}(i)
+	}
+	wg.Wait()
+
+	successes := 0
+	invalids := 0
+	rotatedTokens := make(map[string]struct{})
+	for _, r := range results {
+		switch {
+		case r.err == nil:
+			successes++
+			if r.rotated != "" {
+				rotatedTokens[r.rotated] = struct{}{}
+			}
+		case errors.Is(r.err, autherrors.ErrInvalidToken):
+			invalids++
+		default:
+			t.Fatalf("unexpected refresh error: %v", r.err)
+		}
+	}
+	if successes != 1 {
+		t.Fatalf("expected exactly 1 successful concurrent refresh, got %d (invalid=%d)", successes, invalids)
+	}
+	if invalids != attempts-1 {
+		t.Fatalf("expected %d ErrInvalidToken responses, got %d", attempts-1, invalids)
+	}
+	if len(rotatedTokens) != 1 {
+		t.Fatalf("expected one distinct rotated token, got %d", len(rotatedTokens))
 	}
 }
 

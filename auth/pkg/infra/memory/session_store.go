@@ -99,3 +99,28 @@ func (s *SessionStore) Delete(ctx context.Context, key string) error {
 	delete(s.sessions, key)
 	return nil
 }
+
+func (s *SessionStore) Rotate(ctx context.Context, oldKey, newKey, value string, expiry time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.sessions[oldKey]
+	if !ok {
+		return ErrSessionNotFound
+	}
+	if time.Now().After(entry.expiresAt) {
+		delete(s.sessions, oldKey)
+		return ErrSessionNotFound
+	}
+
+	s.sessions[newKey] = sessionEntry{
+		value:     value,
+		expiresAt: time.Now().Add(expiry),
+	}
+	delete(s.sessions, oldKey)
+	return nil
+}
