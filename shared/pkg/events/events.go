@@ -1,10 +1,12 @@
 // Package events defines the NATS subject names and payload shapes shared
 // between a publishing service and its subscriber(s): order publishes
 // order.* (notification subscribes), payment publishes payment.succeeded
-// (order subscribes), and product publishes product.* (notification
-// subscribes). Each subject has exactly one publisher and one or more
-// subscribers that must agree on the exact string and payload fields, so
-// both are defined once here rather than redeclared per service.
+// (order subscribes), product publishes product.* (notification
+// subscribes), and auth publishes user.deleted (profile subscribes, to
+// cascade-delete saved profile/address data). Each subject has exactly one
+// publisher and one or more subscribers that must agree on the exact string
+// and payload fields, so both are defined once here rather than redeclared
+// per service.
 package events
 
 import "time"
@@ -19,6 +21,7 @@ const (
 	ProductUpdated    = "product.updated"
 	ProductDeleted    = "product.deleted"
 	ProductImage      = "product.image_uploaded"
+	UserDeleted       = "user.deleted"
 )
 
 // OrderItem is one line of an Order event payload.
@@ -68,4 +71,13 @@ type PaymentSucceededEvent struct {
 	OrderID     string `json:"order_id"`
 	PaymentID   string `json:"payment_id"`
 	AmountCents int64  `json:"amount_cents"`
+}
+
+// UserDeletedEvent is the payload for UserDeleted — published by auth,
+// consumed by profile (which owns no foreign key to auth's users table and
+// must clean up saved profile/address data itself).
+type UserDeletedEvent struct {
+	EventType string    `json:"event_type"`
+	UserID    string    `json:"user_id"`
+	Occurred  time.Time `json:"occurred_at"`
 }
