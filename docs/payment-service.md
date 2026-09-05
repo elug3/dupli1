@@ -262,6 +262,7 @@ NANO success callbacks (`resultCode=0000`) fail closed unless `shopcode` and `re
 | `NANO_SUCCESS_URL` / `NANO_FAILURE_URL` | payment | Storefront redirects after `nano/return` |
 | `DUPLI1_PAYMENT_ORDER_TTL` | order | `5m` pending payment window |
 | `NATS_URL` | all | Event bus |
+| `NATS_TOKEN` | all | Token matching nats-server `--auth` (Compose default `dupli1_nats_dev`; prod `dupli1/production/nats-token`) |
 | `TELEGRAM_BOT_TOKEN` | notification | Bot token (prod: Secrets Manager `dupli1/production/telegram`) — **only secret**; see [notification-telegram-bot.md](notification-telegram-bot.md) |
 | `TELEGRAM_ALLOWED_USER_IDS` | notification | Comma-separated Telegram user IDs allowed to use `/start` (transitional; target: Manager Settings) |
 | `TELEGRAM_ORDER_CHAT_ID` | notification | Ops order alerts chat (transitional; target: Manager Settings) |

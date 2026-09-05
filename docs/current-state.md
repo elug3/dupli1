@@ -177,7 +177,7 @@ See [service-layout.md](service-layout.md) for details.
 | MinIO `product-images` | product (local) | `minio:9000` via gateway `/product-images/` |
 | S3 + CloudFront OAC | product (AWS) | `images.dupli1.com` — see [product-images-browser-access.md](product-images-browser-access.md) |
 | Redis | auth | `redis:6379` (in Compose) |
-| NATS | auth, order, payment, notification | `nats:4222` (in Compose) |
+| NATS | auth, product, order, payment, notification, profile | `127.0.0.1:4222` in Compose (`--auth` / `NATS_TOKEN`); Cloud Map `nats.dupli1.local` in ECS |
 
 ## API surface (summary)
 
