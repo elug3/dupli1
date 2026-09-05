@@ -101,7 +101,7 @@ Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](doc
 | PATCH | `/api/v1/auth/users/{id}/permissions` | `user.permissions.update` | Replace permissions / optional `account_type` |
 | PATCH | `/api/v1/auth/users/{id}/password` | `user.password.update` | Set user password |
 | PATCH | `/api/v1/auth/users/{id}/status` | `user.status.update` | Activate / deactivate user |
-| DELETE | `/api/v1/auth/users/{id}` | `user.delete` | Permanently delete user; publishes `user.deleted` (consumed by `profile`) |
+| DELETE | `/api/v1/auth/users/{id}` | `user.delete` | Permanently delete user; enqueues `user.deleted` in the same transaction (consumed by `profile`) |
 
 ### Profile (`dupli1-profile` :8088)
 

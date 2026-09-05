@@ -57,13 +57,15 @@ The cancel body carries no `encData`, so the 수기결제 guide's AES-256-CBC ca
 
 > `remainAmt` appears in the v2.5 field table but is missing from that guide's own example response, so it is parsed as optional — an absent value is treated as unknown rather than zero, and local accounting stays authoritative.
 
-**Ordering.** The PG is called **before** any local mutation, and local state changes only after the provider confirms. A rejected or unreachable PG leaves the payment untouched (`502`). Once the provider confirms, the refund is recorded even if its reported amount disagrees with local accounting — the amount is reconciled toward the provider and clamped into a recordable range, never discarded, since dropping it would show money on the books that is no longer held.
+**Ordering.** Concurrent cancels serialize on `MutateLocked` (Postgres `SELECT … FOR UPDATE`, in-memory mutex) so two in-flight requests cannot both pass validation and both call the PG. The PG is still invoked **before** the local write commits, so a rejected or unreachable PG leaves the payment untouched (`502`). Once the provider confirms, the refund is recorded even if its reported amount disagrees with local accounting — the amount is reconciled toward the provider and clamped into a recordable range, never discarded, since dropping it would show money on the books that is no longer held.
+
+If the process dies after NANO accepts a cancel and before the local transaction commits, a retry can refund again. That crash window is retained so a rejected PG never records a refund that did not happen.
 
 **Idempotency.** An `Idempotency-Key` header makes a retry of the same cancel a no-op. Only the most recent key is retained, which covers the realistic double-submit (timeout then retry) but not an arbitrary replay of an older partial cancel. A full cancel is additionally guarded by the status transition, and any cancel by the remaining balance.
 
 **Bypass payments** never reached a PG, so they are canceled locally only and the matching refund is made out of band.
 
-**Event.** A cancel publishes `payment.canceled` through the payment outbox (same transaction as the state change). **No service subscribes yet:** order's `paid` → `canceled` still only releases the stock reservation, so cancelling an order and refunding it remain two separate operator actions.
+**Event.** A cancel publishes `payment.canceled` through the payment outbox (same transaction as the state change). Order cancels a still-`paid` order on a **full** refund (`remaining_cents` present and `== 0`) only when `payment_id` matches the order's captured payment; omitted `remaining_cents` is not treated as zero. Notification alerts ops on the same subject.
 
 **Not implemented:** NANO `/api/payment/refund.io` (인증결제 v2.7 §5). That endpoint is 가상계좌(vbank)-only, explicitly no-partial, and needs `inputTranNo` from the deposit NOTI. Dupli1 sends `payWay: card` on every cert request, so it never applies.
 

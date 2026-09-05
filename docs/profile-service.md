@@ -233,7 +233,7 @@ Sets this address as the sole default, clearing any other. **Response `200`** �
 |-------|-----------|----------|
 | `user.deleted` (`shared/pkg/events.UserDeleted`) | Subscribe | `profile/pkg/consumer/user_deleted.go` decodes the payload and calls `DeleteUserData`, which deletes all of that user's addresses and their profile row in one transaction. Idempotent — safe under NATS at-least-once redelivery. |
 
-Publishing side: `auth`'s `DELETE /api/v1/auth/users/:id` (`user.delete` permission) publishes this event after removing the user. Profile is the only known subscriber today.
+Publishing side: `auth`'s `DELETE /api/v1/auth/users/:id` (`user.delete` permission) writes this event to `auth_outbox` in the same transaction as the user-row delete, then a drain worker publishes to NATS. The delete fails if that outbox write cannot be persisted. Profile is the only known subscriber today.
 
 Profile does **not** publish its own `profile.updated` / `profile.address.created` events — those were scoped as optional in Phase A.2 and were never implemented; nothing currently consumes profile changes.
 
