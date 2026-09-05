@@ -9,7 +9,7 @@ import (
 
 func TestCheckoutSessionTotalsWithCoupon(t *testing.T) {
 	now := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
-	session, err := domain.NewCheckoutSession("cs_000001", "customer-1", now, time.Hour)
+	session, err := domain.NewCheckoutSession("cs_000001", "customer-1", now, time.Hour, 0)
 	if err != nil {
 		t.Fatalf("NewCheckoutSession returned error: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestCheckoutSessionTotalsWithCoupon(t *testing.T) {
 
 func TestCheckoutSessionUpsertItem_MatchesBySkuIDWhenBothPopulated(t *testing.T) {
 	now := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
-	session, err := domain.NewCheckoutSession("cs_000003", "customer-1", now, time.Hour)
+	session, err := domain.NewCheckoutSession("cs_000003", "customer-1", now, time.Hour, 0)
 	if err != nil {
 		t.Fatalf("NewCheckoutSession returned error: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestCheckoutSessionUpsertItem_MatchesBySkuIDWhenBothPopulated(t *testing.T)
 
 func TestCheckoutSessionUpsertItem_FallsBackToSKUWhenSkuIDMissing(t *testing.T) {
 	now := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
-	session, err := domain.NewCheckoutSession("cs_000004", "customer-1", now, time.Hour)
+	session, err := domain.NewCheckoutSession("cs_000004", "customer-1", now, time.Hour, 0)
 	if err != nil {
 		t.Fatalf("NewCheckoutSession returned error: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestCheckoutSessionUpsertItem_FallsBackToSKUWhenSkuIDMissing(t *testing.T) 
 
 func TestCheckoutSessionRemoveItemBySkuID(t *testing.T) {
 	now := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
-	session, err := domain.NewCheckoutSession("cs_000005", "customer-1", now, time.Hour)
+	session, err := domain.NewCheckoutSession("cs_000005", "customer-1", now, time.Hour, 0)
 	if err != nil {
 		t.Fatalf("NewCheckoutSession returned error: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestCheckoutSessionRemoveItemBySkuID(t *testing.T) {
 
 func TestCheckoutSessionSetItems_AcceptsSkuIDOnlyItem(t *testing.T) {
 	now := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
-	session, err := domain.NewCheckoutSession("cs_000006", "customer-1", now, time.Hour)
+	session, err := domain.NewCheckoutSession("cs_000006", "customer-1", now, time.Hour, 0)
 	if err != nil {
 		t.Fatalf("NewCheckoutSession returned error: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestCheckoutSessionSetItems_AcceptsSkuIDOnlyItem(t *testing.T) {
 
 func TestCheckoutSessionExpires(t *testing.T) {
 	start := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
-	session, err := domain.NewCheckoutSession("cs_000002", "customer-1", start, time.Minute)
+	session, err := domain.NewCheckoutSession("cs_000002", "customer-1", start, time.Minute, 0)
 	if err != nil {
 		t.Fatalf("NewCheckoutSession returned error: %v", err)
 	}

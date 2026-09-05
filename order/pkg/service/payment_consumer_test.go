@@ -43,7 +43,7 @@ func TestCancelExpiredPendingOrderSkipsPaidOrder(t *testing.T) {
 
 	order, err := domain.NewOrder("ord_expiry_1", "customer-1", "res-expiry", []domain.OrderItem{
 		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 5000},
-	}, "", 0, now.Add(-10*time.Minute))
+	}, "", 0, 0, now.Add(-10*time.Minute))
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCancelExpiredPendingOrderCancelsUnpaidPending(t *testing.T) {
 
 	order, err := domain.NewOrder("ord_expiry_2", "customer-1", "res-expiry", []domain.OrderItem{
 		{SKU: "BAG-2", Quantity: 1, UnitPriceCents: 3000},
-	}, "", 0, now.Add(-10*time.Minute))
+	}, "", 0, 0, now.Add(-10*time.Minute))
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestCancelExpiredPendingOrderSkipsWhenPaymentWinsRace(t *testing.T) {
 
 	order, err := domain.NewOrder("ord_expiry_race", "customer-1", "res-expiry", []domain.OrderItem{
 		{SKU: "BAG-RACE", Quantity: 1, UnitPriceCents: 5000},
-	}, "", 0, now.Add(-10*time.Minute))
+	}, "", 0, 0, now.Add(-10*time.Minute))
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestHandlePaymentSucceededMarksOrderPaid(t *testing.T) {
 
 	order, err := domain.NewOrder("ord_pay_1", "customer-1", "res-pay", []domain.OrderItem{
 		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 120000},
-	}, "", 0, now.Add(-5*time.Minute))
+	}, "", 0, 0, now.Add(-5*time.Minute))
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}

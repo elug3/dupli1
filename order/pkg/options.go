@@ -2,6 +2,10 @@ package order
 
 import "time"
 
+// DefaultShippingFeeCents is the flat per-order delivery charge in whole KRW
+// applied when DUPLI1_ORDER_SHIPPING_FEE_CENTS is not set.
+const DefaultShippingFeeCents int64 = 30000
+
 type ServerOptions struct {
 	Addr string
 
@@ -23,10 +27,16 @@ type ServerOptions struct {
 	JWTSecret          string
 	JWKSURL            string
 	NATSURL            string
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
-	IdleTimeout        time.Duration
-	ShutdownTimeout    time.Duration
+
+	// ShippingFeeCents is the flat delivery charge added to every order, in
+	// whole KRW. Set DUPLI1_ORDER_SHIPPING_FEE_CENTS to override; an explicit
+	// 0 means free delivery.
+	ShippingFeeCents int64
+
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	IdleTimeout     time.Duration
+	ShutdownTimeout time.Duration
 }
 
 func NewServerOptions() *ServerOptions {
@@ -36,10 +46,12 @@ func NewServerOptions() *ServerOptions {
 		// A localhost default would shadow DUPLI1_PRODUCT_URL (preferred in older ECS
 		// task defs) and make order call itself → 404 → checkout "unavailable items".
 		// Local Compose sets DUPLI1_GATEWAY_URL; bare `go run` can still use ProductURL.
-		ProductURL:      "http://localhost:8081",
-		ReadTimeout:     5 * time.Second,
-		WriteTimeout:    10 * time.Second,
-		IdleTimeout:     120 * time.Second,
-		ShutdownTimeout: 10 * time.Second,
+		ProductURL: "http://localhost:8081",
+		// Flat delivery charge in whole KRW (30,000 KRW).
+		ShippingFeeCents: DefaultShippingFeeCents,
+		ReadTimeout:      5 * time.Second,
+		WriteTimeout:     10 * time.Second,
+		IdleTimeout:      120 * time.Second,
+		ShutdownTimeout:  10 * time.Second,
 	}
 }

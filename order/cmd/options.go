@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"log"
 	"net"
 	"os"
 	"strconv"
@@ -104,6 +105,13 @@ func applyEnv(opts *order.ServerOptions) {
 		opts.DatabaseConnString = v
 	} else if v := os.Getenv("DB_URL"); v != "" {
 		opts.DatabaseConnString = v
+	}
+	if v := os.Getenv("DUPLI1_ORDER_SHIPPING_FEE_CENTS"); v != "" {
+		if cents, err := strconv.ParseInt(v, 10, 64); err == nil && cents >= 0 {
+			opts.ShippingFeeCents = cents
+		} else {
+			log.Printf("order: ignoring invalid DUPLI1_ORDER_SHIPPING_FEE_CENTS=%q", v)
+		}
 	}
 	if v := os.Getenv("DUPLI1_ORDER_NATS_URL"); v != "" {
 		opts.NATSURL = v

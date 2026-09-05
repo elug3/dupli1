@@ -58,6 +58,7 @@ func (r *Repository) migrate() error {
 			coupon_code TEXT NOT NULL DEFAULT '',
 			subtotal_cents BIGINT NOT NULL,
 			discount_cents BIGINT NOT NULL,
+			shipping_fee_cents BIGINT NOT NULL DEFAULT 0,
 			total_cents BIGINT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
@@ -77,6 +78,7 @@ func (r *Repository) migrate() error {
 			coupon_code TEXT NOT NULL DEFAULT '',
 			subtotal_cents BIGINT NOT NULL DEFAULT 0,
 			discount_cents BIGINT NOT NULL DEFAULT 0,
+			shipping_fee_cents BIGINT NOT NULL DEFAULT 0,
 			total_cents BIGINT NOT NULL DEFAULT 0,
 			order_id TEXT NOT NULL DEFAULT '',
 			expires_at TIMESTAMPTZ NOT NULL,
@@ -138,6 +140,8 @@ func (r *Repository) migrate() error {
 		}
 	}
 	alterStmts := []string{
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee_cents BIGINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_fee_cents BIGINT NOT NULL DEFAULT 0`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_due_at TIMESTAMPTZ`,
@@ -304,11 +308,11 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 	_, err = tx.Exec(ctx, `
 		INSERT INTO orders (
 			id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, total_cents,
+			subtotal_cents, discount_cents, shipping_fee_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			reservation_id = EXCLUDED.reservation_id,
@@ -316,6 +320,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			coupon_code = EXCLUDED.coupon_code,
 			subtotal_cents = EXCLUDED.subtotal_cents,
 			discount_cents = EXCLUDED.discount_cents,
+			shipping_fee_cents = EXCLUDED.shipping_fee_cents,
 			total_cents = EXCLUDED.total_cents,
 			recipient_name = EXCLUDED.recipient_name,
 			recipient_phone = EXCLUDED.recipient_phone,
@@ -331,7 +336,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			carrier_note = EXCLUDED.carrier_note,
 			updated_at = EXCLUDED.updated_at
 	`, order.ID, order.CustomerID, order.ReservationID, order.Status, order.CouponCode,
-		order.SubtotalCents, order.DiscountCents, order.TotalCents,
+		order.SubtotalCents, order.DiscountCents, order.ShippingFeeCents, order.TotalCents,
 		order.RecipientName, order.RecipientPhone, shippingJSON, order.SourceAddressID,
 		order.PaymentID, order.PaidAt, order.PaymentDueAt, order.ShippedBy, order.ShippedAt,
 		order.Carrier, order.TrackingNumber, order.CarrierNote,
@@ -466,14 +471,14 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	var shippingJSON []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, total_cents,
+			subtotal_cents, discount_cents, shipping_fee_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id).Scan(
 		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-		&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+		&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeCents, &order.TotalCents,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -557,7 +562,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, total_cents,
+			subtotal_cents, discount_cents, shipping_fee_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
@@ -576,7 +581,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+			&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeCents, &order.TotalCents,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -612,7 +617,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, total_cents,
+			subtotal_cents, discount_cents, shipping_fee_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
@@ -631,7 +636,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+			&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeCents, &order.TotalCents,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -667,7 +672,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, total_cents,
+			subtotal_cents, discount_cents, shipping_fee_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
@@ -687,7 +692,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-			&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+			&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeCents, &order.TotalCents,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -729,21 +734,22 @@ func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.Ch
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO checkout_sessions (
-			id, customer_id, status, coupon_code, subtotal_cents, discount_cents, total_cents,
+			id, customer_id, status, coupon_code, subtotal_cents, discount_cents, shipping_fee_cents, total_cents,
 			order_id, expires_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			status = EXCLUDED.status,
 			coupon_code = EXCLUDED.coupon_code,
 			subtotal_cents = EXCLUDED.subtotal_cents,
 			discount_cents = EXCLUDED.discount_cents,
+			shipping_fee_cents = EXCLUDED.shipping_fee_cents,
 			total_cents = EXCLUDED.total_cents,
 			order_id = EXCLUDED.order_id,
 			expires_at = EXCLUDED.expires_at,
 			updated_at = EXCLUDED.updated_at
 	`, session.ID, session.CustomerID, session.Status, session.CouponCode,
-		session.SubtotalCents, session.DiscountCents, session.TotalCents,
+		session.SubtotalCents, session.DiscountCents, session.ShippingFeeCents, session.TotalCents,
 		session.OrderID, session.ExpiresAt, session.CreatedAt, session.UpdatedAt)
 	if err != nil {
 		return err
@@ -807,14 +813,14 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, total_cents,
+			subtotal_cents, discount_cents, shipping_fee_cents, total_cents,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
 		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-		&order.SubtotalCents, &order.DiscountCents, &order.TotalCents,
+		&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeCents, &order.TotalCents,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -955,12 +961,12 @@ func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain
 
 	var session domain.CheckoutSession
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, customer_id, status, coupon_code, subtotal_cents, discount_cents, total_cents,
+		SELECT id, customer_id, status, coupon_code, subtotal_cents, discount_cents, shipping_fee_cents, total_cents,
 			order_id, expires_at, created_at, updated_at
 		FROM checkout_sessions WHERE id = $1
 	`, id).Scan(
 		&session.ID, &session.CustomerID, &session.Status, &session.CouponCode,
-		&session.SubtotalCents, &session.DiscountCents, &session.TotalCents,
+		&session.SubtotalCents, &session.DiscountCents, &session.ShippingFeeCents, &session.TotalCents,
 		&session.OrderID, &session.ExpiresAt, &session.CreatedAt, &session.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {

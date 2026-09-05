@@ -695,6 +695,20 @@ When `AUTH_JWKS_URL` or `JWT_SECRET` is set, order and checkout routes require `
 
 **Storefront ABAC:** callers with empty `permissions` may only access their own `customer_id` / checkout session (`sub` must match). `order.create` bypasses create ABAC; `order.read.all` bypasses read/list ABAC. See [permissions.md](permissions.md).
 
+**Pricing.** Orders and checkout sessions price as:
+
+```
+total_cents = subtotal_cents - discount_cents + shipping_fee_cents
+```
+
+`shipping_fee_cents` is a flat per-order delivery charge in whole KRW, set by `DUPLI1_ORDER_SHIPPING_FEE_CENTS` on the order service. It defaults to **30000** (30,000 KRW); set the variable to `0` for free delivery.
+
+The charge applies to every order regardless of size — there is no free-shipping threshold. A coupon discounts **goods only** and is capped at `subtotal_cents`, so the total can never drop below the shipping fee: a 100%-off coupon still pays delivery. An empty checkout session quotes `total_cents: 0` rather than a bare delivery charge; the fee appears once the session has at least one item.
+
+The fee is **snapshotted** on the order (and on the session when it opens), so changing the configured amount never re-prices an order already placed or a quote already shown. Orders created before this feature carry `shipping_fee_cents: 0` and keep their original totals.
+
+Because `total_cents` is what the payment service charges and what the order requires to mark itself paid, the fee flows through the money path automatically.
+
 See [checkout-session.md](checkout-session.md) for the full checkout flow.
 
 ### `GET /api/v1/orders/health`

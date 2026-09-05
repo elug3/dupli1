@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/order/pkg/handler"
 	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
 	"github.com/elug3/dupli1/order/pkg/infra/httpcoupon"
@@ -19,6 +18,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/infra/pg"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 )
 
 type Config struct {
@@ -40,7 +40,12 @@ type Config struct {
 	JWTSecret          string
 	JWKSURL            string
 	NATSURL            string
-	HTTPClient         *http.Client
+
+	// ShippingFeeCents is the flat delivery charge added to every order, in
+	// whole KRW. Zero means free delivery.
+	ShippingFeeCents int64
+
+	HTTPClient *http.Client
 }
 
 type App struct {
@@ -115,7 +120,9 @@ func Bootstrap(cfg Config) (*App, error) {
 		}
 	}
 
-	svc := service.NewWithCheckout(repo, stock, couponClient, 0, eventPublisher).WithProduct(product)
+	svc := service.NewWithCheckout(repo, stock, couponClient, 0, eventPublisher).
+		WithProduct(product).
+		WithShippingFee(cfg.ShippingFeeCents)
 
 	if natsSubscriber != nil {
 		// Long-lived worker/subscriber root; cancelled on process shutdown.

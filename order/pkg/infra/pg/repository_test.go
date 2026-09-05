@@ -1,6 +1,7 @@
 package pg
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -52,12 +53,21 @@ func freshSchema(t *testing.T, dsn, schema string) *pgxpool.Pool {
 
 	t.Cleanup(func() {
 		pool.Close()
-		cleanup, err := pgxpool.Connect(ctx, withPostgresSSLMode(dsn))
+		// t.Context() is canceled just before cleanups run, so reconnecting with
+		// it always fails and the schema is never dropped — the leak accumulates
+		// one schema per test per run in the shared dev database. Use a fresh
+		// context, and report failures instead of swallowing them.
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		conn, err := pgxpool.Connect(cleanupCtx, withPostgresSSLMode(dsn))
 		if err != nil {
+			t.Errorf("cleanup: connect to drop schema %s: %v", schema, err)
 			return
 		}
-		defer cleanup.Close()
-		_, _ = cleanup.Exec(ctx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
+		defer conn.Close()
+		if _, err := conn.Exec(cleanupCtx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`); err != nil {
+			t.Errorf("cleanup: drop schema %s: %v", schema, err)
+		}
 	})
 	return pool
 }
@@ -129,7 +139,7 @@ func TestSaveAndLoadOrderItemProductSnapshot(t *testing.T) {
 		UnitPriceCents: 50000,
 		ProductName:    "Prada Galleria",
 		ImageURL:       "https://cdn.example/bag.jpg",
-	}}, "", 0, now)
+	}}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
@@ -171,7 +181,7 @@ func TestListAllReturnsOrdersAcrossCustomers(t *testing.T) {
 	} {
 		order, err := domain.NewOrder(spec.id, spec.customer, "res-"+spec.id, []domain.OrderItem{{
 			SkuID: "sku-" + spec.id, SKU: "BAG-001", Quantity: 1, UnitPriceCents: 1000,
-		}}, "", 0, now)
+		}}, "", 0, 0, now)
 		if err != nil {
 			t.Fatalf("NewOrder(%s): %v", spec.id, err)
 		}
@@ -208,7 +218,7 @@ func TestSaveAndLoadOrderShipmentTracking(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	order, err := domain.NewOrder("ord-ship-1", "cust-1", "res-ship-1", []domain.OrderItem{{
 		SkuID: "sku-ship-1", SKU: "BAG-001", Quantity: 1, UnitPriceCents: 50000,
-	}}, "", 0, now)
+	}}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}

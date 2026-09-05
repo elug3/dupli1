@@ -13,7 +13,7 @@ func newTestOrder(t *testing.T) *domain.Order {
 	now := time.Date(2026, 8, 11, 10, 0, 0, 0, time.UTC)
 	order, err := domain.NewOrder("ord-1", "customer-1", "res-1", []domain.OrderItem{
 		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 70000},
-	}, "", 0, now)
+	}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
@@ -24,19 +24,19 @@ func TestNewOrderRejectsInvalidInput(t *testing.T) {
 	now := time.Now()
 	_, err := domain.NewOrder("", "customer-1", "res-1", []domain.OrderItem{
 		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 1000},
-	}, "", 0, now)
+	}, "", 0, 0, now)
 	if !errors.Is(err, domain.ErrInvalidOrder) {
 		t.Fatalf("empty id err = %v, want ErrInvalidOrder", err)
 	}
 
-	_, err = domain.NewOrder("ord-1", "customer-1", "res-1", nil, "", 0, now)
+	_, err = domain.NewOrder("ord-1", "customer-1", "res-1", nil, "", 0, 0, now)
 	if !errors.Is(err, domain.ErrInvalidOrder) {
 		t.Fatalf("empty items err = %v, want ErrInvalidOrder", err)
 	}
 
 	_, err = domain.NewOrder("ord-1", "customer-1", "res-1", []domain.OrderItem{
 		{SKU: "BAG-1", Quantity: 0, UnitPriceCents: 1000},
-	}, "", 0, now)
+	}, "", 0, 0, now)
 	if !errors.Is(err, domain.ErrInvalidOrder) {
 		t.Fatalf("zero quantity err = %v, want ErrInvalidOrder", err)
 	}

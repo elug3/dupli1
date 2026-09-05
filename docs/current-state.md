@@ -94,6 +94,7 @@ See [service-layout.md](service-layout.md) for details.
   - List: `GET /api/v1/orders` (all — requires `order.read.all`); `GET /api/v1/orders?customer_id=` (ABAC). There is no `/orders/all` or `/orders/me`.
   - Consumes **`payment.succeeded`** (NATS) → `paid` (idempotent on `payment_id`; replays after ship/fulfill are no-ops); late payment on auto-`canceled` orders **re-reserves stock** and reopens the payment window before marking `paid`
   - 5-minute unpaid `pending` expiry worker (skips when payment wins the race)
+  - **Shipping fee:** flat per-order delivery charge via `DUPLI1_ORDER_SHIPPING_FEE_CENTS` (whole KRW, default 30000 = 30,000 KRW; set 0 for free). `total = subtotal - discount + shipping`; no free-shipping threshold; coupons discount goods only. Snapshotted on the order and on the checkout session so a config change never re-prices existing ones
   - Publishes order events via transactional **outbox** (`order.created` / status updates); outbox drain worker
   - Optional `Idempotency-Key` on `POST /api/v1/orders` (replay-safe create)
   - Checkout `complete` snapshots recipient + shipping address (optional prefill from auth profile)
