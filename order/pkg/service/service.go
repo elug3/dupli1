@@ -24,6 +24,7 @@ const (
 	orderUpdatedSubject     = events.OrderStatusUpdate
 	orderPaidSubject        = events.OrderPaid
 	paymentSucceededSubject = events.PaymentSucceeded
+	paymentCanceledSubject  = events.PaymentCanceled
 )
 
 type Service struct {

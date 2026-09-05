@@ -132,6 +132,12 @@ func Bootstrap(cfg Config) (*App, error) {
 			closeFn()
 			return nil, fmt.Errorf("payment consumer: %w", err)
 		}
+		if err := svc.RegisterPaymentCanceledConsumer(context.Background(), natsSubscriber); err != nil {
+			natsSubscriber.Close()
+			natsPublisher.Close()
+			closeFn()
+			return nil, fmt.Errorf("payment canceled consumer: %w", err)
+		}
 	}
 	// Long-lived worker/subscriber root; cancelled on process shutdown.
 	expiryCtx, expiryCancel := context.WithCancel(context.Background())
