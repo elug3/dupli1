@@ -18,6 +18,10 @@ func BuildSettings(cfg Config) settings.Response {
 	}
 	resp.Limits = map[string]any{
 		"currency": money.Currency, // *_cents amounts are whole KRW won
+		// Published so storefronts quote the charge the service will actually
+		// apply, instead of hardcoding their own copy that can drift from it.
+		// Whole KRW; 0 means free delivery.
+		"shipping_fee_cents": cfg.ShippingFeeCents,
 	}
 	apiBase, _ := resolveAPIBaseURL(cfg)
 	authBase := cfg.AuthURL
