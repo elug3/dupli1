@@ -31,8 +31,10 @@ func TestCreateOrder_AppliesConfiguredShippingFee(t *testing.T) {
 	}
 }
 
-// An unconfigured service must not invent a delivery charge.
-func TestCreateOrder_DefaultsToFreeDelivery(t *testing.T) {
+// A Service built without WithShippingFee must not invent a delivery charge.
+// This is the zero value of the service layer, not the deployment default —
+// bootstrap always passes the configured fee (30,000 KRW unless overridden).
+func TestCreateOrder_UnconfiguredServiceChargesNothing(t *testing.T) {
 	ctx := t.Context()
 	svc := service.New(memory.NewRepository(), &fakeStock{}).
 		WithProduct(&fakeProduct{defaultCents: 250000})

@@ -74,7 +74,7 @@ Create an empty checkout session.
   "status": "open",
   "subtotal_cents": 0,
   "discount_cents": 0,
-  "shipping_fee_cents": 3000,
+  "shipping_fee_cents": 30000,
   "total_cents": 0,
   "expires_at": "2026-06-21T12:30:00Z",
   "created_at": "2026-06-21T12:00:00Z",
@@ -84,7 +84,7 @@ Create an empty checkout session.
 
 **Pricing.** `total_cents = subtotal_cents - discount_cents + shipping_fee_cents`.
 
-`shipping_fee_cents` is the flat delivery charge quoted for this session (whole KRW, from `DUPLI1_ORDER_SHIPPING_FEE_CENTS`; 0 means free delivery). It is fixed when the session opens, so a config change mid-checkout cannot move the price the customer was shown, and the same amount carries onto the resulting order.
+`shipping_fee_cents` is the flat delivery charge quoted for this session (whole KRW, from `DUPLI1_ORDER_SHIPPING_FEE_CENTS`, default 30000; set 0 for free delivery). It is fixed when the session opens, so a config change mid-checkout cannot move the price the customer was shown, and the same amount carries onto the resulting order.
 
 A session with **no items** quotes `total_cents: 0` even while `shipping_fee_cents` is non-zero, as above — an empty cart owes nothing to ship. The charge enters the total once the session holds at least one item, and drops out again if every item is removed.
 
@@ -203,8 +203,8 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
     "coupon_code": "SUMMER30",
     "subtotal_cents": 10000,
     "discount_cents": 3000,
-    "shipping_fee_cents": 3000,
-    "total_cents": 10000
+    "shipping_fee_cents": 30000,
+    "total_cents": 37000
   },
   "order": {
     "id": "ord_000001",
@@ -224,8 +224,8 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
     "coupon_code": "SUMMER30",
     "subtotal_cents": 10000,
     "discount_cents": 3000,
-    "shipping_fee_cents": 3000,
-    "total_cents": 10000,
+    "shipping_fee_cents": 30000,
+    "total_cents": 37000,
     "items": [
       { "sku": "BAG-1", "quantity": 2, "unit_price_cents": 5000 }
     ]
