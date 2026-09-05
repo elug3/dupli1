@@ -331,7 +331,7 @@ func (r *Repository) FindSucceededByOrderID(ctx context.Context, orderID string)
 const paymentSelect = `
 	SELECT id, order_id, customer_id, amount_cents, currency, status,
 	       COALESCE(method, 'credit_card'),
-	       provider, provider_ref, checkout_url,
+	       provider, provider_ref, COALESCE(checkout_url, ''),
 	       COALESCE(created_by, ''), COALESCE(note, ''),
 	       COALESCE(payer_name, ''), COALESCE(payer_phone, ''), COALESCE(payer_email, ''),
 	       COALESCE(idempotency_key, ''),
