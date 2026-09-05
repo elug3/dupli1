@@ -22,8 +22,11 @@ info:
     **Paths:** routes are namespaced by owning service. Older top-level prefixes
     (`/api/v1/inventory`, `/api/v1/catalog`, `/api/v1/coupons`, `/api/v1/variants`,
     `/api/v1/checkout`, `/api/v1/carts`) remain registered as aliases but are omitted here.
-    Per-service `/health` and `/settings` routes are public and also omitted, except
-    notification's health check, which is the only route that service exposes.
+    `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` are a similar one-release
+    alias — they proxy to the `profile` service (see `/api/v1/profile/me/...` below and
+    [profile-service.md](profile-service.md)) and are likewise omitted. Per-service
+    `/health` and `/settings` routes are public and also omitted, except notification's
+    health check, which is the only route that service exposes.
 
     Gateway base URL (local): `http://localhost:8080`
 
@@ -76,43 +79,43 @@ paths:
         '200':
           description: Success
 
-  /api/v1/auth/me/profile:
+  /api/v1/profile/me/profile:
     get:
       summary: Get customer commerce profile and addresses
-      tags: [Auth]
+      tags: [Profile]
       security:
         - bearerAuth: []
       responses:
         '200':
           description: Success
     patch:
-      summary: Update display name and phone
-      tags: [Auth]
+      summary: Update display name and phone (merge patch)
+      tags: [Profile]
       security:
         - bearerAuth: []
       responses:
         '200':
           description: Success
 
-  /api/v1/auth/me/addresses:
+  /api/v1/profile/me/addresses:
     get:
       summary: List saved addresses
-      tags: [Auth]
+      tags: [Profile]
       security:
         - bearerAuth: []
       responses:
         '200':
           description: Success
     post:
-      summary: Create a saved address
-      tags: [Auth]
+      summary: Create a saved address (max 10; first is default)
+      tags: [Profile]
       security:
         - bearerAuth: []
       responses:
         '201':
           description: Created
 
-  /api/v1/auth/me/addresses/{id}:
+  /api/v1/profile/me/addresses/{id}:
     parameters:
       - name: id
         in: path
@@ -121,30 +124,32 @@ paths:
           type: string
     get:
       summary: Get one address
-      tags: [Auth]
+      tags: [Profile]
       security:
         - bearerAuth: []
       responses:
         '200':
           description: Success
+        '404':
+          description: Not found — missing, or owned by a different user
     patch:
-      summary: Update an address
-      tags: [Auth]
+      summary: Update an address (merge patch; is_default true promotes, false un-defaults)
+      tags: [Profile]
       security:
         - bearerAuth: []
       responses:
         '200':
           description: Success
     delete:
-      summary: Delete an address
-      tags: [Auth]
+      summary: Delete an address (no auto-promotion if it was default)
+      tags: [Profile]
       security:
         - bearerAuth: []
       responses:
         '204':
           description: No content
 
-  /api/v1/auth/me/addresses/{id}/default:
+  /api/v1/profile/me/addresses/{id}/default:
     parameters:
       - name: id
         in: path
@@ -152,8 +157,8 @@ paths:
         schema:
           type: string
     post:
-      summary: Set default address
-      tags: [Auth]
+      summary: Set sole default address
+      tags: [Profile]
       security:
         - bearerAuth: []
       responses:
@@ -1344,6 +1349,7 @@ paths:
 tags:
   - name: Auth
   - name: Auth Admin
+  - name: Profile
   - name: Product
   - name: Coupon
   - name: Inventory

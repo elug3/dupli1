@@ -123,20 +123,9 @@ Only unexpected failures are logged (via `respondInternalError`):
 
 **Silent:** validation / not found / forbidden; successful admin updates.
 
-### Profile & addresses — `/api/v1/auth/me/profile`, `/me/addresses`
+### Profile & addresses — moved to the `profile` service
 
-Known domain errors (`ErrInvalidProfile`, `ErrInvalidAddress`, `ErrAddressNotFound`, `ErrAddressLimitReached`) return 4xx **without** a log. Unexpected failures use:
-
-| `event` | Handler |
-|---------|---------|
-| `get_profile_error` | `GetProfile` |
-| `patch_profile_error` | `PatchProfile` |
-| `list_addresses_error` | `ListAddresses` |
-| `create_address_error` | `CreateAddress` |
-| `get_address_error` | `GetAddress` |
-| `patch_address_error` | `PatchAddress` |
-| `delete_address_error` | `DeleteAddress` |
-| `set_default_address_error` | `SetDefaultAddress` |
+This logic (and its logging) no longer lives in `auth` — it was extracted to the standalone `profile` service ([profile-service.md](profile-service.md), [auth-profile-extension-plan.md](auth-profile-extension-plan.md) Phase D). `profile` keeps the same event names (`get_profile_error`, `patch_profile_error`, `list_addresses_error`, `create_address_error`, `get_address_error`, `patch_address_error`, `delete_address_error`, `set_default_address_error`) and the same "known domain errors are silent, unexpected failures log" rule, but logs them via plain `log.Printf` rather than auth's structured zerolog — it has not adopted the zerolog convention this document describes.
 
 ### Bootstrap / process
 

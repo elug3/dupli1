@@ -1,10 +1,10 @@
 # Auth profile extension plan
 
-> **Phases A+B shipped** (auth profile/addresses + order checkout snapshot). Phase D (profile module extraction) is now underway: the `profile/` Go module and its deployment/infra wiring (Compose, nginx, CI, Terraform) are in place; data migration and cutover from `auth` are not done yet. As-built endpoints: [endpoints.md](endpoints.md) Auth section.
+> **Phases A+B shipped** (auth profile/addresses + order checkout snapshot). Phase D (profile module extraction) is now underway: the `profile/` Go module, its deployment/infra wiring (Compose, nginx, CI, Terraform), and `user.deleted` event cleanup are in place; one-time data migration and dropping auth's orphaned tables are not done yet. As-built endpoints and architecture: [profile-service.md](profile-service.md); [endpoints.md](endpoints.md) Profile Service section.
 
-**Status:** Phase A implemented in `auth/` (profile + addresses). **Phase B** implemented in `order/` (checkout snapshot). Phase D (profile module extraction) — `profile/` module and deployment/infra (Compose, nginx one-release aliases, CI, Terraform) done; one-time data copy, dual-run verification, and frontend/auth cutover still pending; wishlists were evaluated for inclusion and intentionally excluded (see Phase D decision log).
+**Status:** Phase A implemented in `auth/` (profile + addresses), now moved to `profile/`. **Phase B** implemented in `order/` (checkout snapshot). Phase D (profile module extraction) — `profile/` module, deployment/infra (Compose, nginx one-release aliases, CI, Terraform), and `user.deleted` cascade-delete done; one-time data copy, dual-run verification, and dropping auth's orphaned tables still pending; wishlists were evaluated for inclusion and intentionally excluded (see Phase D decision log).
 
-**Related:** [payment-service.md](payment-service.md), [payment-methods-plan.md](payment-methods-plan.md), [checkout-session.md](checkout-session.md), [permissions.md](permissions.md), [current-state.md](current-state.md).
+**Related:** [profile-service.md](profile-service.md), [payment-service.md](payment-service.md), [payment-methods-plan.md](payment-methods-plan.md), [checkout-session.md](checkout-session.md), [permissions.md](permissions.md), [current-state.md](current-state.md).
 
 ## Goals
 
@@ -390,7 +390,7 @@ The address-validation logic (`krPhoneDigits`/`postalCodeRE`/`pcccRE` regexes an
 - [x] Cut frontend over to `/api/v1/profile/me/...`; drop profile routes/code from `auth` (orphan auth DB tables may remain until manual drop)
 - [x] Auth publishes `user.deleted`; profile subscribes and deletes owned PII
 - [x] `DELETE /api/v1/auth/users/:id` (`user.delete`)
-- [x] Docs: this file, `CLAUDE.md` service table + dev DB credentials table, `AGENTS.md` DB credentials table — updated. Still open: [current-state.md](current-state.md), [api.md](api.md), [endpoints.md](endpoints.md), [openapi.yaml](openapi.yaml), [service-layout.md](service-layout.md)
+- [x] Docs: this file, `CLAUDE.md` service table + dev DB credentials table, `AGENTS.md` DB credentials table, new [profile-service.md](profile-service.md), [current-state.md](current-state.md), [api.md](api.md), [endpoints.md](endpoints.md), [openapi.yaml](openapi.yaml), [service-layout.md](service-layout.md), [docs/README.md](README.md) — updated
 
 ---
 

@@ -9,6 +9,7 @@ Go microservice backend for a fashion bag marketplace. Services behind an nginx 
 | Service | Local port | Description |
 |---------|------------|-------------|
 | `dupli1-auth` | 18080 | JWT login/refresh, RS256 tokens, JWKS, permission-based user admin |
+| `dupli1-profile` | 8088 | Customer commerce profile + saved shipping addresses (PostgreSQL) |
 | `dupli1-product` | 8081 | Bag catalog, coupons, product CRUD, image upload, stock and reservation APIs |
 | `dupli1-order` | 8083 | Checkout sessions and order lifecycle (PostgreSQL) |
 | `dupli1-cart` | 8086 | Shopping cart (PostgreSQL) |
@@ -16,6 +17,7 @@ Go microservice backend for a fashion bag marketplace. Services behind an nginx 
 | `dupli1-notification` | 8084 | NATS subscriber → Telegram ops alerts when configured |
 | `dupli1-proxy` | 8080 / 80 | nginx reverse proxy (HTTP locally) |
 | `postgres-auth` | 5432 | Auth DB (`dupli1_db`) |
+| `postgres-profile` | 5439 | Profile DB (`profiles`) |
 | `postgres-product` | 5433 | Product DB (also stock/reservations) |
 | `postgres-order` | 5435 | Order DB |
 | `postgres-cart` | 5436 | Cart DB |
@@ -94,13 +96,24 @@ Full reference: [docs/api.md](docs/api.md). Route index: [docs/endpoints.md](doc
 | POST | `/api/v1/auth/refresh` | — | Exchange refresh token for access token |
 | POST | `/api/v1/auth/logout` | — | Revoke refresh token |
 | GET | `/api/v1/auth/me` | Bearer | Current user account |
-| GET/PATCH | `/api/v1/auth/me/profile` | Bearer | Customer commerce profile |
-| GET/POST/PATCH/DELETE | `/api/v1/auth/me/addresses`… | Bearer | Saved shipping addresses |
 | POST | `/api/v1/auth/register` | `user.create` *or open register* | Create user (`AUTH_OPEN_REGISTER` allows anonymous → `customer`) |
 | GET | `/api/v1/auth/users` | `user.read` | List users (auth ABAC) |
 | PATCH | `/api/v1/auth/users/{id}/permissions` | `user.permissions.update` | Replace permissions / optional `account_type` |
 | PATCH | `/api/v1/auth/users/{id}/password` | `user.password.update` | Set user password |
 | PATCH | `/api/v1/auth/users/{id}/status` | `user.status.update` | Activate / deactivate user |
+| DELETE | `/api/v1/auth/users/{id}` | `user.delete` | Permanently delete user; publishes `user.deleted` (consumed by `profile`) |
+
+### Profile (`dupli1-profile` :8088)
+
+Customer commerce PII — display name, phone, saved shipping addresses — extracted from `auth`. Self-service only (JWT `sub` ABAC, no dedicated permission). See [docs/profile-service.md](docs/profile-service.md).
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET/PATCH | `/api/v1/profile/me/profile` | Bearer | Customer commerce profile |
+| GET/POST/PATCH/DELETE | `/api/v1/profile/me/addresses`… | Bearer | Saved shipping addresses (max 10) |
+| POST | `/api/v1/profile/me/addresses/{id}/default` | Bearer | Set sole default address |
+
+One-release nginx aliases keep `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` working during storefront cutover.
 
 Authorization uses fine-grained **permissions** in the JWT (`permissions` claim), not legacy roles. See [docs/permissions.md](docs/permissions.md).
 

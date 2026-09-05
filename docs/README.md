@@ -18,6 +18,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [payment-service.md](payment-service.md) | Money path (NANO / Bypass) |
 | [checkout-session.md](checkout-session.md) | Checkout sessions in order |
 | [cart-service.md](cart-service.md) | Persistent cart |
+| [profile-service.md](profile-service.md) | Customer commerce profile + saved addresses |
 | [notification-telegram-bot.md](notification-telegram-bot.md) | Ops Telegram alerts |
 | [deployment-aws.md](deployment-aws.md) | Production ECS / RDS |
 | [deployment-ec2.md](deployment-ec2.md) | Single-EC2 Compose overlay |
@@ -71,7 +72,7 @@ These retain design history. Prefer the living docs above for current behavior.
 | [product-sale-unit-reflection.md](product-sale-unit-reflection.md) | Decision background for flatten plan |
 | [product-multi-category-design.md](product-multi-category-design.md) | Wallets Sep / padded Oct schedule |
 | [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md) | Keep Product/Variant names |
-| [auth-profile-extension-plan.md](auth-profile-extension-plan.md) | Phases A–B shipped; module extract open |
+| [auth-profile-extension-plan.md](auth-profile-extension-plan.md) | Phases A–B shipped; Phase D (`profile` service) live — data copy from auth's orphaned tables still open. See [profile-service.md](profile-service.md) |
 | [order-tracking-plan.md](order-tracking-plan.md) | Customer order history + required ship tracking |
 | [manager-settings-api.md](manager-settings-api.md) | Sketch only |
 | [frontend-product-variants-migration.md](frontend-product-variants-migration.md) | Sibling frontend migration notes |
