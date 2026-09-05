@@ -187,10 +187,13 @@ Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
 | `payment.create` | Start checkout for any user's order (service accounts) |
 | `payment.read.all` | Read any payment by ID (bypass ownership check in service layer) |
 | `payment.bypass` | Mark a pending order paid without a PG (`method=bypass`). Order-manager / fulfillment; not the same as ABAC bypass. See [payment-methods-plan.md](payment-methods-plan.md) |
+| `payment.cancel` | Cancel / refund a succeeded payment at the PG (`POST /api/v1/payments/{id}/cancel`). Staff-only — no ABAC path, so customers can never refund themselves |
 
 **Default storefront:** authenticated user with empty `permissions` may create/read **only their own** payments (ownership enforced in service).
 
 NANO return/webhook endpoints are **unauthenticated** (callback / webhook secret). Bypass requires `payment.bypass`.
+
+`payment.cancel` is granted by the `fulfillment` bundle and by the `*` / `admin.*` wildcards. It is deliberately **not** added to the legacy `order_manager` role expansion, so existing legacy-role accounts do not silently gain the ability to move money; grant the `fulfillment` bundle (or the permission itself) to opt an account in.
 
 ---
 
@@ -301,6 +304,7 @@ registered as an alias.
 |--------|------|-------------------|
 | `POST` | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | `GET` | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
+| `POST` | `/api/v1/payments/{id}/cancel` | `payment.cancel` (no ABAC) |
 
 ---
 
@@ -312,7 +316,7 @@ Code-defined sets for common job functions. Assigning a bundle expands to explic
 |--------|-------------|
 | `catalog_editor` | `product.create`, `product.update`, `product.read`, `product.variant.create`, `product.variant.update`, `product.image.upload`, `product.master.read`, `product.master.write` |
 | `catalog_admin` | `product.*`, `coupon.*` |
-| `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass` |
+| `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass`, `payment.cancel` |
 | `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update`, `user.delete` |
 | `customer_registrar` | `user.create` |
 

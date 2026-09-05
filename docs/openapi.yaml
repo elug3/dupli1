@@ -1275,6 +1275,65 @@ paths:
         '200':
           description: Success
 
+  /api/v1/payments/{id}/cancel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Payment id
+        schema:
+          type: string
+    post:
+      summary: Cancel (refund) a payment
+      tags: [Payment]
+      security:
+        - bearerAuth: []
+      description: >-
+        Requires payment.cancel. Staff-only — there is no ABAC path, so a
+        customer can never refund their own payment. Refunds a succeeded
+        payment at the PG (NANO /api/payment/cancel.io). Omitting amount_cents
+        cancels the full remaining balance; a partial cancel leaves the payment
+        succeeded with a reduced balance and only the final one moves it to
+        canceled. bypass payments never reached a PG and are canceled locally
+        only. Send Idempotency-Key to make a retry a no-op.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Makes a retry of the same cancel a no-op.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount_cents:
+                  type: integer
+                  format: int64
+                  description: >-
+                    Amount to cancel in whole KRW. Omit or send 0 to cancel the
+                    full remaining balance.
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Cancel accepted by the PG and recorded
+        '400':
+          description: amount_cents negative or above the remaining balance
+        '403':
+          description: Caller lacks payment.cancel
+        '404':
+          description: No such payment
+        '409':
+          description: Payment is not cancelable (not succeeded, or already fully canceled)
+        '501':
+          description: Provider has no cancel API / PG not configured
+        '502':
+          description: PG reached and refused the cancel; payment left unchanged
+
   /api/v1/notification/health:
     get:
       summary: Notification service health
