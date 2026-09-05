@@ -6,7 +6,7 @@ Guidance for AI agents working in the Dupli1 repository.
 
 Dupli1 is a Go microservice backend for a fashion bag marketplace. The repo contains:
 
-- HTTP services in `auth/`, `product/`, `order/`, `cart/`, `payment/`, `notification/`, `profile/` (each with `cmd/` + `pkg/`). `product` also owns stock/reservations (the former standalone `inventory` service was merged in). `profile` (customer display name/phone + saved addresses) was extracted from `auth` per [docs/auth-profile-extension-plan.md](docs/auth-profile-extension-plan.md) Phase D — the auth code path is not removed yet.
+- HTTP services in `auth/`, `product/`, `order/`, `cart/`, `payment/`, `notification/`, `profile/` (each with `cmd/` + `pkg/`). `product` also owns stock/reservations (the former standalone `inventory` service was merged in). `profile` (customer display name/phone + saved addresses) was extracted from `auth` per [docs/auth-profile-extension-plan.md](docs/auth-profile-extension-plan.md) Phase D — the auth code path is removed; the one-time data copy from auth's old tables and dropping them is still open.
 - nginx gateway in `api/` (`dupli1-proxy` in Docker Compose)
 - Docker Compose for local development
 - Terraform and GitHub Actions for AWS ECS deployment

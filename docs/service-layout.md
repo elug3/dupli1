@@ -9,6 +9,9 @@ dupli1/
 ├── auth/                     # Auth service module
 │   ├── cmd/                  # CLI entrypoint (cobra)
 │   └── pkg/                  # domain, service, ports, infra, handler, bootstrap
+├── profile/                  # Customer commerce profile + addresses (extracted from auth)
+│   ├── cmd/
+│   └── pkg/
 ├── product/                  # Product catalog module (also owns stock/reservations)
 │   ├── cmd/
 │   └── pkg/
@@ -89,6 +92,14 @@ Owns:
 - Owner seeding via `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`)
 - Service account seeding via `DUPLI1_WEB_SERVICE_*` (`permissions: ["user.create"]`)
 
+### Profile (`profile/pkg`)
+
+**Module:** `github.com/elug3/dupli1/profile`  
+**Framework:** stdlib `net/http`  
+**Storage:** PostgreSQL (`profiles`), in-memory fallback when no DB URL is configured (tests); NATS (optional — required to consume `user.deleted`)
+
+Owns customer commerce profile (`display_name`, `phone`) and saved shipping addresses at `/api/v1/profile/me/…`, extracted from `auth` (which was the Gin outlier for this data; profile follows the stdlib convention like cart/order/payment/product). Requires Bearer JWT via `AUTH_JWKS_URL`/`JWT_SECRET` (validator only — profile does not issue tokens). Owns no FK into auth's `users` table (separate database), so it subscribes to auth's `user.deleted` NATS event to cascade-delete owned PII instead. See [profile-service.md](profile-service.md).
+
 ### Product (`product/pkg`)
 
 **Module:** `github.com/elug3/dupli1/product`  
@@ -136,6 +147,8 @@ Bypass + NANO card; publishes `payment.succeeded` on NATS. See [payment-service.
 |-------------|---------|
 | `/gateway/health` | nginx (static `ok`) |
 | `/api/v1/auth/` | dupli1-auth |
+| `/api/v1/profile` | dupli1-profile |
+| `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses` | dupli1-profile (one-release alias; see [profile-service.md](profile-service.md)) |
 | `/api/v1/products` | dupli1-product (canonical; also covers `/products/variants`, `/products/coupons`, `/products/catalog`, `/products/inventory`) |
 | `/api/v1/coupons` | dupli1-product (legacy alias) |
 | `/api/v1/catalog` | dupli1-product (legacy alias) |
@@ -150,7 +163,7 @@ Bypass + NANO card; publishes `payment.succeeded` on NATS. See [payment-service.
 
 Checkout sessions: canonical `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions`). Cart admin: canonical `/api/v1/cart/customers/{id}` (legacy `/api/v1/carts/{id}`). Path migration checklist: [TODO.md](TODO.md).
 
-Direct host ports (bypass gateway): auth **18080**, product **8081**, order **8083**, cart **8086**, payment **8087**, notification **8084**.
+Direct host ports (bypass gateway): auth **18080**, profile **8088**, product **8081**, order **8083**, cart **8086**, payment **8087**, notification **8084**.
 
 ## Adding a new service
 
@@ -165,6 +178,7 @@ Direct host ports (bypass gateway): auth **18080**, product **8081**, order **80
 
 ```bash
 cd auth && go test ./...
+cd profile && go test ./...
 cd product && go test ./...
 cd order && go test ./...
 cd cart && go test ./...

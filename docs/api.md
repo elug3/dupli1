@@ -4,7 +4,7 @@ All traffic is routed through the nginx gateway. Locally use **HTTP** at `http:/
 
 **Currency:** the storefront uses **KRW only**. Product `price` values and cart/order/payment `*_cents` fields are **whole Korean won** (zero-decimal minor units for `krw` — do not multiply by 100). Settings expose `limits.currency: "krw"`.
 
-**Path convention:** every route is namespaced by its owning service — `/api/v1/products/…` (including inventory, catalog and coupons), `/api/v1/orders/…` (including checkout sessions), `/api/v1/cart/…`, `/api/v1/payments/…`, `/api/v1/auth/…`. The paths documented here are the canonical ones. Older top-level prefixes (`/api/v1/inventory`, `/api/v1/catalog`, `/api/v1/coupons`, `/api/v1/variants`, `/api/v1/checkout`, `/api/v1/carts`) are still registered as aliases and are called out where they differ; new clients should not use them. Migration table: [TODO.md](TODO.md).
+**Path convention:** every route is namespaced by its owning service — `/api/v1/products/…` (including inventory, catalog and coupons), `/api/v1/orders/…` (including checkout sessions), `/api/v1/cart/…`, `/api/v1/payments/…`, `/api/v1/auth/…`, `/api/v1/profile/…`. The paths documented here are the canonical ones. Older top-level prefixes (`/api/v1/inventory`, `/api/v1/catalog`, `/api/v1/coupons`, `/api/v1/variants`, `/api/v1/checkout`, `/api/v1/carts`) are still registered as aliases and are called out where they differ; new clients should not use them. Migration table: [TODO.md](TODO.md).
 
 ---
 
@@ -198,22 +198,7 @@ Return the currently authenticated user's **account** (credentials tier — not 
 
 ---
 
-### Customer profile — `/api/v1/profile/me/profile` and `/api/v1/profile/me/addresses`
-
-Served by the **`profile`** service. For one release, nginx also aliases the legacy `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` paths to `dupli1-profile`.
-
-Commerce PII (display name, phone, saved addresses) for checkout prefill. Bearer access token; self-service only (no new permission). See [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/profile/me/profile` | Profile + embedded `addresses` |
-| `PATCH` | `/api/v1/profile/me/profile` | Merge-patch `display_name`, `phone` |
-| `GET` | `/api/v1/profile/me/addresses` | `{ "addresses": [ … ] }` |
-| `POST` | `/api/v1/profile/me/addresses` | Create (max 10) |
-| `GET` | `/api/v1/profile/me/addresses/{id}` | One address |
-| `PATCH` | `/api/v1/profile/me/addresses/{id}` | Partial update |
-| `DELETE` | `/api/v1/profile/me/addresses/{id}` | Remove |
-| `POST` | `/api/v1/profile/me/addresses/{id}/default` | Set sole default |
+See the **Profile Service** section below for the commerce profile and saved-addresses API — split out of `auth` into its own `profile` service.
 
 ---
 
@@ -364,6 +349,95 @@ Activate or deactivate a user. Requires `user.status.update`.
 | `401` | Missing or invalid access token |
 | `403` | Caller lacks `user.status.update` or may not manage this user |
 | `404` | User not found |
+
+---
+
+## Profile Service — `/api/v1/profile`
+
+PostgreSQL-backed customer commerce profile (display name, phone) and saved shipping addresses — separated from `auth`'s identity/credentials data so it can evolve and scale independently. Requires `Authorization: Bearer <access_token>`; the owner is always the JWT `sub` claim — self-service only, no dedicated permission (same ABAC pattern as cart). Subscribes to `auth`'s `user.deleted` NATS event to cascade-delete owned PII.
+
+For one release, nginx also aliases the legacy `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` paths to `dupli1-profile`, so clients still calling the pre-extraction paths keep working. See [profile-service.md](profile-service.md) for architecture, data model, and the extraction/cutover plan; [auth-profile-extension-plan.md](auth-profile-extension-plan.md) for phase history.
+
+### `GET /api/v1/profile/health`
+
+**Response `200`**
+```json
+{ "status": "ok" }
+```
+
+### `GET /api/v1/profile/me/profile`
+
+**Response `200`**
+```json
+{
+  "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
+  "display_name": "윤라희",
+  "phone": "01041125167",
+  "default_address_id": "addr_000001",
+  "addresses": [
+    {
+      "id": "addr_000001",
+      "label": "home",
+      "recipient_name": "윤라희",
+      "recipient_phone": "01041125167",
+      "postal_code": "06194",
+      "address_line1": "테헤란로 78길 14-12",
+      "address_line2": "9층",
+      "city": "강남구",
+      "province": "서울특별시",
+      "pccc": "P123456789012",
+      "is_default": true
+    }
+  ]
+}
+```
+`pccc` (Korea Personal Customs Clearance Code, `P` + 12 digits) is omitted per-address when unset — it only applies to overseas-sourced shipments.
+
+### `PATCH /api/v1/profile/me/profile`
+
+Merge-patch: only sent fields change.
+
+**Request**
+```json
+{ "display_name": "윤라희", "phone": "010-4112-5167" }
+```
+
+**Response `200`** — updated `ProfileView` (same shape as `GET`). Phone is normalized to digits-only.
+
+### Saved addresses
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/profile/me/addresses` | `{ "addresses": [ … ] }` |
+| `POST` | `/api/v1/profile/me/addresses` | Create (max **10** per user; first address created is default) |
+| `GET` | `/api/v1/profile/me/addresses/{id}` | One address |
+| `PATCH` | `/api/v1/profile/me/addresses/{id}` | Partial update (merge patch) |
+| `DELETE` | `/api/v1/profile/me/addresses/{id}` | Remove |
+| `POST` | `/api/v1/profile/me/addresses/{id}/default` | Set sole default |
+
+**Create/update request** — `recipient_name`, `recipient_phone`, `postal_code` (5 digits), `address_line1`, `city`, `province` required on create; optional `label`, `address_line2`, `pccc`, `is_default`:
+```json
+{
+  "recipient_name": "윤라희",
+  "recipient_phone": "01041125167",
+  "postal_code": "06194",
+  "address_line1": "테헤란로 78길 14-12",
+  "address_line2": "9층",
+  "city": "강남구",
+  "province": "서울특별시",
+  "pccc": "P123456789012",
+  "is_default": true
+}
+```
+
+`is_default: true` clears the default flag on every other address first (at most one default per user, enforced by a unique partial index). `is_default: false` on `PATCH` un-defaults that address without promoting another — same as what happens when the default address is deleted. Omitting `is_default` on `PATCH` leaves it unchanged.
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid field (phone, postal code, PCCC format, name/line length) or address limit (10) reached |
+| `401` | Missing or invalid access token |
+| `404` | Address not found, or not owned by the caller — same code whether it doesn't exist or belongs to someone else, to avoid id enumeration |
 
 ---
 
@@ -864,6 +938,12 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | PATCH | `/api/v1/auth/users/{id}/permissions` | `user.permissions.update` | auth |
 | PATCH | `/api/v1/auth/users/{id}/password` | `user.password.update` | auth |
 | PATCH | `/api/v1/auth/users/{id}/status` | `user.status.update` | auth |
+| GET | `/api/v1/profile/health` | — | profile |
+| GET | `/api/v1/profile/settings` | — | profile |
+| GET/PATCH | `/api/v1/profile/me/profile` | Bearer | profile |
+| GET/POST | `/api/v1/profile/me/addresses` | Bearer | profile |
+| GET/PATCH/DELETE | `/api/v1/profile/me/addresses/{id}` | Bearer | profile |
+| POST | `/api/v1/profile/me/addresses/{id}/default` | Bearer | profile |
 | GET | `/api/v1/products/health` | — | product |
 | GET | `/api/v1/products/settings` | — | product |
 | GET | `/api/v1/products` | optional `product.read` | product |

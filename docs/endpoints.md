@@ -2,12 +2,14 @@
 
 All services listen on port `8080` inside Docker. The nginx gateway proxies by path prefix with no stripping, so gateway paths match service paths.
 
-**Path convention:** `/api/v1/{service_name}/...` (`auth`, `products`, `orders`, `cart`, `payments`, `notification`). Legacy top-level aliases (`variants`, `coupons`, `catalog`, `inventory`, `checkout`, `carts`) still work until clients migrate — see [TODO.md](TODO.md).
+**Path convention:** `/api/v1/{service_name}/...` (`auth`, `profile`, `products`, `orders`, `cart`, `payments`, `notification`). Legacy top-level aliases (`variants`, `coupons`, `catalog`, `inventory`, `checkout`, `carts`) still work until clients migrate — see [TODO.md](TODO.md).
 
 | Gateway prefix | Upstream service |
 |---|---|
 | `/gateway/health` | nginx (static) |
 | `/api/v1/auth/` | `dupli1-auth:8080` |
+| `/api/v1/profile` | `dupli1-profile:8080` |
+| `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses` | `dupli1-profile:8080` (one-release alias — see [profile-service.md](profile-service.md)) |
 | `/api/v1/products` | `dupli1-product:8080` |
 | `/api/v1/coupons` | `dupli1-product:8080` (legacy alias) |
 | `/api/v1/catalog` | `dupli1-product:8080` (legacy alias) |
@@ -40,16 +42,7 @@ Each service also registers `/health` and `/settings` directly for internal/side
 | `POST` | `/api/v1/auth/logout` | — | Invalidate the current session |
 | `POST` | `/api/v1/auth/refresh` | — | Exchange a refresh token for a new access token |
 | `GET` | `/api/v1/auth/me` | Bearer | Return the authenticated user's account (email, permissions) |
-| `GET` | `/api/v1/profile/me/profile` | Bearer | Customer commerce profile + saved addresses (`profile` service) |
-| `PATCH` | `/api/v1/profile/me/profile` | Bearer | Update `display_name` / `phone` (merge patch) |
-| `GET` | `/api/v1/profile/me/addresses` | Bearer | List saved addresses |
-| `POST` | `/api/v1/profile/me/addresses` | Bearer | Create address (max 10; first is default) |
-| `GET` | `/api/v1/profile/me/addresses/:id` | Bearer | Get one address |
-| `PATCH` | `/api/v1/profile/me/addresses/:id` | Bearer | Update address |
-| `DELETE` | `/api/v1/profile/me/addresses/:id` | Bearer | Delete address |
-| `POST` | `/api/v1/profile/me/addresses/:id/default` | Bearer | Set default address |
-| (alias) | `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses…` | Bearer | One-release nginx aliases → `dupli1-profile` |
-| `DELETE` | `/api/v1/auth/users/:id` | `user.delete` | Permanently delete user; publishes `user.deleted` |
+| `DELETE` | `/api/v1/auth/users/:id` | `user.delete` | Permanently delete user; publishes `user.deleted` (consumed by `profile` to drop owned PII — see [Profile Service](#profile-service)) |
 | `GET` | `/api/v1/auth/users` | `user.read` | List users (filtered by auth ABAC hierarchy) |
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` | Replace a user's permissions (optional `account_type`) |
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` | Set a new password for a user |
@@ -151,20 +144,6 @@ Response `200`:
 
 Errors: `401` missing or invalid token, `404` user not found.
 
-### GET /api/v1/auth/me/profile
-
-Header: `Authorization: Bearer <access_token>`
-
-Response `200` — commerce profile and saved addresses (empty when unset). See [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
-
-### PATCH /api/v1/auth/me/profile
-
-Merge-patch body: `{ "display_name": "…", "phone": "010-…" }` (KR mobile). Creates profile row on first update.
-
-### `/api/v1/auth/me/addresses`
-
-Bearer CRUD for saved shipping addresses (max **10** per user). `POST` body requires `recipient_name`, `recipient_phone`, `postal_code` (5 digits), `address_line1`, `city`, `province`; optional `label`, `address_line2`, `is_default`.
-
 ### GET /api/v1/auth/users
 
 Header: `Authorization: Bearer <access_token>` (requires `user.read`)
@@ -229,6 +208,67 @@ Request:
 Response `200`: user object (same shape as list item).
 
 Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permission, `404` user not found, `500` internal error.
+
+---
+
+## Profile Service
+
+Owns customer commerce PII (display name, phone, saved shipping addresses) — separate from `auth`'s identity/credentials data. Self-service only, ABAC by JWT `sub`, no dedicated permission. Extracted from `auth` — see [profile-service.md](profile-service.md) and [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
+
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/profile/health` | — | Health check |
+| `GET` | `/api/v1/profile/settings` | — | Non-secret service settings |
+| `GET` | `/api/v1/profile/me/profile` | Bearer | Profile + embedded `addresses` |
+| `PATCH` | `/api/v1/profile/me/profile` | Bearer | Merge-patch `display_name` / `phone` |
+| `GET` | `/api/v1/profile/me/addresses` | Bearer | List saved addresses |
+| `POST` | `/api/v1/profile/me/addresses` | Bearer | Create address (max 10; first is default) |
+| `GET` | `/api/v1/profile/me/addresses/:id` | Bearer | Get one address |
+| `PATCH` | `/api/v1/profile/me/addresses/:id` | Bearer | Partial update; `is_default: false` un-defaults, `true` promotes and clears others |
+| `DELETE` | `/api/v1/profile/me/addresses/:id` | Bearer | Delete address (no auto-promotion if it was default) |
+| `POST` | `/api/v1/profile/me/addresses/:id/default` | Bearer | Set sole default |
+| (alias) | `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses…` | Bearer | One-release nginx aliases → `dupli1-profile`; remove once clients are cut over |
+
+Foreign-user access to any `:id` route returns **`404`** (not `403`) — same "don't reveal existence" pattern as cart/order.
+
+### GET /api/v1/profile/me/profile
+
+Header: `Authorization: Bearer <access_token>`
+
+Response `200` — commerce profile and saved addresses (empty when unset):
+```json
+{
+  "user_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
+  "display_name": "윤라희",
+  "phone": "01041125167",
+  "default_address_id": "addr_000001",
+  "addresses": [
+    {
+      "id": "addr_000001",
+      "label": "home",
+      "recipient_name": "윤라희",
+      "recipient_phone": "01041125167",
+      "postal_code": "06194",
+      "address_line1": "테헤란로 78길 14-12",
+      "address_line2": "9층",
+      "city": "강남구",
+      "province": "서울특별시",
+      "pccc": "P123456789012",
+      "is_default": true
+    }
+  ]
+}
+```
+
+### PATCH /api/v1/profile/me/profile
+
+Merge-patch body: `{ "display_name": "…", "phone": "010-…" }` (KR mobile). Creates the profile row on first update.
+
+### `/api/v1/profile/me/addresses`
+
+Bearer CRUD for saved shipping addresses (max **10** per user). `POST`/`PATCH` body: `recipient_name`, `recipient_phone`, `postal_code` (5 digits), `address_line1`, `city`, `province` required on create; optional `label`, `address_line2`, `pccc` (`P` + 12 digits), `is_default`.
+
+Errors: `400` invalid field, `401` missing/invalid token, `404` address not found or not owned by caller, `500` internal error.
 
 ---
 

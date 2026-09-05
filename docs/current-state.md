@@ -17,7 +17,8 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Payments (NANO card + Bypass) | Implemented — see [payment-service.md](payment-service.md) |
 | Payment methods | Credit card (NANO) + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
 | Notifications | Implemented (NATS → Telegram when configured) |
-| User profiles, chat, analytics | **Profile phase A** in auth (`/me/profile`, `/me/addresses`) — [auth-profile-extension-plan.md](auth-profile-extension-plan.md); guest PDP views + recommendations in product; chat/analytics not started |
+| Customer commerce profile + addresses | Implemented — own **`profile`** service (PostgreSQL), extracted from auth ([profile-service.md](profile-service.md), [auth-profile-extension-plan.md](auth-profile-extension-plan.md)); chat/analytics not started |
+| Guest PDP views + recommendations | Implemented — in product |
 | Manager settings (mutable store policy) | Sketch — see [manager-settings-api.md](manager-settings-api.md) |
 
 ## Repository layout
@@ -25,7 +26,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 Services live in **per-service directories**, not `cmd/dupli1-*` / `pkg/*` at the repo root:
 
 ```text
-auth/, product/, order/, cart/, payment/, notification/   # each has cmd/ + pkg/
+auth/, profile/, product/, order/, cart/, payment/, notification/   # each has cmd/ + pkg/
 api/nginx.conf                                      # gateway
 ```
 
@@ -61,6 +62,22 @@ See [service-layout.md](service-layout.md) for details.
   - `user.registered` NATS publish is best-effort: a broker outage is logged and the account still registers
   - Structured **zerolog** logging (`event` field) for session paths, internal errors, and bootstrap — [auth-logging.md](auth-logging.md)
 - **Tests:** `cd auth && go test ./...`
+
+### dupli1-profile
+
+- **Host port:** 8088
+- **Stack:** stdlib HTTP, PostgreSQL, NATS
+- **Persistence:** `profiles` on `postgres-profile`
+- **Features:**
+  - Customer commerce profile (`display_name`, `phone`) + saved shipping addresses at `/api/v1/profile/me/…`, extracted from `auth` — see [profile-service.md](profile-service.md)
+  - One-release nginx aliases keep `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` working during cutover
+  - Self-service only: owner is the JWT `sub`, no dedicated permission (ABAC, same pattern as cart); foreign-user address access returns `404` not `403`
+  - Max **10** addresses per user; at most one `is_default` per user enforced by a Postgres partial unique index
+  - Subscribes to auth's `user.deleted` NATS event and cascade-deletes owned profile + addresses (no FK to auth's `users` table — different database)
+  - No coupling to order/checkout: order's shipping snapshot is copied client-side from a chosen address, not fetched server-to-server
+- **Auth:** Bearer JWT via `AUTH_JWKS_URL` (RS256 JWKS from auth), with `JWT_SECRET` HS256 fallback in dev
+- **Known gap:** one-time data copy from auth's pre-extraction `customer_profiles`/`customer_addresses` tables has not run — addresses saved before cutover aren't visible through `profile` yet (see [auth-profile-extension-plan.md](auth-profile-extension-plan.md) Phase D)
+- **Tests:** `cd profile && go test ./...`
 
 ### dupli1-product
 
@@ -155,6 +172,7 @@ See [service-layout.md](service-layout.md) for details.
 | PostgreSQL `cart` | cart | `postgres-cart:5436` |
 | PostgreSQL `payments` | payment | `postgres-payment:5437` |
 | PostgreSQL `notifications` | notification | `postgres-notification:5438` |
+| PostgreSQL `profiles` | profile | `postgres-profile:5439` |
 | MinIO `product-images` | product (local) | `minio:9000` via gateway `/product-images/` |
 | S3 + CloudFront OAC | product (AWS) | `images.dupli1.com` — see [product-images-browser-access.md](product-images-browser-access.md) |
 | Redis | auth | `redis:6379` (in Compose) |
@@ -164,7 +182,8 @@ See [service-layout.md](service-layout.md) for details.
 
 | Service | Public | Authenticated |
 |---------|--------|---------------|
-| auth | login, refresh, logout, JWKS | register (`user.create` or open register), me, profile/addresses, user admin (permissions) |
+| auth | login, refresh, logout, JWKS | register (`user.create` or open register), me, user admin (permissions, delete) |
+| profile | health only | commerce profile + saved addresses (ABAC self-service) |
 | product | health, product search/PDP, coupon redeem, inventory reads | product/coupon CRUD (per permission), image upload, inventory writes (`inventory.stock.write`, `inventory.reservation.manage`) |
 | order | health only | orders (list all / by customer), checkout (ABAC + permissions), ship (`order.ship`) |
 | cart | health only | own cart; admin read (`cart.read`) |
@@ -179,6 +198,7 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Per
 |--------|------|
 | `github.com/elug3/dupli1` | root stub |
 | `github.com/elug3/dupli1/auth` | `auth/` |
+| `github.com/elug3/dupli1/profile` | `profile/` |
 | `github.com/elug3/dupli1/product` | `product/` |
 | `github.com/elug3/dupli1/order` | `order/` |
 | `github.com/elug3/dupli1/cart` | `cart/` |
