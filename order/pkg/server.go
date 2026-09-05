@@ -17,12 +17,12 @@ type Server struct {
 	stopOnce sync.Once
 }
 
-func NewServer(opts ServerOptions) (*Server, error) {
-	if opts.Addr == "" {
-		return nil, fmt.Errorf("Addr is required")
-	}
-
-	app, err := bootstrap.Bootstrap(bootstrap.Config{
+// BootstrapConfig maps process options onto the bootstrap config. It is split
+// out of NewServer so the mapping is testable: a field omitted from this struct
+// literal silently takes its zero value, which is how a configured shipping fee
+// once failed to reach the service while everything still compiled.
+func BootstrapConfig(opts ServerOptions) bootstrap.Config {
+	return bootstrap.Config{
 		GatewayURL:           opts.GatewayURL,
 		ProductURL:           opts.ProductURL,
 		InventoryURL:         opts.InventoryURL,
@@ -34,8 +34,17 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		JWTSecret:            opts.JWTSecret,
 		JWKSURL:              opts.JWKSURL,
 		NATSURL:              opts.NATSURL,
+		ShippingFeeCents:     opts.ShippingFeeCents,
 		HTTPClient:           bootstrap.DefaultHTTPClient(),
-	})
+	}
+}
+
+func NewServer(opts ServerOptions) (*Server, error) {
+	if opts.Addr == "" {
+		return nil, fmt.Errorf("Addr is required")
+	}
+
+	app, err := bootstrap.Bootstrap(BootstrapConfig(opts))
 	if err != nil {
 		return nil, err
 	}
