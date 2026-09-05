@@ -73,3 +73,25 @@ func TestDeleteUser_NotFound(t *testing.T) {
 		t.Fatalf("got %v, want ErrUserNotFound", err)
 	}
 }
+
+type failingPublisher struct{}
+
+func (failingPublisher) Publish(context.Context, string, any) error {
+	return errors.New("broker down")
+}
+
+func TestDeleteUser_SucceedsWhenPublishFails(t *testing.T) {
+	user, _ := domain.NewUser("u-del-fail", "fail@example.com", "password12", domain.AccountTypeCustomer)
+	repo := &deleteUserRepo{user: user}
+	svc := NewService(repo, fakeTokenGenerator{}, WithEventPublisher(failingPublisher{}))
+
+	if err := svc.DeleteUser(context.Background(), "u-del-fail"); err != nil {
+		t.Fatalf("DeleteUser must succeed even when publish fails: %v", err)
+	}
+	if repo.deleted != "u-del-fail" {
+		t.Fatalf("deleted = %q, want u-del-fail", repo.deleted)
+	}
+	if repo.user != nil {
+		t.Fatal("user row must be removed before publish attempt")
+	}
+}

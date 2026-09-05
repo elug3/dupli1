@@ -709,3 +709,105 @@ func TestRefresh(t *testing.T) {
 		}
 	})
 }
+
+// ---- DELETE /users/:id -----------------------------------------------------
+
+func (s *stack) userDeleteToken(t *testing.T) string {
+	t.Helper()
+	admin, err := domain.NewUser(
+		uuid.New().String(),
+		"user-admin@internal.dupli1",
+		"admin-secret",
+		domain.AccountTypeManager,
+		permissions.UserDelete,
+		permissions.UserPasswordUpdate,
+		permissions.UserStatusUpdate,
+	)
+	if err != nil {
+		t.Fatalf("NewUser admin: %v", err)
+	}
+	if err := s.repo.Save(t.Context(), admin); err != nil {
+		t.Fatalf("Save admin: %v", err)
+	}
+	token, err := s.accessTokenGen.Generate(t.Context(), admin.ID, admin.Permissions)
+	if err != nil {
+		t.Fatalf("Generate admin token: %v", err)
+	}
+	return token
+}
+
+func TestDeleteUser(t *testing.T) {
+	t.Run("requires user.delete permission", func(t *testing.T) {
+		s := newStack(t)
+		customer, err := domain.NewUser(uuid.New().String(), "cust@example.com", "password12", domain.AccountTypeCustomer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.repo.Save(t.Context(), customer); err != nil {
+			t.Fatal(err)
+		}
+
+		w := s.doWithAuth(t, http.MethodDelete, "/api/v1/auth/users/"+customer.ID, s.registrarToken, nil)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("registrar without user.delete: want 403, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("deletes customer and returns 204", func(t *testing.T) {
+		s := newStack(t)
+		adminToken := s.userDeleteToken(t)
+		customer, err := domain.NewUser(uuid.New().String(), "delete-me@example.com", "password12", domain.AccountTypeCustomer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.repo.Save(t.Context(), customer); err != nil {
+			t.Fatal(err)
+		}
+
+		w := s.doWithAuth(t, http.MethodDelete, "/api/v1/auth/users/"+customer.ID, adminToken, nil)
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("want 204, got %d: %s", w.Code, w.Body.String())
+		}
+		if got, _ := s.repo.FindByID(t.Context(), customer.ID); got != nil {
+			t.Fatal("user row should be removed")
+		}
+	})
+
+	t.Run("returns 404 for missing user", func(t *testing.T) {
+		s := newStack(t)
+		adminToken := s.userDeleteToken(t)
+
+		w := s.doWithAuth(t, http.MethodDelete, "/api/v1/auth/users/"+uuid.New().String(), adminToken, nil)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("want 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("forbids self-delete", func(t *testing.T) {
+		s := newStack(t)
+		admin, err := domain.NewUser(
+			uuid.New().String(),
+			"self-delete@internal.dupli1",
+			"admin-secret",
+			domain.AccountTypeManager,
+			permissions.UserDelete,
+			permissions.UserPasswordUpdate,
+			permissions.UserStatusUpdate,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.repo.Save(t.Context(), admin); err != nil {
+			t.Fatal(err)
+		}
+		token, err := s.accessTokenGen.Generate(t.Context(), admin.ID, admin.Permissions)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		w := s.doWithAuth(t, http.MethodDelete, "/api/v1/auth/users/"+admin.ID, token, nil)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("self-delete: want 403, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
