@@ -21,6 +21,7 @@ func TestSubjectConstants(t *testing.T) {
 		"ProductUpdated":    events.ProductUpdated,
 		"ProductDeleted":    events.ProductDeleted,
 		"ProductImage":      events.ProductImage,
+		"UserDeleted":       events.UserDeleted,
 	}
 	for name, subject := range cases {
 		if subject == "" {
@@ -142,5 +143,35 @@ func TestProductJSONRoundTrip(t *testing.T) {
 	}
 	if decoded.ProductID != orig.ProductID || decoded.ImageURL != orig.ImageURL || decoded.Price != orig.Price {
 		t.Fatalf("decoded = %+v, want %+v", decoded, orig)
+	}
+}
+
+func TestUserDeletedEventJSONRoundTrip(t *testing.T) {
+	occurred := time.Date(2026, 9, 4, 3, 50, 0, 0, time.UTC)
+	orig := events.UserDeletedEvent{
+		EventType: events.UserDeleted,
+		UserID:    "user_01",
+		Occurred:  occurred,
+	}
+
+	raw, err := json.Marshal(orig)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	for _, key := range []string{"event_type", "user_id", "occurred_at"} {
+		if !strings.Contains(string(raw), `"`+key+`"`) {
+			t.Fatalf("missing %q in %s", key, string(raw))
+		}
+	}
+
+	var decoded events.UserDeletedEvent
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if decoded.UserID != orig.UserID || decoded.EventType != orig.EventType {
+		t.Fatalf("decoded = %+v, want %+v", decoded, orig)
+	}
+	if decoded.Occurred.IsZero() {
+		t.Fatal("occurred_at must round-trip")
 	}
 }
