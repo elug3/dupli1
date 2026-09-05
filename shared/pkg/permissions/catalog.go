@@ -70,6 +70,7 @@ const (
 	PaymentCreate  = "payment.create"
 	PaymentReadAll = "payment.read.all"
 	PaymentBypass  = "payment.bypass"
+	PaymentCancel  = "payment.cancel"
 )
 
 // Notification permissions (notification service).
@@ -111,6 +112,7 @@ var Catalog = []string{
 	PaymentCreate,
 	PaymentReadAll,
 	PaymentBypass,
+	PaymentCancel,
 	NotificationTelegramRead,
 	NotificationTelegramManage,
 }

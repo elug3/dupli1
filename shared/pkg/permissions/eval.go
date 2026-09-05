@@ -117,3 +117,9 @@ func BypassesPaymentABAC(held []string) bool {
 func CanBypassPayment(held []string) bool {
 	return HasAny(held, All, AdminAll, PaymentBypass)
 }
+
+// CanCancelPayment reports whether held may cancel/refund a succeeded payment
+// at the PG. Never granted by ABAC — customers cannot refund their own payments.
+func CanCancelPayment(held []string) bool {
+	return HasAny(held, All, AdminAll, PaymentCancel)
+}

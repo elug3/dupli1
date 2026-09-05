@@ -17,6 +17,7 @@ const (
 	OrderStatusUpdate = "order.status_updated"
 	OrderPaid         = "order.paid"
 	PaymentSucceeded  = "payment.succeeded"
+	PaymentCanceled   = "payment.canceled"
 	ProductCreated    = "product.created"
 	ProductUpdated    = "product.updated"
 	ProductDeleted    = "product.deleted"
@@ -71,6 +72,22 @@ type PaymentSucceededEvent struct {
 	OrderID     string `json:"order_id"`
 	PaymentID   string `json:"payment_id"`
 	AmountCents int64  `json:"amount_cents"`
+}
+
+// PaymentCanceledEvent is the payload for PaymentCanceled — published by
+// payment when a succeeded payment is canceled (fully or partially) at the PG.
+// AmountCents is the amount canceled by this event; RemainingCents is what is
+// still captured afterwards (0 on a full cancel). No service subscribes yet —
+// order's paid-cancel refund flow is not wired.
+type PaymentCanceledEvent struct {
+	EventType      string    `json:"event_type"`
+	OrderID        string    `json:"order_id"`
+	PaymentID      string    `json:"payment_id"`
+	AmountCents    int64     `json:"amount_cents"`
+	RemainingCents int64     `json:"remaining_cents"`
+	Reason         string    `json:"reason,omitempty"`
+	CanceledBy     string    `json:"canceled_by,omitempty"`
+	Occurred       time.Time `json:"occurred_at"`
 }
 
 // UserDeletedEvent is the payload for UserDeleted — published by auth,
