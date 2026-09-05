@@ -22,6 +22,7 @@ const (
 	SubjectProductUpdated    = events.ProductUpdated
 	SubjectProductDeleted    = events.ProductDeleted
 	SubjectProductImage      = events.ProductImage
+	SubjectPaymentCanceled   = events.PaymentCanceled
 )
 
 type ChatRouting interface {
@@ -50,6 +51,7 @@ func (d *Dispatcher) Register(subscriber ports.EventSubscriber, ctx context.Cont
 		SubjectOrderCreated,
 		SubjectOrderStatusUpdate,
 		SubjectOrderPaid,
+		SubjectPaymentCanceled,
 		SubjectProductCreated,
 		SubjectProductUpdated,
 		SubjectProductDeleted,
@@ -72,6 +74,8 @@ func (d *Dispatcher) handle(ctx context.Context, subject string, payload []byte)
 	switch subject {
 	case SubjectOrderCreated, SubjectOrderStatusUpdate, SubjectOrderPaid:
 		return d.handleOrder(ctx, subject, payload)
+	case SubjectPaymentCanceled:
+		return d.handlePaymentCanceled(ctx, payload)
 	case SubjectProductCreated, SubjectProductUpdated, SubjectProductDeleted, SubjectProductImage:
 		return d.handleProduct(ctx, subject, payload)
 	default:
@@ -96,6 +100,58 @@ func (d *Dispatcher) handleOrder(ctx context.Context, subject string, payload []
 		return fmt.Errorf("notify order event: %w", err)
 	}
 	return nil
+}
+
+// handlePaymentCanceled alerts ops that money went back to a customer. Refunds
+// were previously silent: order.* events covered creation and payment, so a
+// cancelled payment produced no message at all and the only trace was a row in
+// the payments table.
+func (d *Dispatcher) handlePaymentCanceled(ctx context.Context, payload []byte) error {
+	var event events.PaymentCanceledEvent
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return fmt.Errorf("decode payment.canceled event: %w", err)
+	}
+
+	chatID := strings.TrimSpace(d.orderChatID(ctx))
+	if chatID == "" {
+		log.Printf("payment.canceled for %s skipped: order telegram chat not configured", event.OrderID)
+		return nil
+	}
+
+	if err := d.notifier.Send(ctx, chatID, formatPaymentCanceledMessage(event, d.cfg.ManageWebURL)); err != nil {
+		return fmt.Errorf("notify payment.canceled: %w", err)
+	}
+	return nil
+}
+
+// formatPaymentCanceledMessage distinguishes a full refund from a partial one:
+// a full refund cancels the order automatically, a partial leaves it standing
+// with money still owed, and ops need to know which they are looking at.
+func formatPaymentCanceledMessage(event events.PaymentCanceledEvent, manageWebURL string) string {
+	manageLink := formatManageOrderLink(manageWebURL, event.OrderID)
+	reason := strings.TrimSpace(event.Reason)
+	reasonLine := ""
+	if reason != "" {
+		reasonLine = fmt.Sprintf("Reason: %s\n", escapeHTML(reason))
+	}
+	byLine := ""
+	if by := strings.TrimSpace(event.CanceledBy); by != "" {
+		byLine = fmt.Sprintf("By: %s\n", escapeHTML(by))
+	}
+
+	if event.RemainingCents > 0 {
+		return fmt.Sprintf(
+			"↩️ <b>Partial refund</b> %s\n%sRefunded: <b>%s</b>\nStill captured: <b>%s</b>\n%s%sOrder is unchanged — review whether it should still ship.",
+			escapeHTML(event.OrderID), manageLink,
+			formatMoney(event.AmountCents), formatMoney(event.RemainingCents),
+			reasonLine, byLine,
+		)
+	}
+	return fmt.Sprintf(
+		"↩️ <b>Refunded in full</b> %s\n%sRefunded: <b>%s</b>\n%s%sOrder has been canceled and its stock released.",
+		escapeHTML(event.OrderID), manageLink,
+		formatMoney(event.AmountCents), reasonLine, byLine,
+	)
 }
 
 func (d *Dispatcher) handleProduct(ctx context.Context, subject string, payload []byte) error {
