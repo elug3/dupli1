@@ -42,11 +42,22 @@ func TestExpandBundles_union(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(got, UserCreate) {
-		t.Fatal("missing user.create")
+	for _, p := range []string{UserCreate, UserRead, UserDelete} {
+		if !slices.Contains(got, p) {
+			t.Fatalf("union missing %s", p)
+		}
 	}
-	if !slices.Contains(got, UserRead) {
-		t.Fatal("missing user.read")
+}
+
+func TestExpandBundle_userAdminIncludesDelete(t *testing.T) {
+	got, err := ExpandBundle(BundleUserAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{UserCreate, UserRead, UserPasswordUpdate, UserStatusUpdate, UserDelete} {
+		if !slices.Contains(got, p) {
+			t.Fatalf("user_admin missing %s", p)
+		}
 	}
 }
 
