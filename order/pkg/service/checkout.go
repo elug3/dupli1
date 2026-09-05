@@ -24,7 +24,7 @@ func (s *Service) CreateCheckoutSession(ctx context.Context, input CreateCheckou
 		return nil, err
 	}
 
-	session, err := domain.NewCheckoutSession(sessionID, input.CustomerID, s.now(), s.checkoutTTL)
+	session, err := domain.NewCheckoutSession(sessionID, input.CustomerID, s.now(), s.checkoutTTL, s.shippingFeeCents)
 	if err != nil {
 		return nil, err
 	}

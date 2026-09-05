@@ -139,7 +139,7 @@ func TestSaveAndLoadOrderItemProductSnapshot(t *testing.T) {
 		UnitPriceCents: 50000,
 		ProductName:    "Prada Galleria",
 		ImageURL:       "https://cdn.example/bag.jpg",
-	}}, "", 0, now)
+	}}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestListAllReturnsOrdersAcrossCustomers(t *testing.T) {
 	} {
 		order, err := domain.NewOrder(spec.id, spec.customer, "res-"+spec.id, []domain.OrderItem{{
 			SkuID: "sku-" + spec.id, SKU: "BAG-001", Quantity: 1, UnitPriceCents: 1000,
-		}}, "", 0, now)
+		}}, "", 0, 0, now)
 		if err != nil {
 			t.Fatalf("NewOrder(%s): %v", spec.id, err)
 		}
@@ -218,7 +218,7 @@ func TestSaveAndLoadOrderShipmentTracking(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	order, err := domain.NewOrder("ord-ship-1", "cust-1", "res-ship-1", []domain.OrderItem{{
 		SkuID: "sku-ship-1", SKU: "BAG-001", Quantity: 1, UnitPriceCents: 50000,
-	}}, "", 0, now)
+	}}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}

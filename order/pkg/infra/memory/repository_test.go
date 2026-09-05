@@ -15,7 +15,7 @@ func seedPendingOrder(t *testing.T, repo *memory.Repository, id string, dueAt ti
 	now := dueAt
 	order, err := domain.NewOrder(id, "cust-1", "res-1", []domain.OrderItem{
 		{SKU: "BAG-1", SkuID: "01SKU", Quantity: 1, UnitPriceCents: 1000},
-	}, "", 0, now)
+	}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}

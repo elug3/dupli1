@@ -32,14 +32,22 @@ type CheckoutSession struct {
 	CouponCode       string                `json:"coupon_code,omitempty"`
 	SubtotalCents    int64                 `json:"subtotal_cents"`
 	DiscountCents    int64                 `json:"discount_cents"`
-	TotalCents       int64                 `json:"total_cents"`
-	OrderID          string                `json:"order_id,omitempty"`
-	ExpiresAt        time.Time             `json:"expires_at"`
-	CreatedAt        time.Time             `json:"created_at"`
-	UpdatedAt        time.Time             `json:"updated_at"`
+	// ShippingFeeCents is the delivery charge quoted for this session, in whole
+	// KRW. It is fixed when the session opens so a mid-session config change
+	// cannot move the price the customer was shown.
+	ShippingFeeCents int64     `json:"shipping_fee_cents"`
+	TotalCents       int64     `json:"total_cents"`
+	OrderID          string    `json:"order_id,omitempty"`
+	ExpiresAt        time.Time `json:"expires_at"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-func NewCheckoutSession(id, customerID string, now time.Time, ttl time.Duration) (*CheckoutSession, error) {
+// NewCheckoutSession opens a session quoting shippingFeeCents for delivery. The
+// fee is stored on the session so every later recalculation reuses the quote the
+// customer was first shown, rather than re-reading a config value that may have
+// changed mid-checkout.
+func NewCheckoutSession(id, customerID string, now time.Time, ttl time.Duration, shippingFeeCents int64) (*CheckoutSession, error) {
 	id = strings.TrimSpace(id)
 	customerID = strings.TrimSpace(customerID)
 	if id == "" || customerID == "" {
@@ -48,15 +56,19 @@ func NewCheckoutSession(id, customerID string, now time.Time, ttl time.Duration)
 	if ttl <= 0 {
 		ttl = DefaultCheckoutTTL
 	}
+	if shippingFeeCents < 0 {
+		return nil, ErrInvalidCheckoutSession
+	}
 
 	return &CheckoutSession{
-		ID:         id,
-		CustomerID: customerID,
-		Items:      []OrderItem{},
-		Status:     CheckoutStatusOpen,
-		ExpiresAt:  now.Add(ttl),
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:               id,
+		CustomerID:       customerID,
+		Items:            []OrderItem{},
+		Status:           CheckoutStatusOpen,
+		ShippingFeeCents: shippingFeeCents,
+		ExpiresAt:        now.Add(ttl),
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}, nil
 }
 
@@ -235,5 +247,15 @@ func (s *CheckoutSession) recalculateTotalsWithDiscount(discountFraction float64
 	} else {
 		s.DiscountCents = 0
 	}
-	s.TotalCents = subtotal - s.DiscountCents
+	s.TotalCents = subtotal - s.DiscountCents + s.shippingFeeForTotal()
+}
+
+// shippingFeeForTotal is the delivery charge to include in the session total.
+// An empty cart owes nothing to ship, so a session with no items quotes zero
+// rather than showing a bare delivery charge as its total.
+func (s *CheckoutSession) shippingFeeForTotal() int64 {
+	if len(s.Items) == 0 {
+		return 0
+	}
+	return s.ShippingFeeCents
 }

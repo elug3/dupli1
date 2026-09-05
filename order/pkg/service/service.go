@@ -34,7 +34,11 @@ type Service struct {
 	outboxDrainer  *outbox.Drainer
 	couponClient   ports.CouponClient
 	checkoutTTL    time.Duration
-	now            func() time.Time
+	// shippingFeeCents is the flat delivery charge applied to every order, in
+	// whole KRW. Zero (the default) means delivery is free, which keeps the
+	// service safe to run unconfigured.
+	shippingFeeCents int64
+	now              func() time.Time
 }
 
 type CreateOrderInput struct {
@@ -107,6 +111,18 @@ func (s *Service) WithProduct(product ports.ProductClient) *Service {
 	return s
 }
 
+// WithShippingFee sets the flat delivery charge added to every order, in whole
+// KRW. A negative value is ignored so a misconfigured fee cannot make orders
+// cheaper than their goods.
+func (s *Service) WithShippingFee(cents int64) *Service {
+	if cents < 0 {
+		log.Printf("order: ignoring negative shipping fee %d", cents)
+		return s
+	}
+	s.shippingFeeCents = cents
+	return s
+}
+
 func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*domain.Order, error) {
 	idemKey := strings.TrimSpace(input.IdempotencyKey)
 	reqHash := hashCreateOrderInput(input)
@@ -143,7 +159,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		return nil, err
 	}
 
-	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountCents, s.now())
+	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountCents, s.shippingFeeCents, s.now())
 	if err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
@@ -487,16 +503,17 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 		}
 	}
 	payload, err := json.Marshal(events.Order{
-		EventType:     subject,
-		OrderID:       order.ID,
-		CustomerID:    order.CustomerID,
-		Status:        string(order.Status),
-		SubtotalCents: order.SubtotalCents,
-		DiscountCents: order.DiscountCents,
-		TotalCents:    order.TotalCents,
-		Items:         items,
-		CreatedAt:     order.CreatedAt,
-		Occurred:      s.now(),
+		EventType:        subject,
+		OrderID:          order.ID,
+		CustomerID:       order.CustomerID,
+		Status:           string(order.Status),
+		SubtotalCents:    order.SubtotalCents,
+		DiscountCents:    order.DiscountCents,
+		ShippingFeeCents: order.ShippingFeeCents,
+		TotalCents:       order.TotalCents,
+		Items:            items,
+		CreatedAt:        order.CreatedAt,
+		Occurred:         s.now(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal %s event: %w", subject, err)

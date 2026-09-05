@@ -23,10 +23,16 @@ type ServerOptions struct {
 	JWTSecret          string
 	JWKSURL            string
 	NATSURL            string
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
-	IdleTimeout        time.Duration
-	ShutdownTimeout    time.Duration
+
+	// ShippingFeeCents is the flat delivery charge added to every order, in
+	// whole KRW. Defaults to 0 (free delivery) so an unconfigured deployment
+	// never charges customers unexpectedly.
+	ShippingFeeCents int64
+
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	IdleTimeout     time.Duration
+	ShutdownTimeout time.Duration
 }
 
 func NewServerOptions() *ServerOptions {
