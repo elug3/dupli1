@@ -39,6 +39,15 @@ func (fakeCheckoutProvider) CreateSession(_ context.Context, input ports.Checkou
 	}, nil
 }
 
+// CancelPayment cancels the full requested amount and reports no remaining
+// balance, standing in for a PG that accepts every cancel.
+func (fakeCheckoutProvider) CancelPayment(_ context.Context, input ports.CancelPaymentInput) (*ports.CancelPaymentResult, error) {
+	return &ports.CancelPaymentResult{
+		CanceledAmountCents: input.AmountCents,
+		ProviderRef:         input.ProviderRef,
+	}, nil
+}
+
 func makeToken(t *testing.T, secret, userID string, perms []string) string {
 	t.Helper()
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{

@@ -13,6 +13,13 @@ const PaymentSucceededSubject = events.PaymentSucceeded
 // PaymentSucceededEvent is an alias of the shared event payload — see shared/pkg/events.
 type PaymentSucceededEvent = events.PaymentSucceededEvent
 
+// PaymentCanceledSubject is the NATS subject payment publishes when a captured
+// payment is canceled. Alias of the shared event — see shared/pkg/events.
+const PaymentCanceledSubject = events.PaymentCanceled
+
+// PaymentCanceledEvent is an alias of the shared event payload — see shared/pkg/events.
+type PaymentCanceledEvent = events.PaymentCanceledEvent
+
 type EventPublisher interface {
 	Publish(ctx context.Context, subject string, event any) error
 }

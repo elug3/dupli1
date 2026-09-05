@@ -24,3 +24,10 @@ func NewUnavailableProvider(reason string) *UnavailableProvider {
 func (p *UnavailableProvider) CreateSession(_ context.Context, _ ports.CheckoutSessionInput) (*ports.CheckoutSessionResult, error) {
 	return nil, fmt.Errorf("%w: %s", ports.ErrMethodUnavailable, p.Reason)
 }
+
+// CancelPayment reports that no PG is configured to cancel against. A payment
+// that was recorded without a PG (method=bypass) is refunded out of band, so
+// the service handles that case without reaching a provider at all.
+func (p *UnavailableProvider) CancelPayment(_ context.Context, _ ports.CancelPaymentInput) (*ports.CancelPaymentResult, error) {
+	return nil, fmt.Errorf("%w: %s", ports.ErrCancelUnsupported, p.Reason)
+}

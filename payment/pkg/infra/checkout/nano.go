@@ -1,12 +1,16 @@
 package checkout
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +24,7 @@ const (
 	nanoDefaultProdBase   = "https://pay.nanopay.co.kr"
 	nanoPCRequestPath     = "/api/payment/cert/pc/request.io"
 	nanoMobileRequestPath = "/api/payment/cert/mobile/request.io"
+	nanoCancelPath        = "/api/payment/cancel.io"
 )
 
 // NanoConfig holds NANO Solution certified-payment (인증결제) credentials.
@@ -94,7 +99,7 @@ func (p *NanoProvider) CreateSession(_ context.Context, input ports.CheckoutSess
 	checkoutURL := fmt.Sprintf("%s/api/v1/payments/%s/nano/checkout", p.cfg.publicBase(), input.PaymentID)
 	return &ports.CheckoutSessionResult{
 		Provider:    domain.ProviderNano,
-		ProviderRef: "nano_" + input.PaymentID,
+		ProviderRef: PlaceholderProviderRef(input.PaymentID),
 		CheckoutURL: checkoutURL,
 	}, nil
 }
@@ -226,4 +231,173 @@ func IsMobileUserAgent(ua string) bool {
 		}
 	}
 	return false
+}
+
+// nanoProviderRefPrefix marks a provider_ref that is still the placeholder
+// written at checkout, before NANO's real tranNo arrives on the approval
+// callback.
+const nanoProviderRefPrefix = "nano_"
+
+// PlaceholderProviderRef is the provider_ref stored at checkout, standing in
+// until the approval callback replaces it with NANO's tranNo.
+func PlaceholderProviderRef(paymentID string) string {
+	return nanoProviderRefPrefix + paymentID
+}
+
+// IsPlaceholderProviderRef reports whether ref is still the checkout-time
+// placeholder rather than a real NANO tranNo.
+func IsPlaceholderProviderRef(ref string) bool {
+	return strings.HasPrefix(strings.TrimSpace(ref), nanoProviderRefPrefix)
+}
+
+// NanoCancelRequest is the JSON body for NANO payment cancel (결제취소).
+//
+// Source: [NANO] 수기결제 연동 API 안내 v2.5 §3 (POST /api/payment/cancel.io).
+// The certified-payment guide (인증결제 v2.7 §4 취소) has no cancel body of its
+// own — it defers to this one, so cert-approved card payments are canceled
+// through the same endpoint.
+//
+// Unlike the cert request this carries no timestamp and no hashValue: the
+// cancel endpoint authenticates with the API_KEY HTTP header instead (수기결제
+// v2.5 §1). It also carries no encData, so none of that guide's AES-256-CBC
+// card encryption applies here.
+type NanoCancelRequest struct {
+	Ver         string `json:"ver,omitempty"`
+	LoginID     string `json:"loginId"`
+	ShopCode    string `json:"shopcode"`
+	PayMethod   string `json:"payMethod,omitempty"`
+	CancelAmt   string `json:"cancelAmt"`
+	TranNo      string `json:"tranNo"`
+	CompOrderNo string `json:"compOrderNo,omitempty"`
+}
+
+// NanoCancelResponse is the NANO cancel result. remainAmt was added in 수기결제
+// v2.5 alongside partial cancel; it is absent from that guide's own example
+// response, so it is treated as optional and parsed defensively.
+type NanoCancelResponse struct {
+	ResultCode  string `json:"resultCode"`
+	ResultMsg   string `json:"resultMsg"`
+	ShopCode    string `json:"shopcode"`
+	CancelDate  string `json:"cancelDate"`
+	CancelTime  string `json:"cancelTime"`
+	CancelAmt   string `json:"cancelAmt"`
+	ApprTranNo  string `json:"apprTranNo"`
+	RemainAmt   string `json:"remainAmt"`
+	CompOrderNo string `json:"compOrderNo"`
+}
+
+// nanoResultCodeSuccess is returned in resultCode for an accepted request.
+const nanoResultCodeSuccess = "0000"
+
+// BuildCancelRequest builds the signed-by-header cancel body for a captured
+// payment. tranNo is the original approval's 거래번호.
+func (p *NanoProvider) BuildCancelRequest(tranNo, paymentID string, amountCents int64) (requestURL string, body NanoCancelRequest, err error) {
+	if !p.cfg.Enabled() {
+		return "", NanoCancelRequest{}, fmt.Errorf("%w: nano credentials not configured", ports.ErrCancelUnsupported)
+	}
+	tranNo = strings.TrimSpace(tranNo)
+	if tranNo == "" || IsPlaceholderProviderRef(tranNo) {
+		// The approval callback never delivered a tranNo, so there is nothing to
+		// address the cancel to. Sending the placeholder would earn a confusing
+		// rejection from NANO; refuse locally and point ops at the console.
+		return "", NanoCancelRequest{}, fmt.Errorf(
+			"%w: payment %s has no nano tranNo (approval callback never recorded one); refund via the NANO console",
+			ports.ErrCancelUnsupported, paymentID,
+		)
+	}
+	if amountCents <= 0 {
+		return "", NanoCancelRequest{}, domain.ErrCancelAmountInvalid
+	}
+	body = NanoCancelRequest{
+		Ver:         strings.TrimSpace(p.cfg.Ver),
+		LoginID:     strings.TrimSpace(p.cfg.LoginID),
+		ShopCode:    strings.TrimSpace(p.cfg.ShopCode),
+		CancelAmt:   fmt.Sprintf("%d", amountCents),
+		TranNo:      tranNo,
+		CompOrderNo: strings.TrimSpace(paymentID),
+	}
+	return p.cfg.normalizedBaseURL() + nanoCancelPath, body, nil
+}
+
+// CancelPayment cancels a captured NANO card payment. Any outcome other than a
+// parsed resultCode of 0000 returns an error and leaves the caller's state
+// untouched, so a payment is never recorded as refunded on an unconfirmed call.
+func (p *NanoProvider) CancelPayment(ctx context.Context, input ports.CancelPaymentInput) (*ports.CancelPaymentResult, error) {
+	reqURL, body, err := p.BuildCancelRequest(input.ProviderRef, input.PaymentID, input.AmountCents)
+	if err != nil {
+		return nil, err
+	}
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal nano cancel: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("build nano cancel request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("CharSet", "UTF-8")
+	req.Header.Set("API_KEY", p.cfg.APIKey)
+
+	client := p.cfg.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("nano cancel request: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("nano cancel read: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("%w: nano cancel http %d", ports.ErrCancelRejected, resp.StatusCode)
+	}
+
+	var parsed NanoCancelResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return nil, fmt.Errorf("%w: nano cancel response is not JSON", ports.ErrCancelRejected)
+	}
+	if strings.TrimSpace(parsed.ResultCode) != nanoResultCodeSuccess {
+		msg := strings.TrimSpace(parsed.ResultMsg)
+		if msg == "" {
+			msg = "resultCode " + strings.TrimSpace(parsed.ResultCode)
+		}
+		return nil, fmt.Errorf("%w: %s", ports.ErrCancelRejected, msg)
+	}
+
+	// NANO echoes the amount it actually canceled; trust it over the request
+	// when both are present so a provider-side adjustment is not lost.
+	canceled := input.AmountCents
+	if v, ok := parseNanoAmount(parsed.CancelAmt); ok {
+		canceled = v
+	}
+	result := &ports.CancelPaymentResult{
+		CanceledAmountCents: canceled,
+		ProviderRef:         strings.TrimSpace(parsed.ApprTranNo),
+		CanceledAt:          strings.TrimSpace(parsed.CancelDate + parsed.CancelTime),
+	}
+	if v, ok := parseNanoAmount(parsed.RemainAmt); ok {
+		result.RemainingCents = v
+		result.RemainingKnown = true
+	}
+	return result, nil
+}
+
+// parseNanoAmount parses a NANO amount string (whole KRW). It reports false for
+// an empty or non-numeric field so optional amounts can be distinguished from a
+// genuine zero.
+func parseNanoAmount(s string) (int64, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || v < 0 {
+		return 0, false
+	}
+	return v, true
 }
