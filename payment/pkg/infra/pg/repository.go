@@ -67,6 +67,11 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payer_name TEXT`,
 		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payer_phone TEXT`,
 		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payer_email TEXT`,
+		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS canceled_amount_cents BIGINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ`,
+		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cancel_reason TEXT`,
+		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS canceled_by TEXT`,
+		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cancel_idempotency_key TEXT`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_provider_ref ON payments(provider_ref)`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id)`,
@@ -153,6 +158,20 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, payment *domain.Payment
 	if payment.Note != "" {
 		note = payment.Note
 	}
+	var canceledAt any
+	if payment.CanceledAt != nil {
+		canceledAt = *payment.CanceledAt
+	}
+	var cancelReason, canceledByUser, cancelKey any
+	if payment.CancelReason != "" {
+		cancelReason = payment.CancelReason
+	}
+	if payment.CanceledBy != "" {
+		canceledByUser = payment.CanceledBy
+	}
+	if payment.CancelIdempotencyKey != "" {
+		cancelKey = payment.CancelIdempotencyKey
+	}
 	var payerName, payerPhone, payerEmail any
 	if payment.PayerName != "" {
 		payerName = payment.PayerName
@@ -168,8 +187,10 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, payment *domain.Payment
 			id, order_id, customer_id, amount_cents, currency, status, method,
 			provider, provider_ref, checkout_url, created_by, note,
 			payer_name, payer_phone, payer_email, idempotency_key,
-			expires_at, created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+			expires_at, created_at, updated_at,
+			canceled_amount_cents, canceled_at, cancel_reason, canceled_by,
+			cancel_idempotency_key
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
 		ON CONFLICT (id) DO UPDATE SET
 			status = EXCLUDED.status,
 			provider_ref = EXCLUDED.provider_ref,
@@ -180,11 +201,17 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, payment *domain.Payment
 			payer_name = EXCLUDED.payer_name,
 			payer_phone = EXCLUDED.payer_phone,
 			payer_email = EXCLUDED.payer_email,
-			updated_at = EXCLUDED.updated_at
+			updated_at = EXCLUDED.updated_at,
+			canceled_amount_cents = EXCLUDED.canceled_amount_cents,
+			canceled_at = EXCLUDED.canceled_at,
+			cancel_reason = EXCLUDED.cancel_reason,
+			canceled_by = EXCLUDED.canceled_by,
+			cancel_idempotency_key = EXCLUDED.cancel_idempotency_key
 	`, payment.ID, payment.OrderID, payment.CustomerID, payment.AmountCents, payment.Currency,
 		string(payment.Status), method, payment.Provider, payment.ProviderRef, payment.CheckoutURL,
 		createdBy, note, payerName, payerPhone, payerEmail, idempotencyKey,
-		payment.ExpiresAt, payment.CreatedAt, payment.UpdatedAt)
+		payment.ExpiresAt, payment.CreatedAt, payment.UpdatedAt,
+		payment.CanceledAmountCents, canceledAt, cancelReason, canceledByUser, cancelKey)
 	if err != nil {
 		return err
 	}
@@ -331,11 +358,14 @@ func (r *Repository) FindSucceededByOrderID(ctx context.Context, orderID string)
 const paymentSelect = `
 	SELECT id, order_id, customer_id, amount_cents, currency, status,
 	       COALESCE(method, 'credit_card'),
-	       provider, provider_ref, checkout_url,
+	       provider, provider_ref, COALESCE(checkout_url, ''),
 	       COALESCE(created_by, ''), COALESCE(note, ''),
 	       COALESCE(payer_name, ''), COALESCE(payer_phone, ''), COALESCE(payer_email, ''),
 	       COALESCE(idempotency_key, ''),
-	       expires_at, created_at, updated_at
+	       expires_at, created_at, updated_at,
+	       COALESCE(canceled_amount_cents, 0), canceled_at,
+	       COALESCE(cancel_reason, ''), COALESCE(canceled_by, ''),
+	       COALESCE(cancel_idempotency_key, '')
 	FROM payments`
 
 func scanPayment(row pgx.Row) (*domain.Payment, error) {
@@ -347,6 +377,8 @@ func scanPayment(row pgx.Row) (*domain.Payment, error) {
 		&p.Method, &p.Provider, &p.ProviderRef, &p.CheckoutURL,
 		&p.CreatedBy, &p.Note, &p.PayerName, &p.PayerPhone, &p.PayerEmail,
 		&idempotencyKey, &p.ExpiresAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.CanceledAmountCents, &p.CanceledAt,
+		&p.CancelReason, &p.CanceledBy, &p.CancelIdempotencyKey,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ports.ErrNotFound

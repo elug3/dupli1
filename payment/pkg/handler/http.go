@@ -135,6 +135,13 @@ func (h *Handler) paymentRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "cancel" && r.Method == http.MethodPost {
+		h.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+			h.cancelPayment(w, r, parts[0])
+		})(w, r)
+		return
+	}
+
 	if len(parts) == 1 && r.Method == http.MethodGet {
 		h.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 			h.getPayment(w, r, parts[0])
@@ -152,6 +159,45 @@ func (h *Handler) getPayment(w http.ResponseWriter, r *http.Request, paymentID s
 		ownerID = ""
 	}
 	payment, err := h.svc.GetPayment(r.Context(), paymentID, ownerID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, payment)
+}
+
+// cancelPayment cancels (refunds) a captured payment at the PG.
+// Staff-only: requires payment.cancel with no ABAC fallback, so a customer can
+// never refund their own payment.
+func (h *Handler) cancelPayment(w http.ResponseWriter, r *http.Request, paymentID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+	if h.jwtValidator != nil && !permissions.CanCancelPayment(claims.Permissions) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
+		return
+	}
+
+	var req struct {
+		// AmountCents omitted or 0 cancels the full remaining balance.
+		AmountCents int64  `json:"amount_cents"`
+		Reason      string `json:"reason"`
+	}
+	// An empty body is a valid full cancel.
+	if err := decodeJSON(r, &req); err != nil && !errors.Is(err, io.EOF) {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.AmountCents < 0 {
+		respondError(w, http.StatusBadRequest, "amount_cents must not be negative")
+		return
+	}
+
+	payment, err := h.svc.CancelPayment(r.Context(), service.CancelPaymentInput{
+		PaymentID:      paymentID,
+		AmountCents:    req.AmountCents,
+		Reason:         req.Reason,
+		CanceledBy:     claims.UserID,
+		IdempotencyKey: r.Header.Get("Idempotency-Key"),
+	})
 	if err != nil {
 		respondServiceError(w, err)
 		return
@@ -449,8 +495,14 @@ func respondServiceError(w http.ResponseWriter, err error) {
 		respondError(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, ports.ErrOrderForbidden), errors.Is(err, ports.ErrPaymentForbidden):
 		respondError(w, http.StatusForbidden, err.Error())
-	case errors.Is(err, ports.ErrMethodUnavailable):
+	case errors.Is(err, ports.ErrMethodUnavailable), errors.Is(err, ports.ErrCancelUnsupported):
 		respondError(w, http.StatusNotImplemented, err.Error())
+	case errors.Is(err, domain.ErrNotCancelable):
+		respondError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, domain.ErrCancelAmountInvalid):
+		respondError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ports.ErrCancelRejected):
+		respondError(w, http.StatusBadGateway, err.Error())
 	case errors.Is(err, ports.ErrOrderNotPending), errors.Is(err, domain.ErrInvalidPayment):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:

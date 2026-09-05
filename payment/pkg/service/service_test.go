@@ -35,6 +35,15 @@ func (fakeCheckoutProvider) CreateSession(_ context.Context, input ports.Checkou
 	}, nil
 }
 
+// CancelPayment cancels the full requested amount and reports no remaining
+// balance, standing in for a PG that accepts every cancel.
+func (fakeCheckoutProvider) CancelPayment(_ context.Context, input ports.CancelPaymentInput) (*ports.CancelPaymentResult, error) {
+	return &ports.CancelPaymentResult{
+		CanceledAmountCents: input.AmountCents,
+		ProviderRef:         input.ProviderRef,
+	}, nil
+}
+
 type recordingPublisher struct {
 	events []ports.PaymentSucceededEvent
 }

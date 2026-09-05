@@ -36,6 +36,39 @@ stateDiagram-v2
 
 ---
 
+## Payment cancel / refund
+
+`POST /api/v1/payments/{id}/cancel` (permission `payment.cancel`, staff-only — no ABAC) refunds a `succeeded` payment through the PG.
+
+**Provider endpoint.** NANO `POST /api/payment/cancel.io`, documented in **[NANO] 수기결제 연동 API 안내 v2.5 §3**. The certified-payment guide (인증결제 v2.7 §4 취소) defines no cancel body of its own and defers to that section, so cert-approved card payments cancel through the same endpoint.
+
+Two differences from the cert request matter:
+
+| | Cert request (`/cert/pc/request.io`) | Cancel (`/cancel.io`) |
+|---|---|---|
+| Auth | body `hashValue` = `SHA256(ver+loginId+shopcode+reqPayAmt+timestamp+API_KEY+"NANO")` | **`API_KEY` HTTP header** |
+| `timestamp` / `hashValue` | required | absent |
+
+The cancel body carries no `encData`, so the 수기결제 guide's AES-256-CBC card encryption does **not** apply — no card data passes through Dupli1 on this path.
+
+**Transaction id.** The cancel needs NANO's `tranNo` from the original approval. It is captured on the verified return/webhook callback and stored as the payment's `provider_ref`, replacing the `nano_<payment_id>` placeholder written at checkout.
+
+**Partial cancel.** Supported since 수기결제 v2.5 (`cancelAmt` cancels exactly the amount sent; the response reports `remainAmt`). A partial cancel leaves the payment `succeeded` with a reduced remaining balance; the payment becomes `canceled` only when the balance reaches zero. `canceled_amount_cents` on the payment is cumulative.
+
+> `remainAmt` appears in the v2.5 field table but is missing from that guide's own example response, so it is parsed as optional — an absent value is treated as unknown rather than zero, and local accounting stays authoritative.
+
+**Ordering.** The PG is called **before** any local mutation, and local state changes only after the provider confirms. A rejected or unreachable PG leaves the payment untouched (`502`). Once the provider confirms, the refund is recorded even if its reported amount disagrees with local accounting — the amount is reconciled toward the provider and clamped into a recordable range, never discarded, since dropping it would show money on the books that is no longer held.
+
+**Idempotency.** An `Idempotency-Key` header makes a retry of the same cancel a no-op. Only the most recent key is retained, which covers the realistic double-submit (timeout then retry) but not an arbitrary replay of an older partial cancel. A full cancel is additionally guarded by the status transition, and any cancel by the remaining balance.
+
+**Bypass payments** never reached a PG, so they are canceled locally only and the matching refund is made out of band.
+
+**Event.** A cancel publishes `payment.canceled` through the payment outbox (same transaction as the state change). **No service subscribes yet:** order's `paid` → `canceled` still only releases the stock reservation, so cancelling an order and refunding it remain two separate operator actions.
+
+**Not implemented:** NANO `/api/payment/refund.io` (인증결제 v2.7 §5). That endpoint is 가상계좌(vbank)-only, explicitly no-partial, and needs `inputTranNo` from the deposit NOTI. Dupli1 sends `payWay: card` on every cert request, so it never applies.
+
+---
+
 ## End-to-end flow
 
 ```mermaid
@@ -242,7 +275,7 @@ Local Postgres (payment): `postgres://dupli1:dupli1_dev@localhost:5437/payments?
 |------|--------|
 | Unpaid > 5 min | `canceled`, release stock |
 | Checkout abandoned / never completed | stay `pending` until TTL, then cancel |
-| Paid, ops rejects | `canceled` + refund (payment phase 2) |
+| Paid, ops rejects | `canceled` (order) + `POST /api/v1/payments/{id}/cancel` (refund) — **two separate calls**, not yet chained |
 | Duplicate `payment.succeeded` | idempotent — order stays `paid` |
 | Replayed `payment.succeeded` after ship | no-op when `payment_id` already set and status ≠ `pending` |
 | Payment succeeds after 5 min auto-cancel | order **reinstated** to `pending` with a fresh reservation and extended payment window, then marked `paid` |

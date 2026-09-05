@@ -766,6 +766,7 @@ When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront calle
 |--------|------|-------------------|
 | POST | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | GET | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
+| POST | `/api/v1/payments/{id}/cancel` | `payment.cancel` — **staff only, no ABAC** |
 
 **Create payment**
 ```json
@@ -777,6 +778,32 @@ When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront calle
 { "order_id": "ord_000001", "method": "bypass", "note": "Cash received" }
 ```
 Returns `status: "succeeded"` immediately and publishes `payment.succeeded` (no `checkout_url`).
+
+**Cancel / refund payment**
+
+`POST /api/v1/payments/{id}/cancel` refunds a `succeeded` payment at the PG (NANO `/api/payment/cancel.io`). Requires `payment.cancel`; there is no ABAC path, so a customer can never refund their own payment.
+
+```json
+{ "amount_cents": 20000, "reason": "ops reject" }
+```
+
+Both fields are optional and an empty body is valid: omitting `amount_cents` (or sending `0`) cancels the **full remaining balance**. Send an `Idempotency-Key` header to make a retry of the same cancel a no-op — strongly recommended for partial cancels, which local state alone cannot distinguish from a deliberate second refund.
+
+A full cancel moves the payment to `canceled`. A **partial** cancel leaves it `succeeded` with a reduced remaining balance, matching NANO's `remainAmt` semantics; repeat partials until the balance reaches zero, at which point the payment becomes `canceled`. The response is the updated payment, including `canceled_amount_cents` (cumulative), `canceled_at`, `cancel_reason`, and `canceled_by`.
+
+| Status | Meaning |
+|--------|---------|
+| `200` | Cancel accepted by the PG and recorded |
+| `400` | `amount_cents` negative or above the remaining balance |
+| `403` | Caller lacks `payment.cancel` |
+| `404` | No such payment |
+| `409` | Payment is not cancelable (not `succeeded`, or already fully canceled) |
+| `501` | Provider has no cancel API / PG not configured |
+| `502` | PG was reached and refused the cancel — payment left unchanged |
+
+`bypass` payments never touched a PG, so they are canceled locally only and the matching refund is made out of band.
+
+The cancel publishes **`payment.canceled`** (NATS, via the payment outbox). **No service subscribes to it yet** — order's paid-cancel still releases stock without triggering a refund, so a `paid` → `canceled` order and its refund remain two separate operator actions.
 
 Unpaid `pending` orders auto-cancel after **5 minutes**. Full design: [payment-service.md](payment-service.md).
 
@@ -859,6 +886,7 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | GET | `/api/v1/payments/health` | — | payment |
 | GET | `/api/v1/payments/settings` | — | payment |
 | POST/GET | `/api/v1/payments` | ABAC / `payment.create` / `payment.read.all` | payment |
+| POST | `/api/v1/payments/{id}/cancel` | `payment.cancel` | payment |
 | GET | `/api/v1/notification/health` | — | notification |
 | GET | `/api/v1/notification/settings` | — | notification |
 | POST | `/api/v1/notification/telegram/webhook` | webhook secret header | notification |
