@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -102,6 +104,37 @@ func (p *NanoProvider) CreateSession(_ context.Context, input ports.CheckoutSess
 		ProviderRef: PlaceholderProviderRef(input.PaymentID),
 		CheckoutURL: checkoutURL,
 	}, nil
+}
+
+// CallbackReachable reports whether the configured public base could plausibly
+// be reached by NANO's servers.
+//
+// receiveUrl is built from this base, and NANO POSTs the approval result to it
+// from its own infrastructure. A loopback or unset base resolves to NANO's own
+// host, so the callback never arrives: the card window can complete and the
+// payment still sits at requires_payment forever, with nothing logged. This
+// exists so that state is detected at startup rather than inferred from a pile
+// of stranded payments.
+func (c NanoConfig) CallbackReachable() bool {
+	raw := strings.TrimSpace(c.PublicBaseURL)
+	if raw == "" {
+		return false // publicBase() falls back to localhost
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return false
+	}
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return !ip.IsLoopback() && !ip.IsUnspecified() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast()
+	}
+	return true
 }
 
 // NanoRequest is the JSON body for NANO cert PC/mobile request.io.

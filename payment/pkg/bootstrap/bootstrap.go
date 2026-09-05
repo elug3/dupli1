@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"log"
 	"errors"
 	"fmt"
 	"net/http"
@@ -74,6 +75,18 @@ func Bootstrap(cfg Config) (*App, error) {
 	if nanoCfg.Enabled() {
 		nanoProvider = checkout.NewNanoProvider(nanoCfg)
 		checkoutProvider = nanoProvider
+		if !nanoCfg.CallbackReachable() {
+			// Card payments cannot complete in this state: NANO POSTs the
+			// approval to receiveUrl from its own servers, and a loopback or
+			// private base resolves to something on their side. Payments strand
+			// at requires_payment with nothing in the logs, so say it once here.
+			log.Printf(
+				"payment: WARNING nano is configured but DUPLI1_PAYMENT_PUBLIC_URL=%q is not reachable from the internet; "+
+					"NANO cannot deliver the approval callback and card payments will never leave requires_payment. "+
+					"Set it to a publicly resolvable base URL (a tunnel is fine for local testing), or use method=bypass.",
+				nanoCfg.PublicBaseURL,
+			)
+		}
 	} else {
 		checkoutProvider = checkout.NewUnavailableProvider(
 			"card checkout is not configured; set NANO_* credentials or use method=bypass (payment.bypass)",
