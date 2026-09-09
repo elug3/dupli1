@@ -40,8 +40,8 @@ func (fakeCheckoutProvider) CreateSession(_ context.Context, input ports.Checkou
 // balance, standing in for a PG that accepts every cancel.
 func (fakeCheckoutProvider) CancelPayment(_ context.Context, input ports.CancelPaymentInput) (*ports.CancelPaymentResult, error) {
 	return &ports.CancelPaymentResult{
-		CanceledAmountCents: input.AmountCents,
-		ProviderRef:         input.ProviderRef,
+		CanceledAmountKRW: input.AmountKRW,
+		ProviderRef:       input.ProviderRef,
 	}, nil
 }
 
@@ -87,7 +87,7 @@ func (r *saveRaceRepo) Save(ctx context.Context, payment *domain.Payment) error 
 func TestCreatePayment_ReusesOpenPaymentWhenSaveRaces(t *testing.T) {
 	base := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
@@ -121,7 +121,7 @@ func TestCreatePayment_ReusesOpenPaymentWhenSaveRaces(t *testing.T) {
 func TestCreatePayment_ReusesNewestRequiresPaymentForOrder(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	older, err := domain.NewPayment("pay_old", "ord_1", "cust_1", 4200, domain.DefaultCurrency, "test", "dev_old", "http://checkout/old", time.Date(2026, 8, 15, 10, 0, 0, 0, time.UTC))
@@ -154,7 +154,7 @@ func TestCreatePayment_ReusesNewestRequiresPaymentForOrder(t *testing.T) {
 func TestCreatePayment_ReusesExistingRequiresPaymentForOrder(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, nil)
@@ -180,7 +180,7 @@ func TestCreatePayment_ReusesExistingRequiresPaymentForOrder(t *testing.T) {
 func TestCreatePayment_ReusesExistingSucceededForOrder(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, nil)
@@ -216,7 +216,7 @@ func TestCreatePayment_ReusesExistingSucceededForOrder(t *testing.T) {
 func TestCreatePayment_ReusesBypassSucceededWhenCardRetried(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 	}}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, nil)
 
@@ -245,7 +245,7 @@ func TestCreatePayment_ReusesBypassSucceededWhenCardRetried(t *testing.T) {
 func TestCreatePayment_CardCheckout(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, nil)
 
@@ -275,7 +275,7 @@ func TestCreatePayment_CardCheckout(t *testing.T) {
 func TestCreatePayment_BypassSucceedsAndPublishes(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 	}}
 	pub := &recordingPublisher{}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, pub)
@@ -307,13 +307,13 @@ func TestCreatePayment_BypassSucceedsAndPublishes(t *testing.T) {
 	if payment.CreatedBy != "manager_1" || payment.Note != "Cash at showroom" {
 		t.Fatalf("audit fields: created_by=%q note=%q", payment.CreatedBy, payment.Note)
 	}
-	if payment.AmountCents != 70000 {
-		t.Fatalf("amount = %d", payment.AmountCents)
+	if payment.AmountKRW != 70000 {
+		t.Fatalf("amount = %d", payment.AmountKRW)
 	}
 	if len(pub.events) != 1 {
 		t.Fatalf("events = %d, want 1", len(pub.events))
 	}
-	if pub.events[0].OrderID != "ord_1" || pub.events[0].AmountCents != 70000 {
+	if pub.events[0].OrderID != "ord_1" || pub.events[0].AmountKRW != 70000 {
 		t.Fatalf("unexpected event: %+v", pub.events[0])
 	}
 }
@@ -321,7 +321,7 @@ func TestCreatePayment_BypassSucceedsAndPublishes(t *testing.T) {
 func TestCreatePayment_BypassForbiddenWithoutPermission(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, nil)
 
@@ -336,7 +336,7 @@ func TestCreatePayment_BypassForbiddenWithoutPermission(t *testing.T) {
 func TestCreatePayment_BitcoinUnavailable(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, nil)
 
@@ -351,7 +351,7 @@ func TestCreatePayment_BitcoinUnavailable(t *testing.T) {
 func TestCreatePayment_CardUnavailableWhenNoProviderConfigured(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	svc := service.New(repo, orders, checkout.NewUnavailableProvider("no PG configured"), nil)
 
@@ -366,7 +366,7 @@ func TestCreatePayment_CardUnavailableWhenNoProviderConfigured(t *testing.T) {
 func TestCreatePayment_UnknownMethod(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, nil)
 
@@ -381,7 +381,7 @@ func TestCreatePayment_UnknownMethod(t *testing.T) {
 func TestCreatePayment_BypassSkipsCustomerABAC(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, nil)
 
@@ -403,7 +403,7 @@ func TestCreatePayment_BypassSkipsCustomerABAC(t *testing.T) {
 func TestCompletePayment_PublishesEvent(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	pub := &recordingPublisher{}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, pub)
@@ -433,7 +433,7 @@ func TestCompletePayment_PublishesEvent(t *testing.T) {
 func TestCreatePayment_RejectsNonPendingOrder(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "paid", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "paid", TotalKRW: 4200,
 	}}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, nil)
 
@@ -497,7 +497,7 @@ func (p *failAlwaysPublisher) Publish(_ context.Context, subject string, event a
 func TestCompletePayment_SoftSucceedsWhenPublishFails(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	pub := &failAlwaysPublisher{}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, pub)
@@ -531,7 +531,7 @@ func TestCompletePayment_SoftSucceedsWhenPublishFails(t *testing.T) {
 func TestCompletePayment_DrainOutboxAfterPublishFailure(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	failPub := &failAlwaysPublisher{}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, failPub)
@@ -566,7 +566,7 @@ func TestCompletePayment_DrainOutboxAfterPublishFailure(t *testing.T) {
 func TestCompletePayment_RepublishesAfterPriorPublishFailure(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	pub := &failOncePublisher{failFirst: true}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, pub)
@@ -601,7 +601,7 @@ func TestCompletePayment_RepublishesAfterPriorPublishFailure(t *testing.T) {
 func TestReconcileSucceededPaymentsRepublishes(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 4200,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 4200,
 	}}
 	pub := &recordingPublisher{}
 	svc := service.New(repo, orders, fakeCheckoutProvider{}, pub)
@@ -628,7 +628,7 @@ func TestReconcileSucceededPaymentsRepublishes(t *testing.T) {
 func TestCreatePayment_NanoCheckout(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "윤라희", RecipientPhone: "010-4112-5167",
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{
@@ -661,7 +661,7 @@ func TestCreatePayment_NanoCheckout_PersistsPayerEmail(t *testing.T) {
 	email := "01234567890123456789012345678901@example.com"
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "윤라희", RecipientPhone: "010-4112-5167",
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{
@@ -693,7 +693,7 @@ func TestCreatePayment_NanoCheckout_PersistsPayerEmail(t *testing.T) {
 func TestCreatePayment_NanoRequiresRecipient(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{
 		ShopCode: "240000005", LoginID: "shoptest", APIKey: "test-key", PublicBaseURL: "http://localhost:8080",
@@ -710,7 +710,7 @@ func TestCreatePayment_NanoRequiresRecipient(t *testing.T) {
 func TestHandleNanoResult_Success(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	pub := &recordingPublisher{}
@@ -750,7 +750,7 @@ func TestHandleNanoResult_Success(t *testing.T) {
 func TestHandleNanoResult_UnsignedReturnMACSucceeds(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{
@@ -785,7 +785,7 @@ func TestHandleNanoResult_UnsignedReturnMACSucceeds(t *testing.T) {
 func TestHandleNanoResult_ReturnMACDoesNotCrossPayments(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{
@@ -820,7 +820,7 @@ func TestHandleNanoResult_ReturnMACDoesNotCrossPayments(t *testing.T) {
 func TestHandleNanoResult_AmountMismatch(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{
@@ -848,7 +848,7 @@ func TestHandleNanoResult_AmountMismatch(t *testing.T) {
 func TestHandleNanoResult_FailureMarksFailed(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{
@@ -875,7 +875,7 @@ func TestHandleNanoResult_FailureMarksFailed(t *testing.T) {
 func TestHandleNanoResult_ForgedSuccessMissingFieldsRejected(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{
@@ -919,7 +919,7 @@ func TestHandleNanoResult_ForgedSuccessMissingFieldsRejected(t *testing.T) {
 func TestHandleNanoResult_MissingShopCodeRejected(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{
@@ -947,7 +947,7 @@ func TestHandleNanoResult_MissingShopCodeRejected(t *testing.T) {
 func TestHandleNanoResult_ShopCodeMismatch(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{

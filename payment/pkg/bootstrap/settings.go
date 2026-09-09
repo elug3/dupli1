@@ -30,7 +30,7 @@ func BuildSettings(cfg Config) settings.Response {
 	}
 	resp.Limits = map[string]any{
 		"checkout_provider": checkoutProvider,
-		"currency":          money.Currency, // only KRW; amount_cents is whole won
+		"currency":          money.Currency, // only KRW; amount_krw is whole won
 		"methods": map[string]bool{
 			"credit_card": nanoOn,
 			"bypass":      true, // requires payment.bypass; storefront must hide

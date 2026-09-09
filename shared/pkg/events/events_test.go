@@ -39,15 +39,15 @@ func TestOrderJSONRoundTrip(t *testing.T) {
 	occurred := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
 	created := occurred.Add(-5 * time.Minute)
 	orig := events.Order{
-		EventType:     events.OrderCreated,
-		OrderID:       "ord_01",
-		CustomerID:    "cust_01",
-		Status:        "pending",
-		SubtotalCents: 120000,
-		DiscountCents: 5000,
-		TotalCents:    115000,
+		EventType:   events.OrderCreated,
+		OrderID:     "ord_01",
+		CustomerID:  "cust_01",
+		Status:      "pending",
+		SubtotalKRW: 120000,
+		DiscountKRW: 5000,
+		TotalKRW:    115000,
 		Items: []events.OrderItem{
-			{SkuID: "01HXYZ", SKU: "PRADA_GALLERIA_BLK_M", Quantity: 1, UnitPriceCents: 115000},
+			{SkuID: "01HXYZ", SKU: "PRADA_GALLERIA_BLK_M", Quantity: 1, UnitPriceKRW: 115000},
 		},
 		CreatedAt: created,
 		Occurred:  occurred,
@@ -61,7 +61,7 @@ func TestOrderJSONRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		t.Fatalf("Unmarshal wire: %v", err)
 	}
-	for _, key := range []string{"order_id", "customer_id", "subtotal_cents", "discount_cents", "total_cents", "created_at", "occurred_at"} {
+	for _, key := range []string{"order_id", "customer_id", "subtotal_krw", "discount_krw", "total_krw", "created_at", "occurred_at"} {
 		if _, ok := wire[key]; !ok {
 			t.Fatalf("missing snake_case field %q in %s", key, string(raw))
 		}
@@ -71,7 +71,7 @@ func TestOrderJSONRoundTrip(t *testing.T) {
 		t.Fatalf("items = %v, want one element", wire["items"])
 	}
 	item := items[0].(map[string]any)
-	if item["sku_id"] != "01HXYZ" || item["unit_price_cents"] != float64(115000) {
+	if item["sku_id"] != "01HXYZ" || item["unit_price_krw"] != float64(115000) {
 		t.Fatalf("item wire = %v", item)
 	}
 
@@ -79,7 +79,7 @@ func TestOrderJSONRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("Unmarshal Order: %v", err)
 	}
-	if decoded.OrderID != orig.OrderID || decoded.TotalCents != orig.TotalCents {
+	if decoded.OrderID != orig.OrderID || decoded.TotalKRW != orig.TotalKRW {
 		t.Fatalf("decoded = %+v, want %+v", decoded, orig)
 	}
 	if len(decoded.Items) != 1 || decoded.Items[0].SkuID != "01HXYZ" {
@@ -89,17 +89,17 @@ func TestOrderJSONRoundTrip(t *testing.T) {
 
 func TestPaymentSucceededEventJSONRoundTrip(t *testing.T) {
 	orig := events.PaymentSucceededEvent{
-		EventType:   events.PaymentSucceeded,
-		OrderID:     "ord_pay",
-		PaymentID:   "pay_nano_1",
-		AmountCents: 99000,
+		EventType: events.PaymentSucceeded,
+		OrderID:   "ord_pay",
+		PaymentID: "pay_nano_1",
+		AmountKRW: 99000,
 	}
 
 	raw, err := json.Marshal(orig)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	for _, key := range []string{"event_type", "order_id", "payment_id", "amount_cents"} {
+	for _, key := range []string{"event_type", "order_id", "payment_id", "amount_krw"} {
 		if !strings.Contains(string(raw), `"`+key+`"`) {
 			t.Fatalf("missing %q in %s", key, string(raw))
 		}
@@ -109,28 +109,28 @@ func TestPaymentSucceededEventJSONRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if decoded.OrderID != orig.OrderID || decoded.PaymentID != orig.PaymentID || decoded.AmountCents != orig.AmountCents {
+	if decoded.OrderID != orig.OrderID || decoded.PaymentID != orig.PaymentID || decoded.AmountKRW != orig.AmountKRW {
 		t.Fatalf("decoded = %+v, want %+v", decoded, orig)
 	}
 }
 
 func TestPaymentCanceledEventJSONRoundTrip(t *testing.T) {
 	orig := events.PaymentCanceledEvent{
-		EventType:      events.PaymentCanceled,
-		OrderID:        "ord_pay",
-		PaymentID:      "pay_nano_1",
-		AmountCents:    70000,
-		RemainingCents: 0,
-		Reason:         "ops reject",
-		CanceledBy:     "mgr_1",
-		Occurred:       time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC),
+		EventType:    events.PaymentCanceled,
+		OrderID:      "ord_pay",
+		PaymentID:    "pay_nano_1",
+		AmountKRW:    70000,
+		RemainingKRW: 0,
+		Reason:       "ops reject",
+		CanceledBy:   "mgr_1",
+		Occurred:     time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC),
 	}
 
 	raw, err := json.Marshal(orig)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	for _, key := range []string{"event_type", "order_id", "payment_id", "amount_cents", "remaining_cents"} {
+	for _, key := range []string{"event_type", "order_id", "payment_id", "amount_krw", "remaining_krw"} {
 		if !strings.Contains(string(raw), `"`+key+`"`) {
 			t.Fatalf("missing %q in %s", key, string(raw))
 		}
@@ -140,36 +140,83 @@ func TestPaymentCanceledEventJSONRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if decoded.OrderID != orig.OrderID || decoded.PaymentID != orig.PaymentID || decoded.AmountCents != orig.AmountCents {
+	if decoded.OrderID != orig.OrderID || decoded.PaymentID != orig.PaymentID || decoded.AmountKRW != orig.AmountKRW {
 		t.Fatalf("decoded = %+v, want %+v", decoded, orig)
 	}
-	if decoded.RemainingCents != 0 || !decoded.RemainingSpecified() {
-		t.Fatalf("remaining = %d specified=%t, want 0 / true", decoded.RemainingCents, decoded.RemainingSpecified())
+	if decoded.RemainingKRW != 0 || !decoded.RemainingSpecified() {
+		t.Fatalf("remaining = %d specified=%t, want 0 / true", decoded.RemainingKRW, decoded.RemainingSpecified())
 	}
 }
 
-func TestPaymentCanceledEvent_OmittedRemainingCentsIsNotSpecified(t *testing.T) {
-	raw := []byte(`{"event_type":"payment.canceled","order_id":"ord_1","payment_id":"pay_1","amount_cents":1000}`)
+func TestPaymentCanceledEvent_OmittedRemainingKRWIsNotSpecified(t *testing.T) {
+	raw := []byte(`{"event_type":"payment.canceled","order_id":"ord_1","payment_id":"pay_1","amount_krw":1000}`)
 	var decoded events.PaymentCanceledEvent
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if decoded.RemainingSpecified() {
-		t.Fatal("omitted remaining_cents must not count as specified")
+		t.Fatal("omitted remaining_krw must not count as specified")
 	}
-	if decoded.RemainingCents != 0 {
-		t.Fatalf("omitted remaining unmarshals to %d, want 0", decoded.RemainingCents)
+	if decoded.RemainingKRW != 0 {
+		t.Fatalf("omitted remaining unmarshals to %d, want 0", decoded.RemainingKRW)
+	}
+}
+
+func TestPaymentSucceededEvent_LegacyAmountCents(t *testing.T) {
+	raw := []byte(`{"event_type":"payment.succeeded","order_id":"ord_1","payment_id":"pay_1","amount_cents":99000}`)
+	var decoded events.PaymentSucceededEvent
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if decoded.AmountKRW != 99000 {
+		t.Fatalf("legacy amount_cents = %d, want 99000", decoded.AmountKRW)
+	}
+}
+
+func TestPaymentSucceededEvent_AmountKRWWinsOverCents(t *testing.T) {
+	raw := []byte(`{"event_type":"payment.succeeded","order_id":"ord_1","payment_id":"pay_1","amount_krw":1000,"amount_cents":99000}`)
+	var decoded events.PaymentSucceededEvent
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if decoded.AmountKRW != 1000 {
+		t.Fatalf("amount_krw must win over amount_cents: got %d", decoded.AmountKRW)
 	}
 }
 
 func TestPaymentCanceledEvent_ExplicitZeroRemainingIsSpecified(t *testing.T) {
+	raw := []byte(`{"event_type":"payment.canceled","order_id":"ord_1","payment_id":"pay_1","amount_krw":1000,"remaining_krw":0}`)
+	var decoded events.PaymentCanceledEvent
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !decoded.RemainingSpecified() || decoded.RemainingKRW != 0 {
+		t.Fatalf("explicit 0 remaining: specified=%t remaining=%d", decoded.RemainingSpecified(), decoded.RemainingKRW)
+	}
+}
+
+func TestPaymentCanceledEvent_LegacyRemainingCentsIsSpecified(t *testing.T) {
 	raw := []byte(`{"event_type":"payment.canceled","order_id":"ord_1","payment_id":"pay_1","amount_cents":1000,"remaining_cents":0}`)
 	var decoded events.PaymentCanceledEvent
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if !decoded.RemainingSpecified() || decoded.RemainingCents != 0 {
-		t.Fatalf("explicit 0 remaining: specified=%t remaining=%d", decoded.RemainingSpecified(), decoded.RemainingCents)
+	if decoded.AmountKRW != 1000 {
+		t.Fatalf("legacy amount_cents = %d, want 1000", decoded.AmountKRW)
+	}
+	if !decoded.RemainingSpecified() || decoded.RemainingKRW != 0 {
+		t.Fatalf("legacy remaining_cents: specified=%t remaining=%d", decoded.RemainingSpecified(), decoded.RemainingKRW)
+	}
+}
+
+func TestPaymentCanceledEvent_RemainingKRWWinsOverCents(t *testing.T) {
+	raw := []byte(`{"event_type":"payment.canceled","order_id":"ord_1","payment_id":"pay_1","amount_krw":1000,"remaining_krw":500,"remaining_cents":0}`)
+	var decoded events.PaymentCanceledEvent
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !decoded.RemainingSpecified() || decoded.RemainingKRW != 500 {
+		t.Fatalf("remaining_krw must win: specified=%t remaining=%d", decoded.RemainingSpecified(), decoded.RemainingKRW)
 	}
 }
 
@@ -247,7 +294,7 @@ func TestPaymentCallbackRejectedJSONRoundTrip(t *testing.T) {
 		OrderID:        "ord_000023",
 		Reason:         "verify_failed",
 		ResultCode:     "0000",
-		ExpectedCents:  31004,
+		ExpectedKRW:    31004,
 		ReportedAmount: "31004",
 		TranNo:         "260905001496",
 		Detail:         "callback hash did not verify",
@@ -263,7 +310,7 @@ func TestPaymentCallbackRejectedJSONRoundTrip(t *testing.T) {
 		t.Fatalf("Unmarshal wire: %v", err)
 	}
 	// The subscriber reads these exact keys; renaming one silently empties the alert.
-	for _, key := range []string{"event_type", "provider", "source", "payment_id", "order_id", "reason", "result_code", "expected_cents", "reported_amount", "occurred_at"} {
+	for _, key := range []string{"event_type", "provider", "source", "payment_id", "order_id", "reason", "result_code", "expected_krw", "reported_amount", "occurred_at"} {
 		if _, ok := wire[key]; !ok {
 			t.Errorf("wire payload missing %q: %s", key, raw)
 		}
@@ -290,7 +337,7 @@ func TestPaymentCallbackRejectedOmitsUnknownPaymentFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	for _, key := range []string{"payment_id", "order_id", "expected_cents", "reported_amount", "tran_no"} {
+	for _, key := range []string{"payment_id", "order_id", "expected_krw", "reported_amount", "tran_no"} {
 		if strings.Contains(string(raw), `"`+key+`"`) {
 			t.Errorf("empty %s should be omitted: %s", key, raw)
 		}

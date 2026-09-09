@@ -83,7 +83,7 @@ Default when `method` is omitted: **`credit_card`** (NANO when configured; else 
 | Payer fields | Order snapshot `recipient_name` / `recipient_phone` (required for NANO) |
 | Completion | NANO `receiveUrl` form + optional JSON webhook → `HandleNanoResult`; local `simulate-success` when NANO unset |
 | TTL | Existing 5-minute unpaid window |
-| Currency | KRW only (`amount_cents` = whole won) |
+| Currency | KRW only (`amount_krw` = whole won) |
 
 **API shape (NANO):**
 
@@ -96,7 +96,7 @@ Default when `method` is omitted: **`credit_card`** (NANO when configured; else 
   "id": "pay_000001",
   "order_id": "ord_000001",
   "method": "credit_card",
-  "amount_cents": 70000,
+  "amount_krw": 70000,
   "currency": "krw",
   "status": "requires_payment",
   "provider": "nano",
@@ -139,7 +139,7 @@ Staff mark a pending order as paid **without** collecting money through a PG. Us
   "id": "pay_000002",
   "order_id": "ord_000001",
   "method": "bypass",
-  "amount_cents": 70000,
+  "amount_krw": 70000,
   "currency": "krw",
   "status": "succeeded",
   "provider": "bypass",
@@ -155,7 +155,7 @@ Staff mark a pending order as paid **without** collecting money through a PG. Us
 **Guards**
 
 1. Order must be `pending` (same as card).
-2. Amount always taken from order `total_cents` — never from the request body.
+2. Amount always taken from order `total_krw` — never from the request body.
 3. Idempotency: reuse existing `Idempotency-Key` header behavior; a second bypass for an already-paid order fails with order-not-pending.
 4. Reject `method=bypass` from storefront tokens (empty permissions / no `payment.bypass`) with **403**.
 5. Do **not** expose Bypass in public `GET /api/v1/payments/settings` customer-facing method list; settings may list it under a manager-only flag or omit it until manage-web needs it.
@@ -264,7 +264,7 @@ Expose non-secret capability flags for clients:
   "event_type": "payment.succeeded",
   "order_id": "ord_000001",
   "payment_id": "pay_000001",
-  "amount_cents": 70000,
+  "amount_krw": 70000,
   "occurred_at": "..."
 }
 ```

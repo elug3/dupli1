@@ -143,18 +143,18 @@ func formatPaymentCanceledMessage(event events.PaymentCanceledEvent, manageWebUR
 		byLine = fmt.Sprintf("By: %s\n", escapeHTML(by))
 	}
 
-	if event.RemainingCents > 0 {
+	if event.RemainingKRW > 0 {
 		return fmt.Sprintf(
 			"↩️ <b>Partial refund</b> %s\n%sRefunded: <b>%s</b>\nStill captured: <b>%s</b>\n%s%sOrder is unchanged — review whether it should still ship.",
 			escapeHTML(event.OrderID), manageLink,
-			formatMoney(event.AmountCents), formatMoney(event.RemainingCents),
+			formatMoney(event.AmountKRW), formatMoney(event.RemainingKRW),
 			reasonLine, byLine,
 		)
 	}
 	return fmt.Sprintf(
 		"↩️ <b>Refunded in full</b> %s\n%sRefunded: <b>%s</b>\n%s%sOrder has been canceled and its stock released.",
 		escapeHTML(event.OrderID), manageLink,
-		formatMoney(event.AmountCents), reasonLine, byLine,
+		formatMoney(event.AmountKRW), reasonLine, byLine,
 	)
 }
 
@@ -201,8 +201,8 @@ func formatPaymentCallbackRejectedMessage(event events.PaymentCallbackRejectedEv
 	} else {
 		b.WriteString(fmt.Sprintf("Cause: %s\n", escapeHTML(event.Reason)))
 	}
-	if event.ExpectedCents > 0 {
-		b.WriteString(fmt.Sprintf("Expected: <b>%s</b>\n", formatMoney(event.ExpectedCents)))
+	if event.ExpectedKRW > 0 {
+		b.WriteString(fmt.Sprintf("Expected: <b>%s</b>\n", formatMoney(event.ExpectedKRW)))
 	}
 	// Reported verbatim: a malformed amount is itself the clue.
 	if reported := strings.TrimSpace(event.ReportedAmount); reported != "" {
@@ -267,7 +267,7 @@ func formatOrderMessage(subject string, event events.Order, manageWebURL string)
 		itemsLine = "no items"
 	}
 
-	total := formatMoney(event.TotalCents)
+	total := formatMoney(event.TotalKRW)
 	createdLine := formatOrderCreatedAt(event.CreatedAt, event.Occurred)
 	manageLink := formatManageOrderLink(manageWebURL, event.OrderID)
 

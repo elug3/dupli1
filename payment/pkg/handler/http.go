@@ -181,23 +181,23 @@ func (h *Handler) cancelPayment(w http.ResponseWriter, r *http.Request, paymentI
 	}
 
 	var req struct {
-		// AmountCents omitted or 0 cancels the full remaining balance.
-		AmountCents int64  `json:"amount_cents"`
-		Reason      string `json:"reason"`
+		// AmountKRW omitted or 0 cancels the full remaining balance.
+		AmountKRW int64  `json:"amount_krw"`
+		Reason    string `json:"reason"`
 	}
 	// An empty body is a valid full cancel.
 	if err := decodeJSON(r, &req); err != nil && !errors.Is(err, io.EOF) {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if req.AmountCents < 0 {
-		respondError(w, http.StatusBadRequest, "amount_cents must not be negative")
+	if req.AmountKRW < 0 {
+		respondError(w, http.StatusBadRequest, "amount_krw must not be negative")
 		return
 	}
 
 	payment, err := h.svc.CancelPayment(r.Context(), service.CancelPaymentInput{
 		PaymentID:      paymentID,
-		AmountCents:    req.AmountCents,
+		AmountKRW:      req.AmountKRW,
 		Reason:         req.Reason,
 		CanceledBy:     claims.UserID,
 		IdempotencyKey: r.Header.Get("Idempotency-Key"),
@@ -252,7 +252,7 @@ func (h *Handler) nanoCheckout(w http.ResponseWriter, r *http.Request, paymentID
 	reqURL, body, err := h.nano.BuildRequest(
 		payment.ID, payment.OrderID,
 		payment.PayerName, payment.PayerPhone, payment.PayerEmail,
-		"Dupli1 "+payment.OrderID, payment.AmountCents, mobile,
+		"Dupli1 "+payment.OrderID, payment.AmountKRW, mobile,
 	)
 	if err != nil {
 		log.Printf("payment: nano checkout %s: build nano request: %v", payment.ID, err)

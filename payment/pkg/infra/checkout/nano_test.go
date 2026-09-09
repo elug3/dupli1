@@ -85,11 +85,11 @@ func TestNanoProviderCreateSession(t *testing.T) {
 		PublicBaseURL: "https://dupli1.com",
 	})
 	sess, err := p.CreateSession(t.Context(), ports.CheckoutSessionInput{
-		OrderID:     "ord_1",
-		PaymentID:   "pay_000001",
-		AmountCents: 70000,
-		OrderName:   "윤라희",
-		OrderTel:    "010-4112-5167",
+		OrderID:   "ord_1",
+		PaymentID: "pay_000001",
+		AmountKRW: 70000,
+		OrderName: "윤라희",
+		OrderTel:  "010-4112-5167",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -107,7 +107,7 @@ func TestNanoProviderRequiresPayer(t *testing.T) {
 		ShopCode: "240000005", LoginID: "shoptest", APIKey: "k", PublicBaseURL: "http://localhost:8080",
 	})
 	_, err := p.CreateSession(t.Context(), ports.CheckoutSessionInput{
-		PaymentID: "pay_1", AmountCents: 1000, OrderName: "", OrderTel: "01012345678",
+		PaymentID: "pay_1", AmountKRW: 1000, OrderName: "", OrderTel: "01012345678",
 	})
 	if err == nil {
 		t.Fatal("expected error for missing name")

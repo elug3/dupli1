@@ -49,7 +49,7 @@ func (c *Client) GetOrder(ctx context.Context, bearerToken, orderID string) (*po
 		ID              string `json:"id"`
 		CustomerID      string `json:"customer_id"`
 		Status          string `json:"status"`
-		TotalCents      int64  `json:"total_cents"`
+		TotalKRW        int64  `json:"total_krw"`
 		RecipientName   string `json:"recipient_name"`
 		RecipientPhone  string `json:"recipient_phone"`
 		ShippingAddress struct {
@@ -64,12 +64,12 @@ func (c *Client) GetOrder(ctx context.Context, bearerToken, orderID string) (*po
 		return nil, err
 	}
 	return &ports.OrderSummary{
-		ID:              body.ID,
-		CustomerID:      body.CustomerID,
-		Status:          body.Status,
-		TotalCents:      body.TotalCents,
-		RecipientName:   body.RecipientName,
-		RecipientPhone:  body.RecipientPhone,
+		ID:             body.ID,
+		CustomerID:     body.CustomerID,
+		Status:         body.Status,
+		TotalKRW:       body.TotalKRW,
+		RecipientName:  body.RecipientName,
+		RecipientPhone: body.RecipientPhone,
 		ShippingAddress: ports.ShippingAddress{
 			PostalCode:   body.ShippingAddress.PostalCode,
 			AddressLine1: body.ShippingAddress.AddressLine1,

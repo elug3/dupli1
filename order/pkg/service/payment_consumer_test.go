@@ -42,13 +42,13 @@ func TestCancelExpiredPendingOrderSkipsPaidOrder(t *testing.T) {
 	svc.now = func() time.Time { return now }
 
 	order, err := domain.NewOrder("ord_expiry_1", "customer-1", "res-expiry", []domain.OrderItem{
-		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 5000},
+		{SKU: "BAG-1", Quantity: 1, UnitPriceKRW: 5000},
 	}, "", 0, 0, now.Add(-10*time.Minute))
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
 	order.PaymentDueAt = now.Add(-time.Minute)
-	if err := order.MarkPaid("pay-1", order.TotalCents, now.Add(-30*time.Second)); err != nil {
+	if err := order.MarkPaid("pay-1", order.TotalKRW, now.Add(-30*time.Second)); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := repo.Save(ctx, order); err != nil {
@@ -80,7 +80,7 @@ func TestCancelExpiredPendingOrderCancelsUnpaidPending(t *testing.T) {
 	svc.now = func() time.Time { return now }
 
 	order, err := domain.NewOrder("ord_expiry_2", "customer-1", "res-expiry", []domain.OrderItem{
-		{SKU: "BAG-2", Quantity: 1, UnitPriceCents: 3000},
+		{SKU: "BAG-2", Quantity: 1, UnitPriceKRW: 3000},
 	}, "", 0, 0, now.Add(-10*time.Minute))
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
@@ -116,7 +116,7 @@ func (r *paidDuringExpiryRepo) CancelIfPendingExpired(ctx context.Context, order
 		return nil, false, err
 	}
 	if order.Status == domain.StatusPending {
-		if err := order.MarkPaid("pay-race", order.TotalCents, now); err != nil {
+		if err := order.MarkPaid("pay-race", order.TotalKRW, now); err != nil {
 			return nil, false, err
 		}
 		if err := r.Repository.Save(ctx, order); err != nil {
@@ -136,7 +136,7 @@ func TestCancelExpiredPendingOrderSkipsWhenPaymentWinsRace(t *testing.T) {
 	svc.now = func() time.Time { return now }
 
 	order, err := domain.NewOrder("ord_expiry_race", "customer-1", "res-expiry", []domain.OrderItem{
-		{SKU: "BAG-RACE", Quantity: 1, UnitPriceCents: 5000},
+		{SKU: "BAG-RACE", Quantity: 1, UnitPriceKRW: 5000},
 	}, "", 0, 0, now.Add(-10*time.Minute))
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
@@ -171,7 +171,7 @@ func TestHandlePaymentSucceededMarksOrderPaid(t *testing.T) {
 	svc.now = func() time.Time { return now }
 
 	order, err := domain.NewOrder("ord_pay_1", "customer-1", "res-pay", []domain.OrderItem{
-		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 120000},
+		{SKU: "BAG-1", Quantity: 1, UnitPriceKRW: 120000},
 	}, "", 0, 0, now.Add(-5*time.Minute))
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
@@ -181,10 +181,10 @@ func TestHandlePaymentSucceededMarksOrderPaid(t *testing.T) {
 	}
 
 	payload, err := json.Marshal(events.PaymentSucceededEvent{
-		EventType:   events.PaymentSucceeded,
-		OrderID:     order.ID,
-		PaymentID:   "pay-nano-1",
-		AmountCents: order.TotalCents,
+		EventType: events.PaymentSucceeded,
+		OrderID:   order.ID,
+		PaymentID: "pay-nano-1",
+		AmountKRW: order.TotalKRW,
 	})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -205,6 +205,50 @@ func TestHandlePaymentSucceededMarksOrderPaid(t *testing.T) {
 	}
 }
 
+func TestHandlePaymentSucceededLegacyAmountCents(t *testing.T) {
+	ctx := t.Context()
+	stock := &expiryStock{reservationID: "res-pay"}
+	repo := memory.NewRepository()
+	svc := New(repo, stock)
+
+	now := time.Date(2026, 8, 21, 10, 0, 0, 0, time.UTC)
+	svc.now = func() time.Time { return now }
+
+	order, err := domain.NewOrder("ord_pay_cents", "customer-1", "res-pay", []domain.OrderItem{
+		{SKU: "BAG-1", Quantity: 1, UnitPriceKRW: 120000},
+	}, "", 0, 0, now.Add(-5*time.Minute))
+	if err != nil {
+		t.Fatalf("NewOrder: %v", err)
+	}
+	if err := repo.Save(ctx, order); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"event_type":   "payment.succeeded",
+		"order_id":     order.ID,
+		"payment_id":   "pay-nano-cents",
+		"amount_cents": order.TotalKRW,
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := svc.handlePaymentSucceeded(ctx, paymentSucceededSubject, payload); err != nil {
+		t.Fatalf("handlePaymentSucceeded: %v", err)
+	}
+
+	stored, err := repo.Get(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if stored.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid from leftover amount_cents payload", stored.Status)
+	}
+	if stored.PaymentID != "pay-nano-cents" {
+		t.Fatalf("payment_id = %q, want pay-nano-cents", stored.PaymentID)
+	}
+}
+
 func TestHandlePaymentSucceededRejectsInvalidPayload(t *testing.T) {
 	ctx := t.Context()
 	svc := New(memory.NewRepository(), &expiryStock{})
@@ -216,9 +260,9 @@ func TestHandlePaymentSucceededRejectsInvalidPayload(t *testing.T) {
 	}
 
 	payload, err := json.Marshal(map[string]any{
-		"event_type":   "payment.succeeded",
-		"payment_id":   "pay-1",
-		"amount_cents": 1000,
+		"event_type": "payment.succeeded",
+		"payment_id": "pay-1",
+		"amount_krw": 1000,
 	})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)

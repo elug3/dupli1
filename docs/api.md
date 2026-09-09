@@ -2,7 +2,7 @@
 
 All traffic is routed through the nginx gateway. Locally use **HTTP** at `http://localhost:8080` or `http://localhost` (port 80). Production terminates TLS at the load balancer or gateway.
 
-**Currency:** the storefront uses **KRW only**. Product `price` values and cart/order/payment `*_cents` fields are **whole Korean won** (zero-decimal minor units for `krw` — do not multiply by 100). Settings expose `limits.currency: "krw"`.
+**Currency:** the storefront uses **KRW only**. Product `price` values and cart/order/payment `*_krw` fields are **whole Korean won** (zero-decimal minor units for `krw` — do not multiply by 100). Settings expose `limits.currency: "krw"`.
 
 **Path convention:** every route is namespaced by its owning service — `/api/v1/products/…` (including inventory, catalog and coupons), `/api/v1/orders/…` (including checkout sessions), `/api/v1/cart/…`, `/api/v1/payments/…`, `/api/v1/auth/…`, `/api/v1/profile/…`. The paths documented here are the canonical ones. Older top-level prefixes (`/api/v1/inventory`, `/api/v1/catalog`, `/api/v1/coupons`, `/api/v1/variants`, `/api/v1/checkout`, `/api/v1/carts`) are still registered as aliases and are called out where they differ; new clients should not use them. Migration table: [TODO.md](TODO.md).
 
@@ -738,13 +738,13 @@ See [cart-service.md](cart-service.md) for architecture, service boundaries, and
       "sku": "BOT-001-BLK",
       "product_id": "BOT-001",
       "quantity": 1,
-      "unit_price_cents": 125000,
+      "unit_price_krw": 125000,
       "color": "Black",
       "available_qty": 3
     }
   ],
   "unavailable_items": [],
-  "subtotal_cents": 125000,
+  "subtotal_krw": 125000,
   "updated_at": "2026-07-05T12:00:00Z"
 }
 ```
@@ -777,16 +777,16 @@ When `AUTH_JWKS_URL` or `JWT_SECRET` is set, order and checkout routes require `
 **Pricing.** Orders and checkout sessions price as:
 
 ```
-total_cents = subtotal_cents - discount_cents + shipping_fee_krw
+total_krw = subtotal_krw - discount_krw + shipping_fee_krw
 ```
 
-`shipping_fee_krw` is a flat per-order delivery charge in whole KRW, set by `DUPLI1_ORDER_SHIPPING_FEE_KRW` on the order service (deprecated alias: `DUPLI1_ORDER_SHIPPING_FEE_CENTS`). It defaults to **30000** (30,000 KRW); set the variable to `0` for free delivery. JSON, the Go field, and the Postgres column all use `shipping_fee_krw` — not `shipping_fee_cents`. Other `*_cents` money fields (`subtotal_cents`, `discount_cents`, `total_cents`, `unit_price_cents`) are unchanged.
+`shipping_fee_krw` is a flat per-order delivery charge in whole KRW, set by `DUPLI1_ORDER_SHIPPING_FEE_KRW` on the order service (deprecated alias: `DUPLI1_ORDER_SHIPPING_FEE_CENTS`). It defaults to **30000** (30,000 KRW); set the variable to `0` for free delivery. JSON, Go identifiers, and Postgres columns for money use `*_krw` (`shipping_fee_krw`, `subtotal_krw`, `discount_krw`, `total_krw`, `unit_price_krw`, `amount_krw`, …) — not `*_cents`. Existing databases rename leftover `*_cents` columns on migrate.
 
-The charge applies to every order regardless of size — there is no free-shipping threshold. A coupon discounts **goods only** and is capped at `subtotal_cents`, so the total can never drop below the shipping fee: a 100%-off coupon still pays delivery. An empty checkout session quotes `total_cents: 0` rather than a bare delivery charge; the fee appears once the session has at least one item.
+The charge applies to every order regardless of size — there is no free-shipping threshold. A coupon discounts **goods only** and is capped at `subtotal_krw`, so the total can never drop below the shipping fee: a 100%-off coupon still pays delivery. An empty checkout session quotes `total_krw: 0` rather than a bare delivery charge; the fee appears once the session has at least one item.
 
 The fee is **snapshotted** on the checkout session when it opens; `complete` charges that quoted fee even if the configured amount changed. Direct `POST /orders` uses the current configured fee. Orders created before this feature carry `shipping_fee_krw: 0` and keep their original totals.
 
-Because `total_cents` is what the payment service charges and what the order requires to mark itself paid, the fee flows through the money path automatically.
+Because `total_krw` is what the payment service charges and what the order requires to mark itself paid, the fee flows through the money path automatically.
 
 See [checkout-session.md](checkout-session.md) for the full checkout flow.
 
@@ -831,7 +831,7 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 }
 ```
 
-Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices are **resolved server-side** from the catalog; `unit_price_cents` is not part of the request body and is ignored if sent.
+Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices are **resolved server-side** from the catalog; `unit_price_krw` is not part of the request body and is ignored if sent.
 
 **Status machine**
 
@@ -877,17 +877,17 @@ Returns `status: "succeeded"` immediately and publishes `payment.succeeded` (no 
 `POST /api/v1/payments/{id}/cancel` refunds a `succeeded` payment at the PG (NANO `/api/payment/cancel.io`). Requires `payment.cancel`; there is no ABAC path, so a customer can never refund their own payment.
 
 ```json
-{ "amount_cents": 20000, "reason": "ops reject" }
+{ "amount_krw": 20000, "reason": "ops reject" }
 ```
 
-Both fields are optional and an empty body is valid: omitting `amount_cents` (or sending `0`) cancels the **full remaining balance**. Send an `Idempotency-Key` header to make a retry of the same cancel a no-op — strongly recommended for partial cancels, which local state alone cannot distinguish from a deliberate second refund.
+Both fields are optional and an empty body is valid: omitting `amount_krw` (or sending `0`) cancels the **full remaining balance**. Send an `Idempotency-Key` header to make a retry of the same cancel a no-op — strongly recommended for partial cancels, which local state alone cannot distinguish from a deliberate second refund.
 
-A full cancel moves the payment to `canceled`. A **partial** cancel leaves it `succeeded` with a reduced remaining balance, matching NANO's `remainAmt` semantics; repeat partials until the balance reaches zero, at which point the payment becomes `canceled`. The response is the updated payment, including `canceled_amount_cents` (cumulative), `canceled_at`, `cancel_reason`, and `canceled_by`.
+A full cancel moves the payment to `canceled`. A **partial** cancel leaves it `succeeded` with a reduced remaining balance, matching NANO's `remainAmt` semantics; repeat partials until the balance reaches zero, at which point the payment becomes `canceled`. The response is the updated payment, including `canceled_amount_krw` (cumulative), `canceled_at`, `cancel_reason`, and `canceled_by`.
 
 | Status | Meaning |
 |--------|---------|
 | `200` | Cancel accepted by the PG and recorded |
-| `400` | `amount_cents` negative or above the remaining balance |
+| `400` | `amount_krw` negative or above the remaining balance |
 | `403` | Caller lacks `payment.cancel` |
 | `404` | No such payment |
 | `409` | Payment is not cancelable (not `succeeded`, or already fully canceled) |
@@ -896,7 +896,7 @@ A full cancel moves the payment to `canceled`. A **partial** cancel leaves it `s
 
 `bypass` payments never touched a PG, so they are canceled locally only and the matching refund is made out of band.
 
-The cancel publishes **`payment.canceled`** (NATS, via the payment outbox). Order cancels a still-`paid` order on a full refund when `remaining_cents` is present and `0` and `payment_id` matches; notification alerts ops. Concurrent cancels of the same payment serialize on a row lock so NANO is not called twice.
+The cancel publishes **`payment.canceled`** (NATS, via the payment outbox). Order cancels a still-`paid` order on a full refund when `remaining_krw` is present and `0` and `payment_id` matches; notification alerts ops. Concurrent cancels of the same payment serialize on a row lock so NANO is not called twice.
 
 Unpaid `pending` orders auto-cancel after **5 minutes**. Full design: [payment-service.md](payment-service.md).
 

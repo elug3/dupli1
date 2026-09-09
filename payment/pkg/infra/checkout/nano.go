@@ -98,7 +98,7 @@ func (p *NanoProvider) CreateSession(_ context.Context, input ports.CheckoutSess
 	if name == "" || tel == "" {
 		return nil, fmt.Errorf("%w: order recipient name and phone are required for card payment", domain.ErrInvalidPayment)
 	}
-	if input.PaymentID == "" || input.AmountCents <= 0 {
+	if input.PaymentID == "" || input.AmountKRW <= 0 {
 		return nil, domain.ErrInvalidPayment
 	}
 
@@ -160,7 +160,7 @@ type NanoRequest struct {
 }
 
 // BuildRequest builds a signed NANO cert payment request for the given payment snapshot.
-func (p *NanoProvider) BuildRequest(paymentID, orderID, orderName, orderTel, orderEmail, goodsName string, amountCents int64, mobile bool) (requestURL string, body NanoRequest, err error) {
+func (p *NanoProvider) BuildRequest(paymentID, orderID, orderName, orderTel, orderEmail, goodsName string, amountKRW int64, mobile bool) (requestURL string, body NanoRequest, err error) {
 	if !p.cfg.Enabled() {
 		return "", NanoRequest{}, fmt.Errorf("nano credentials not configured")
 	}
@@ -169,13 +169,13 @@ func (p *NanoProvider) BuildRequest(paymentID, orderID, orderName, orderTel, ord
 	if name == "" || tel == "" {
 		return "", NanoRequest{}, fmt.Errorf("order name and phone required")
 	}
-	if amountCents <= 0 {
+	if amountKRW <= 0 {
 		return "", NanoRequest{}, fmt.Errorf("invalid amount")
 	}
 	if strings.TrimSpace(goodsName) == "" {
 		goodsName = "Dupli1 " + orderID
 	}
-	amt := fmt.Sprintf("%d", amountCents)
+	amt := fmt.Sprintf("%d", amountKRW)
 	ts := nanoTimestamp(time.Now())
 	ver := strings.TrimSpace(p.cfg.Ver)
 	login := strings.TrimSpace(p.cfg.LoginID)
@@ -407,7 +407,7 @@ const nanoResultCodeSuccess = "0000"
 
 // BuildCancelRequest builds the signed-by-header cancel body for a captured
 // payment. tranNo is the original approval's 거래번호.
-func (p *NanoProvider) BuildCancelRequest(tranNo, paymentID string, amountCents int64) (requestURL string, body NanoCancelRequest, err error) {
+func (p *NanoProvider) BuildCancelRequest(tranNo, paymentID string, amountKRW int64) (requestURL string, body NanoCancelRequest, err error) {
 	if !p.cfg.Enabled() {
 		return "", NanoCancelRequest{}, fmt.Errorf("%w: nano credentials not configured", ports.ErrCancelUnsupported)
 	}
@@ -421,14 +421,14 @@ func (p *NanoProvider) BuildCancelRequest(tranNo, paymentID string, amountCents 
 			ports.ErrCancelUnsupported, paymentID,
 		)
 	}
-	if amountCents <= 0 {
+	if amountKRW <= 0 {
 		return "", NanoCancelRequest{}, domain.ErrCancelAmountInvalid
 	}
 	body = NanoCancelRequest{
 		Ver:         strings.TrimSpace(p.cfg.Ver),
 		LoginID:     strings.TrimSpace(p.cfg.LoginID),
 		ShopCode:    strings.TrimSpace(p.cfg.ShopCode),
-		CancelAmt:   fmt.Sprintf("%d", amountCents),
+		CancelAmt:   fmt.Sprintf("%d", amountKRW),
 		TranNo:      tranNo,
 		CompOrderNo: strings.TrimSpace(paymentID),
 	}
@@ -439,7 +439,7 @@ func (p *NanoProvider) BuildCancelRequest(tranNo, paymentID string, amountCents 
 // parsed resultCode of 0000 returns an error and leaves the caller's state
 // untouched, so a payment is never recorded as refunded on an unconfirmed call.
 func (p *NanoProvider) CancelPayment(ctx context.Context, input ports.CancelPaymentInput) (*ports.CancelPaymentResult, error) {
-	reqURL, body, err := p.BuildCancelRequest(input.ProviderRef, input.PaymentID, input.AmountCents)
+	reqURL, body, err := p.BuildCancelRequest(input.ProviderRef, input.PaymentID, input.AmountKRW)
 	if err != nil {
 		return nil, err
 	}
@@ -487,17 +487,17 @@ func (p *NanoProvider) CancelPayment(ctx context.Context, input ports.CancelPaym
 
 	// NANO echoes the amount it actually canceled; trust it over the request
 	// when both are present so a provider-side adjustment is not lost.
-	canceled := input.AmountCents
+	canceled := input.AmountKRW
 	if v, ok := parseNanoAmount(parsed.CancelAmt); ok {
 		canceled = v
 	}
 	result := &ports.CancelPaymentResult{
-		CanceledAmountCents: canceled,
-		ProviderRef:         strings.TrimSpace(parsed.ApprTranNo),
-		CanceledAt:          strings.TrimSpace(parsed.CancelDate + parsed.CancelTime),
+		CanceledAmountKRW: canceled,
+		ProviderRef:       strings.TrimSpace(parsed.ApprTranNo),
+		CanceledAt:        strings.TrimSpace(parsed.CancelDate + parsed.CancelTime),
 	}
 	if v, ok := parseNanoAmount(parsed.RemainAmt); ok {
-		result.RemainingCents = v
+		result.RemainingKRW = v
 		result.RemainingKnown = true
 	}
 	return result, nil

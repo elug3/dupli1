@@ -46,7 +46,7 @@ type CreateOrderInput struct {
 	CustomerID      string
 	Items           []domain.OrderItem
 	CouponCode      string
-	DiscountCents   int64
+	DiscountKRW     int64
 	IdempotencyKey  string
 	RecipientName   string
 	RecipientPhone  string
@@ -69,7 +69,7 @@ type CompleteCheckoutInput struct {
 type idempotencyFingerprint struct {
 	CustomerID      string                 `json:"customer_id"`
 	CouponCode      string                 `json:"coupon_code,omitempty"`
-	DiscountCents   int64                  `json:"discount_cents,omitempty"`
+	DiscountKRW     int64                  `json:"discount_krw,omitempty"`
 	RecipientName   string                 `json:"recipient_name,omitempty"`
 	RecipientPhone  string                 `json:"recipient_phone,omitempty"`
 	ShippingAddress domain.ShippingAddress `json:"shipping_address,omitempty"`
@@ -170,7 +170,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		shippingFee = *input.ShippingFeeKRW
 	}
 
-	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountCents, shippingFee, s.now())
+	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountKRW, shippingFee, s.now())
 	if err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
@@ -236,7 +236,7 @@ func (s *Service) ListAllOrders(ctx context.Context) ([]domain.Order, error) {
 	return cloneOrders(orders), nil
 }
 
-func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, amountCents int64) (*domain.Order, error) {
+func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, amountKRW int64) (*domain.Order, error) {
 	order, err := s.repo.Get(ctx, strings.TrimSpace(orderID))
 	if err != nil {
 		return nil, err
@@ -257,7 +257,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 		}
 		reinstatedReservation = reservationID
 	}
-	if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {
+	if err := order.MarkPaid(paymentID, amountKRW, s.now()); err != nil {
 		if reinstatedReservation != "" {
 			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
 		}
@@ -287,7 +287,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 				return nil, err
 			}
 			reinstatedReservation = reservationID
-			if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {
+			if err := order.MarkPaid(paymentID, amountKRW, s.now()); err != nil {
 				_ = s.stock.ReleaseReservation(ctx, reservationID)
 				return nil, err
 			}
@@ -331,7 +331,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 		if err != nil {
 			return nil, err
 		}
-		if err := fresh.MarkPaid(paymentID, amountCents, s.now()); err != nil {
+		if err := fresh.MarkPaid(paymentID, amountKRW, s.now()); err != nil {
 			_ = s.stock.ReleaseReservation(ctx, reservationID)
 			return nil, err
 		}
@@ -477,7 +477,7 @@ func hashCreateOrderInput(input CreateOrderInput) string {
 	fp := idempotencyFingerprint{
 		CustomerID:      strings.TrimSpace(input.CustomerID),
 		CouponCode:      strings.TrimSpace(input.CouponCode),
-		DiscountCents:   input.DiscountCents,
+		DiscountKRW:     input.DiscountKRW,
 		RecipientName:   strings.TrimSpace(input.RecipientName),
 		RecipientPhone:  strings.TrimSpace(input.RecipientPhone),
 		ShippingAddress: input.ShippingAddress,
@@ -530,10 +530,10 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 	items := make([]events.OrderItem, len(order.Items))
 	for i, item := range order.Items {
 		items[i] = events.OrderItem{
-			SkuID:          item.SkuID,
-			SKU:            item.SKU,
-			Quantity:       item.Quantity,
-			UnitPriceCents: item.UnitPriceCents,
+			SkuID:        item.SkuID,
+			SKU:          item.SKU,
+			Quantity:     item.Quantity,
+			UnitPriceKRW: item.UnitPriceKRW,
 		}
 	}
 	payload, err := json.Marshal(events.Order{
@@ -541,10 +541,10 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 		OrderID:        order.ID,
 		CustomerID:     order.CustomerID,
 		Status:         string(order.Status),
-		SubtotalCents:  order.SubtotalCents,
-		DiscountCents:  order.DiscountCents,
+		SubtotalKRW:    order.SubtotalKRW,
+		DiscountKRW:    order.DiscountKRW,
 		ShippingFeeKRW: order.ShippingFeeKRW,
-		TotalCents:     order.TotalCents,
+		TotalKRW:       order.TotalKRW,
 		Items:          items,
 		CreatedAt:      order.CreatedAt,
 		Occurred:       s.now(),
@@ -569,7 +569,7 @@ func (s *Service) DrainOutbox(ctx context.Context) error {
 	return s.outboxDrainer.Drain(ctx)
 }
 
-// priceItems resolves each line from the product catalog and ignores any client unit_price_cents.
+// priceItems resolves each line from the product catalog and ignores any client unit_price_krw.
 // When any variants are missing, every failed line is collected into UnavailableVariantsError
 // rather than failing on the first miss.
 func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]domain.OrderItem, error) {
@@ -590,16 +590,16 @@ func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]d
 			}
 			return nil, err
 		}
-		if info.UnitPriceCents <= 0 {
+		if info.UnitPriceKRW <= 0 {
 			return nil, domain.ErrInvalidOrder
 		}
 		out = append(out, domain.OrderItem{
-			SkuID:          info.SkuID,
-			SKU:            info.SKU,
-			Quantity:       item.Quantity,
-			UnitPriceCents: info.UnitPriceCents,
-			ProductName:    info.ProductName,
-			ImageURL:       info.ImageURL,
+			SkuID:        info.SkuID,
+			SKU:          info.SKU,
+			Quantity:     item.Quantity,
+			UnitPriceKRW: info.UnitPriceKRW,
+			ProductName:  info.ProductName,
+			ImageURL:     info.ImageURL,
 		})
 	}
 	if len(unavailable) > 0 {

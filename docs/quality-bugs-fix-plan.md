@@ -29,17 +29,17 @@ Do **C1** and **H7** first — active money/auth risk. **H1** outbox landed; reu
 
 ### Problem
 
-`POST /orders` and checkout item APIs accept client `unit_price_cents`. Totals become NANO / Bypass charge amounts. Cart already ignores client prices.
+`POST /orders` and checkout item APIs accept client `unit_price_krw`. Totals become NANO / Bypass charge amounts. Cart already ignores client prices.
 
 ### Solution (copy cart)
 
 1. Add order `ports.ProductClient` (`GetVariant` / `GetVariantBySkuID`, optional batch `?sku_ids=`).
 2. Wire HTTP client in `order/pkg/bootstrap` via gateway / product URL (prefer `DUPLI1_GATEWAY_URL` once #111 lands).
-3. In `CreateOrder`, `SetCheckoutItems`, `UpsertCheckoutItem`: resolve each line from product; set `UnitPriceCents = money.FromProductPrice(variant.Price)`; reject missing/inactive variants; **ignore** any client price.
-4. Handler request DTO becomes `{sku|sku_id, quantity}` only (like cart `ItemInput`). Keep `unit_price_cents` on **responses** and DB as a snapshot.
+3. In `CreateOrder`, `SetCheckoutItems`, `UpsertCheckoutItem`: resolve each line from product; set `UnitPriceKRW = money.FromProductPrice(variant.Price)`; reject missing/inactive variants; **ignore** any client price.
+4. Handler request DTO becomes `{sku|sku_id, quantity}` only (like cart `ItemInput`). Keep `unit_price_krw` on **responses** and DB as a snapshot.
 5. Optional: re-resolve prices on `CompleteCheckout` so stale sessions cannot lock old prices.
 6. Update `api/specs/order-v1.yaml`, [checkout-session.md](checkout-session.md), [endpoints.md](endpoints.md).
-7. Test: client sends `unit_price_cents: 1` → stored/charged amount is catalog price.
+7. Test: client sends `unit_price_krw: 1` → stored/charged amount is catalog price.
 
 ### Done when
 

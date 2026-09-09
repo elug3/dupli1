@@ -15,7 +15,7 @@ func TestCheckoutSessionTotalsWithCoupon(t *testing.T) {
 	}
 
 	if err := session.UpsertItem(domain.OrderItem{
-		SKU: "BAG-1", Quantity: 1, UnitPriceCents: 10000,
+		SKU: "BAG-1", Quantity: 1, UnitPriceKRW: 10000,
 	}, now); err != nil {
 		t.Fatalf("UpsertItem returned error: %v", err)
 	}
@@ -23,8 +23,8 @@ func TestCheckoutSessionTotalsWithCoupon(t *testing.T) {
 		t.Fatalf("ApplyCoupon returned error: %v", err)
 	}
 
-	if session.SubtotalCents != 10000 || session.DiscountCents != 3000 || session.TotalCents != 7000 {
-		t.Fatalf("totals = %d/%d/%d, want 10000/3000/7000", session.SubtotalCents, session.DiscountCents, session.TotalCents)
+	if session.SubtotalKRW != 10000 || session.DiscountKRW != 3000 || session.TotalKRW != 7000 {
+		t.Fatalf("totals = %d/%d/%d, want 10000/3000/7000", session.SubtotalKRW, session.DiscountKRW, session.TotalKRW)
 	}
 }
 
@@ -36,13 +36,13 @@ func TestCheckoutSessionUpsertItem_MatchesBySkuIDWhenBothPopulated(t *testing.T)
 	}
 
 	if err := session.UpsertItem(domain.OrderItem{
-		SkuID: "SKUID-1", SKU: "BAG-1", Quantity: 1, UnitPriceCents: 10000,
+		SkuID: "SKUID-1", SKU: "BAG-1", Quantity: 1, UnitPriceKRW: 10000,
 	}, now); err != nil {
 		t.Fatalf("UpsertItem returned error: %v", err)
 	}
 	// Same SkuID, different (stale) SKU string — should update in place, not duplicate.
 	if err := session.UpsertItem(domain.OrderItem{
-		SkuID: "SKUID-1", SKU: "BAG-1-RENAMED", Quantity: 3, UnitPriceCents: 10000,
+		SkuID: "SKUID-1", SKU: "BAG-1-RENAMED", Quantity: 3, UnitPriceKRW: 10000,
 	}, now); err != nil {
 		t.Fatalf("UpsertItem returned error: %v", err)
 	}
@@ -63,12 +63,12 @@ func TestCheckoutSessionUpsertItem_FallsBackToSKUWhenSkuIDMissing(t *testing.T) 
 	}
 
 	if err := session.UpsertItem(domain.OrderItem{
-		SKU: "BAG-1", Quantity: 1, UnitPriceCents: 10000,
+		SKU: "BAG-1", Quantity: 1, UnitPriceKRW: 10000,
 	}, now); err != nil {
 		t.Fatalf("UpsertItem returned error: %v", err)
 	}
 	if err := session.UpsertItem(domain.OrderItem{
-		SKU: "BAG-1", Quantity: 5, UnitPriceCents: 10000,
+		SKU: "BAG-1", Quantity: 5, UnitPriceKRW: 10000,
 	}, now); err != nil {
 		t.Fatalf("UpsertItem returned error: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestCheckoutSessionRemoveItemBySkuID(t *testing.T) {
 	}
 
 	if err := session.UpsertItem(domain.OrderItem{
-		SkuID: "SKUID-1", SKU: "BAG-1", Quantity: 1, UnitPriceCents: 10000,
+		SkuID: "SKUID-1", SKU: "BAG-1", Quantity: 1, UnitPriceKRW: 10000,
 	}, now); err != nil {
 		t.Fatalf("UpsertItem returned error: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestCheckoutSessionSetItems_AcceptsSkuIDOnlyItem(t *testing.T) {
 	}
 
 	err = session.SetItems([]domain.OrderItem{
-		{SkuID: "SKUID-1", Quantity: 2, UnitPriceCents: 5000},
+		{SkuID: "SKUID-1", Quantity: 2, UnitPriceKRW: 5000},
 	}, now)
 	if err != nil {
 		t.Fatalf("SetItems returned error: %v", err)

@@ -86,7 +86,7 @@ func TestBuildCancelRequest_RejectsNonPositiveAmount(t *testing.T) {
 func TestCancelPayment_UnconfiguredProvider(t *testing.T) {
 	p := NewNanoProvider(NanoConfig{})
 	_, err := p.CancelPayment(t.Context(), ports.CancelPaymentInput{
-		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountCents: 70000,
+		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountKRW: 70000,
 	})
 	if !errors.Is(err, ports.ErrCancelUnsupported) {
 		t.Fatalf("err = %v, want ErrCancelUnsupported", err)
@@ -120,7 +120,7 @@ func TestCancelPayment_Success(t *testing.T) {
 
 	p := cancelTestProvider(srv.URL)
 	res, err := p.CancelPayment(t.Context(), ports.CancelPaymentInput{
-		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountCents: 70000,
+		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountKRW: 70000,
 	})
 	if err != nil {
 		t.Fatalf("CancelPayment: %v", err)
@@ -137,11 +137,11 @@ func TestCancelPayment_Success(t *testing.T) {
 	if gotBody.CancelAmt != "70000" || gotBody.TranNo != "2409030071109" {
 		t.Fatalf("body = %+v", gotBody)
 	}
-	if res.CanceledAmountCents != 70000 {
-		t.Fatalf("canceled = %d, want 70000", res.CanceledAmountCents)
+	if res.CanceledAmountKRW != 70000 {
+		t.Fatalf("canceled = %d, want 70000", res.CanceledAmountKRW)
 	}
-	if !res.RemainingKnown || res.RemainingCents != 0 {
-		t.Fatalf("remaining = %d (known=%t), want 0 known", res.RemainingCents, res.RemainingKnown)
+	if !res.RemainingKnown || res.RemainingKRW != 0 {
+		t.Fatalf("remaining = %d (known=%t), want 0 known", res.RemainingKRW, res.RemainingKnown)
 	}
 	if res.ProviderRef != "2409030071109" {
 		t.Fatalf("provider ref = %q", res.ProviderRef)
@@ -159,16 +159,16 @@ func TestCancelPayment_PartialReportsRemaining(t *testing.T) {
 
 	p := cancelTestProvider(srv.URL)
 	res, err := p.CancelPayment(t.Context(), ports.CancelPaymentInput{
-		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountCents: 20000,
+		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountKRW: 20000,
 	})
 	if err != nil {
 		t.Fatalf("CancelPayment: %v", err)
 	}
-	if res.CanceledAmountCents != 20000 {
-		t.Fatalf("canceled = %d, want 20000", res.CanceledAmountCents)
+	if res.CanceledAmountKRW != 20000 {
+		t.Fatalf("canceled = %d, want 20000", res.CanceledAmountKRW)
 	}
-	if !res.RemainingKnown || res.RemainingCents != 50000 {
-		t.Fatalf("remaining = %d (known=%t), want 50000 known", res.RemainingCents, res.RemainingKnown)
+	if !res.RemainingKnown || res.RemainingKRW != 50000 {
+		t.Fatalf("remaining = %d (known=%t), want 50000 known", res.RemainingKRW, res.RemainingKnown)
 	}
 }
 
@@ -192,7 +192,7 @@ func TestCancelPayment_MissingRemainAmtIsUnknownNotZero(t *testing.T) {
 
 	p := cancelTestProvider(srv.URL)
 	res, err := p.CancelPayment(t.Context(), ports.CancelPaymentInput{
-		ProviderRef: "2409040000019", PaymentID: "pay_000001", AmountCents: 1004,
+		ProviderRef: "2409040000019", PaymentID: "pay_000001", AmountKRW: 1004,
 	})
 	if err != nil {
 		t.Fatalf("CancelPayment: %v", err)
@@ -200,8 +200,8 @@ func TestCancelPayment_MissingRemainAmtIsUnknownNotZero(t *testing.T) {
 	if res.RemainingKnown {
 		t.Fatal("absent remainAmt must not report a known remaining balance")
 	}
-	if res.CanceledAmountCents != 1004 {
-		t.Fatalf("canceled = %d, want 1004", res.CanceledAmountCents)
+	if res.CanceledAmountKRW != 1004 {
+		t.Fatalf("canceled = %d, want 1004", res.CanceledAmountKRW)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestCancelPayment_RejectedByProvider(t *testing.T) {
 
 	p := cancelTestProvider(srv.URL)
 	_, err := p.CancelPayment(t.Context(), ports.CancelPaymentInput{
-		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountCents: 70000,
+		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountKRW: 70000,
 	})
 	if !errors.Is(err, ports.ErrCancelRejected) {
 		t.Fatalf("err = %v, want ErrCancelRejected", err)
@@ -231,7 +231,7 @@ func TestCancelPayment_HTTPErrorIsRejection(t *testing.T) {
 
 	p := cancelTestProvider(srv.URL)
 	_, err := p.CancelPayment(t.Context(), ports.CancelPaymentInput{
-		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountCents: 70000,
+		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountKRW: 70000,
 	})
 	if !errors.Is(err, ports.ErrCancelRejected) {
 		t.Fatalf("err = %v, want ErrCancelRejected", err)
@@ -247,7 +247,7 @@ func TestCancelPayment_NonJSONBodyIsRejection(t *testing.T) {
 
 	p := cancelTestProvider(srv.URL)
 	_, err := p.CancelPayment(t.Context(), ports.CancelPaymentInput{
-		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountCents: 70000,
+		ProviderRef: "2409030071109", PaymentID: "pay_000001", AmountKRW: 70000,
 	})
 	if !errors.Is(err, ports.ErrCancelRejected) {
 		t.Fatalf("err = %v, want ErrCancelRejected", err)
@@ -256,7 +256,7 @@ func TestCancelPayment_NonJSONBodyIsRejection(t *testing.T) {
 
 func TestUnavailableProviderCancelUnsupported(t *testing.T) {
 	p := NewUnavailableProvider("")
-	_, err := p.CancelPayment(t.Context(), ports.CancelPaymentInput{AmountCents: 100})
+	_, err := p.CancelPayment(t.Context(), ports.CancelPaymentInput{AmountKRW: 100})
 	if !errors.Is(err, ports.ErrCancelUnsupported) {
 		t.Fatalf("err = %v, want ErrCancelUnsupported", err)
 	}
@@ -284,7 +284,7 @@ func TestBuildCancelRequest_RejectsPlaceholderProviderRef(t *testing.T) {
 func TestPlaceholderProviderRefRoundTrip(t *testing.T) {
 	p := cancelTestProvider("https://dev3.nanopay.co.kr")
 	sess, err := p.CreateSession(t.Context(), ports.CheckoutSessionInput{
-		OrderID: "ord_1", PaymentID: "pay_000001", AmountCents: 70000,
+		OrderID: "ord_1", PaymentID: "pay_000001", AmountKRW: 70000,
 		OrderName: "윤라희", OrderTel: "010-1234-5678",
 	})
 	if err != nil {

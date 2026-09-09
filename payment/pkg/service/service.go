@@ -98,21 +98,21 @@ func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInpu
 	now := s.now()
 	goodsName := "Dupli1 " + order.ID
 	session, err := s.checkout.CreateSession(ctx, ports.CheckoutSessionInput{
-		OrderID:     order.ID,
-		PaymentID:   paymentID,
-		AmountCents: order.TotalCents,
-		Currency:    domain.DefaultCurrency,
-		CustomerID:  order.CustomerID,
-		OrderName:   order.RecipientName,
-		OrderTel:    order.RecipientPhone,
-		OrderEmail:  strings.TrimSpace(input.PayerEmail),
-		GoodsName:   goodsName,
+		OrderID:    order.ID,
+		PaymentID:  paymentID,
+		AmountKRW:  order.TotalKRW,
+		Currency:   domain.DefaultCurrency,
+		CustomerID: order.CustomerID,
+		OrderName:  order.RecipientName,
+		OrderTel:   order.RecipientPhone,
+		OrderEmail: strings.TrimSpace(input.PayerEmail),
+		GoodsName:  goodsName,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalCents, domain.DefaultCurrency, session.Provider, session.ProviderRef, session.CheckoutURL, now)
+	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalKRW, domain.DefaultCurrency, session.Provider, session.ProviderRef, session.CheckoutURL, now)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (s *Service) createBypassPayment(ctx context.Context, input CreatePaymentIn
 	}
 	now := s.now()
 	providerRef := "bypass_" + paymentID
-	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalCents, domain.DefaultCurrency, domain.ProviderBypass, providerRef, "", now)
+	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalKRW, domain.DefaultCurrency, domain.ProviderBypass, providerRef, "", now)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +301,7 @@ func (s *Service) HandleNanoResult(ctx context.Context, auth NanoCallbackAuth, r
 		return nil, s.nanoReject(ctx, result, NanoRejectNotNano, payment, domain.ErrInvalidPayment)
 	}
 	amt := strings.TrimSpace(result.ReqPayAmt)
-	if amt == "" || amt != fmt.Sprintf("%d", payment.AmountCents) {
+	if amt == "" || amt != fmt.Sprintf("%d", payment.AmountKRW) {
 		return nil, s.nanoReject(ctx, result, NanoRejectAmountMismatch, payment, domain.ErrInvalidPayment)
 	}
 	if !NanoApproved(result) {
@@ -356,10 +356,10 @@ func (s *Service) persistSucceeded(ctx context.Context, payment *domain.Payment)
 
 func (s *Service) paymentSucceededOutbox(payment *domain.Payment) ([]ports.OutboxEvent, error) {
 	payload, err := json.Marshal(ports.PaymentSucceededEvent{
-		EventType:   ports.PaymentSucceededSubject,
-		OrderID:     payment.OrderID,
-		PaymentID:   payment.ID,
-		AmountCents: payment.AmountCents,
+		EventType: ports.PaymentSucceededSubject,
+		OrderID:   payment.OrderID,
+		PaymentID: payment.ID,
+		AmountKRW: payment.AmountKRW,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal payment.succeeded: %w", err)
@@ -426,10 +426,10 @@ func (s *Service) ReconcileSucceededPayments(ctx context.Context, lookback time.
 	for i := range payments {
 		p := payments[i]
 		if err := s.events.Publish(ctx, ports.PaymentSucceededSubject, ports.PaymentSucceededEvent{
-			EventType:   ports.PaymentSucceededSubject,
-			OrderID:     p.OrderID,
-			PaymentID:   p.ID,
-			AmountCents: p.AmountCents,
+			EventType: ports.PaymentSucceededSubject,
+			OrderID:   p.OrderID,
+			PaymentID: p.ID,
+			AmountKRW: p.AmountKRW,
 		}); err != nil && firstErr == nil {
 			firstErr = err
 		}
@@ -440,11 +440,11 @@ func (s *Service) ReconcileSucceededPayments(ctx context.Context, lookback time.
 // CancelPaymentInput requests a cancel (refund) of a captured payment.
 type CancelPaymentInput struct {
 	PaymentID string
-	// AmountCents is the amount to cancel. Zero means the full remaining
+	// AmountKRW is the amount to cancel. Zero means the full remaining
 	// balance, which is the common ops case (order rejected after payment).
-	AmountCents int64
-	Reason      string
-	CanceledBy  string
+	AmountKRW  int64
+	Reason     string
+	CanceledBy string
 	// IdempotencyKey makes a retry of this exact cancel a no-op. Strongly
 	// recommended for partial cancels, where local state alone cannot tell a
 	// duplicate submit apart from a deliberate second refund.
@@ -479,22 +479,22 @@ func (s *Service) CancelPayment(ctx context.Context, input CancelPaymentInput) (
 			return nil, nil
 		}
 
-		requested := input.AmountCents
+		requested := input.AmountKRW
 		if requested == 0 {
-			requested = payment.RemainingCancelableCents()
+			requested = payment.RemainingCancelableKRW()
 		}
 		// Validate before spending a PG round trip.
 		if err := payment.ValidateCancel(requested); err != nil {
 			return nil, err
 		}
-		remainingBefore := payment.RemainingCancelableCents()
+		remainingBefore := payment.RemainingCancelableKRW()
 		amount := requested
 
 		if payment.Method != domain.MethodBypass {
 			result, err := s.checkout.CancelPayment(ctx, ports.CancelPaymentInput{
 				ProviderRef: payment.ProviderRef,
 				PaymentID:   payment.ID,
-				AmountCents: requested,
+				AmountKRW:   requested,
 				Currency:    payment.Currency,
 			})
 			if err != nil {
@@ -535,16 +535,16 @@ func reconcileCanceledAmount(paymentID string, result *ports.CancelPaymentResult
 	if result == nil {
 		return amount
 	}
-	if result.CanceledAmountCents > 0 {
-		amount = result.CanceledAmountCents
+	if result.CanceledAmountKRW > 0 {
+		amount = result.CanceledAmountKRW
 	}
 	if result.RemainingKnown {
-		amount = remainingBefore - result.RemainingCents
+		amount = remainingBefore - result.RemainingKRW
 	}
 	if amount != requested {
 		log.Printf(
 			"cancel payment %s: provider canceled %d (remaining_known=%t remaining=%d), requested %d",
-			paymentID, amount, result.RemainingKnown, result.RemainingCents, requested,
+			paymentID, amount, result.RemainingKnown, result.RemainingKRW, requested,
 		)
 	}
 	if amount < 1 {
@@ -561,16 +561,16 @@ func reconcileCanceledAmount(paymentID string, result *ports.CancelPaymentResult
 	return amount
 }
 
-func (s *Service) paymentCanceledOutbox(payment *domain.Payment, amountCents int64) ([]ports.OutboxEvent, error) {
+func (s *Service) paymentCanceledOutbox(payment *domain.Payment, amountKRW int64) ([]ports.OutboxEvent, error) {
 	payload, err := json.Marshal(ports.PaymentCanceledEvent{
-		EventType:      ports.PaymentCanceledSubject,
-		OrderID:        payment.OrderID,
-		PaymentID:      payment.ID,
-		AmountCents:    amountCents,
-		RemainingCents: payment.RemainingCancelableCents(),
-		Reason:         payment.CancelReason,
-		CanceledBy:     payment.CanceledBy,
-		Occurred:       s.now(),
+		EventType:    ports.PaymentCanceledSubject,
+		OrderID:      payment.OrderID,
+		PaymentID:    payment.ID,
+		AmountKRW:    amountKRW,
+		RemainingKRW: payment.RemainingCancelableKRW(),
+		Reason:       payment.CancelReason,
+		CanceledBy:   payment.CanceledBy,
+		Occurred:     s.now(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal payment.canceled: %w", err)

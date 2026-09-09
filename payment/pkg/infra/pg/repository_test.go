@@ -84,10 +84,10 @@ func migratedRepo(t *testing.T, schema string) *Repository {
 }
 
 // succeededPayment stores a card payment that has been captured, ready to cancel.
-func succeededPayment(t *testing.T, repo *Repository, id string, amountCents int64) *domain.Payment {
+func succeededPayment(t *testing.T, repo *Repository, id string, amountKRW int64) *domain.Payment {
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	p, err := domain.NewPayment(id, "ord_"+id, "cust_1", amountCents,
+	p, err := domain.NewPayment(id, "ord_"+id, "cust_1", amountKRW,
 		domain.DefaultCurrency, domain.ProviderNano, "2409030071109", "", now)
 	if err != nil {
 		t.Fatalf("NewPayment: %v", err)
@@ -104,7 +104,7 @@ func TestMigrateAddsCancelColumns(t *testing.T) {
 	repo := migratedRepo(t, schema)
 
 	for _, column := range []string{
-		"canceled_amount_cents", "canceled_at", "cancel_reason",
+		"canceled_amount_krw", "canceled_at", "cancel_reason",
 		"canceled_by", "cancel_idempotency_key",
 	} {
 		var count int
@@ -146,7 +146,7 @@ func TestMigrateOverPreCancelSchemaKeepsExistingRowsReadable(t *testing.T) {
 			id              TEXT PRIMARY KEY,
 			order_id        TEXT NOT NULL,
 			customer_id     TEXT NOT NULL,
-			amount_cents    BIGINT NOT NULL CHECK (amount_cents > 0),
+			amount_krw    BIGINT NOT NULL CHECK (amount_krw > 0),
 			currency        TEXT NOT NULL,
 			status          TEXT NOT NULL,
 			method          TEXT NOT NULL DEFAULT 'credit_card',
@@ -168,7 +168,7 @@ func TestMigrateOverPreCancelSchemaKeepsExistingRowsReadable(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO payments (
-			id, order_id, customer_id, amount_cents, currency, status, method,
+			id, order_id, customer_id, amount_krw, currency, status, method,
 			provider, provider_ref, expires_at, created_at, updated_at
 		) VALUES ('pay_legacy', 'ord_legacy', 'cust_1', 70000, 'krw', 'succeeded',
 		          'credit_card', 'nano', '2409030071109', $1, $1, $1)
@@ -185,11 +185,11 @@ func TestMigrateOverPreCancelSchemaKeepsExistingRowsReadable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read legacy row after migrate: %v", err)
 	}
-	if got.Status != domain.StatusSucceeded || got.AmountCents != 70000 {
-		t.Fatalf("legacy row = %q / %d", got.Status, got.AmountCents)
+	if got.Status != domain.StatusSucceeded || got.AmountKRW != 70000 {
+		t.Fatalf("legacy row = %q / %d", got.Status, got.AmountKRW)
 	}
-	if got.CanceledAmountCents != 0 {
-		t.Fatalf("canceled_amount_cents = %d, want 0 for a legacy row", got.CanceledAmountCents)
+	if got.CanceledAmountKRW != 0 {
+		t.Fatalf("canceled_amount_krw = %d, want 0 for a legacy row", got.CanceledAmountKRW)
 	}
 	if got.CanceledAt != nil {
 		t.Fatalf("canceled_at = %v, want nil for a legacy row", got.CanceledAt)
@@ -201,6 +201,82 @@ func TestMigrateOverPreCancelSchemaKeepsExistingRowsReadable(t *testing.T) {
 	// A legacy row must still be cancelable — that is the whole point of the upgrade.
 	if !got.Cancelable() {
 		t.Fatal("legacy succeeded row must be cancelable after migrate")
+	}
+}
+
+// Databases that stored payment amounts under amount_cents must keep those
+// values after the column is renamed to amount_krw.
+func TestMigrateRenamesMoneyCentsColumns(t *testing.T) {
+	dsn := requireDSN(t)
+	pool := freshSchema(t, dsn, "payment_money_rename_test")
+	ctx := t.Context()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	if _, err := pool.Exec(ctx, `
+		CREATE TABLE payments (
+			id              TEXT PRIMARY KEY,
+			order_id        TEXT NOT NULL,
+			customer_id     TEXT NOT NULL,
+			amount_cents    BIGINT NOT NULL CHECK (amount_cents > 0),
+			currency        TEXT NOT NULL,
+			status          TEXT NOT NULL,
+			method          TEXT NOT NULL DEFAULT 'credit_card',
+			provider        TEXT NOT NULL,
+			provider_ref    TEXT NOT NULL,
+			checkout_url    TEXT,
+			created_by      TEXT,
+			note            TEXT,
+			idempotency_key TEXT UNIQUE,
+			expires_at      TIMESTAMPTZ NOT NULL,
+			created_at      TIMESTAMPTZ NOT NULL,
+			updated_at      TIMESTAMPTZ NOT NULL,
+			canceled_amount_cents BIGINT NOT NULL DEFAULT 0
+		)`); err != nil {
+		t.Fatalf("create cents-era payments table: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO payments (
+			id, order_id, customer_id, amount_cents, currency, status, method,
+			provider, provider_ref, canceled_amount_cents, expires_at, created_at, updated_at
+		) VALUES ('pay_cents', 'ord_cents', 'cust_1', 70000, 'krw', 'succeeded',
+		          'credit_card', 'nano', '2409030071109', 5000, $1, $1, $1)
+	`, now); err != nil {
+		t.Fatalf("seed cents-era payment: %v", err)
+	}
+
+	repo := &Repository{pool: pool}
+	if err := repo.migrate(); err != nil {
+		t.Fatalf("migrate rename: %v", err)
+	}
+
+	for _, pair := range [][2]string{
+		{"amount_krw", "amount_cents"},
+		{"canceled_amount_krw", "canceled_amount_cents"},
+	} {
+		var krw, legacy int
+		if err := repo.pool.QueryRow(ctx, `
+			SELECT
+				count(*) FILTER (WHERE column_name = $1),
+				count(*) FILTER (WHERE column_name = $2)
+			FROM information_schema.columns
+			WHERE table_schema = current_schema() AND table_name = 'payments'
+		`, pair[0], pair[1]).Scan(&krw, &legacy); err != nil {
+			t.Fatalf("inspect %s: %v", pair[0], err)
+		}
+		if krw != 1 || legacy != 0 {
+			t.Fatalf("payments columns: %s=%d %s=%d, want 1 / 0", pair[0], krw, pair[1], legacy)
+		}
+	}
+
+	got, err := repo.Get(ctx, "pay_cents")
+	if err != nil {
+		t.Fatalf("Get after rename: %v", err)
+	}
+	if got.AmountKRW != 70000 {
+		t.Fatalf("renamed amount_krw = %d, want 70000", got.AmountKRW)
+	}
+	if got.CanceledAmountKRW != 5000 {
+		t.Fatalf("renamed canceled_amount_krw = %d, want 5000", got.CanceledAmountKRW)
 	}
 }
 
@@ -225,8 +301,8 @@ func TestSaveAndLoadFullCancel(t *testing.T) {
 	if got.Status != domain.StatusCanceled {
 		t.Fatalf("status = %q, want canceled", got.Status)
 	}
-	if got.CanceledAmountCents != 70000 {
-		t.Fatalf("canceled_amount_cents = %d, want 70000", got.CanceledAmountCents)
+	if got.CanceledAmountKRW != 70000 {
+		t.Fatalf("canceled_amount_krw = %d, want 70000", got.CanceledAmountKRW)
 	}
 	if got.CancelReason != "ops reject" || got.CanceledBy != "mgr_1" {
 		t.Fatalf("audit = %q / %q", got.CancelReason, got.CanceledBy)
@@ -237,8 +313,8 @@ func TestSaveAndLoadFullCancel(t *testing.T) {
 	if got.CanceledAt == nil || !got.CanceledAt.Equal(canceledAt) {
 		t.Fatalf("canceled_at = %v, want %v", got.CanceledAt, canceledAt)
 	}
-	if got.RemainingCancelableCents() != 0 {
-		t.Fatalf("remaining = %d, want 0", got.RemainingCancelableCents())
+	if got.RemainingCancelableKRW() != 0 {
+		t.Fatalf("remaining = %d, want 0", got.RemainingCancelableKRW())
 	}
 }
 
@@ -263,11 +339,11 @@ func TestSaveAndLoadPartialCancel(t *testing.T) {
 	if got.Status != domain.StatusSucceeded {
 		t.Fatalf("status = %q, want succeeded after a partial cancel", got.Status)
 	}
-	if got.CanceledAmountCents != 20000 {
-		t.Fatalf("canceled = %d, want 20000", got.CanceledAmountCents)
+	if got.CanceledAmountKRW != 20000 {
+		t.Fatalf("canceled = %d, want 20000", got.CanceledAmountKRW)
 	}
-	if got.RemainingCancelableCents() != 50000 {
-		t.Fatalf("remaining = %d, want 50000", got.RemainingCancelableCents())
+	if got.RemainingCancelableKRW() != 50000 {
+		t.Fatalf("remaining = %d, want 50000", got.RemainingCancelableKRW())
 	}
 	if !got.Cancelable() {
 		t.Fatal("partially canceled payment must stay cancelable")
@@ -301,8 +377,8 @@ func TestPartialCancelsAccumulateAcrossSaves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("final reload: %v", err)
 	}
-	if got.CanceledAmountCents != 70000 {
-		t.Fatalf("canceled = %d, want 70000 cumulative", got.CanceledAmountCents)
+	if got.CanceledAmountKRW != 70000 {
+		t.Fatalf("canceled = %d, want 70000 cumulative", got.CanceledAmountKRW)
 	}
 	if got.Status != domain.StatusCanceled {
 		t.Fatalf("status = %q, want canceled once fully refunded", got.Status)

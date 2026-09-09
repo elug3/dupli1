@@ -34,7 +34,7 @@ func TestDispatcher_CallbackRejectedAlert(t *testing.T) {
 		"provider":   "nano", "source": "return",
 		"payment_id": "pay_000023", "order_id": "ORD-023",
 		"reason": "verify_failed", "result_code": "0000",
-		"expected_cents": 31004, "reported_amount": "31004",
+		"expected_krw": 31004, "reported_amount": "31004",
 		"tran_no": "260905001496",
 		"detail":  "callback hashValue did not verify",
 	})

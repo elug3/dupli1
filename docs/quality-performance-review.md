@@ -14,7 +14,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 
 | # | Finding | Status |
 |---|---------|--------|
-| C1 | **Client-controlled order prices** — `POST /orders` and checkout item APIs accept `unit_price_cents` from the client; totals and payment amounts derive from that. | **Fixed** — order/checkout resolve prices from product (client `unit_price_cents` ignored) |
+| C1 | **Client-controlled order prices** — `POST /orders` and checkout item APIs accept `unit_price_krw` from the client; totals and payment amounts derive from that. | **Fixed** — order/checkout resolve prices from product (client `unit_price_krw` ignored) |
 | C2 | **Unauthenticated `simulate-success`** — `GET /api/v1/payments/{id}/simulate-success` completes payment and publishes `payment.succeeded` with no auth. | **Fixed**, then **removed** — the whole dev-simulate provider/endpoint was later deleted and merged into Bypass, so the route no longer exists |
 | C3 | **Checkout delete-by-skuId skips ownership check** — `DELETE …/items/by-sku-id/{id}` omitted `withCheckoutSessionAccess`. | **Fixed** |
 | C4 | **Payment succeeded + failed NATS publish = stuck order** — `CompletePayment` saves `succeeded` then publishes; on publish failure, retry returns early without republishing. | **Fixed** — already-succeeded payments republish the event (order `MarkOrderPaid` is idempotent) |
@@ -100,7 +100,7 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 
 ## Recommended priority (remaining)
 
-1. ~~**Server-side pricing** at order/checkout create (ignore client `unit_price_cents`)~~ **done** — see [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)
+1. ~~**Server-side pricing** at order/checkout create (ignore client `unit_price_krw`)~~ **done** — see [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)
 2. ~~Inventory service **token refresh** in order bootstrap~~ **done**
 3. ~~**Fail closed without JWT** in order/cart/payment (and Bypass)~~ **done** — see fix plan H7
 4. **Transactional outbox** (or JetStream) for `payment.succeeded` / order events; stop swallowing NATS handler errors

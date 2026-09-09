@@ -30,13 +30,13 @@ type CheckoutSession struct {
 	UnavailableItems []UnavailableItem     `json:"unavailable_items,omitempty"`
 	Status           CheckoutSessionStatus `json:"status"`
 	CouponCode       string                `json:"coupon_code,omitempty"`
-	SubtotalCents    int64                 `json:"subtotal_cents"`
-	DiscountCents    int64                 `json:"discount_cents"`
+	SubtotalKRW      int64                 `json:"subtotal_krw"`
+	DiscountKRW      int64                 `json:"discount_krw"`
 	// ShippingFeeKRW is the delivery charge quoted for this session, in whole
 	// KRW. It is fixed when the session opens so a mid-session config change
 	// cannot move the price the customer was shown.
 	ShippingFeeKRW int64     `json:"shipping_fee_krw"`
-	TotalCents     int64     `json:"total_cents"`
+	TotalKRW       int64     `json:"total_krw"`
 	OrderID        string    `json:"order_id,omitempty"`
 	ExpiresAt      time.Time `json:"expires_at"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -92,7 +92,7 @@ func (s *CheckoutSession) SetItems(items []OrderItem, now time.Time) error {
 	for i, item := range items {
 		item.SkuID = strings.TrimSpace(item.SkuID)
 		item.SKU = strings.ToUpper(strings.TrimSpace(item.SKU))
-		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceCents < 0 {
+		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceKRW < 0 {
 			return ErrInvalidCheckoutSession
 		}
 		copied[i] = item
@@ -111,7 +111,7 @@ func (s *CheckoutSession) UpsertItem(item OrderItem, now time.Time) error {
 
 	item.SkuID = strings.TrimSpace(item.SkuID)
 	item.SKU = strings.ToUpper(strings.TrimSpace(item.SKU))
-	if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceCents < 0 {
+	if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceKRW < 0 {
 		return ErrInvalidCheckoutSession
 	}
 
@@ -238,16 +238,16 @@ func (s *CheckoutSession) recalculateTotals() {
 func (s *CheckoutSession) recalculateTotalsWithDiscount(discountFraction float64) {
 	var subtotal int64
 	for _, item := range s.Items {
-		subtotal += int64(item.Quantity) * item.UnitPriceCents
+		subtotal += int64(item.Quantity) * item.UnitPriceKRW
 	}
 
-	s.SubtotalCents = subtotal
+	s.SubtotalKRW = subtotal
 	if discountFraction > 0 && s.CouponCode != "" {
-		s.DiscountCents = int64(float64(subtotal) * discountFraction)
+		s.DiscountKRW = int64(float64(subtotal) * discountFraction)
 	} else {
-		s.DiscountCents = 0
+		s.DiscountKRW = 0
 	}
-	s.TotalCents = subtotal - s.DiscountCents + s.shippingFeeForTotal()
+	s.TotalKRW = subtotal - s.DiscountKRW + s.shippingFeeForTotal()
 }
 
 // shippingFeeForTotal is the delivery charge to include in the session total.

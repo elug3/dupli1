@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/cart/pkg/handler"
 	"github.com/elug3/dupli1/cart/pkg/infra/memory"
 	"github.com/elug3/dupli1/cart/pkg/ports"
 	"github.com/elug3/dupli1/cart/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -24,22 +24,22 @@ type fakeProduct struct{}
 
 func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantInfo, error) {
 	return &ports.VariantInfo{
-		SKU:            sku,
-		ProductID:      "BOT-001",
-		Color:          "Black",
-		UnitPriceCents: 125000,
-		ImageURL:       "https://example.com/img.jpg",
+		SKU:          sku,
+		ProductID:    "BOT-001",
+		Color:        "Black",
+		UnitPriceKRW: 125000,
+		ImageURL:     "https://example.com/img.jpg",
 	}, nil
 }
 
 func (f *fakeProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports.VariantInfo, error) {
 	return &ports.VariantInfo{
-		SkuID:          skuID,
-		SKU:            skuID,
-		ProductID:      "BOT-001",
-		Color:          "Black",
-		UnitPriceCents: 125000,
-		ImageURL:       "https://example.com/img.jpg",
+		SkuID:        skuID,
+		SKU:          skuID,
+		ProductID:    "BOT-001",
+		Color:        "Black",
+		UnitPriceKRW: 125000,
+		ImageURL:     "https://example.com/img.jpg",
 	}, nil
 }
 
@@ -116,9 +116,9 @@ func TestCartCRUD(t *testing.T) {
 	}
 
 	var cart struct {
-		CustomerID    string `json:"customer_id"`
-		SubtotalCents int64  `json:"subtotal_cents"`
-		Items         []struct {
+		CustomerID  string `json:"customer_id"`
+		SubtotalKRW int64  `json:"subtotal_krw"`
+		Items       []struct {
 			SKU string `json:"sku"`
 		} `json:"items"`
 	}
@@ -128,8 +128,8 @@ func TestCartCRUD(t *testing.T) {
 	if cart.CustomerID != userID {
 		t.Fatalf("customer_id = %q, want %q", cart.CustomerID, userID)
 	}
-	if cart.SubtotalCents != 250000 {
-		t.Fatalf("subtotal = %d, want 250000", cart.SubtotalCents)
+	if cart.SubtotalKRW != 250000 {
+		t.Fatalf("subtotal = %d, want 250000", cart.SubtotalKRW)
 	}
 	if len(cart.Items) != 1 || cart.Items[0].SKU != "BOT-001-BLK" {
 		t.Fatalf("unexpected items: %+v", cart.Items)

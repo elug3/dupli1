@@ -27,7 +27,7 @@ func (s *Service) handlePaymentSucceeded(ctx context.Context, _ string, payload 
 	if event.OrderID == "" || event.PaymentID == "" {
 		return fmt.Errorf("payment.succeeded missing order_id or payment_id")
 	}
-	_, err := s.MarkOrderPaid(ctx, event.OrderID, event.PaymentID, event.AmountCents)
+	_, err := s.MarkOrderPaid(ctx, event.OrderID, event.PaymentID, event.AmountKRW)
 	if err != nil {
 		return fmt.Errorf("mark order paid order_id=%s payment_id=%s: %w", event.OrderID, event.PaymentID, err)
 	}
@@ -121,16 +121,16 @@ func (s *Service) handlePaymentCanceled(ctx context.Context, _ string, payload [
 		return nil
 	}
 	if !event.RemainingSpecified() {
-		log.Printf("payment.canceled missing remaining_cents (order %s payment %s): skip", event.OrderID, event.PaymentID)
+		log.Printf("payment.canceled missing remaining_krw (order %s payment %s): skip", event.OrderID, event.PaymentID)
 		return nil
 	}
-	return s.CancelOrderForRefund(ctx, event.OrderID, event.PaymentID, event.RemainingCents)
+	return s.CancelOrderForRefund(ctx, event.OrderID, event.PaymentID, event.RemainingKRW)
 }
 
 // CancelOrderForRefund cancels an order whose payment was fully refunded.
 //
 // Only a full refund of the order's own payment cancels: a partial one
-// (remainingCents > 0) leaves money still owed on goods the customer has not
+// (remainingKRW > 0) leaves money still owed on goods the customer has not
 // been made whole for, and silently cancelling that is worse than leaving it
 // for a human. A payload whose payment_id does not match the order is ignored
 // so a spoofed or mis-routed event cannot cancel someone else's paid order.
@@ -143,14 +143,14 @@ func (s *Service) handlePaymentCanceled(ctx context.Context, _ string, payload [
 //
 // Idempotent: a replayed event finds the order already canceled and no-ops,
 // matching how MarkOrderPaid tolerates redelivery.
-func (s *Service) CancelOrderForRefund(ctx context.Context, orderID, paymentID string, remainingCents int64) error {
+func (s *Service) CancelOrderForRefund(ctx context.Context, orderID, paymentID string, remainingKRW int64) error {
 	orderID = strings.TrimSpace(orderID)
 	paymentID = strings.TrimSpace(paymentID)
 
-	if remainingCents > 0 {
+	if remainingKRW > 0 {
 		log.Printf(
 			"payment.canceled: order %s partially refunded (payment %s, %d still captured); leaving for manual review",
-			orderID, paymentID, remainingCents,
+			orderID, paymentID, remainingKRW,
 		)
 		return nil
 	}

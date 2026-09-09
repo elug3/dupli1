@@ -143,10 +143,10 @@ On `GET /api/v1/cart` and after mutations, cart calls product for both variant i
 
 | Source | Endpoint | Fields added |
 |--------|----------|--------------|
-| Product | `GET /api/v1/products/variants?sku_ids=` (preferred) or `/api/v1/products/variants/by-sku/{sku}` / `by-sku-id/{skuId}` | `product_id`, `unit_price_cents`, `color`, `image_url` |
+| Product | `GET /api/v1/products/variants?sku_ids=` (preferred) or `/api/v1/products/variants/by-sku/{sku}` / `by-sku-id/{skuId}` | `product_id`, `unit_price_krw`, `color`, `image_url` |
 | Product (inventory) | `GET /api/v1/products/inventory/items/{sku}` or `.../items/by-sku-id/{skuId}` | `available_qty` (optional) |
 
-Prices are **server-sourced** from product — clients send only `{ "sku" or "sku_id", "quantity" }` on add. Catalog `price` is **KRW won**; cart maps it 1:1 into `unit_price_cents` (whole won — do not ×100).
+Prices are **server-sourced** from product — clients send only `{ "sku" or "sku_id", "quantity" }` on add. Catalog `price` is **KRW won**; cart maps it 1:1 into `unit_price_krw` (whole won — do not ×100).
 
 ---
 
@@ -168,19 +168,19 @@ Return the authenticated user's cart.
       "sku_id": "01JAY6Z9K3F8QW1G7H2T5X0ABC",
       "product_id": "BOT-001",
       "quantity": 1,
-      "unit_price_cents": 125000,
+      "unit_price_krw": 125000,
       "color": "Black",
       "image_url": "https://...",
       "available_qty": 3
     }
   ],
   "unavailable_items": [],
-  "subtotal_cents": 125000,
+  "subtotal_krw": 125000,
   "updated_at": "2026-07-05T12:00:00Z"
 }
 ```
 
-When a stored line can no longer be resolved to an active variant, it remains in `items` with `available: false` and empty enrichment (`product_id`, `unit_price_cents`, …). The same line is listed under top-level `unavailable_items`:
+When a stored line can no longer be resolved to an active variant, it remains in `items` with `available: false` and empty enrichment (`product_id`, `unit_price_krw`, …). The same line is listed under top-level `unavailable_items`:
 
 ```json
 {
@@ -194,7 +194,7 @@ When a stored line can no longer be resolved to an active variant, it remains in
 }
 ```
 
-`subtotal_cents` **excludes** unavailable lines. `unavailable_items` is omitted (or `[]`) when every line is sellable.
+`subtotal_krw` **excludes** unavailable lines. `unavailable_items` is omitted (or `[]`) when every line is sellable.
 ---
 
 ### `POST /api/v1/cart/items`
@@ -274,7 +274,7 @@ sequenceDiagram
     participant Product as dupli1-product
 
     Client->>Cart: GET /api/v1/cart
-    Cart-->>Client: items + unit_price_cents
+    Cart-->>Client: items + unit_price_krw
 
     Client->>Order: POST /api/v1/orders/checkout/sessions
     Client->>Order: PUT /api/v1/orders/checkout/sessions/{id}/items

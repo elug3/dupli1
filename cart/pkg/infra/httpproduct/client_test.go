@@ -37,8 +37,8 @@ func TestGetVariantMapsColor(t *testing.T) {
 	if info.Color != "Green" {
 		t.Fatalf("Color = %q, want Green", info.Color)
 	}
-	if info.UnitPriceCents != 2890000 {
-		t.Fatalf("UnitPriceCents=%d, want 2890000 (KRW won, not ×100)", info.UnitPriceCents)
+	if info.UnitPriceKRW != 2890000 {
+		t.Fatalf("UnitPriceKRW=%d, want 2890000 (KRW won, not ×100)", info.UnitPriceKRW)
 	}
 }
 

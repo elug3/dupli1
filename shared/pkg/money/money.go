@@ -1,8 +1,9 @@
 // Package money defines Dupli1's single storefront currency (KRW) and amount helpers.
 //
 // Catalog prices (product.price) and cart/order/payment integer fields use the same
-// unit: whole Korean won. JSON fields historically named *_cents are Stripe "minor
-// units"; for KRW (a zero-decimal currency) that is whole won — not won×100.
+// unit: whole Korean won. JSON fields are named *_krw (historically *_cents, a
+// Stripe "minor units" leftover). For KRW (a zero-decimal currency) that is whole
+// won — not won×100.
 package money
 
 import (

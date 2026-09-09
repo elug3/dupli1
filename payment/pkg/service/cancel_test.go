@@ -32,7 +32,7 @@ func (p *cancelProvider) CancelPayment(_ context.Context, input ports.CancelPaym
 	if p.result != nil {
 		return p.result, nil
 	}
-	return &ports.CancelPaymentResult{CanceledAmountCents: input.AmountCents}, nil
+	return &ports.CancelPaymentResult{CanceledAmountKRW: input.AmountKRW}, nil
 }
 
 // cancelEventPublisher captures payment.canceled events off the outbox drain.
@@ -58,10 +58,10 @@ func (p *cancelEventPublisher) Publish(_ context.Context, subject string, event 
 
 // seedSucceededCardPayment creates a card payment and drives it to succeeded,
 // as a NANO callback would, so it is ready to cancel.
-func seedSucceededCardPayment(t *testing.T, repo ports.Repository, provider ports.CheckoutProvider, pub ports.EventPublisher, totalCents int64) (*service.Service, *domain.Payment) {
+func seedSucceededCardPayment(t *testing.T, repo ports.Repository, provider ports.CheckoutProvider, pub ports.EventPublisher, totalKRW int64) (*service.Service, *domain.Payment) {
 	t.Helper()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: totalCents,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: totalKRW,
 		RecipientName: "윤라희", RecipientPhone: "01012345678",
 	}}
 	svc := service.New(repo, orders, provider, pub)
@@ -101,8 +101,8 @@ func TestCancelPayment_FullCancelCallsProviderAndClosesPayment(t *testing.T) {
 		t.Fatalf("provider calls = %d, want 1", len(provider.calls))
 	}
 	call := provider.calls[0]
-	if call.AmountCents != 70000 {
-		t.Fatalf("provider asked to cancel %d, want the full 70000", call.AmountCents)
+	if call.AmountKRW != 70000 {
+		t.Fatalf("provider asked to cancel %d, want the full 70000", call.AmountKRW)
 	}
 	if call.ProviderRef != "2409030071109" {
 		t.Fatalf("provider ref = %q, want the NANO tranNo", call.ProviderRef)
@@ -118,8 +118,8 @@ func TestCancelPayment_FullCancelCallsProviderAndClosesPayment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if stored.Status != domain.StatusCanceled || stored.CanceledAmountCents != 70000 {
-		t.Fatalf("stored = %q / %d", stored.Status, stored.CanceledAmountCents)
+	if stored.Status != domain.StatusCanceled || stored.CanceledAmountKRW != 70000 {
+		t.Fatalf("stored = %q / %d", stored.Status, stored.CanceledAmountKRW)
 	}
 	if stored.CanceledBy != "mgr_1" || stored.CancelReason != "ops reject" {
 		t.Fatalf("audit fields = %q / %q", stored.CanceledBy, stored.CancelReason)
@@ -132,8 +132,8 @@ func TestCancelPayment_FullCancelCallsProviderAndClosesPayment(t *testing.T) {
 	if ev.OrderID != "ord_1" || ev.PaymentID != seeded.ID {
 		t.Fatalf("event ids = %q / %q", ev.OrderID, ev.PaymentID)
 	}
-	if ev.AmountCents != 70000 || ev.RemainingCents != 0 {
-		t.Fatalf("event amounts = %d / %d", ev.AmountCents, ev.RemainingCents)
+	if ev.AmountKRW != 70000 || ev.RemainingKRW != 0 {
+		t.Fatalf("event amounts = %d / %d", ev.AmountKRW, ev.RemainingKRW)
 	}
 }
 
@@ -141,14 +141,14 @@ func TestCancelPayment_PartialLeavesRemainder(t *testing.T) {
 	repo := memory.NewRepository()
 	provider := &cancelProvider{
 		result: &ports.CancelPaymentResult{
-			CanceledAmountCents: 20000, RemainingCents: 50000, RemainingKnown: true,
+			CanceledAmountKRW: 20000, RemainingKRW: 50000, RemainingKnown: true,
 		},
 	}
 	pub := &cancelEventPublisher{}
 	svc, seeded := seedSucceededCardPayment(t, repo, provider, pub, 70000)
 
 	canceled, err := svc.CancelPayment(t.Context(), service.CancelPaymentInput{
-		PaymentID: seeded.ID, AmountCents: 20000,
+		PaymentID: seeded.ID, AmountKRW: 20000,
 	})
 	if err != nil {
 		t.Fatalf("CancelPayment: %v", err)
@@ -156,10 +156,10 @@ func TestCancelPayment_PartialLeavesRemainder(t *testing.T) {
 	if canceled.Status != domain.StatusSucceeded {
 		t.Fatalf("status = %q, want succeeded after a partial cancel", canceled.Status)
 	}
-	if canceled.RemainingCancelableCents() != 50000 {
-		t.Fatalf("remaining = %d, want 50000", canceled.RemainingCancelableCents())
+	if canceled.RemainingCancelableKRW() != 50000 {
+		t.Fatalf("remaining = %d, want 50000", canceled.RemainingCancelableKRW())
 	}
-	if len(pub.events) != 1 || pub.events[0].RemainingCents != 50000 {
+	if len(pub.events) != 1 || pub.events[0].RemainingKRW != 50000 {
 		t.Fatalf("event remaining = %+v", pub.events)
 	}
 }
@@ -184,8 +184,8 @@ func TestCancelPayment_ProviderRejectionLeavesPaymentUntouched(t *testing.T) {
 	if stored.Status != domain.StatusSucceeded {
 		t.Fatalf("status = %q, want succeeded to survive a rejected cancel", stored.Status)
 	}
-	if stored.CanceledAmountCents != 0 || stored.CanceledAt != nil {
-		t.Fatalf("rejected cancel left state: %d / %v", stored.CanceledAmountCents, stored.CanceledAt)
+	if stored.CanceledAmountKRW != 0 || stored.CanceledAt != nil {
+		t.Fatalf("rejected cancel left state: %d / %v", stored.CanceledAmountKRW, stored.CanceledAt)
 	}
 	if len(pub.events) != 0 {
 		t.Fatalf("rejected cancel must publish nothing, got %d", len(pub.events))
@@ -197,7 +197,7 @@ func TestCancelPayment_ProviderRejectionLeavesPaymentUntouched(t *testing.T) {
 func TestCancelPayment_BypassSkipsProvider(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 	}}
 	provider := &cancelProvider{err: errors.New("provider must not be called for bypass")}
 	pub := &cancelEventPublisher{}
@@ -250,13 +250,13 @@ func TestCancelPayment_IdempotencyKeyBlocksDoublePartialRefund(t *testing.T) {
 	svc, seeded := seedSucceededCardPayment(t, repo, provider, &cancelEventPublisher{}, 70000)
 
 	first, err := svc.CancelPayment(t.Context(), service.CancelPaymentInput{
-		PaymentID: seeded.ID, AmountCents: 20000, IdempotencyKey: "retry-1",
+		PaymentID: seeded.ID, AmountKRW: 20000, IdempotencyKey: "retry-1",
 	})
 	if err != nil {
 		t.Fatalf("first partial: %v", err)
 	}
 	second, err := svc.CancelPayment(t.Context(), service.CancelPaymentInput{
-		PaymentID: seeded.ID, AmountCents: 20000, IdempotencyKey: "retry-1",
+		PaymentID: seeded.ID, AmountKRW: 20000, IdempotencyKey: "retry-1",
 	})
 	if err != nil {
 		t.Fatalf("retried partial: %v", err)
@@ -264,11 +264,11 @@ func TestCancelPayment_IdempotencyKeyBlocksDoublePartialRefund(t *testing.T) {
 	if len(provider.calls) != 1 {
 		t.Fatalf("provider called %d times, want 1 for a retried cancel", len(provider.calls))
 	}
-	if second.CanceledAmountCents != first.CanceledAmountCents {
-		t.Fatalf("retry changed total: %d then %d", first.CanceledAmountCents, second.CanceledAmountCents)
+	if second.CanceledAmountKRW != first.CanceledAmountKRW {
+		t.Fatalf("retry changed total: %d then %d", first.CanceledAmountKRW, second.CanceledAmountKRW)
 	}
-	if second.CanceledAmountCents != 20000 {
-		t.Fatalf("canceled = %d, want 20000", second.CanceledAmountCents)
+	if second.CanceledAmountKRW != 20000 {
+		t.Fatalf("canceled = %d, want 20000", second.CanceledAmountKRW)
 	}
 }
 
@@ -279,12 +279,12 @@ func TestCancelPayment_DifferentKeyRefundsAgain(t *testing.T) {
 	svc, seeded := seedSucceededCardPayment(t, repo, provider, &cancelEventPublisher{}, 70000)
 
 	if _, err := svc.CancelPayment(t.Context(), service.CancelPaymentInput{
-		PaymentID: seeded.ID, AmountCents: 20000, IdempotencyKey: "cancel-1",
+		PaymentID: seeded.ID, AmountKRW: 20000, IdempotencyKey: "cancel-1",
 	}); err != nil {
 		t.Fatalf("first partial: %v", err)
 	}
 	got, err := svc.CancelPayment(t.Context(), service.CancelPaymentInput{
-		PaymentID: seeded.ID, AmountCents: 30000, IdempotencyKey: "cancel-2",
+		PaymentID: seeded.ID, AmountKRW: 30000, IdempotencyKey: "cancel-2",
 	})
 	if err != nil {
 		t.Fatalf("second partial: %v", err)
@@ -292,8 +292,8 @@ func TestCancelPayment_DifferentKeyRefundsAgain(t *testing.T) {
 	if len(provider.calls) != 2 {
 		t.Fatalf("provider calls = %d, want 2", len(provider.calls))
 	}
-	if got.CanceledAmountCents != 50000 {
-		t.Fatalf("canceled = %d, want 50000 cumulative", got.CanceledAmountCents)
+	if got.CanceledAmountKRW != 50000 {
+		t.Fatalf("canceled = %d, want 50000 cumulative", got.CanceledAmountKRW)
 	}
 	if got.Status != domain.StatusSucceeded {
 		t.Fatalf("status = %q, want succeeded with 20000 remaining", got.Status)
@@ -306,7 +306,7 @@ func TestCancelPayment_RejectsAmountOverRemaining(t *testing.T) {
 	svc, seeded := seedSucceededCardPayment(t, repo, provider, &cancelEventPublisher{}, 70000)
 
 	_, err := svc.CancelPayment(t.Context(), service.CancelPaymentInput{
-		PaymentID: seeded.ID, AmountCents: 70001,
+		PaymentID: seeded.ID, AmountKRW: 70001,
 	})
 	if !errors.Is(err, domain.ErrCancelAmountInvalid) {
 		t.Fatalf("err = %v, want ErrCancelAmountInvalid", err)
@@ -322,22 +322,22 @@ func TestCancelPayment_ProviderRemainingWins(t *testing.T) {
 	repo := memory.NewRepository()
 	provider := &cancelProvider{
 		result: &ports.CancelPaymentResult{
-			CanceledAmountCents: 20000, RemainingCents: 40000, RemainingKnown: true,
+			CanceledAmountKRW: 20000, RemainingKRW: 40000, RemainingKnown: true,
 		},
 	}
 	svc, seeded := seedSucceededCardPayment(t, repo, provider, &cancelEventPublisher{}, 70000)
 
 	got, err := svc.CancelPayment(t.Context(), service.CancelPaymentInput{
-		PaymentID: seeded.ID, AmountCents: 20000,
+		PaymentID: seeded.ID, AmountKRW: 20000,
 	})
 	if err != nil {
 		t.Fatalf("CancelPayment: %v", err)
 	}
-	if got.CanceledAmountCents != 30000 {
-		t.Fatalf("canceled = %d, want 30000 derived from the provider's remainAmt", got.CanceledAmountCents)
+	if got.CanceledAmountKRW != 30000 {
+		t.Fatalf("canceled = %d, want 30000 derived from the provider's remainAmt", got.CanceledAmountKRW)
 	}
-	if got.RemainingCancelableCents() != 40000 {
-		t.Fatalf("remaining = %d, want 40000 to match the provider", got.RemainingCancelableCents())
+	if got.RemainingCancelableKRW() != 40000 {
+		t.Fatalf("remaining = %d, want 40000 to match the provider", got.RemainingCancelableKRW())
 	}
 }
 
@@ -346,7 +346,7 @@ func TestCancelPayment_ProviderRemainingWins(t *testing.T) {
 func TestCancelPayment_ProviderOvershootIsClampedNotDropped(t *testing.T) {
 	repo := memory.NewRepository()
 	provider := &cancelProvider{
-		result: &ports.CancelPaymentResult{CanceledAmountCents: 999999},
+		result: &ports.CancelPaymentResult{CanceledAmountKRW: 999999},
 	}
 	svc, seeded := seedSucceededCardPayment(t, repo, provider, &cancelEventPublisher{}, 70000)
 
@@ -357,8 +357,8 @@ func TestCancelPayment_ProviderOvershootIsClampedNotDropped(t *testing.T) {
 	if got.Status != domain.StatusCanceled {
 		t.Fatalf("status = %q, want canceled", got.Status)
 	}
-	if got.CanceledAmountCents != 70000 {
-		t.Fatalf("canceled = %d, want it clamped to the 70000 total", got.CanceledAmountCents)
+	if got.CanceledAmountKRW != 70000 {
+		t.Fatalf("canceled = %d, want it clamped to the 70000 total", got.CanceledAmountKRW)
 	}
 }
 
@@ -414,8 +414,8 @@ func TestCancelPayment_ConcurrentCancelsCallProviderOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if stored.Status != domain.StatusCanceled || stored.CanceledAmountCents != 70000 {
-		t.Fatalf("stored = %q / %d, want a single full cancel", stored.Status, stored.CanceledAmountCents)
+	if stored.Status != domain.StatusCanceled || stored.CanceledAmountKRW != 70000 {
+		t.Fatalf("stored = %q / %d, want a single full cancel", stored.Status, stored.CanceledAmountKRW)
 	}
 }
 
@@ -433,7 +433,7 @@ func (p *blockingCancelProvider) CancelPayment(_ context.Context, input ports.Ca
 		p.once.Do(func() { close(p.started) })
 		<-p.release
 	}
-	return &ports.CancelPaymentResult{CanceledAmountCents: input.AmountCents}, nil
+	return &ports.CancelPaymentResult{CanceledAmountKRW: input.AmountKRW}, nil
 }
 
 func TestCancelPayment_UnknownPayment(t *testing.T) {
@@ -448,7 +448,7 @@ func TestCancelPayment_UnknownPayment(t *testing.T) {
 func TestCancelPayment_RequiresPaymentNotCancelable(t *testing.T) {
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "윤라희", RecipientPhone: "01012345678",
 	}}
 	provider := &cancelProvider{}

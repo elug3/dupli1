@@ -5,7 +5,7 @@
 #
 # Exercises the canonical /api/v1/{service}/... paths through the gateway and
 # asserts the launch-critical invariants: prices come from the catalog (a bogus
-# client unit_price_cents is ignored), stock is reserved at checkout and committed
+# client unit_price_krw is ignored), stock is reserved at checkout and committed
 # on ship, soldCount tracks the commit, payment bypass stays manager-only, and the
 # removed `confirmed` status is rejected.
 #
@@ -141,10 +141,10 @@ CUSTOMER_ID=$(api GET /api/v1/auth/me "$CUSTOMER" | field 'd["user_id"]')
 [ -n "$CUSTOMER_ID" ] && pass "customer $CUSTOMER_ID" || { fail "customer sign-in"; exit 1; }
 
 step "Cart resolves price server-side"
-# unit_price_cents below is deliberately wrong; the server must ignore it.
+# unit_price_krw below is deliberately wrong; the server must ignore it.
 cart=$(api POST /api/v1/cart/items "$CUSTOMER" \
-  "{\"sku_id\":\"$SKU_ID\",\"quantity\":$QUANTITY,\"unit_price_cents\":1}")
-cart_price=$(echo "$cart" | field 'd["items"][0]["unit_price_cents"]')
+  "{\"sku_id\":\"$SKU_ID\",\"quantity\":$QUANTITY,\"unit_price_krw\":1}")
+cart_price=$(echo "$cart" | field 'd["items"][0]["unit_price_krw"]')
 catalog_price=$(api GET "/api/v1/products/$PRODUCT_ID" | field 'int(d["price"])')
 check "cart unit price came from the catalog" "$cart_price" "$catalog_price"
 
@@ -153,11 +153,11 @@ session=$(api POST /api/v1/orders/checkout/sessions "$CUSTOMER" "{\"customer_id\
 SESSION_ID=$(echo "$session" | field 'd["id"]')
 [ -n "$SESSION_ID" ] && pass "session $SESSION_ID" || { fail "create session: $session"; exit 1; }
 session=$(api POST "/api/v1/orders/checkout/sessions/$SESSION_ID/items" "$CUSTOMER" \
-  "{\"sku_id\":\"$SKU_ID\",\"quantity\":$QUANTITY,\"unit_price_cents\":1}")
-check "session subtotal" "$(echo "$session" | field 'd["subtotal_cents"]')" "$((catalog_price * QUANTITY))"
+  "{\"sku_id\":\"$SKU_ID\",\"quantity\":$QUANTITY,\"unit_price_krw\":1}")
+check "session subtotal" "$(echo "$session" | field 'd["subtotal_krw"]')" "$((catalog_price * QUANTITY))"
 session_fee=$(echo "$session" | field 'd.get("shipping_fee_krw", 0)')
 check "session total includes shipping" \
-  "$(echo "$session" | field 'd["total_cents"]')" \
+  "$(echo "$session" | field 'd["total_krw"]')" \
   "$((catalog_price * QUANTITY + session_fee))"
 
 step "Complete checkout"
@@ -169,9 +169,9 @@ check "order status" "$(echo "$completed" | field 'd["order"]["status"]')" pendi
 # Read the delivery charge back rather than hard-coding it, so this passes at any
 # configured DUPLI1_ORDER_SHIPPING_FEE_KRW (0 included).
 shipping_fee=$(echo "$completed" | field 'd["order"].get("shipping_fee_krw", 0)')
-check "order subtotal" "$(echo "$completed" | field 'd["order"]["subtotal_cents"]')" "$((catalog_price * QUANTITY))"
+check "order subtotal" "$(echo "$completed" | field 'd["order"]["subtotal_krw"]')" "$((catalog_price * QUANTITY))"
 check "order total includes shipping" \
-  "$(echo "$completed" | field 'd["order"]["total_cents"]')" \
+  "$(echo "$completed" | field 'd["order"]["total_krw"]')" \
   "$((catalog_price * QUANTITY + shipping_fee))"
 
 read -r stock_reserved_q stock_reserved_r <<<"$(stock_of "$SKU_ID")"
