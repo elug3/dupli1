@@ -30,7 +30,7 @@ func dispatchPaymentCanceled(t *testing.T, payload map[string]any) *recordedNoti
 func TestDispatcher_FullRefundAlert(t *testing.T) {
 	n := dispatchPaymentCanceled(t, map[string]any{
 		"event_type": "payment.canceled", "order_id": "ORD-001", "payment_id": "pay_1",
-		"amount_cents": 280000, "remaining_cents": 0,
+		"amount_krw": 280000, "remaining_krw": 0,
 		"reason": "ops reject", "canceled_by": "mgr-1",
 	})
 
@@ -49,7 +49,7 @@ func TestDispatcher_FullRefundAlert(t *testing.T) {
 func TestDispatcher_PartialRefundAlertDiffersFromFull(t *testing.T) {
 	n := dispatchPaymentCanceled(t, map[string]any{
 		"event_type": "payment.canceled", "order_id": "ORD-002", "payment_id": "pay_2",
-		"amount_cents": 20000, "remaining_cents": 50000,
+		"amount_krw": 20000, "remaining_krw": 50000,
 	})
 
 	for _, want := range []string{"Partial refund", "₩20,000", "₩50,000", "unchanged"} {
@@ -66,7 +66,7 @@ func TestDispatcher_PartialRefundAlertDiffersFromFull(t *testing.T) {
 func TestDispatcher_RefundAlertOmitsEmptyFields(t *testing.T) {
 	n := dispatchPaymentCanceled(t, map[string]any{
 		"event_type": "payment.canceled", "order_id": "ORD-003", "payment_id": "pay_3",
-		"amount_cents": 1000, "remaining_cents": 0,
+		"amount_krw": 1000, "remaining_krw": 0,
 	})
 	for _, unwanted := range []string{"Reason:", "By:"} {
 		if strings.Contains(n.message, unwanted) {
@@ -82,7 +82,7 @@ func TestDispatcher_RefundAlertSkippedWithoutChat(t *testing.T) {
 	dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{})
 	raw, _ := json.Marshal(map[string]any{
 		"event_type": "payment.canceled", "order_id": "ORD-004",
-		"payment_id": "pay_4", "amount_cents": 1000,
+		"payment_id": "pay_4", "amount_krw": 1000,
 	})
 	if err := dispatcher.HandleForTest(t.Context(), service.SubjectPaymentCanceled, raw); err != nil {
 		t.Fatalf("unconfigured chat should be skipped, got %v", err)

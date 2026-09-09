@@ -222,7 +222,7 @@ func (s *Service) enrichCart(ctx context.Context, customerID string, stored []do
 				enriched.SKU = info.SKU
 				enriched.ProductID = info.ProductID
 				enriched.Color = info.Color
-				enriched.UnitPriceCents = info.UnitPriceCents
+				enriched.UnitPriceKRW = info.UnitPriceKRW
 				enriched.ImageURL = info.ImageURL
 			} else if errors.Is(err, ports.ErrVariantNotFound) {
 				available := false
@@ -252,14 +252,14 @@ func (s *Service) enrichCart(ctx context.Context, customerID string, stored []do
 		if enriched.Available != nil && !*enriched.Available {
 			continue
 		}
-		subtotal += int64(enriched.Quantity) * enriched.UnitPriceCents
+		subtotal += int64(enriched.Quantity) * enriched.UnitPriceKRW
 	}
 
 	cart := &domain.Cart{
-		CustomerID:    customerID,
-		Items:         items,
-		SubtotalCents: subtotal,
-		UpdatedAt:     updatedAt,
+		CustomerID:  customerID,
+		Items:       items,
+		SubtotalKRW: subtotal,
+		UpdatedAt:   updatedAt,
 	}
 	if len(unavailable) > 0 {
 		cart.UnavailableItems = unavailable

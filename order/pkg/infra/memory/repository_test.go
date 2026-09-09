@@ -14,7 +14,7 @@ func seedPendingOrder(t *testing.T, repo *memory.Repository, id string, dueAt ti
 	ctx := t.Context()
 	now := dueAt
 	order, err := domain.NewOrder(id, "cust-1", "res-1", []domain.OrderItem{
-		{SKU: "BAG-1", SkuID: "01SKU", Quantity: 1, UnitPriceCents: 1000},
+		{SKU: "BAG-1", SkuID: "01SKU", Quantity: 1, UnitPriceKRW: 1000},
 	}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
@@ -102,7 +102,7 @@ func TestCancelIfPaidForRefundCancelsMatchingPaidOrder(t *testing.T) {
 	repo := memory.NewRepository()
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	order := seedPendingOrder(t, repo, "ord-ref-1", now.Add(-time.Minute))
-	if err := order.MarkPaid("pay-ord-ref-1", order.TotalCents, now); err != nil {
+	if err := order.MarkPaid("pay-ord-ref-1", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := repo.Save(ctx, order); err != nil {
@@ -126,7 +126,7 @@ func TestCancelIfPaidForRefundSkipsMismatchedPayment(t *testing.T) {
 	repo := memory.NewRepository()
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	order := seedPendingOrder(t, repo, "ord-ref-2", now.Add(-time.Minute))
-	if err := order.MarkPaid("pay-ord-ref-2", order.TotalCents, now); err != nil {
+	if err := order.MarkPaid("pay-ord-ref-2", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := repo.Save(ctx, order); err != nil {
@@ -154,7 +154,7 @@ func TestShipIfPaidSkipsCanceledOrder(t *testing.T) {
 	repo := memory.NewRepository()
 	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 	order := seedPendingOrder(t, repo, "ord-ship-1", now.Add(-time.Minute))
-	if err := order.MarkPaid("pay-ship-1", order.TotalCents, now); err != nil {
+	if err := order.MarkPaid("pay-ship-1", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := repo.Save(ctx, order); err != nil {

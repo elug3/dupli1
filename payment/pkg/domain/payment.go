@@ -50,7 +50,7 @@ type Payment struct {
 	ID          string        `json:"id"`
 	OrderID     string        `json:"order_id"`
 	CustomerID  string        `json:"customer_id"`
-	AmountCents int64         `json:"amount_cents"` // whole KRW won (zero-decimal minor units)
+	AmountKRW   int64         `json:"amount_krw"` // whole KRW won (zero-decimal minor units)
 	Currency    string        `json:"currency"`
 	Status      PaymentStatus `json:"status"`
 	Method      string        `json:"method"`
@@ -65,14 +65,14 @@ type Payment struct {
 	PayerPhone     string `json:"-"`
 	PayerEmail     string `json:"-"`
 	IdempotencyKey string `json:"-"`
-	// CanceledAmountCents is the cumulative amount canceled at the PG. It stays
-	// 0 for an untouched payment, sits between 1 and AmountCents-1 after a
-	// partial cancel (Status remains succeeded), and equals AmountCents once
+	// CanceledAmountKRW is the cumulative amount canceled at the PG. It stays
+	// 0 for an untouched payment, sits between 1 and AmountKRW-1 after a
+	// partial cancel (Status remains succeeded), and equals AmountKRW once
 	// fully canceled (Status becomes canceled).
-	CanceledAmountCents int64      `json:"canceled_amount_cents,omitempty"`
-	CanceledAt          *time.Time `json:"canceled_at,omitempty"`
-	CancelReason        string     `json:"cancel_reason,omitempty"`
-	CanceledBy          string     `json:"canceled_by,omitempty"`
+	CanceledAmountKRW int64      `json:"canceled_amount_krw,omitempty"`
+	CanceledAt        *time.Time `json:"canceled_at,omitempty"`
+	CancelReason      string     `json:"cancel_reason,omitempty"`
+	CanceledBy        string     `json:"canceled_by,omitempty"`
 	// CancelIdempotencyKey is the key of the most recent applied cancel, used to
 	// make a client retry of that same cancel a no-op. Only the latest key is
 	// kept: it guards the realistic double-submit (timeout then retry), not an
@@ -88,8 +88,8 @@ func (p *Payment) MarkFailed(now time.Time) {
 	p.UpdatedAt = now
 }
 
-func NewPayment(id, orderID, customerID string, amountCents int64, currency, provider, providerRef, checkoutURL string, now time.Time) (*Payment, error) {
-	if id == "" || orderID == "" || customerID == "" || amountCents <= 0 {
+func NewPayment(id, orderID, customerID string, amountKRW int64, currency, provider, providerRef, checkoutURL string, now time.Time) (*Payment, error) {
+	if id == "" || orderID == "" || customerID == "" || amountKRW <= 0 {
 		return nil, ErrInvalidPayment
 	}
 	normalized, err := money.NormalizeCurrency(currency)
@@ -100,7 +100,7 @@ func NewPayment(id, orderID, customerID string, amountCents int64, currency, pro
 		ID:          id,
 		OrderID:     orderID,
 		CustomerID:  customerID,
-		AmountCents: amountCents,
+		AmountKRW:   amountKRW,
 		Currency:    normalized,
 		Status:      StatusRequiresPayment,
 		Method:      MethodCreditCard,
@@ -133,10 +133,10 @@ func (p *Payment) MarkSucceeded(now time.Time) {
 	p.UpdatedAt = now
 }
 
-// RemainingCancelableCents is the amount still captured and therefore still
+// RemainingCancelableKRW is the amount still captured and therefore still
 // cancelable at the PG.
-func (p *Payment) RemainingCancelableCents() int64 {
-	remaining := p.AmountCents - p.CanceledAmountCents
+func (p *Payment) RemainingCancelableKRW() int64 {
+	remaining := p.AmountKRW - p.CanceledAmountKRW
 	if remaining < 0 {
 		return 0
 	}
@@ -148,17 +148,17 @@ func (p *Payment) RemainingCancelableCents() int64 {
 // requires_payment is abandoned rather than canceled, and failed/expired
 // never captured money.
 func (p *Payment) Cancelable() bool {
-	return p.Status == StatusSucceeded && p.RemainingCancelableCents() > 0
+	return p.Status == StatusSucceeded && p.RemainingCancelableKRW() > 0
 }
 
 // ValidateCancel checks a requested cancel without mutating the payment, so
 // callers can reject bad input before spending a PG round trip.
-// amountCents must be positive and at most the remaining balance.
-func (p *Payment) ValidateCancel(amountCents int64) error {
+// amountKRW must be positive and at most the remaining balance.
+func (p *Payment) ValidateCancel(amountKRW int64) error {
 	if !p.Cancelable() {
 		return ErrNotCancelable
 	}
-	if amountCents <= 0 || amountCents > p.RemainingCancelableCents() {
+	if amountKRW <= 0 || amountKRW > p.RemainingCancelableKRW() {
 		return ErrCancelAmountInvalid
 	}
 	return nil
@@ -168,11 +168,11 @@ func (p *Payment) ValidateCancel(amountCents int64) error {
 // exhausts the remaining balance moves the payment to canceled; a partial
 // cancel leaves it succeeded with a reduced remaining balance, matching NANO's
 // remainAmt semantics (see [NANO] 수기결제 연동 API v2.5 §3).
-func (p *Payment) ApplyCancel(amountCents int64, reason, canceledBy string, now time.Time) error {
-	if err := p.ValidateCancel(amountCents); err != nil {
+func (p *Payment) ApplyCancel(amountKRW int64, reason, canceledBy string, now time.Time) error {
+	if err := p.ValidateCancel(amountKRW); err != nil {
 		return err
 	}
-	p.CanceledAmountCents += amountCents
+	p.CanceledAmountKRW += amountKRW
 	// Keep whatever a previous cancel recorded when this one supplies nothing:
 	// a later cancel without a reason must not erase the earlier audit trail.
 	// Only the most recent stated reason/actor is kept — a full per-cancel
@@ -184,7 +184,7 @@ func (p *Payment) ApplyCancel(amountCents int64, reason, canceledBy string, now 
 		p.CanceledBy = by
 	}
 	p.CanceledAt = &now
-	if p.RemainingCancelableCents() == 0 {
+	if p.RemainingCancelableKRW() == 0 {
 		p.Status = StatusCanceled
 	}
 	p.UpdatedAt = now

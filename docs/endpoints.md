@@ -531,7 +531,7 @@ Response `200`:
 
 Optional header: `Idempotency-Key` — retries with the same key and body return the original order (no second stock reservation). A reused key with a different body returns `409`.
 
-Unit prices are resolved server-side from the product catalog; client `unit_price_cents` is ignored if sent.
+Unit prices are resolved server-side from the product catalog; client `unit_price_krw` is ignored if sent.
 
 Request:
 ```json
@@ -609,12 +609,12 @@ Order object shape:
   "customer_id": "cust-123",
   "reservation_id": "res-xyz",
   "payment_id": "pay_000001",
-  "items": [ { "sku": "SHOE-001", "quantity": 1, "unit_price_cents": 9900 } ],
+  "items": [ { "sku": "SHOE-001", "quantity": 1, "unit_price_krw": 9900 } ],
   "status": "paid",
-  "subtotal_cents": 9900,
-  "discount_cents": 0,
+  "subtotal_krw": 9900,
+  "discount_krw": 0,
   "shipping_fee_krw": 0,
-  "total_cents": 9900,
+  "total_krw": 9900,
   "payment_due_at": "...",
   "paid_at": "...",
   "created_at": "...",

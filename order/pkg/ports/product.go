@@ -12,12 +12,12 @@ var (
 
 // VariantInfo is the catalog snapshot used to price order/checkout lines.
 type VariantInfo struct {
-	SkuID          string
-	SKU            string
-	ProductID      string
-	UnitPriceCents int64  // whole KRW won (from product.price; not ×100)
-	ProductName    string // display name from parent product
-	ImageURL       string // first variant image URL, empty if none
+	SkuID        string
+	SKU          string
+	ProductID    string
+	UnitPriceKRW int64  // whole KRW won (from product.price; not ×100)
+	ProductName  string // display name from parent product
+	ImageURL     string // first variant image URL, empty if none
 }
 
 // ProductClient looks up public variant data for server-side pricing.

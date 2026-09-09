@@ -23,21 +23,21 @@ const cancelTestSecret = "test-secret"
 // amounts can be exercised against something other than the shared stub's fixed
 // 1000 KRW order.
 type cancelOrderClient struct {
-	totalCents int64
+	totalKRW int64
 }
 
 func (c cancelOrderClient) GetOrder(_ context.Context, _, _ string) (*ports.OrderSummary, error) {
 	return &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: c.totalCents,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: c.totalKRW,
 	}, nil
 }
 
 // newCancelFixture wires a mux over a repo holding one succeeded bypass payment
 // (bypass keeps the fixture off the PG path, which has its own tests).
-func newCancelFixture(t *testing.T, totalCents int64) (*http.ServeMux, *domain.Payment) {
+func newCancelFixture(t *testing.T, totalKRW int64) (*http.ServeMux, *domain.Payment) {
 	t.Helper()
 	repo := memory.NewRepository()
-	svc := service.New(repo, cancelOrderClient{totalCents: totalCents}, fakeCheckoutProvider{}, nil)
+	svc := service.New(repo, cancelOrderClient{totalKRW: totalKRW}, fakeCheckoutProvider{}, nil)
 	h := handler.New(svc, authjwt.NewHMACValidator(cancelTestSecret))
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -110,8 +110,8 @@ func TestCancelPayment_WithPermissionCancelsFully(t *testing.T) {
 	if got.Status != domain.StatusCanceled {
 		t.Fatalf("status = %q, want canceled", got.Status)
 	}
-	if got.CanceledAmountCents != 70000 {
-		t.Fatalf("canceled = %d, want the full 70000", got.CanceledAmountCents)
+	if got.CanceledAmountKRW != 70000 {
+		t.Fatalf("canceled = %d, want the full 70000", got.CanceledAmountKRW)
 	}
 	if got.CanceledBy != "mgr-1" || got.CancelReason != "ops reject" {
 		t.Fatalf("audit = %q / %q", got.CanceledBy, got.CancelReason)
@@ -148,7 +148,7 @@ func TestCancelPayment_PartialAmount(t *testing.T) {
 	mux, payment := newCancelFixture(t, 70000)
 	token := makeToken(t, cancelTestSecret, "mgr-1", []string{permissions.PaymentCancel})
 
-	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_cents":20000}`))
+	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_krw":20000}`))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -159,8 +159,8 @@ func TestCancelPayment_PartialAmount(t *testing.T) {
 	if got.Status != domain.StatusSucceeded {
 		t.Fatalf("status = %q, want succeeded after partial", got.Status)
 	}
-	if got.CanceledAmountCents != 20000 {
-		t.Fatalf("canceled = %d, want 20000", got.CanceledAmountCents)
+	if got.CanceledAmountKRW != 20000 {
+		t.Fatalf("canceled = %d, want 20000", got.CanceledAmountKRW)
 	}
 }
 
@@ -168,7 +168,7 @@ func TestCancelPayment_AmountOverTotalIsBadRequest(t *testing.T) {
 	mux, payment := newCancelFixture(t, 70000)
 	token := makeToken(t, cancelTestSecret, "mgr-1", []string{permissions.PaymentCancel})
 
-	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_cents":70001}`))
+	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_krw":70001}`))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
 	}
@@ -178,7 +178,7 @@ func TestCancelPayment_NegativeAmountIsBadRequest(t *testing.T) {
 	mux, payment := newCancelFixture(t, 70000)
 	token := makeToken(t, cancelTestSecret, "mgr-1", []string{permissions.PaymentCancel})
 
-	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_cents":-1}`))
+	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_krw":-1}`))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
 	}
@@ -231,7 +231,7 @@ func TestCancelPayment_IdempotencyKeyHeaderIsHonored(t *testing.T) {
 	send := func() *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/"+payment.ID+"/cancel",
-			bytes.NewReader([]byte(`{"amount_cents":20000}`)))
+			bytes.NewReader([]byte(`{"amount_krw":20000}`)))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Idempotency-Key", "retry-1")
@@ -250,7 +250,7 @@ func TestCancelPayment_IdempotencyKeyHeaderIsHonored(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatal(err)
 	}
-	if got.CanceledAmountCents != 20000 {
-		t.Fatalf("canceled = %d, want 20000 — the retry must not refund twice", got.CanceledAmountCents)
+	if got.CanceledAmountKRW != 20000 {
+		t.Fatalf("canceled = %d, want 20000 — the retry must not refund twice", got.CanceledAmountKRW)
 	}
 }

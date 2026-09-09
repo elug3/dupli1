@@ -56,10 +56,10 @@ func (r *Repository) migrate() error {
 			reservation_id TEXT NOT NULL,
 			status TEXT NOT NULL,
 			coupon_code TEXT NOT NULL DEFAULT '',
-			subtotal_cents BIGINT NOT NULL,
-			discount_cents BIGINT NOT NULL,
+			subtotal_krw BIGINT NOT NULL,
+			discount_krw BIGINT NOT NULL,
 			shipping_fee_krw BIGINT NOT NULL DEFAULT 0,
-			total_cents BIGINT NOT NULL,
+			total_krw BIGINT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
@@ -68,7 +68,7 @@ func (r *Repository) migrate() error {
 			order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
 			sku TEXT NOT NULL,
 			quantity INTEGER NOT NULL,
-			unit_price_cents BIGINT NOT NULL,
+			unit_price_krw BIGINT NOT NULL,
 			PRIMARY KEY (order_id, sku)
 		)`,
 		`CREATE TABLE IF NOT EXISTS checkout_sessions (
@@ -76,10 +76,10 @@ func (r *Repository) migrate() error {
 			customer_id TEXT NOT NULL,
 			status TEXT NOT NULL,
 			coupon_code TEXT NOT NULL DEFAULT '',
-			subtotal_cents BIGINT NOT NULL DEFAULT 0,
-			discount_cents BIGINT NOT NULL DEFAULT 0,
+			subtotal_krw BIGINT NOT NULL DEFAULT 0,
+			discount_krw BIGINT NOT NULL DEFAULT 0,
 			shipping_fee_krw BIGINT NOT NULL DEFAULT 0,
-			total_cents BIGINT NOT NULL DEFAULT 0,
+			total_krw BIGINT NOT NULL DEFAULT 0,
 			order_id TEXT NOT NULL DEFAULT '',
 			expires_at TIMESTAMPTZ NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL,
@@ -89,7 +89,7 @@ func (r *Repository) migrate() error {
 			session_id TEXT NOT NULL REFERENCES checkout_sessions(id) ON DELETE CASCADE,
 			sku TEXT NOT NULL,
 			quantity INTEGER NOT NULL,
-			unit_price_cents BIGINT NOT NULL,
+			unit_price_krw BIGINT NOT NULL,
 			PRIMARY KEY (session_id, sku)
 		)`,
 		`CREATE TABLE IF NOT EXISTS order_idempotency_keys (
@@ -139,10 +139,9 @@ func (r *Repository) migrate() error {
 			return fmt.Errorf("migrate order schema: %w", err)
 		}
 	}
-	// Rename before ADD COLUMN so an existing shipping_fee_cents column is
-	// kept (with its snapshotted values) instead of a second fee column
-	// appearing at default 0.
-	if err := r.renameShippingFeeCentsColumns(ctx); err != nil {
+	// Rename before ADD COLUMN so existing *_cents money columns keep their
+	// snapshotted values instead of a second column appearing at default 0.
+	if err := r.renameMoneyCentsColumns(ctx); err != nil {
 		return fmt.Errorf("migrate order schema: %w", err)
 	}
 	alterStmts := []string{
@@ -266,9 +265,21 @@ func (r *Repository) addConstraintIfMissing(ctx context.Context, name, sql strin
 	return nil
 }
 
-func (r *Repository) renameShippingFeeCentsColumns(ctx context.Context) error {
-	for _, table := range []string{"orders", "checkout_sessions"} {
-		if err := r.renameColumnIfNeeded(ctx, table, "shipping_fee_cents", "shipping_fee_krw"); err != nil {
+func (r *Repository) renameMoneyCentsColumns(ctx context.Context) error {
+	renames := []struct{ table, from, to string }{
+		{"orders", "shipping_fee_cents", "shipping_fee_krw"},
+		{"checkout_sessions", "shipping_fee_cents", "shipping_fee_krw"},
+		{"orders", "subtotal_cents", "subtotal_krw"},
+		{"orders", "discount_cents", "discount_krw"},
+		{"orders", "total_cents", "total_krw"},
+		{"checkout_sessions", "subtotal_cents", "subtotal_krw"},
+		{"checkout_sessions", "discount_cents", "discount_krw"},
+		{"checkout_sessions", "total_cents", "total_krw"},
+		{"order_items", "unit_price_cents", "unit_price_krw"},
+		{"checkout_session_items", "unit_price_cents", "unit_price_krw"},
+	}
+	for _, item := range renames {
+		if err := r.renameColumnIfNeeded(ctx, item.table, item.from, item.to); err != nil {
 			return err
 		}
 	}
@@ -359,7 +370,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 	_, err = tx.Exec(ctx, `
 		INSERT INTO orders (
 			id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, shipping_fee_krw, total_cents,
+			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
@@ -369,10 +380,10 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			reservation_id = EXCLUDED.reservation_id,
 			status = EXCLUDED.status,
 			coupon_code = EXCLUDED.coupon_code,
-			subtotal_cents = EXCLUDED.subtotal_cents,
-			discount_cents = EXCLUDED.discount_cents,
+			subtotal_krw = EXCLUDED.subtotal_krw,
+			discount_krw = EXCLUDED.discount_krw,
 			shipping_fee_krw = EXCLUDED.shipping_fee_krw,
-			total_cents = EXCLUDED.total_cents,
+			total_krw = EXCLUDED.total_krw,
 			recipient_name = EXCLUDED.recipient_name,
 			recipient_phone = EXCLUDED.recipient_phone,
 			shipping_address = EXCLUDED.shipping_address,
@@ -387,7 +398,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			carrier_note = EXCLUDED.carrier_note,
 			updated_at = EXCLUDED.updated_at
 	`, order.ID, order.CustomerID, order.ReservationID, order.Status, order.CouponCode,
-		order.SubtotalCents, order.DiscountCents, order.ShippingFeeKRW, order.TotalCents,
+		order.SubtotalKRW, order.DiscountKRW, order.ShippingFeeKRW, order.TotalKRW,
 		order.RecipientName, order.RecipientPhone, shippingJSON, order.SourceAddressID,
 		order.PaymentID, order.PaidAt, order.PaymentDueAt, order.ShippedBy, order.ShippedAt,
 		order.Carrier, order.TrackingNumber, order.CarrierNote,
@@ -401,9 +412,9 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 	}
 	for _, item := range order.Items {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO order_items (order_id, sku, sku_id, quantity, unit_price_cents, product_name, image_url)
+			INSERT INTO order_items (order_id, sku, sku_id, quantity, unit_price_krw, product_name, image_url)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, order.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceCents, item.ProductName, item.ImageURL); err != nil {
+		`, order.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceKRW, item.ProductName, item.ImageURL); err != nil {
 			return err
 		}
 	}
@@ -522,14 +533,14 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	var shippingJSON []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, shipping_fee_krw, total_cents,
+			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id).Scan(
 		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-		&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeKRW, &order.TotalCents,
+		&order.SubtotalKRW, &order.DiscountKRW, &order.ShippingFeeKRW, &order.TotalKRW,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -569,7 +580,7 @@ func (r *Repository) loadOrderItemsBatch(ctx context.Context, orderIDs []string)
 		return out, nil
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT order_id, sku, COALESCE(sku_id, ''), quantity, unit_price_cents,
+		SELECT order_id, sku, COALESCE(sku_id, ''), quantity, unit_price_krw,
 			COALESCE(product_name, ''), COALESCE(image_url, '')
 		FROM order_items
 		WHERE order_id = ANY($1)
@@ -583,7 +594,7 @@ func (r *Repository) loadOrderItemsBatch(ctx context.Context, orderIDs []string)
 	for rows.Next() {
 		var orderID string
 		var item domain.OrderItem
-		if err := rows.Scan(&orderID, &item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents, &item.ProductName, &item.ImageURL); err != nil {
+		if err := rows.Scan(&orderID, &item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceKRW, &item.ProductName, &item.ImageURL); err != nil {
 			return nil, err
 		}
 		out[orderID] = append(out[orderID], item)
@@ -613,7 +624,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, shipping_fee_krw, total_cents,
+			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
@@ -632,7 +643,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-			&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeKRW, &order.TotalCents,
+			&order.SubtotalKRW, &order.DiscountKRW, &order.ShippingFeeKRW, &order.TotalKRW,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -668,7 +679,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, shipping_fee_krw, total_cents,
+			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
@@ -687,7 +698,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-			&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeKRW, &order.TotalCents,
+			&order.SubtotalKRW, &order.DiscountKRW, &order.ShippingFeeKRW, &order.TotalKRW,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -723,7 +734,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, shipping_fee_krw, total_cents,
+			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
@@ -743,7 +754,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-			&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeKRW, &order.TotalCents,
+			&order.SubtotalKRW, &order.DiscountKRW, &order.ShippingFeeKRW, &order.TotalKRW,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -785,22 +796,22 @@ func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.Ch
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO checkout_sessions (
-			id, customer_id, status, coupon_code, subtotal_cents, discount_cents, shipping_fee_krw, total_cents,
+			id, customer_id, status, coupon_code, subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			order_id, expires_at, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			status = EXCLUDED.status,
 			coupon_code = EXCLUDED.coupon_code,
-			subtotal_cents = EXCLUDED.subtotal_cents,
-			discount_cents = EXCLUDED.discount_cents,
+			subtotal_krw = EXCLUDED.subtotal_krw,
+			discount_krw = EXCLUDED.discount_krw,
 			shipping_fee_krw = EXCLUDED.shipping_fee_krw,
-			total_cents = EXCLUDED.total_cents,
+			total_krw = EXCLUDED.total_krw,
 			order_id = EXCLUDED.order_id,
 			expires_at = EXCLUDED.expires_at,
 			updated_at = EXCLUDED.updated_at
 	`, session.ID, session.CustomerID, session.Status, session.CouponCode,
-		session.SubtotalCents, session.DiscountCents, session.ShippingFeeKRW, session.TotalCents,
+		session.SubtotalKRW, session.DiscountKRW, session.ShippingFeeKRW, session.TotalKRW,
 		session.OrderID, session.ExpiresAt, session.CreatedAt, session.UpdatedAt)
 	if err != nil {
 		return err
@@ -811,9 +822,9 @@ func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.Ch
 	}
 	for _, item := range session.Items {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO checkout_session_items (session_id, sku, sku_id, quantity, unit_price_cents)
+			INSERT INTO checkout_session_items (session_id, sku, sku_id, quantity, unit_price_krw)
 			VALUES ($1, $2, $3, $4, $5)
-		`, session.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceCents); err != nil {
+		`, session.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceKRW); err != nil {
 			return err
 		}
 	}
@@ -864,14 +875,14 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, shipping_fee_krw, total_cents,
+			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
 		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-		&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeKRW, &order.TotalCents,
+		&order.SubtotalKRW, &order.DiscountKRW, &order.ShippingFeeKRW, &order.TotalKRW,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -887,7 +898,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	order.ShippedAt = shippedAt
 
 	rows, err := tx.Query(ctx, `
-		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_cents
+		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_krw
 		FROM order_items WHERE order_id = $1 ORDER BY sku
 	`, orderID)
 	if err != nil {
@@ -896,7 +907,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	defer rows.Close()
 	for rows.Next() {
 		var item domain.OrderItem
-		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents); err != nil {
+		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceKRW); err != nil {
 			return nil, false, err
 		}
 		order.Items = append(order.Items, item)
@@ -948,14 +959,14 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
-			subtotal_cents, discount_cents, shipping_fee_krw, total_cents,
+			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
 		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
-		&order.SubtotalCents, &order.DiscountCents, &order.ShippingFeeKRW, &order.TotalCents,
+		&order.SubtotalKRW, &order.DiscountKRW, &order.ShippingFeeKRW, &order.TotalKRW,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
@@ -971,7 +982,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	order.ShippedAt = shippedAt
 
 	rows, err := tx.Query(ctx, `
-		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_cents
+		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_krw
 		FROM order_items WHERE order_id = $1 ORDER BY sku
 	`, orderID)
 	if err != nil {
@@ -980,7 +991,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	defer rows.Close()
 	for rows.Next() {
 		var item domain.OrderItem
-		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents); err != nil {
+		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceKRW); err != nil {
 			return nil, false, err
 		}
 		order.Items = append(order.Items, item)
@@ -1141,12 +1152,12 @@ func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain
 
 	var session domain.CheckoutSession
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, customer_id, status, coupon_code, subtotal_cents, discount_cents, shipping_fee_krw, total_cents,
+		SELECT id, customer_id, status, coupon_code, subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			order_id, expires_at, created_at, updated_at
 		FROM checkout_sessions WHERE id = $1
 	`, id).Scan(
 		&session.ID, &session.CustomerID, &session.Status, &session.CouponCode,
-		&session.SubtotalCents, &session.DiscountCents, &session.ShippingFeeKRW, &session.TotalCents,
+		&session.SubtotalKRW, &session.DiscountKRW, &session.ShippingFeeKRW, &session.TotalKRW,
 		&session.OrderID, &session.ExpiresAt, &session.CreatedAt, &session.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -1157,7 +1168,7 @@ func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_cents FROM checkout_session_items WHERE session_id = $1 ORDER BY sku
+		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_krw FROM checkout_session_items WHERE session_id = $1 ORDER BY sku
 	`, id)
 	if err != nil {
 		return nil, err
@@ -1166,7 +1177,7 @@ func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain
 
 	for rows.Next() {
 		var item domain.OrderItem
-		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceCents); err != nil {
+		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceKRW); err != nil {
 			return nil, err
 		}
 		session.Items = append(session.Items, item)

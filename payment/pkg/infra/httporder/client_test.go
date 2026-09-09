@@ -22,7 +22,7 @@ func TestGetOrderParsesFulfillmentFields(t *testing.T) {
 			"id":              "ord-42",
 			"customer_id":     "cust-1",
 			"status":          "pending",
-			"total_cents":     7000,
+			"total_krw":       7000,
 			"recipient_name":  "윤라희",
 			"recipient_phone": "01041125167",
 			"shipping_address": map[string]string{
@@ -50,7 +50,7 @@ func TestGetOrderParsesFulfillmentFields(t *testing.T) {
 	if got.ShippingAddress.PostalCode != "06194" || got.ShippingAddress.AddressLine2 != "9층" {
 		t.Fatalf("shipping address = %+v", got.ShippingAddress)
 	}
-	if got.TotalCents != 7000 || got.Status != "pending" {
+	if got.TotalKRW != 7000 || got.Status != "pending" {
 		t.Fatalf("order summary = %+v", got)
 	}
 }

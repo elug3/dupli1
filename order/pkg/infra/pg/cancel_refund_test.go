@@ -20,12 +20,12 @@ func TestCancelIfPaidForRefundCancelsMatchingPaidOrder(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	order, err := domain.NewOrder("ord-ref-pg-1", "cust-1", "res-1", []domain.OrderItem{{
-		SkuID: "sku-1", SKU: "BAG-001", Quantity: 1, UnitPriceCents: 1000,
+		SkuID: "sku-1", SKU: "BAG-001", Quantity: 1, UnitPriceKRW: 1000,
 	}}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
-	if err := order.MarkPaid("pay-ord-ref-pg-1", order.TotalCents, now); err != nil {
+	if err := order.MarkPaid("pay-ord-ref-pg-1", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := repo.Save(ctx, order); err != nil {
@@ -63,12 +63,12 @@ func TestCancelIfPaidForRefundSkipsMismatchedPayment(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	order, err := domain.NewOrder("ord-ref-pg-2", "cust-1", "res-2", []domain.OrderItem{{
-		SkuID: "sku-2", SKU: "BAG-002", Quantity: 1, UnitPriceCents: 1000,
+		SkuID: "sku-2", SKU: "BAG-002", Quantity: 1, UnitPriceKRW: 1000,
 	}}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
-	if err := order.MarkPaid("pay-ord-ref-pg-2", order.TotalCents, now); err != nil {
+	if err := order.MarkPaid("pay-ord-ref-pg-2", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := repo.Save(ctx, order); err != nil {
@@ -103,12 +103,12 @@ func TestCancelIfPaidForRefundIsIdempotent(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	order, err := domain.NewOrder("ord-ref-pg-3", "cust-1", "res-3", []domain.OrderItem{{
-		SkuID: "sku-3", SKU: "BAG-003", Quantity: 1, UnitPriceCents: 1000,
+		SkuID: "sku-3", SKU: "BAG-003", Quantity: 1, UnitPriceKRW: 1000,
 	}}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
-	if err := order.MarkPaid("pay-ord-ref-pg-3", order.TotalCents, now); err != nil {
+	if err := order.MarkPaid("pay-ord-ref-pg-3", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := repo.Save(ctx, order); err != nil {

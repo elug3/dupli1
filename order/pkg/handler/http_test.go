@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/handler"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -63,11 +63,11 @@ func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantI
 		p = 1000
 	}
 	return &ports.VariantInfo{
-		SkuID:          "ID-" + sku,
-		SKU:            sku,
-		UnitPriceCents: p,
-		ProductName:    f.productName,
-		ImageURL:       f.imageURL,
+		SkuID:        "ID-" + sku,
+		SKU:          sku,
+		UnitPriceKRW: p,
+		ProductName:  f.productName,
+		ImageURL:     f.imageURL,
 	}, nil
 }
 
@@ -77,11 +77,11 @@ func (f *fakeProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports
 		p = 1000
 	}
 	return &ports.VariantInfo{
-		SkuID:          skuID,
-		SKU:            "SKU-" + skuID,
-		UnitPriceCents: p,
-		ProductName:    f.productName,
-		ImageURL:       f.imageURL,
+		SkuID:        skuID,
+		SKU:          "SKU-" + skuID,
+		UnitPriceKRW: p,
+		ProductName:  f.productName,
+		ImageURL:     f.imageURL,
 	}, nil
 }
 
@@ -112,7 +112,7 @@ func TestCreateOrderIgnoresClientUnitPrice(t *testing.T) {
 
 	body := map[string]any{
 		"customer_id": "u-1",
-		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_cents": 1}},
+		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_krw": 1}},
 	}
 	w := do(t, mux, http.MethodPost, "/api/v1/orders", token, body)
 	if w.Code != http.StatusCreated {
@@ -122,8 +122,8 @@ func TestCreateOrderIgnoresClientUnitPrice(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&order); err != nil {
 		t.Fatal(err)
 	}
-	if order.TotalCents != 1000 || order.Items[0].UnitPriceCents != 1000 {
-		t.Fatalf("order priced from client? total=%d item=%d, want catalog 1000", order.TotalCents, order.Items[0].UnitPriceCents)
+	if order.TotalKRW != 1000 || order.Items[0].UnitPriceKRW != 1000 {
+		t.Fatalf("order priced from client? total=%d item=%d, want catalog 1000", order.TotalKRW, order.Items[0].UnitPriceKRW)
 	}
 }
 
@@ -138,7 +138,7 @@ func seedOrder(t *testing.T, svc *service.Service, customerID string) string {
 	t.Helper()
 	order, err := svc.CreateOrder(t.Context(), service.CreateOrderInput{
 		CustomerID: customerID,
-		Items:      []domain.OrderItem{{SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}},
+		Items:      []domain.OrderItem{{SKU: "ITEM-1", Quantity: 1, UnitPriceKRW: 1000}},
 	})
 	if err != nil {
 		t.Fatalf("seedOrder: %v", err)
@@ -248,7 +248,7 @@ func TestCreateOrder_CustomerCanCreateOwnOrder(t *testing.T) {
 
 	body := map[string]any{
 		"customer_id": "u-1",
-		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_cents": 999}},
+		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_krw": 999}},
 	}
 	w := do(t, mux, http.MethodPost, "/api/v1/orders", token, body)
 	if w.Code != http.StatusCreated {
@@ -263,7 +263,7 @@ func TestCreateOrder_CustomerForbiddenOnOthersCustomerID(t *testing.T) {
 
 	body := map[string]any{
 		"customer_id": "u-2", // different from token subject
-		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_cents": 999}},
+		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_krw": 999}},
 	}
 	w := do(t, mux, http.MethodPost, "/api/v1/orders", token, body)
 	if w.Code != http.StatusForbidden {
@@ -278,7 +278,7 @@ func TestCreateOrder_OrderManagerCannotCreateForOtherCustomer(t *testing.T) {
 
 	body := map[string]any{
 		"customer_id": "u-99",
-		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_cents": 999}},
+		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_krw": 999}},
 	}
 	w := do(t, mux, http.MethodPost, "/api/v1/orders", token, body)
 	if w.Code != http.StatusForbidden {
@@ -293,7 +293,7 @@ func TestCreateOrder_AdminCanCreateForAnyCustomer(t *testing.T) {
 
 	body := map[string]any{
 		"customer_id": "u-99",
-		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_cents": 999}},
+		"items":       []map[string]any{{"sku": "SHOE-1", "quantity": 1, "unit_price_krw": 999}},
 	}
 	w := do(t, mux, http.MethodPost, "/api/v1/orders", token, body)
 	if w.Code != http.StatusCreated {
@@ -473,8 +473,8 @@ func TestGetOrder_CustomerForbiddenOnOthersOrder(t *testing.T) {
 	h, svc := newTestHandler(t)
 	mux := newMux(h)
 
-	orderID := seedOrder(t, svc, "u-1")     // order owned by u-1
-	token := makeToken(t, "u-2", nil) // logged in as u-2
+	orderID := seedOrder(t, svc, "u-1") // order owned by u-1
+	token := makeToken(t, "u-2", nil)   // logged in as u-2
 
 	w := do(t, mux, http.MethodGet, "/api/v1/orders/"+orderID, token, nil)
 	if w.Code != http.StatusForbidden {
@@ -531,7 +531,7 @@ func seedPaidOrder(t *testing.T, svc *service.Service, customerID string) string
 	if err != nil {
 		t.Fatalf("GetOrder: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay-test", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay-test", order.TotalKRW); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 	return orderID
@@ -646,7 +646,7 @@ func TestCheckoutDeleteBySkuID_ForeignUserForbidden(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 
-	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
+	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceKRW: 1000}
 	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
@@ -673,7 +673,7 @@ func TestCheckoutDeleteBySkuID_OwnerSuccess(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 
-	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
+	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceKRW: 1000}
 	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
@@ -699,7 +699,7 @@ func TestCompleteCheckoutPersistsPCCCInOrderJSON(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 
-	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
+	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceKRW: 1000}
 	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
@@ -767,7 +767,7 @@ func TestCompleteCheckoutRejectsMalformedPCCC(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 
-	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
+	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceKRW: 1000}
 	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}
@@ -804,7 +804,7 @@ func TestCompleteCheckoutRejectsInvalidFulfillment(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 
-	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceCents: 1000}
+	item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceKRW: 1000}
 	if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
 		t.Fatalf("seed checkout item: %v", err)
 	}

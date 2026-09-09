@@ -51,12 +51,12 @@ func (f *fakeInventoryClient) GetAvailableQtyBySkuID(_ context.Context, skuID st
 func newTestService(t *testing.T) *service.Service {
 	t.Helper()
 	variant := &ports.VariantInfo{
-		SkuID:          "SKUID-GRN",
-		SKU:            "BOT-001-GRN",
-		ProductID:      "BOT-001",
-		Color:          "Green",
-		UnitPriceCents: 250000,
-		ImageURL:       "https://example.com/green.jpg",
+		SkuID:        "SKUID-GRN",
+		SKU:          "BOT-001-GRN",
+		ProductID:    "BOT-001",
+		Color:        "Green",
+		UnitPriceKRW: 250000,
+		ImageURL:     "https://example.com/green.jpg",
 	}
 	product := &fakeProductClient{
 		bySKU:   map[string]*ports.VariantInfo{"BOT-001-GRN": variant},
@@ -84,7 +84,7 @@ func TestUpsertItem_BySKU_PersistsResolvedSkuID(t *testing.T) {
 	if item.SkuID != "SKUID-GRN" || item.SKU != "BOT-001-GRN" {
 		t.Fatalf("want resolved skuId+sku, got %+v", item)
 	}
-	if item.AvailableQty != 7 || item.UnitPriceCents != 250000 {
+	if item.AvailableQty != 7 || item.UnitPriceKRW != 250000 {
 		t.Fatalf("unexpected enrichment: %+v", item)
 	}
 }
@@ -174,11 +174,11 @@ func TestGetCart_EnrichesStoredItemBySkuIDWhenPresent(t *testing.T) {
 func TestGetCart_ReportsUnavailableItems(t *testing.T) {
 	ctx := t.Context()
 	variant := &ports.VariantInfo{
-		SkuID:          "SKUID-GRN",
-		SKU:            "BOT-001-GRN",
-		ProductID:      "BOT-001",
-		Color:          "Green",
-		UnitPriceCents: 250000,
+		SkuID:        "SKUID-GRN",
+		SKU:          "BOT-001-GRN",
+		ProductID:    "BOT-001",
+		Color:        "Green",
+		UnitPriceKRW: 250000,
 	}
 	product := &fakeProductClient{
 		bySKU:   map[string]*ports.VariantInfo{"BOT-001-GRN": variant},
@@ -210,8 +210,8 @@ func TestGetCart_ReportsUnavailableItems(t *testing.T) {
 	if cart.Items[1].Available == nil || *cart.Items[1].Available {
 		t.Fatalf("want available=false on stale line, got %+v", cart.Items[1])
 	}
-	if cart.SubtotalCents != 250000 {
-		t.Fatalf("subtotal = %d, want 250000 (exclude unavailable)", cart.SubtotalCents)
+	if cart.SubtotalKRW != 250000 {
+		t.Fatalf("subtotal = %d, want 250000 (exclude unavailable)", cart.SubtotalKRW)
 	}
 }
 
@@ -263,7 +263,7 @@ func TestUpsertItem_RejectsZeroAvailable(t *testing.T) {
 	}
 	variant := &ports.VariantInfo{
 		SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", ProductID: "BOT-001",
-		UnitPriceCents: 250000,
+		UnitPriceKRW: 250000,
 	}
 	product := &fakeProductClient{
 		bySKU:   map[string]*ports.VariantInfo{"BOT-001-GRN": variant},
@@ -293,4 +293,3 @@ func TestReplaceItems_RejectsOversell(t *testing.T) {
 		t.Fatalf("want InsufficientStockError, got %v", err)
 	}
 }
-

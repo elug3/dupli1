@@ -72,21 +72,21 @@ Create an empty checkout session.
   "customer_id": "03f95d58-4840-46d4-9c92-fe48364d2e75",
   "items": [],
   "status": "open",
-  "subtotal_cents": 0,
-  "discount_cents": 0,
+  "subtotal_krw": 0,
+  "discount_krw": 0,
   "shipping_fee_krw": 30000,
-  "total_cents": 0,
+  "total_krw": 0,
   "expires_at": "2026-06-21T12:30:00Z",
   "created_at": "2026-06-21T12:00:00Z",
   "updated_at": "2026-06-21T12:00:00Z"
 }
 ```
 
-**Pricing.** `total_cents = subtotal_cents - discount_cents + shipping_fee_krw`.
+**Pricing.** `total_krw = subtotal_krw - discount_krw + shipping_fee_krw`.
 
 `shipping_fee_krw` is the flat delivery charge quoted for this session (whole KRW, from `DUPLI1_ORDER_SHIPPING_FEE_KRW`, default 30000; set 0 for free delivery; deprecated alias `DUPLI1_ORDER_SHIPPING_FEE_CENTS`). It is fixed when the session opens, and `complete` charges that quoted amount even if the configured fee changed mid-checkout. Direct `POST /api/v1/orders` (no session) uses the current configured fee.
 
-A session with **no items** quotes `total_cents: 0` even while `shipping_fee_krw` is non-zero, as above — an empty cart owes nothing to ship. The charge enters the total once the session holds at least one item, and drops out again if every item is removed.
+A session with **no items** quotes `total_krw: 0` even while `shipping_fee_krw` is non-zero, as above — an empty cart owes nothing to ship. The charge enters the total once the session holds at least one item, and drops out again if every item is removed.
 
 A coupon discounts goods only, so the total never falls below the delivery charge.
 
@@ -104,7 +104,7 @@ On read, the service re-checks each stored line against the product catalog. Lin
 
 ### `PUT /api/v1/orders/checkout/sessions/{id}/items`
 
-Replace all line items. Server resolves prices from product (client `unit_price_cents` is ignored).
+Replace all line items. Server resolves prices from product (client `unit_price_krw` is ignored).
 
 **Request**
 ```json
@@ -115,7 +115,7 @@ Replace all line items. Server resolves prices from product (client `unit_price_
 }
 ```
 
-**Response `200`** — updated session with recalculated `subtotal_cents` and `total_cents` (catalog prices).
+**Response `200`** — updated session with recalculated `subtotal_krw` and `total_krw` (catalog prices).
 
 Batch replace validates **all** lines. Missing variants return **`422`**:
 
@@ -162,7 +162,7 @@ Apply a coupon by redeeming it from the product service.
 { "code": "SUMMER30" }
 ```
 
-**Response `200`** — session with `coupon_code`, `discount_cents`, and `total_cents` updated.
+**Response `200`** — session with `coupon_code`, `discount_krw`, and `total_krw` updated.
 
 Requires `DUPLI1_PRODUCT_URL` to be configured. Returns `503` when the coupon client is unavailable.
 
@@ -201,10 +201,10 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
     "status": "completed",
     "order_id": "ord_000001",
     "coupon_code": "SUMMER30",
-    "subtotal_cents": 10000,
-    "discount_cents": 3000,
+    "subtotal_krw": 10000,
+    "discount_krw": 3000,
     "shipping_fee_krw": 30000,
-    "total_cents": 37000
+    "total_krw": 37000
   },
   "order": {
     "id": "ord_000001",
@@ -222,12 +222,12 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
     },
     "source_address_id": "addr_000001",
     "coupon_code": "SUMMER30",
-    "subtotal_cents": 10000,
-    "discount_cents": 3000,
+    "subtotal_krw": 10000,
+    "discount_krw": 3000,
     "shipping_fee_krw": 30000,
-    "total_cents": 37000,
+    "total_krw": 37000,
     "items": [
-      { "sku": "BAG-1", "quantity": 2, "unit_price_cents": 5000 }
+      { "sku": "BAG-1", "quantity": 2, "unit_price_krw": 5000 }
     ]
   }
 }

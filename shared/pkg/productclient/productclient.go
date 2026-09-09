@@ -7,7 +7,7 @@
 // out of the response (cart: Color, order: ProductName) — both legitimate,
 // different downstream needs, but everything around that one field
 // (request construction, error handling, JSON decoding, SKU
-// normalization, KRW-cents conversion) was pure duplication that had
+// normalization, KRW conversion) was pure duplication that had
 // already started to drift in unrelated ways (one had gained a helper
 // function the other hadn't).
 package productclient
@@ -35,9 +35,9 @@ type Variant struct {
 	ProductID   string
 	Color       string
 	ProductName string
-	// UnitPriceCents is whole KRW won (from product.price; not ×100).
-	UnitPriceCents int64
-	ImageURL       string
+	// UnitPriceKRW is whole KRW won (from product.price; not ×100).
+	UnitPriceKRW int64
+	ImageURL     string
 	// Status is decoded from the response but not currently read by any
 	// caller.
 	Status string
@@ -109,10 +109,10 @@ func (c *Client) fetchVariant(ctx context.Context, path string) (*Variant, error
 		ProductID:   body.ProductID,
 		Color:       body.Color,
 		ProductName: body.ProductName,
-		// Product prices are KRW won; UnitPriceCents stores whole won (Stripe minor units for krw).
-		UnitPriceCents: money.FromProductPrice(body.Price),
-		ImageURL:       firstOf(body.ImageURLs),
-		Status:         body.Status,
+		// Product prices are KRW won; UnitPriceKRW stores whole won (Stripe minor units for krw).
+		UnitPriceKRW: money.FromProductPrice(body.Price),
+		ImageURL:     firstOf(body.ImageURLs),
+		Status:       body.Status,
 	}, nil
 }
 

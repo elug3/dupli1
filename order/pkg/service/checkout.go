@@ -140,7 +140,7 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 		return nil, err
 	}
 
-	discountCents := int64(0)
+	discountKRW := int64(0)
 	couponCode := session.CouponCode
 	if couponCode != "" {
 		if s.couponClient == nil {
@@ -153,9 +153,9 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 		couponCode = coupon.Code
 		var subtotal int64
 		for _, item := range pricedItems {
-			subtotal += int64(item.Quantity) * item.UnitPriceCents
+			subtotal += int64(item.Quantity) * item.UnitPriceKRW
 		}
-		discountCents = int64(float64(subtotal) * coupon.DiscountFraction)
+		discountKRW = int64(float64(subtotal) * coupon.DiscountFraction)
 	}
 
 	shippingFee := session.ShippingFeeKRW
@@ -163,7 +163,7 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 		CustomerID:      session.CustomerID,
 		Items:           pricedItems,
 		CouponCode:      couponCode,
-		DiscountCents:   discountCents,
+		DiscountKRW:     discountKRW,
 		RecipientName:   snapshot.RecipientName,
 		RecipientPhone:  snapshot.RecipientPhone,
 		ShippingAddress: snapshot.ShippingAddress,

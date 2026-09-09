@@ -38,10 +38,10 @@ type UnavailableItem struct {
 }
 
 type OrderItem struct {
-	SkuID          string `json:"sku_id,omitempty"`
-	SKU            string `json:"sku"`
-	Quantity       int    `json:"quantity"`
-	UnitPriceCents int64  `json:"unit_price_cents"` // whole KRW won
+	SkuID        string `json:"sku_id,omitempty"`
+	SKU          string `json:"sku"`
+	Quantity     int    `json:"quantity"`
+	UnitPriceKRW int64  `json:"unit_price_krw"` // whole KRW won
 	// ProductName and ImageURL are captured at order creation from the product catalog.
 	ProductName string `json:"product_name,omitempty"`
 	ImageURL    string `json:"image_url,omitempty"`
@@ -56,12 +56,12 @@ type Order struct {
 	Items         []OrderItem `json:"items"`
 	Status        OrderStatus `json:"status"`
 	CouponCode    string      `json:"coupon_code,omitempty"`
-	SubtotalCents int64       `json:"subtotal_cents"`
-	DiscountCents int64       `json:"discount_cents"`
+	SubtotalKRW   int64       `json:"subtotal_krw"`
+	DiscountKRW   int64       `json:"discount_krw"`
 	// ShippingFeeKRW is the delivery charge in whole KRW, captured at order
 	// creation so a later config change never re-prices a placed order.
 	ShippingFeeKRW  int64           `json:"shipping_fee_krw"`
-	TotalCents      int64           `json:"total_cents"`
+	TotalKRW        int64           `json:"total_krw"`
 	RecipientName   string          `json:"recipient_name,omitempty"`
 	RecipientPhone  string          `json:"recipient_phone,omitempty"`
 	ShippingAddress ShippingAddress `json:"shipping_address,omitempty"`
@@ -85,7 +85,7 @@ type Order struct {
 //
 // The discount applies to goods only and is capped at the subtotal, so the total
 // can never fall below the shipping fee — a 100%-off coupon still pays delivery.
-func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCode string, discountCents, shippingFeeKRW int64, now time.Time) (*Order, error) {
+func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCode string, discountKRW, shippingFeeKRW int64, now time.Time) (*Order, error) {
 	id = strings.TrimSpace(id)
 	customerID = strings.TrimSpace(customerID)
 	reservationID = strings.TrimSpace(reservationID)
@@ -98,16 +98,16 @@ func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCod
 	for i, item := range items {
 		item.SkuID = strings.TrimSpace(item.SkuID)
 		item.SKU = strings.ToUpper(strings.TrimSpace(item.SKU))
-		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceCents < 0 {
+		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceKRW < 0 {
 			return nil, ErrInvalidOrder
 		}
-		subtotal += int64(item.Quantity) * item.UnitPriceCents
+		subtotal += int64(item.Quantity) * item.UnitPriceKRW
 		copiedItems[i] = item
 	}
 	if len(copiedItems) == 0 {
 		return nil, ErrInvalidOrder
 	}
-	if discountCents < 0 || discountCents > subtotal {
+	if discountKRW < 0 || discountKRW > subtotal {
 		return nil, ErrInvalidOrder
 	}
 	if shippingFeeKRW < 0 {
@@ -121,17 +121,17 @@ func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCod
 		Items:          copiedItems,
 		Status:         StatusPending,
 		CouponCode:     strings.ToUpper(strings.TrimSpace(couponCode)),
-		SubtotalCents:  subtotal,
-		DiscountCents:  discountCents,
+		SubtotalKRW:    subtotal,
+		DiscountKRW:    discountKRW,
 		ShippingFeeKRW: shippingFeeKRW,
-		TotalCents:     subtotal - discountCents + shippingFeeKRW,
+		TotalKRW:       subtotal - discountKRW + shippingFeeKRW,
 		PaymentDueAt:   now.Add(DefaultPaymentTTL),
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}, nil
 }
 
-func (o *Order) MarkPaid(paymentID string, amountCents int64, now time.Time) error {
+func (o *Order) MarkPaid(paymentID string, amountKRW int64, now time.Time) error {
 	if o.Status != StatusPending {
 		return ErrInvalidTransition
 	}
@@ -139,7 +139,7 @@ func (o *Order) MarkPaid(paymentID string, amountCents int64, now time.Time) err
 	if paymentID == "" {
 		return ErrInvalidOrder
 	}
-	if amountCents != o.TotalCents {
+	if amountKRW != o.TotalKRW {
 		return ErrPaymentAmountMismatch
 	}
 	o.Status = StatusPaid

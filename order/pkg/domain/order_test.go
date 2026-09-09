@@ -12,7 +12,7 @@ func newTestOrder(t *testing.T) *domain.Order {
 	t.Helper()
 	now := time.Date(2026, 8, 11, 10, 0, 0, 0, time.UTC)
 	order, err := domain.NewOrder("ord-1", "customer-1", "res-1", []domain.OrderItem{
-		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 70000},
+		{SKU: "BAG-1", Quantity: 1, UnitPriceKRW: 70000},
 	}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
@@ -23,7 +23,7 @@ func newTestOrder(t *testing.T) *domain.Order {
 func TestNewOrderRejectsInvalidInput(t *testing.T) {
 	now := time.Now()
 	_, err := domain.NewOrder("", "customer-1", "res-1", []domain.OrderItem{
-		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 1000},
+		{SKU: "BAG-1", Quantity: 1, UnitPriceKRW: 1000},
 	}, "", 0, 0, now)
 	if !errors.Is(err, domain.ErrInvalidOrder) {
 		t.Fatalf("empty id err = %v, want ErrInvalidOrder", err)
@@ -35,7 +35,7 @@ func TestNewOrderRejectsInvalidInput(t *testing.T) {
 	}
 
 	_, err = domain.NewOrder("ord-1", "customer-1", "res-1", []domain.OrderItem{
-		{SKU: "BAG-1", Quantity: 0, UnitPriceCents: 1000},
+		{SKU: "BAG-1", Quantity: 0, UnitPriceKRW: 1000},
 	}, "", 0, 0, now)
 	if !errors.Is(err, domain.ErrInvalidOrder) {
 		t.Fatalf("zero quantity err = %v, want ErrInvalidOrder", err)
@@ -46,22 +46,22 @@ func TestMarkPaidRequiresPendingAndMatchingAmount(t *testing.T) {
 	order := newTestOrder(t)
 	now := time.Date(2026, 8, 11, 10, 5, 0, 0, time.UTC)
 
-	if err := order.MarkPaid("pay-1", order.TotalCents, now); err != nil {
+	if err := order.MarkPaid("pay-1", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if order.Status != domain.StatusPaid || order.PaymentID != "pay-1" || order.PaidAt == nil {
 		t.Fatalf("order = %+v, want paid with payment id", order)
 	}
 
-	if err := order.MarkPaid("pay-2", order.TotalCents, now); !errors.Is(err, domain.ErrInvalidTransition) {
+	if err := order.MarkPaid("pay-2", order.TotalKRW, now); !errors.Is(err, domain.ErrInvalidTransition) {
 		t.Fatalf("second MarkPaid err = %v, want ErrInvalidTransition", err)
 	}
 
 	pending := newTestOrder(t)
-	if err := pending.MarkPaid("", pending.TotalCents, now); !errors.Is(err, domain.ErrInvalidOrder) {
+	if err := pending.MarkPaid("", pending.TotalKRW, now); !errors.Is(err, domain.ErrInvalidOrder) {
 		t.Fatalf("empty payment id err = %v, want ErrInvalidOrder", err)
 	}
-	if err := pending.MarkPaid("pay-1", pending.TotalCents-1, now); !errors.Is(err, domain.ErrPaymentAmountMismatch) {
+	if err := pending.MarkPaid("pay-1", pending.TotalKRW-1, now); !errors.Is(err, domain.ErrPaymentAmountMismatch) {
 		t.Fatalf("amount mismatch err = %v, want ErrPaymentAmountMismatch", err)
 	}
 }
@@ -75,7 +75,7 @@ func TestShipRequiresPaidOrder(t *testing.T) {
 		t.Fatalf("ship pending err = %v, want ErrInvalidTransition", err)
 	}
 
-	if err := order.MarkPaid("pay-1", order.TotalCents, now); err != nil {
+	if err := order.MarkPaid("pay-1", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := order.Ship("", tracking, now); !errors.Is(err, domain.ErrInvalidOrder) {
@@ -116,7 +116,7 @@ func TestReinstateForLatePayment(t *testing.T) {
 	}
 
 	paid := newTestOrder(t)
-	if err := paid.MarkPaid("pay-1", paid.TotalCents, now); err != nil {
+	if err := paid.MarkPaid("pay-1", paid.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := paid.ReinstateForLatePayment("res-x", now); !errors.Is(err, domain.ErrInvalidTransition) {
@@ -139,7 +139,7 @@ func TestCancelAndFulfillTransitions(t *testing.T) {
 	}
 
 	paid := newTestOrder(t)
-	if err := paid.MarkPaid("pay-1", paid.TotalCents, now); err != nil {
+	if err := paid.MarkPaid("pay-1", paid.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := paid.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-1"}, now); err != nil {
@@ -165,7 +165,7 @@ func TestIsPaymentExpired(t *testing.T) {
 		t.Fatal("expected pending order after due to be expired")
 	}
 
-	if err := order.MarkPaid("pay-1", order.TotalCents, afterDue); err != nil {
+	if err := order.MarkPaid("pay-1", order.TotalKRW, afterDue); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if order.IsPaymentExpired(afterDue) {

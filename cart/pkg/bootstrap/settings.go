@@ -15,7 +15,7 @@ func BuildSettings(cfg Config) settings.Response {
 		"inventory_enrichment": cfg.InventoryURL != "",
 	}
 	resp.Limits = map[string]any{
-		"currency": money.Currency, // unit_price_cents / subtotal_cents are whole KRW won
+		"currency": money.Currency, // unit_price_krw / subtotal_krw are whole KRW won
 	}
 	resp.Dependencies = map[string]settings.Dependency{
 		"product":   settings.Dep(cfg.ProductURL),

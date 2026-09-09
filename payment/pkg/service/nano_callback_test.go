@@ -34,7 +34,7 @@ func nanoCallbackFixture(t *testing.T, pub ports.EventPublisher) (*service.Servi
 	t.Helper()
 	repo := memory.NewRepository()
 	orders := stubOrderClient{order: &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalCents: 70000,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: 70000,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}}
 	nano := checkout.NewNanoProvider(checkout.NanoConfig{

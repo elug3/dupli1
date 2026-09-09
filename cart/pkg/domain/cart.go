@@ -32,14 +32,14 @@ type UnavailableItem struct {
 }
 
 type CartItem struct {
-	SkuID          string `json:"sku_id,omitempty"`
-	SKU            string `json:"sku"`
-	ProductID      string `json:"product_id"`
-	Quantity       int    `json:"quantity"`
-	UnitPriceCents int64  `json:"unit_price_cents"` // whole KRW won (enriched from product)
-	Color          string `json:"color,omitempty"`
-	ImageURL       string `json:"image_url,omitempty"`
-	AvailableQty   int    `json:"available_qty,omitempty"`
+	SkuID        string `json:"sku_id,omitempty"`
+	SKU          string `json:"sku"`
+	ProductID    string `json:"product_id"`
+	Quantity     int    `json:"quantity"`
+	UnitPriceKRW int64  `json:"unit_price_krw"` // whole KRW won (enriched from product)
+	Color        string `json:"color,omitempty"`
+	ImageURL     string `json:"image_url,omitempty"`
+	AvailableQty int    `json:"available_qty,omitempty"`
 	// Available is false when enrichment failed (variant not sellable).
 	// Omitted when true/unknown so existing clients stay compatible.
 	Available *bool `json:"available,omitempty"`
@@ -49,7 +49,7 @@ type Cart struct {
 	CustomerID       string            `json:"customer_id"`
 	Items            []CartItem        `json:"items"`
 	UnavailableItems []UnavailableItem `json:"unavailable_items,omitempty"`
-	SubtotalCents    int64             `json:"subtotal_cents"` // whole KRW won; excludes unavailable lines
+	SubtotalKRW      int64             `json:"subtotal_krw"` // whole KRW won; excludes unavailable lines
 	UpdatedAt        time.Time         `json:"updated_at"`
 }
 

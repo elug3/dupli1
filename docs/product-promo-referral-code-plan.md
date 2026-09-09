@@ -10,7 +10,7 @@ One code system that can **discount**, **attribute sales**, or **both** — so m
 
 ## Verdict
 
-**Do not build a separate referral service.** Extend the existing product coupon + order `coupon_code` / `discount_cents` path into a **promo code** model with:
+**Do not build a separate referral service.** Extend the existing product coupon + order `coupon_code` / `discount_krw` path into a **promo code** model with:
 
 1. Hardened coupon rules (real expiry, usage limits, redemption ledger).
 2. Optional **partner / campaign attribution** for sales reporting (GMV + order count by code).
@@ -24,8 +24,8 @@ Customer-facing UX keeps calling them “promo / coupon”; admin reports distin
 |-------|----------|
 | Product `coupons` | `code`, `discount` (fraction), `description`, `expires` (free-text), `active` — PG + memory; seed `SUMMER30` |
 | Redeem | `POST /api/v1/products/coupons/redeem` (and legacy `/api/v1/coupons/redeem`) — **lookup only**; does not consume uses |
-| Order checkout | `POST …/checkout/sessions/{id}/coupon` → product redeem → `coupon_code` + `%` of subtotal as `discount_cents` |
-| Order row | Immutable `coupon_code` / `discount_cents` / `total_cents` on create; pricing server-side |
+| Order checkout | `POST …/checkout/sessions/{id}/coupon` → product redeem → `coupon_code` + `%` of subtotal as `discount_krw` |
+| Order row | Immutable `coupon_code` / `discount_krw` / `total_krw` on create; pricing server-side |
 | manage-web | `/coupons` CRUD (code, %, description, expires, active toggle) |
 | Storefront | Cart/checkout promo field; validates via redeem; applies via `applySessionCoupon` before complete |
 | Permissions | `coupon.read|create|update|delete` / `coupon.*` (catalog_editor bundle) |
@@ -61,13 +61,13 @@ Building a standalone “referral” microservice would duplicate the checkout a
 | Decision | Choice |
 |----------|--------|
 | Ownership of code definitions | **Product** (existing `coupons` table / CRUD) — rename conceptually to *promo codes*; keep HTTP paths `/products/coupons` for compatibility |
-| Ownership of applied code on purchase | **Order** — keep `coupon_code` + `discount_cents` on session/order (stable wire names) |
+| Ownership of applied code on purchase | **Order** — keep `coupon_code` + `discount_krw` on session/order (stable wire names) |
 | Sales attribution moment | Count toward **paid** GMV when order becomes `paid` (payment.succeeded). Pending/canceled do not count. Ship/fulfill do not change attribution |
 | Redemption / usage consume | On **checkout complete** (order create), after server re-validates redeem — not on preview redeem, not on cart |
-| Track-only codes | Allowed: `discount_fraction = 0` and/or `discount_cents = 0`; session still stores `coupon_code` |
+| Track-only codes | Allowed: `discount_fraction = 0` and/or `discount_krw = 0`; session still stores `coupon_code` |
 | Partner entity | Lightweight: optional `partner_id` (string ULID or slug) + display name on the code row. No payout ledger in v1 of this plan |
 | Customer wallet | **Out of scope** for first slices — keep public redeem + checkout apply; profile wallet stays cosmetic until a later phase |
-| Currency | KRW only; fixed discounts are whole won (`*_cents` = whole KRW) |
+| Currency | KRW only; fixed discounts are whole won (`*_krw` = whole KRW) |
 | Permissions | Reuse `coupon.*`; add report read under `coupon.read` or new `coupon.report` if managers need separation later |
 | Commission / influencer payout | **Out of scope** — report GMV by code/partner; finance settles offline |
 
@@ -83,13 +83,13 @@ Extend `coupons` (additive columns; keep `code` PK):
 | `kind` | text | `discount` \| `referral` \| `hybrid` (default `discount`) |
 | `discount_type` | text | `percent` \| `fixed` \| `none` |
 | `discount` / `discount_fraction` | float | Keep existing column for percent; `0` allowed when type `none` |
-| `discount_fixed_cents` | bigint | Whole KRW off when type `fixed` |
+| `discount_fixed_krw` | bigint | Whole KRW off when type `fixed` |
 | `description` | text | Existing |
 | `expires_at` | timestamptz nullable | Enforce on redeem; migrate away from free-text `expires` (keep `expires` as display until clients migrate) |
 | `active` | bool | Existing |
 | `max_redemptions` | int nullable | Global cap; null = unlimited |
 | `max_per_customer` | int nullable | Per `customer_id`; null = unlimited |
-| `min_subtotal_cents` | bigint | Default 0 |
+| `min_subtotal_krw` | bigint | Default 0 |
 | `partner_id` | text nullable | Referrer / campaign owner |
 | `partner_label` | text | Admin display |
 | `redemption_count` | int | Denormalized counter (ledger is source of truth) |
@@ -98,7 +98,7 @@ Rules on redeem (validate) and again on checkout complete:
 
 - `active` and (`expires_at` is null or `now < expires_at`)
 - global and per-customer caps not exceeded (count **consumed** redemptions only)
-- subtotal ≥ `min_subtotal_cents`
+- subtotal ≥ `min_subtotal_krw`
 - discount math: percent → `floor(subtotal * fraction)` or existing int cast; fixed → `min(fixed, subtotal)`; none → `0`
 
 ### Redemption ledger (product or order)
@@ -108,7 +108,7 @@ Prefer **order as source of applied code** + a **product redemption ledger** wri
 ```text
 coupon_redemptions (
   id, code, order_id, customer_id,
-  discount_cents, order_subtotal_cents,
+  discount_krw, order_subtotal_krw,
   status: reserved | consumed | released,
   created_at, paid_at nullable
 )
@@ -124,14 +124,14 @@ Exact reserve-vs-paid timing is an open question below; **reports always filter 
 
 ### Order (unchanged wire + optional enrichment)
 
-Keep `coupon_code`, `discount_cents`. Optional later: `partner_id` snapshot on the order row for reporting without joining product (denormalize at complete).
+Keep `coupon_code`, `discount_krw`. Optional later: `partner_id` snapshot on the order row for reporting without joining product (denormalize at complete).
 
 ## Attribution & reporting
 
 **Sales by code (manager):**
 
 - Inputs: `code` or `partner_id`, date range, status filter (default `paid`+)
-- Metrics: order count, GMV (`sum(total_cents)`), discount given (`sum(discount_cents)`), AOV
+- Metrics: order count, GMV (`sum(total_krw)`), discount given (`sum(discount_krw)`), AOV
 - API sketch: `GET /api/v1/products/coupons/{code}/stats` and/or `GET /api/v1/products/coupons/stats?partner_id=`
 - manage-web: Coupons table columns + detail drawer with stats; Orders filter by coupon code (already show code on order detail)
 
@@ -170,7 +170,7 @@ sequenceDiagram
 
 **Backend**
 
-1. Add `expires_at`, `max_redemptions`, `max_per_customer`, `min_subtotal_cents`, `redemption_count` (additive migrate).
+1. Add `expires_at`, `max_redemptions`, `max_per_customer`, `min_subtotal_krw`, `redemption_count` (additive migrate).
 2. Enforce expiry + caps on redeem and on checkout complete re-validate.
 3. Redemption ledger + release on unpaid cancel.
 4. Allow `discount = 0` for track-only (adjust domain `ApplyCoupon` which today rejects `<= 0` / `>= 1`).
@@ -191,7 +191,7 @@ sequenceDiagram
 
 ### Phase 3 — Richer discount shapes (optional)
 
-1. `discount_type` + `discount_fixed_cents`.
+1. `discount_type` + `discount_fixed_krw`.
 2. Order checkout math supports fixed KRW off.
 3. manage-web create/edit UI for fixed vs percent vs none.
 4. (Defer) brand/SKU scope, stacking, first-order-only.
@@ -208,7 +208,7 @@ sequenceDiagram
 - Multi-code stacking on one order
 - Automatic partner commission / payouts / tax
 - Guest checkout attribution without customer_id (guest cart still open elsewhere)
-- Changing JSON field names away from `coupon_code` / `discount_cents`
+- Changing JSON field names away from `coupon_code` / `discount_krw`
 - Formal SQL migration tooling (continue additive startup migrate)
 
 ## Open questions
@@ -222,7 +222,7 @@ sequenceDiagram
 ## Exit criteria (feature complete for Phases 1–2)
 
 - [ ] Expired / capped codes rejected at redeem and checkout complete
-- [ ] Track-only and hybrid codes store `coupon_code` on paid orders with correct `discount_cents`
+- [ ] Track-only and hybrid codes store `coupon_code` on paid orders with correct `discount_krw`
 - [ ] Manager can see redemption count and paid GMV for a code / partner
 - [ ] Unpaid cancel does not permanently burn a capped redemption (if reserve model chosen)
 - [ ] Tests cover product + order paths; [api.md](api.md) / [current-state.md](current-state.md) updated

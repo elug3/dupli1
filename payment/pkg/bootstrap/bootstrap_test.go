@@ -21,7 +21,7 @@ func TestBootstrap_WiresUnavailableCheckoutWithoutNanoOrDevSimulate(t *testing.T
 			"id":              "ord_1",
 			"customer_id":     "cust_1",
 			"status":          "pending",
-			"total_cents":     1000,
+			"total_krw":       1000,
 			"recipient_name":  "Kim",
 			"recipient_phone": "01012345678",
 		})

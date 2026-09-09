@@ -53,7 +53,7 @@ The cancel body carries no `encData`, so the 수기결제 guide's AES-256-CBC ca
 
 **Transaction id.** The cancel needs NANO's `tranNo` from the original approval. It is captured on the verified return/webhook callback and stored as the payment's `provider_ref`, replacing the `nano_<payment_id>` placeholder written at checkout.
 
-**Partial cancel.** Supported since 수기결제 v2.5 (`cancelAmt` cancels exactly the amount sent; the response reports `remainAmt`). A partial cancel leaves the payment `succeeded` with a reduced remaining balance; the payment becomes `canceled` only when the balance reaches zero. `canceled_amount_cents` on the payment is cumulative.
+**Partial cancel.** Supported since 수기결제 v2.5 (`cancelAmt` cancels exactly the amount sent; the response reports `remainAmt`). A partial cancel leaves the payment `succeeded` with a reduced remaining balance; the payment becomes `canceled` only when the balance reaches zero. `canceled_amount_krw` on the payment is cumulative.
 
 > `remainAmt` appears in the v2.5 field table but is missing from that guide's own example response, so it is parsed as optional — an absent value is treated as unknown rather than zero, and local accounting stays authoritative.
 
@@ -65,7 +65,7 @@ If the process dies after NANO accepts a cancel and before the local transaction
 
 **Bypass payments** never reached a PG, so they are canceled locally only and the matching refund is made out of band.
 
-**Event.** A cancel publishes `payment.canceled` through the payment outbox (same transaction as the state change). Order cancels a still-`paid` order on a **full** refund (`remaining_cents` present and `== 0`) only when `payment_id` matches the order's captured payment; omitted `remaining_cents` is not treated as zero. Notification alerts ops on the same subject.
+**Event.** A cancel publishes `payment.canceled` through the payment outbox (same transaction as the state change). Order cancels a still-`paid` order on a **full** refund (`remaining_krw` present and `== 0`) only when `payment_id` matches the order's captured payment; omitted `remaining_krw` is not treated as zero. Notification alerts ops on the same subject.
 
 **Not implemented:** NANO `/api/payment/refund.io` (인증결제 v2.7 §5). That endpoint is 가상계좌(vbank)-only, explicitly no-partial, and needs `inputTranNo` from the deposit NOTI. Dupli1 sends `payWay: card` on every cert request, so it never applies.
 
@@ -92,7 +92,7 @@ sequenceDiagram
     Client->>Pay: POST /api/v1/payments { order_id, method }
     Pay->>Order: GET order (verify pending + total + recipient for NANO)
     Pay->>Pay: NANO checkout URL / bypass succeed
-    Pay->>Bus: payment.succeeded { order_id, payment_id, amount_cents }
+    Pay->>Bus: payment.succeeded { order_id, payment_id, amount_krw }
 
     Bus->>Order: consume payment.succeeded
     Order->>Order: pending → paid
@@ -115,7 +115,7 @@ sequenceDiagram
 | Card PG | **NANO Solution** certified payment (`payWay=card`) when configured |
 | Card data on Dupli1 | **Never** |
 | Default currency | **`krw` only** (single currency; other codes rejected) |
-| Amount unit | Whole Korean won (`amount_cents` = zero-decimal minor units for KRW — **not** won×100) |
+| Amount unit | Whole Korean won (`amount_krw` = zero-decimal minor units for KRW — **not** won×100) |
 | Unpaid `pending` TTL | **5 minutes** → auto-cancel + release stock |
 | Inventory plan | **B** — reserve on checkout complete; **commit on `in_transit`** |
 | Payment → order | **`payment.succeeded` event** (not HTTP confirm from payment) |
@@ -123,7 +123,7 @@ sequenceDiagram
 | Who sets `in_transit` | **Order-manager** via `POST /orders/{id}/ship` |
 | Manual `confirmed` | **Removed** |
 | Telegram | **Notification service** on `order.paid` |
-| Event payload | `order_id`, **`payment_id`**, **`amount_cents`** (must match `order.total_cents`) |
+| Event payload | `order_id`, **`payment_id`**, **`amount_krw`** (must match `order.total_krw`) |
 | Audit | `shipped_by`, `shipped_at` on order |
 
 ---
@@ -165,12 +165,12 @@ sequenceDiagram
   "event_type": "payment.succeeded",
   "order_id": "ord_000001",
   "payment_id": "pay_000001",
-  "amount_cents": 70000,
+  "amount_krw": 70000,
   "occurred_at": "2026-07-05T12:03:00Z"
 }
 ```
 
-Order consumer: idempotent on `payment_id`; reject if `amount_cents != order.total_cents`. If the order already carries the same `payment_id` and is no longer `pending` (e.g. `paid`, `in_transit`, or `fulfilled`), a replay is a no-op — the payment reconcile worker republishes for up to two hours after success, so late deliveries must not fail after ship.
+Order consumer: idempotent on `payment_id`; reject if `amount_krw != order.total_krw`. If the order already carries the same `payment_id` and is no longer `pending` (e.g. `paid`, `in_transit`, or `fulfilled`), a replay is a no-op — the payment reconcile worker republishes for up to two hours after success, so late deliveries must not fail after ship.
 
 ### `payment.callback_rejected` (payment → notification)
 
@@ -183,7 +183,7 @@ Order consumer: idempotent on `payment_id`; reject if `amount_cents != order.tot
   "order_id": "ord_000023",
   "reason": "verify_failed",
   "result_code": "0000",
-  "expected_cents": 31004,
+  "expected_krw": 31004,
   "reported_amount": "31004",
   "tran_no": "260905001496",
   "detail": "callback hashValue / receiveUrl MAC did not verify",
@@ -248,7 +248,7 @@ A refused callback the PG had already approved also publishes `payment.callback_
   "id": "pay_000001",
   "order_id": "ord_000001",
   "method": "bypass",
-  "amount_cents": 70000,
+  "amount_krw": 70000,
   "currency": "krw",
   "status": "succeeded",
   "expires_at": "2026-07-05T12:05:00Z"
@@ -282,7 +282,7 @@ A refused callback the PG had already approved also publishes `payment.callback_
 ## Security
 
 1. `payment.succeeded` (outbox) is source of truth for marking orders paid
-2. Verify `amount_cents` on `payment.succeeded`
+2. Verify `amount_krw` on `payment.succeeded`
 3. Idempotent complete / replay handling (`payment_id`)
 4. Customer may only pay own orders
 5. Ship endpoint requires elevated role; writes `shipped_by` from JWT `sub`

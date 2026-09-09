@@ -105,7 +105,7 @@ POST /orders  →  pending  →  paid  →  in_transit  →  fulfilled
                  canceled ←──── auto-cancel after 5 min unpaid
 ```
 
-Order calls product stock/coupons via the internal nginx gateway (`DUPLI1_GATEWAY_URL`), not direct service URLs. Pricing is resolved server-side — client `unit_price_cents` is ignored.
+Order calls product stock/coupons via the internal nginx gateway (`DUPLI1_GATEWAY_URL`), not direct service URLs. Pricing is resolved server-side — client `unit_price_krw` is ignored.
 
 Event flow: `payment.succeeded` (NATS, published by payment outbox) → order marks `paid`. `POST /orders/{id}/ship` → commits inventory reservation → `in_transit`.
 
@@ -133,7 +133,7 @@ Order, cart, and payment use PostgreSQL when their `DUPLI1_*_DB` env var is set;
 
 ## Key constraints
 
-- **Currency: KRW only.** All `*_cents` fields are whole Korean won. No fractional amounts.
+- **Currency: KRW only.** All `*_krw` fields are whole Korean won. No fractional amounts.
 - **No `go.work`.** Run and test from each service module directory.
 - **nginx resolver:** `api/nginx.conf` must list only Docker's embedded DNS `127.0.0.11` in its `resolver` directive. Adding `10.0.0.2` (AWS VPC) causes ~50% of local requests to fail with `502`.
 - **Legacy API aliases.** Canonical paths are `/api/v1/{service}/…`; legacy top-level prefixes (`/api/v1/inventory/`, `/api/v1/checkout/`, `/api/v1/carts/`, etc.) are still registered. New code uses canonical paths only.
