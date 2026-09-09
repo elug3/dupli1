@@ -1,5 +1,42 @@
 package domain
 
+import "strings"
+
+const listingThumbSuffix = ".w600.jpg"
+
+// SyncListingImageURLs realigns listingImageUrls with a new imageUrls slice.
+// Used when imageUrls is replaced without an explicit listingImageUrls body
+// (e.g. manage-web deleteVariantImage). Surviving images keep their listing
+// URL by URL match; new entries derive the {key}.w600.jpg sibling path.
+func SyncListingImageURLs(oldImages, oldListings, newImages []string) []string {
+	byImage := make(map[string]string, len(oldImages))
+	for i, img := range oldImages {
+		if img == "" {
+			continue
+		}
+		if i < len(oldListings) && oldListings[i] != "" {
+			byImage[img] = oldListings[i]
+		}
+	}
+	out := make([]string, len(newImages))
+	for i, img := range newImages {
+		if listing, ok := byImage[img]; ok {
+			out[i] = listing
+			continue
+		}
+		out[i] = DeriveListingImageURL(img)
+	}
+	return out
+}
+
+// DeriveListingImageURL returns the listing-thumb URL for a full-size image URL.
+func DeriveListingImageURL(imageURL string) string {
+	if strings.HasSuffix(imageURL, listingThumbSuffix) {
+		return imageURL
+	}
+	return imageURL + listingThumbSuffix
+}
+
 // MergeUpdate returns a copy of the variant with any non-zero-value fields
 // from incoming applied on top. Used by UpdateVariant so a partial request
 // body (e.g. color-only) can't silently blank out size/status/images —

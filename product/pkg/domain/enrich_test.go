@@ -49,6 +49,31 @@ func TestEnrichFromVariantsListCardOmitsVariants(t *testing.T) {
 	}
 }
 
+func TestSyncListingImageURLs_DeleteKeepsSurvivors(t *testing.T) {
+	oldImages := []string{
+		"http://localhost:8080/product-images/p1/sku/a",
+		"http://localhost:8080/product-images/p1/sku/b",
+	}
+	oldListings := []string{
+		"http://localhost:8080/product-images/p1/sku/a.w600.jpg",
+		"http://localhost:8080/product-images/p1/sku/b.w600.jpg",
+	}
+	newImages := []string{oldImages[1]}
+
+	got := domain.SyncListingImageURLs(oldImages, oldListings, newImages)
+	if len(got) != 1 || got[0] != oldListings[1] {
+		t.Fatalf("listing = %v, want [%q]", got, oldListings[1])
+	}
+}
+
+func TestSyncListingImageURLs_NewImageDerivesSibling(t *testing.T) {
+	got := domain.SyncListingImageURLs(nil, nil, []string{"http://x/img/key"})
+	want := "http://x/img/key.w600.jpg"
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("listing = %v, want [%q]", got, want)
+	}
+}
+
 func TestVariantMergeUpdate_PartialBodyKeepsOmittedFields(t *testing.T) {
 	existing := domain.Variant{
 		SKU:           "BOT-001-GRN",
