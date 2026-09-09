@@ -50,6 +50,22 @@ func jpegBytes(t *testing.T, w, h int) []byte {
 	return buf.Bytes()
 }
 
+func TestUploadVariantImageRejectsEmpty(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", Status: "active", Price: 2500},
+	}
+	store.Variants = []domain.Variant{
+		{SKU: "BOT-001", ProductID: "BOT-001", Status: "active"},
+	}
+	svc := service.NewProductSearchService(store, &memImageStore{})
+
+	_, err := svc.UploadVariantImage(t.Context(), "BOT-001", "BOT-001", bytes.NewReader(nil), 0, "image/jpeg")
+	if err == nil {
+		t.Fatal("expected error for empty image")
+	}
+}
+
 func TestUploadVariantImageWritesListingThumb(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
