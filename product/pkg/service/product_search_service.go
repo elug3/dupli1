@@ -366,6 +366,11 @@ func (s *ProductSearchService) UpdateVariant(ctx context.Context, productID, sku
 		return nil, fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 	}
 	merged := existing.MergeUpdate(v)
+	if len(v.ImageURLs) > 0 && len(v.ListingImageURLs) == 0 {
+		merged.ListingImageURLs = domain.SyncListingImageURLs(
+			existing.ImageURLs, existing.ListingImageURLs, merged.ImageURLs,
+		)
+	}
 	dims, err := domain.NormalizeDimensions(merged.Dimensions)
 	if err != nil {
 		return nil, ports.Invalid(err.Error())

@@ -272,6 +272,39 @@ func TestUpdateVariant_PartialBodyDoesNotClearOtherFields(t *testing.T) {
 	}
 }
 
+func TestUpdateVariant_ImageDeleteSyncsListingURLs(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", Status: "active", Price: 2500},
+	}
+	fullA := "http://localhost:8080/product-images/BOT-001/sku/a"
+	fullB := "http://localhost:8080/product-images/BOT-001/sku/b"
+	listA := fullA + ".w600.jpg"
+	listB := fullB + ".w600.jpg"
+	store.Variants = []domain.Variant{
+		{
+			SkuID: "SKUID-1", SKU: "BOT-001-GRN", ProductID: "BOT-001",
+			Color: "Green", Status: "active",
+			ImageURLs:        []string{fullA, fullB},
+			ListingImageURLs: []string{listA, listB},
+		},
+	}
+	svc := service.NewProductSearchService(store, nil)
+
+	updated, err := svc.UpdateVariant(t.Context(), "BOT-001", "BOT-001-GRN", domain.Variant{
+		ImageURLs: []string{fullB},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.ImageURLs) != 1 || updated.ImageURLs[0] != fullB {
+		t.Fatalf("imageURLs = %v", updated.ImageURLs)
+	}
+	if len(updated.ListingImageURLs) != 1 || updated.ListingImageURLs[0] != listB {
+		t.Fatalf("listingImageURLs = %v, want [%q]", updated.ListingImageURLs, listB)
+	}
+}
+
 func TestUpdateVariant_Dimensions(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
