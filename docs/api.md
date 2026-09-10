@@ -51,7 +51,7 @@ Every user has an `account_type` field (JSON key `account_type`) separate from *
 
 `admin` is **not** an account type — it is a permission/management tier (`admin.*`, auth ABAC `ClassAdmin`). Write APIs reject `account_type: "admin"`; use `manager` for operators. Startup migrate rewrites any leftover DB `account_type=admin` → `manager`.
 
-Seeded accounts: owner (`OWNER_EMAIL`) → `permissions: ["*"]`, `account_type: manager`; `dupli1-web` → `["user.create"]`; `dupli1-order` → `["order.ship", "order.status.update", "inventory.reservation.manage"]`. `POST /register` defaults to `customer` when `account_type` is omitted.
+Seeded accounts: owner (`OWNER_EMAIL`) → `permissions: ["*"]`, `account_type: manager`; `dupli1-web` → `["user.create"]`; `dupli1-order` → `["order.ship", "order.status.update", "inventory.reservation.manage", "payment.cancel"]`. `POST /register` defaults to `customer` when `account_type` is omitted.
 
 ---
 
@@ -841,7 +841,7 @@ Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices
 | `pending` | `paid` | `payment.succeeded` consumer or bypass payment — **payment-driven only**, no client route |
 | `paid` | `in_transit` | `POST /api/v1/orders/{id}/ship` (commits reserved stock) |
 | `in_transit` | `fulfilled` | `PUT /api/v1/orders/{id}/status` with `fulfilled` |
-| `pending`, `paid` | `canceled` | `PUT /api/v1/orders/{id}/status` with `canceled`, or the unpaid-expiry worker |
+| `pending`, `paid` | `canceled` | `PUT /api/v1/orders/{id}/status` with `canceled`, or the unpaid-expiry worker. **Paid** cancel refunds the captured payment (`POST /payments/{payment_id}/cancel`) first; a PG rejection leaves the order `paid`. Unpaid expiry never calls payment. |
 
 `PUT /status` accepts only `canceled` and `fulfilled`; use `POST /ship` to reach `in_transit`. There is no `confirmed` status — it was replaced by `paid` and `in_transit`. See [payment-service.md](payment-service.md).
 

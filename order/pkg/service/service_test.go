@@ -52,6 +52,21 @@ func (f *fakeStock) ReleaseReservation(ctx context.Context, reservationID string
 	return nil
 }
 
+type fakePayment struct {
+	canceled []string
+	keys     []string
+	err      error
+}
+
+func (f *fakePayment) CancelPayment(_ context.Context, paymentID, idempotencyKey string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.canceled = append(f.canceled, paymentID)
+	f.keys = append(f.keys, idempotencyKey)
+	return nil
+}
+
 type recordedPublisher struct {
 	subjects []string
 	events   []any
@@ -768,7 +783,8 @@ func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSavePaid(t *testing.T) {
 func TestCancelPaidOrderReleasesStock(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultKRW: 7500})
+	pay := &fakePayment{}
+	svc := newSvc(stock, &fakeProduct{defaultKRW: 7500}).WithPayment(pay)
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -787,6 +803,66 @@ func TestCancelPaidOrderReleasesStock(t *testing.T) {
 	}
 	if stock.released != "res-123" {
 		t.Fatalf("released reservation = %q, want res-123", stock.released)
+	}
+	if len(pay.canceled) != 1 || pay.canceled[0] != "pay-1" {
+		t.Fatalf("canceled payments = %v, want [pay-1]", pay.canceled)
+	}
+	if len(pay.keys) != 1 || pay.keys[0] != "order-cancel-"+order.ID {
+		t.Fatalf("idempotency keys = %v", pay.keys)
+	}
+}
+
+func TestCancelPaidOrderFailsClosedWhenRefundRejected(t *testing.T) {
+	ctx := t.Context()
+	stock := &fakeStock{reservationID: "res-123"}
+	pay := &fakePayment{err: ports.ErrPaymentRefundRejected}
+	svc := newSvc(stock, &fakeProduct{defaultKRW: 7500}).WithPayment(pay)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "clock-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+
+	_, err = svc.CancelOrder(ctx, order.ID)
+	if !errors.Is(err, ports.ErrPaymentRefundRejected) {
+		t.Fatalf("err = %v, want ErrPaymentRefundRejected", err)
+	}
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid when the PG rejects the refund", got.Status)
+	}
+	if stock.released != "" {
+		t.Fatalf("released = %q, want empty", stock.released)
+	}
+}
+
+func TestCancelPendingOrderDoesNotCallPayment(t *testing.T) {
+	ctx := t.Context()
+	stock := &fakeStock{reservationID: "res-123"}
+	pay := &fakePayment{}
+	svc := newSvc(stock, &fakeProduct{defaultKRW: 7500}).WithPayment(pay)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "clock-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	if _, err := svc.CancelOrder(ctx, order.ID); err != nil {
+		t.Fatalf("CancelOrder: %v", err)
+	}
+	if len(pay.canceled) != 0 {
+		t.Fatalf("pending cancel must not refund, got %v", pay.canceled)
 	}
 }
 

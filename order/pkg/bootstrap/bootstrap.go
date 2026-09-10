@@ -11,6 +11,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/handler"
 	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
 	"github.com/elug3/dupli1/order/pkg/infra/httpcoupon"
+	"github.com/elug3/dupli1/order/pkg/infra/httppayment"
 	"github.com/elug3/dupli1/order/pkg/infra/httpproduct"
 	"github.com/elug3/dupli1/order/pkg/infra/httpstock"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
@@ -101,6 +102,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	stock := httpstock.NewClient(apiBase, cfg.HTTPClient, stockTokenSource)
 	product := httpproduct.NewClient(apiBase, cfg.HTTPClient)
 	couponClient := httpcoupon.NewClient(apiBase, cfg.HTTPClient)
+	payment := httppayment.NewClient(apiBase, httppaymentHTTPClient(cfg.HTTPClient), stockTokenSource)
 
 	var eventPublisher ports.EventPublisher
 	var natsPublisher *natsinfra.Publisher
@@ -122,7 +124,8 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	svc := service.NewWithCheckout(repo, stock, couponClient, 0, eventPublisher).
 		WithProduct(product).
-		WithShippingFee(cfg.ShippingFeeKRW)
+		WithShippingFee(cfg.ShippingFeeKRW).
+		WithPayment(payment)
 
 	if natsSubscriber != nil {
 		// Long-lived worker/subscriber root; cancelled on process shutdown.
@@ -229,6 +232,14 @@ func resolveStockTokenSource(ctx context.Context, cfg Config) (httpauth.TokenSou
 
 func DefaultHTTPClient() *http.Client {
 	return &http.Client{Timeout: 5 * time.Second}
+}
+
+// httppaymentHTTPClient is longer than the stock client: cancel waits on NANO.
+func httppaymentHTTPClient(base *http.Client) *http.Client {
+	if base != nil && base.Timeout >= 20*time.Second {
+		return base
+	}
+	return &http.Client{Timeout: 25 * time.Second}
 }
 
 func CloseApps(apps ...*App) error {

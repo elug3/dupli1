@@ -43,6 +43,8 @@ func TestRespondServiceErrorKeepsClientErrors(t *testing.T) {
 		{domain.ErrInvalidFulfillment, http.StatusBadRequest},
 		{domain.ErrSessionNotOpen, http.StatusBadRequest},
 		{ports.ErrProductUnavailable, http.StatusBadGateway},
+		{ports.ErrPaymentRefundRejected, http.StatusBadGateway},
+		{ports.ErrPaymentForbidden, http.StatusForbidden},
 	}
 	for _, tc := range cases {
 		rec := httptest.NewRecorder()

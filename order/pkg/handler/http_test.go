@@ -51,6 +51,21 @@ func (f *fakeStock) Reserve(_ context.Context, _ string, _ []ports.StockItem) (s
 func (f *fakeStock) CommitReservation(_ context.Context, _ string) error  { return nil }
 func (f *fakeStock) ReleaseReservation(_ context.Context, _ string) error { return nil }
 
+type recordingPayment struct {
+	ids  []string
+	keys []string
+	err  error
+}
+
+func (p *recordingPayment) CancelPayment(_ context.Context, paymentID, idempotencyKey string) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.ids = append(p.ids, paymentID)
+	p.keys = append(p.keys, idempotencyKey)
+	return nil
+}
+
 type fakeProduct struct {
 	price       int64
 	productName string
@@ -823,5 +838,63 @@ func TestCompleteCheckoutRejectsInvalidFulfillment(t *testing.T) {
 	w = do(t, mux, http.MethodPost, path, ownerToken, body)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateStatusCanceledRefundsPaidOrder(t *testing.T) {
+	pay := &recordingPayment{}
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay)
+	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay_000026", 1000); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+
+	token := makeToken(t, "mgr-1", []string{permissions.OrderStatusUpdate})
+	w := do(t, mux, http.MethodPut, "/api/v1/orders/"+orderID+"/status", token, map[string]string{"status": "canceled"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if len(pay.ids) != 1 || pay.ids[0] != "pay_000026" {
+		t.Fatalf("refunded payments = %v, want [pay_000026]", pay.ids)
+	}
+	if len(pay.keys) != 1 || pay.keys[0] != "order-cancel-"+orderID {
+		t.Fatalf("idempotency keys = %v", pay.keys)
+	}
+	var got domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status != domain.StatusCanceled {
+		t.Fatalf("order status = %q, want canceled", got.Status)
+	}
+}
+
+func TestUpdateStatusCanceledRefundRejectedLeavesPaid(t *testing.T) {
+	pay := &recordingPayment{err: ports.ErrPaymentRefundRejected}
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay)
+	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay_1", 1000); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+
+	token := makeToken(t, "mgr-1", []string{permissions.OrderStatusUpdate})
+	w := do(t, mux, http.MethodPut, "/api/v1/orders/"+orderID+"/status", token, map[string]string{"status": "canceled"})
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502; body: %s", w.Code, w.Body.String())
+	}
+	got, err := svc.GetOrder(t.Context(), orderID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid", got.Status)
 	}
 }

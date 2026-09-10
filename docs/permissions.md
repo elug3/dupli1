@@ -373,9 +373,9 @@ Users with multiple legacy roles receive the **union** of expanded permissions (
 |---------|----------|-------|-----------------|
 | Owner | `OWNER_EMAIL` | `owner`, `product_manager` | `*` |
 | dupli1-web | `DUPLI1_WEB_SERVICE_*` | `customer_registrar` | `user.create` |
-| dupli1-order | `DUPLI1_ORDER_SERVICE_*` | `order_manager` | `order.ship`, `order.status.update`, `inventory.reservation.manage` |
+| dupli1-order | `DUPLI1_ORDER_SERVICE_*` | `order_manager` | `order.ship`, `order.status.update`, `inventory.reservation.manage`, `payment.cancel` |
 
-Note: `dupli1-order` does not need `cart.read` or `inventory.stock.write` for its runtime paths (reservations only). The legacy `order_manager` role was broader than the order service account requires.
+Note: `dupli1-order` does not need `cart.read` or `inventory.stock.write` for its runtime paths (reservations only). `payment.cancel` is so a paid-order cancel can refund through the gateway if the operator Bearer is missing. The legacy `order_manager` role was broader than the order service account requires.
 
 ---
 

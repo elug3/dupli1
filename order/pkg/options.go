@@ -50,9 +50,10 @@ func NewServerOptions() *ServerOptions {
 		// Local Compose sets DUPLI1_GATEWAY_URL; bare `go run` can still use ProductURL.
 		ProductURL: "http://localhost:8081",
 		// Flat delivery charge in whole KRW (30,000 KRW).
-		ShippingFeeKRW:  DefaultShippingFeeKRW,
-		ReadTimeout:     5 * time.Second,
-		WriteTimeout:    10 * time.Second,
+		ShippingFeeKRW: DefaultShippingFeeKRW,
+		ReadTimeout:    5 * time.Second,
+		// WriteTimeout covers paid cancel, which waits on NANO through payment.
+		WriteTimeout:    25 * time.Second,
 		IdleTimeout:     120 * time.Second,
 		ShutdownTimeout: 10 * time.Second,
 	}
