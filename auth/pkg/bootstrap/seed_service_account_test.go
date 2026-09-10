@@ -173,6 +173,7 @@ func TestSeedOrderServiceAccount_CreatesAndSyncs(t *testing.T) {
 		permissions.OrderShip,
 		permissions.OrderStatusUpdate,
 		permissions.InventoryReservationManage,
+		permissions.PaymentCancel,
 	} {
 		if !u.HasPermission(p) {
 			t.Fatalf("missing permission %s in %v", p, u.Permissions)

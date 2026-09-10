@@ -31,6 +31,7 @@ type Service struct {
 	repo           ports.Repository
 	stock          ports.StockClient
 	product        ports.ProductClient
+	payment        ports.PaymentClient
 	eventPublisher ports.EventPublisher
 	outboxDrainer  *outbox.Drainer
 	couponClient   ports.CouponClient
@@ -126,6 +127,14 @@ func (s *Service) WithShippingFee(krw int64) *Service {
 		return s
 	}
 	s.shippingFeeKRW = krw
+	return s
+}
+
+// WithPayment sets the client used to refund a captured payment when a paid
+// order is canceled. Without it, paid cancel fails closed so the card capture
+// is not dropped locally while NANO still holds the money.
+func (s *Service) WithPayment(payment ports.PaymentClient) *Service {
+	s.payment = payment
 	return s
 }
 
@@ -422,6 +431,24 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if order.Status != domain.StatusPending && order.Status != domain.StatusPaid {
 		return nil, domain.ErrInvalidTransition
 	}
+	if order.Status == domain.StatusPaid {
+		if err := s.refundCapturedPayment(ctx, order); err != nil {
+			return nil, err
+		}
+		// payment.canceled may have already moved the order; don't fail the
+		// operator after the card refund has gone through.
+		fresh, err := s.repo.Get(ctx, order.ID)
+		if err != nil {
+			return nil, err
+		}
+		if fresh.Status == domain.StatusCanceled {
+			return cloneOrder(fresh), nil
+		}
+		order = fresh
+		if order.Status != domain.StatusPaid && order.Status != domain.StatusPending {
+			return nil, domain.ErrInvalidTransition
+		}
+	}
 	if err := order.Cancel(s.now()); err != nil {
 		return nil, err
 	}
@@ -433,6 +460,17 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 		log.Printf("cancel order %s: release reservation %s: %v", saved.ID, saved.ReservationID, err)
 	}
 	return saved, nil
+}
+
+func (s *Service) refundCapturedPayment(ctx context.Context, order *domain.Order) error {
+	paymentID := strings.TrimSpace(order.PaymentID)
+	if paymentID == "" {
+		return nil
+	}
+	if s.payment == nil {
+		return fmt.Errorf("%w: cannot refund payment %s without a payment client", ports.ErrPaymentUnavailable, paymentID)
+	}
+	return s.payment.CancelPayment(ctx, paymentID, "order-cancel-"+order.ID)
 }
 
 func (s *Service) FulfillOrder(ctx context.Context, id string) (*domain.Order, error) {

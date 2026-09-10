@@ -264,7 +264,8 @@ func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request, orderID s
 	)
 	switch req.Status {
 	case domain.StatusCanceled:
-		order, err = h.svc.CancelOrder(r.Context(), orderID)
+		ctx := ports.WithPaymentBearer(r.Context(), r.Header.Get("Authorization"))
+		order, err = h.svc.CancelOrder(ctx, orderID)
 	case domain.StatusFulfilled:
 		order, err = h.svc.FulfillOrder(r.Context(), orderID)
 	default:
@@ -295,8 +296,13 @@ func respondServiceError(w http.ResponseWriter, err error) {
 		respondError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ports.ErrVariantNotFound):
 		respondError(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, ports.ErrProductUnavailable), errors.Is(err, ports.ErrCouponUnavailable):
+	case errors.Is(err, ports.ErrProductUnavailable), errors.Is(err, ports.ErrCouponUnavailable),
+		errors.Is(err, ports.ErrPaymentUnavailable), errors.Is(err, ports.ErrPaymentRefundRejected):
 		respondError(w, http.StatusBadGateway, err.Error())
+	case errors.Is(err, ports.ErrPaymentForbidden):
+		respondError(w, http.StatusForbidden, err.Error())
+	case errors.Is(err, ports.ErrPaymentUnauthorized):
+		respondError(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, domain.ErrPaymentAmountMismatch),
 		errors.Is(err, domain.ErrInvalidCheckoutSession), errors.Is(err, domain.ErrEmptyCheckout),
 		errors.Is(err, domain.ErrInvalidFulfillment), errors.Is(err, domain.ErrInvalidShipment),

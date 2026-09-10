@@ -40,6 +40,8 @@ stateDiagram-v2
 
 `POST /api/v1/payments/{id}/cancel` (permission `payment.cancel`, staff-only — no ABAC) refunds a `succeeded` payment through the PG.
 
+Ops **Cancel** on a paid order (`PUT /api/v1/orders/{id}/status` `{ "status": "canceled" }`) calls that endpoint first (forwards the operator Bearer; falls back to the `dupli1-order` service account which is seeded with `payment.cancel`). A PG rejection leaves the order `paid`. Unpaid / pending cancel does not call payment.
+
 **Provider endpoint.** NANO `POST /api/payment/cancel.io`, documented in **[NANO] 수기결제 연동 API 안내 v2.5 §3**. The certified-payment guide (인증결제 v2.7 §4 취소) defines no cancel body of its own and defers to that section, so cert-approved card payments cancel through the same endpoint.
 
 Two differences from the cert request matter:
@@ -319,7 +321,7 @@ Local Postgres (payment): `postgres://dupli1:dupli1_dev@localhost:5437/payments?
 |------|--------|
 | Unpaid > 5 min | `canceled`, release stock |
 | Checkout abandoned / never completed | stay `pending` until TTL, then cancel |
-| Paid, ops rejects | `canceled` (order) + `POST /api/v1/payments/{id}/cancel` (refund) — **two separate calls**, not yet chained |
+| Paid, ops rejects | `PUT /orders/{id}/status` `{ "status": "canceled" }` refunds the captured payment (`POST /payments/{payment_id}/cancel`, NANO or Bypass) **then** cancels the order. A PG rejection (`502`) leaves the order `paid`. The reverse path (`POST /payments/{id}/cancel` → `payment.canceled`) still cancels a still-`paid` matching order. |
 | Duplicate `payment.succeeded` | idempotent — order stays `paid` |
 | Replayed `payment.succeeded` after ship | no-op when `payment_id` already set and status ≠ `pending` |
 | Payment succeeds after 5 min auto-cancel | order **reinstated** to `pending` with a fresh reservation and extended payment window, then marked `paid` |
