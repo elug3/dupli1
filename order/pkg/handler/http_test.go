@@ -986,3 +986,122 @@ func TestConfirmForbiddenWithoutPermission(t *testing.T) {
 		t.Fatalf("status = %d, want 403", w.Code)
 	}
 }
+
+func TestGetOrderIncludesRefundPolicyFields(t *testing.T) {
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000})
+	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay_1", 1000); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+
+	token := makeToken(t, "u-1", nil)
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/"+orderID, token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	var body struct {
+		ImmediateCancelAllowed bool   `json:"immediate_cancel_allowed"`
+		CancelRequestAllowed   bool   `json:"cancel_request_allowed"`
+		ConfirmationDueAt      string `json:"confirmation_due_at"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !body.ImmediateCancelAllowed {
+		t.Fatal("unconfirmed paid order must expose immediate_cancel_allowed")
+	}
+	if body.CancelRequestAllowed {
+		t.Fatal("unconfirmed paid order must not allow cancel_request yet")
+	}
+	if body.ConfirmationDueAt == "" {
+		t.Fatal("confirmation_due_at must be set for unconfirmed paid orders")
+	}
+}
+
+func TestRejectCancelRequestClearsPendingRequest(t *testing.T) {
+	pay := &recordingPayment{}
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay)
+	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay_1", 1000); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	mgr := makeToken(t, "mgr-1", []string{permissions.OrderStatusUpdate})
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/confirm", mgr, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("confirm status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	customer := makeToken(t, "u-1", nil)
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel", customer, map[string]string{"reason": "changed mind"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("cancel status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel/reject", mgr, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("reject status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if len(pay.ids) != 0 {
+		t.Fatalf("reject must not refund, got %v", pay.ids)
+	}
+
+	var got domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status != domain.StatusPaid || got.CancelRequestedAt != nil {
+		t.Fatalf("order = %+v, want paid with no cancel request", got)
+	}
+	if !got.CancelRequestAllowed {
+		t.Fatal("customer must be able to open a new cancel request after reject")
+	}
+}
+
+func TestApproveCancelRefundRejectedLeavesPaid(t *testing.T) {
+	pay := &recordingPayment{err: ports.ErrPaymentRefundRejected}
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay)
+	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay_1", 1000); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	mgr := makeToken(t, "mgr-1", []string{permissions.OrderStatusUpdate})
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/confirm", mgr, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("confirm status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	customer := makeToken(t, "u-1", nil)
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel", customer, map[string]string{"reason": "please cancel"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("cancel status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel/approve", mgr, nil)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("approve status = %d, want 502; body: %s", w.Code, w.Body.String())
+	}
+
+	got, err := svc.GetOrder(t.Context(), orderID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid when PG rejects refund", got.Status)
+	}
+	if got.CancelRequestedAt == nil {
+		t.Fatal("cancel request must remain pending after failed approve")
+	}
+}
