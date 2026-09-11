@@ -296,8 +296,9 @@ func (h *Handler) customerCancel(w http.ResponseWriter, r *http.Request, orderID
 		_ = json.NewDecoder(r.Body).Decode(&req)
 	}
 
-	ctx := ports.WithPaymentBearer(r.Context(), r.Header.Get("Authorization"))
-	updated, err := h.svc.CustomerCancel(ctx, orderID, req.Reason)
+	// Refunds run as the order service account (payment.cancel). Customers
+	// never carry that permission, so forwarding their Bearer would 403 at payment.
+	updated, err := h.svc.CustomerCancel(r.Context(), orderID, req.Reason)
 	if err != nil {
 		respondServiceError(w, err)
 		return
