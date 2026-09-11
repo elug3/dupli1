@@ -159,6 +159,9 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier_note TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_requested_at TIMESTAMPTZ`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_request_reason TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`,
@@ -373,8 +376,9 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
+			confirmed_at, cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			reservation_id = EXCLUDED.reservation_id,
@@ -396,12 +400,16 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			carrier = EXCLUDED.carrier,
 			tracking_number = EXCLUDED.tracking_number,
 			carrier_note = EXCLUDED.carrier_note,
+			confirmed_at = EXCLUDED.confirmed_at,
+			cancel_requested_at = EXCLUDED.cancel_requested_at,
+			cancel_request_reason = EXCLUDED.cancel_request_reason,
 			updated_at = EXCLUDED.updated_at
 	`, order.ID, order.CustomerID, order.ReservationID, order.Status, order.CouponCode,
 		order.SubtotalKRW, order.DiscountKRW, order.ShippingFeeKRW, order.TotalKRW,
 		order.RecipientName, order.RecipientPhone, shippingJSON, order.SourceAddressID,
 		order.PaymentID, order.PaidAt, order.PaymentDueAt, order.ShippedBy, order.ShippedAt,
 		order.Carrier, order.TrackingNumber, order.CarrierNote,
+		order.ConfirmedAt, order.CancelRequestedAt, order.CancelRequestReason,
 		order.CreatedAt, order.UpdatedAt)
 	if err != nil {
 		return err
@@ -529,13 +537,14 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	}
 
 	var order domain.Order
-	var paidAt, shippedAt *time.Time
+	var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
 	var shippingJSON []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
+			confirmed_at, cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id).Scan(
@@ -544,6 +553,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
+		&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -557,6 +567,8 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	}
 	order.PaidAt = paidAt
 	order.ShippedAt = shippedAt
+	order.ConfirmedAt = confirmedAt
+	order.CancelRequestedAt = cancelRequestedAt
 
 	items, err := r.loadOrderItems(ctx, id)
 	if err != nil {
@@ -627,6 +639,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
+			confirmed_at, cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders WHERE customer_id = $1 ORDER BY created_at DESC
 	`, customerID)
@@ -639,7 +652,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	var ids []string
 	for rows.Next() {
 		var order domain.Order
-		var paidAt, shippedAt *time.Time
+		var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
@@ -647,6 +660,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
+			&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -656,6 +670,8 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 		}
 		order.PaidAt = paidAt
 		order.ShippedAt = shippedAt
+		order.ConfirmedAt = confirmedAt
+		order.CancelRequestedAt = cancelRequestedAt
 		orders = append(orders, order)
 		ids = append(ids, order.ID)
 	}
@@ -682,6 +698,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
+			confirmed_at, cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders ORDER BY created_at DESC
 	`)
@@ -694,7 +711,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 	var ids []string
 	for rows.Next() {
 		var order domain.Order
-		var paidAt, shippedAt *time.Time
+		var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
@@ -702,6 +719,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
+			&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -711,6 +729,8 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 		}
 		order.PaidAt = paidAt
 		order.ShippedAt = shippedAt
+		order.ConfirmedAt = confirmedAt
+		order.CancelRequestedAt = cancelRequestedAt
 		orders = append(orders, order)
 		ids = append(ids, order.ID)
 	}
@@ -737,6 +757,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
+			confirmed_at, cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders
 		WHERE status = $1 AND payment_due_at < $2
@@ -750,7 +771,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 	var ids []string
 	for rows.Next() {
 		var order domain.Order
-		var paidAt, shippedAt *time.Time
+		var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
@@ -758,6 +779,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
+			&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -767,6 +789,8 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 		}
 		order.PaidAt = paidAt
 		order.ShippedAt = shippedAt
+		order.ConfirmedAt = confirmedAt
+		order.CancelRequestedAt = cancelRequestedAt
 		orders = append(orders, order)
 		ids = append(ids, order.ID)
 	}
@@ -871,13 +895,14 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	}
 
 	var order domain.Order
-	var paidAt, shippedAt *time.Time
+	var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
+			confirmed_at, cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
@@ -886,6 +911,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
+		&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if err != nil {
@@ -896,6 +922,8 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	}
 	order.PaidAt = paidAt
 	order.ShippedAt = shippedAt
+	order.ConfirmedAt = confirmedAt
+	order.CancelRequestedAt = cancelRequestedAt
 
 	rows, err := tx.Query(ctx, `
 		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_krw
@@ -955,13 +983,14 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	}
 
 	var order domain.Order
-	var paidAt, shippedAt *time.Time
+	var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_krw, discount_krw, shipping_fee_krw, total_krw,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
+			confirmed_at, cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
@@ -970,6 +999,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
+		&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if err != nil {
@@ -980,6 +1010,8 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	}
 	order.PaidAt = paidAt
 	order.ShippedAt = shippedAt
+	order.ConfirmedAt = confirmedAt
+	order.CancelRequestedAt = cancelRequestedAt
 
 	rows, err := tx.Query(ctx, `
 		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_krw
@@ -1119,10 +1151,11 @@ func (r *Repository) ShipIfPaid(ctx context.Context, order *domain.Order, events
 			carrier = $5,
 			tracking_number = $6,
 			carrier_note = $7,
-			updated_at = $8
-		WHERE id = $1 AND status = $9
+			confirmed_at = $8,
+			updated_at = $9
+		WHERE id = $1 AND status = $10
 	`, order.ID, domain.StatusInTransit, order.ShippedBy, order.ShippedAt,
-		order.Carrier, order.TrackingNumber, order.CarrierNote, order.UpdatedAt, domain.StatusPaid)
+		order.Carrier, order.TrackingNumber, order.CarrierNote, order.ConfirmedAt, order.UpdatedAt, domain.StatusPaid)
 	if err != nil {
 		return false, err
 	}

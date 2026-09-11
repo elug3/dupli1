@@ -145,6 +145,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	// Long-lived worker/subscriber root; cancelled on process shutdown.
 	expiryCtx, expiryCancel := context.WithCancel(context.Background())
 	svc.StartPendingExpiryWorker(expiryCtx, 30*time.Second)
+	svc.StartRefundPolicyWorker(expiryCtx, 30*time.Second)
 	svc.StartOutboxWorker(expiryCtx, 2*time.Second)
 
 	jwtValidator, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)

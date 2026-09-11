@@ -168,7 +168,7 @@ Public `GET /api/v1/products` and `GET /api/v1/products/{id}` stay **unauthentic
 | `order.create` | Create order for any `customer_id` (without ABAC self-check) |
 | `order.read.all` | List/get any customer's orders (bypass ABAC) |
 | `order.ship` | `POST /orders/{id}/ship` |
-| `order.status.update` | `PUT /orders/{id}/status` (cancel, fulfill) |
+| `order.status.update` | `PUT /orders/{id}/status` (cancel, fulfill); `POST /orders/{id}/confirm`; `POST /orders/{id}/cancel/approve|reject` |
 
 Checkout session routes (`/api/v1/orders/checkout/sessions/*`) follow the same rules as orders: authenticated customers use ABAC on `customer_id`; `order.create` / `order.read.all` bypass ABAC.
 
@@ -301,6 +301,10 @@ registered as an alias.
 | `GET` | `/api/v1/orders?customer_id=` | ABAC or `order.read.all` |
 | `GET` | `/api/v1/orders/{id}` | ABAC or `order.read.all` |
 | `POST` | `/api/v1/orders/{id}/ship` | `order.ship` |
+| `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` |
+| `POST` | `/api/v1/orders/{id}/cancel` | ABAC owner |
+| `POST` | `/api/v1/orders/{id}/cancel/approve` | `order.status.update` |
+| `POST` | `/api/v1/orders/{id}/cancel/reject` | `order.status.update` |
 | `PUT` | `/api/v1/orders/{id}/status` | `order.status.update` |
 | `*` | `/api/v1/orders/checkout/sessions/*` | same as orders (ABAC on session owner); legacy alias `/api/v1/checkout/sessions/*` |
 

@@ -182,6 +182,26 @@ func (h *Handler) order(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "confirm" && r.Method == http.MethodPost {
+		h.confirmOrder(w, r, parts[0])
+		return
+	}
+
+	if len(parts) == 2 && parts[1] == "cancel" && r.Method == http.MethodPost {
+		h.customerCancel(w, r, parts[0])
+		return
+	}
+
+	if len(parts) == 3 && parts[1] == "cancel" && parts[2] == "approve" && r.Method == http.MethodPost {
+		h.approveCancel(w, r, parts[0])
+		return
+	}
+
+	if len(parts) == 3 && parts[1] == "cancel" && parts[2] == "reject" && r.Method == http.MethodPost {
+		h.rejectCancel(w, r, parts[0])
+		return
+	}
+
 	if len(parts) == 2 && parts[1] == "status" && r.Method == http.MethodPut {
 		h.updateStatus(w, r, parts[0])
 		return
@@ -235,6 +255,78 @@ func (h *Handler) shipOrder(w http.ResponseWriter, r *http.Request, orderID stri
 	}
 
 	order, err := h.svc.ShipOrder(r.Context(), orderID, claims.UserID, tracking)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, order)
+}
+
+func (h *Handler) confirmOrder(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+	if h.jwtValidator != nil && !claims.HasPermission(permissions.OrderStatusUpdate) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
+		return
+	}
+	order, err := h.svc.ConfirmOrder(r.Context(), orderID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, order)
+}
+
+func (h *Handler) customerCancel(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+
+	order, err := h.svc.GetOrder(r.Context(), orderID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	if h.jwtValidator != nil && order.CustomerID != claims.UserID {
+		respondError(w, http.StatusForbidden, "forbidden: you do not own this order")
+		return
+	}
+
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	if r.Body != nil && r.Body != http.NoBody {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+
+	ctx := ports.WithPaymentBearer(r.Context(), r.Header.Get("Authorization"))
+	updated, err := h.svc.CustomerCancel(ctx, orderID, req.Reason)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) approveCancel(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+	if h.jwtValidator != nil && !claims.HasPermission(permissions.OrderStatusUpdate) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
+		return
+	}
+	ctx := ports.WithPaymentBearer(r.Context(), r.Header.Get("Authorization"))
+	order, err := h.svc.ApproveCancelRequest(ctx, orderID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, order)
+}
+
+func (h *Handler) rejectCancel(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+	if h.jwtValidator != nil && !claims.HasPermission(permissions.OrderStatusUpdate) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
+		return
+	}
+	order, err := h.svc.RejectCancelRequest(r.Context(), orderID)
 	if err != nil {
 		respondServiceError(w, err)
 		return

@@ -1232,6 +1232,78 @@ paths:
         '200':
           description: Success
 
+  /api/v1/orders/{id}/confirm:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Confirm a paid order (sets confirmed_at; 2-hour SLA)
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [order.status.update]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/{id}/cancel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Customer cancel (immediate refund before confirm; request after)
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      description: Owner ABAC. Immediate refund until confirmed_at; afterward records a cancel request.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/{id}/cancel/approve:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Approve a customer cancel request and refund
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [order.status.update]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/{id}/cancel/reject:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Reject a customer cancel request
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [order.status.update]
+      responses:
+        '200':
+          description: Success
+
   /api/v1/orders/{id}/status:
     parameters:
       - name: id
@@ -1246,7 +1318,7 @@ paths:
       security:
         - bearerAuth: []
       x-required-permissions: [order.status.update]
-      description: Accepts canceled and fulfilled only; paid is payment-driven and in_transit uses /ship.
+      description: Accepts canceled (from pending, paid, or in_transit) and fulfilled only; paid is payment-driven and in_transit from paid uses /ship. Confirm uses /confirm.
       responses:
         '200':
           description: Success

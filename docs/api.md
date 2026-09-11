@@ -820,7 +820,11 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 | GET | `/api/v1/orders` | List all orders (`order.read.all`) |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
-| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship order (`paid` → `in_transit`); body requires `carrier` + `tracking_number` (`carrier_note` when `carrier=other`) |
+| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship order (`paid` → `in_transit`); body requires `carrier` + `tracking_number` (`carrier_note` when `carrier=other`); sets `confirmed_at` |
+| POST | `/api/v1/orders/{id}/confirm` | `order.status.update` — set `confirmed_at` on a paid order (2-hour SLA from `paid_at`) |
+| POST | `/api/v1/orders/{id}/cancel` | Customer ABAC — immediate refund before confirm; cancel request after confirm / in transit |
+| POST | `/api/v1/orders/{id}/cancel/approve` | `order.status.update` — refund + cancel a customer request |
+| POST | `/api/v1/orders/{id}/cancel/reject` | `order.status.update` — keep the order, clear the request |
 | PUT | `/api/v1/orders/{id}/status` | `order.status.update` — cancel or fulfill |
 
 **Create order request**
@@ -841,9 +845,9 @@ Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices
 | `pending` | `paid` | `payment.succeeded` consumer or bypass payment — **payment-driven only**, no client route |
 | `paid` | `in_transit` | `POST /api/v1/orders/{id}/ship` (commits reserved stock) |
 | `in_transit` | `fulfilled` | `PUT /api/v1/orders/{id}/status` with `fulfilled` |
-| `pending`, `paid` | `canceled` | `PUT /api/v1/orders/{id}/status` with `canceled`, or the unpaid-expiry worker. **Paid** cancel refunds the captured payment (`POST /payments/{payment_id}/cancel`) first; a PG rejection leaves the order `paid`. Unpaid expiry never calls payment. |
+| `pending`, `paid`, `in_transit` | `canceled` | Customer `POST /cancel` (immediate before confirm; request after), manager `PUT /status` `{ "status": "canceled" }`, unpaid-expiry worker, or auto-approve of an overdue cancel request. **Paid / in-transit** cancel refunds the captured payment (`POST /payments/{payment_id}/cancel`) first; a PG rejection leaves the order unchanged. Unpaid expiry never calls payment. |
 
-`PUT /status` accepts only `canceled` and `fulfilled`; use `POST /ship` to reach `in_transit`. There is no `confirmed` status — it was replaced by `paid` and `in_transit`. See [payment-service.md](payment-service.md).
+`PUT /status` accepts only `canceled` and `fulfilled`; use `POST /ship` to reach `in_transit`. There is no `confirmed` **status** — manager acceptance is `confirmed_at` on a still-`paid` order (or implied by ship). See [payment-service.md](payment-service.md).
 
 ---
 

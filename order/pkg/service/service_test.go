@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
@@ -866,10 +867,11 @@ func TestCancelPendingOrderDoesNotCallPayment(t *testing.T) {
 	}
 }
 
-func TestCancelInTransitOrderFails(t *testing.T) {
+func TestCancelInTransitOrderRefundsWithoutReleasingStock(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultKRW: 7500})
+	pay := &fakePayment{}
+	svc := newSvc(stock, &fakeProduct{defaultKRW: 7500}).WithPayment(pay)
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -885,9 +887,18 @@ func TestCancelInTransitOrderFails(t *testing.T) {
 		t.Fatalf("ShipOrder: %v", err)
 	}
 
-	_, err = svc.CancelOrder(ctx, order.ID)
-	if !errors.Is(err, domain.ErrInvalidTransition) {
-		t.Fatalf("CancelOrder error = %v, want ErrInvalidTransition", err)
+	canceled, err := svc.CancelOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("CancelOrder in_transit: %v", err)
+	}
+	if canceled.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", canceled.Status)
+	}
+	if len(pay.canceled) != 1 || pay.canceled[0] != "pay-1" {
+		t.Fatalf("canceled payments = %v, want [pay-1]", pay.canceled)
+	}
+	if stock.released != "" {
+		t.Fatalf("in-transit cancel must not restock, released %q", stock.released)
 	}
 }
 
@@ -1139,5 +1150,183 @@ func TestDrainOutboxPublishesPending(t *testing.T) {
 	}
 	if len(pending) != 0 {
 		t.Fatalf("pending = %d, want 0", len(pending))
+	}
+}
+
+func TestCustomerCancelImmediateBeforeConfirm(t *testing.T) {
+	ctx := t.Context()
+	pay := &fakePayment{}
+	stock := &fakeStock{reservationID: "res-1"}
+	svc := newSvc(stock, &fakeProduct{defaultKRW: 5000}).WithPayment(pay)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if !got.ImmediateCancelAllowed || got.ConfirmedAt != nil {
+		t.Fatal("unconfirmed paid order must allow immediate cancel")
+	}
+
+	canceled, err := svc.CustomerCancel(ctx, order.ID, "")
+	if err != nil {
+		t.Fatalf("CustomerCancel: %v", err)
+	}
+	if canceled.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", canceled.Status)
+	}
+	if len(pay.canceled) != 1 {
+		t.Fatalf("want immediate refund, got %v", pay.canceled)
+	}
+}
+
+func TestCustomerCancelAfterConfirmRequestsManagerApproval(t *testing.T) {
+	ctx := t.Context()
+	pay := &fakePayment{}
+	svc := newSvc(&fakeStock{reservationID: "res-1"}, &fakeProduct{defaultKRW: 5000}).WithPayment(pay)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+		t.Fatalf("ConfirmOrder: %v", err)
+	}
+
+	got, err := svc.CustomerCancel(ctx, order.ID, "changed mind")
+	if err != nil {
+		t.Fatalf("CustomerCancel: %v", err)
+	}
+	if got.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid until manager confirms", got.Status)
+	}
+	if got.CancelRequestedAt == nil || got.CancelRequestReason != "changed mind" {
+		t.Fatalf("cancel request = %+v", got)
+	}
+	if len(pay.canceled) != 0 {
+		t.Fatalf("must not refund until manager confirms, got %v", pay.canceled)
+	}
+
+	approved, err := svc.ApproveCancelRequest(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("ApproveCancelRequest: %v", err)
+	}
+	if approved.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", approved.Status)
+	}
+	if len(pay.canceled) != 1 {
+		t.Fatalf("want refund after manager confirm, got %v", pay.canceled)
+	}
+}
+
+func TestRejectCancelRequestLeavesOrderPaid(t *testing.T) {
+	ctx := t.Context()
+	pay := &fakePayment{}
+	svc := newSvc(&fakeStock{reservationID: "res-1"}, &fakeProduct{defaultKRW: 5000}).WithPayment(pay)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+		t.Fatalf("ConfirmOrder: %v", err)
+	}
+	if _, err := svc.CustomerCancel(ctx, order.ID, "please cancel"); err != nil {
+		t.Fatalf("CustomerCancel: %v", err)
+	}
+
+	rejected, err := svc.RejectCancelRequest(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("RejectCancelRequest: %v", err)
+	}
+	if rejected.Status != domain.StatusPaid || rejected.CancelRequestedAt != nil {
+		t.Fatalf("rejected = %+v, want paid with no request", rejected)
+	}
+	if len(pay.canceled) != 0 {
+		t.Fatalf("reject must not refund, got %v", pay.canceled)
+	}
+}
+
+func TestRefundPolicyWorkerAutoConfirmsAndAutoApproves(t *testing.T) {
+	ctx := t.Context()
+	now := time.Date(2026, 9, 11, 8, 0, 0, 0, time.UTC)
+	clock := now
+	pay := &fakePayment{}
+	svc := newSvc(&fakeStock{reservationID: "res-1"}, &fakeProduct{defaultKRW: 5000}).
+		WithPayment(pay).
+		WithClock(func() time.Time { return clock })
+
+	unconfirmed, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, unconfirmed.ID, "pay-u", unconfirmed.TotalKRW); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+
+	requested, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-2",
+		Items:      []domain.OrderItem{{SKU: "bag-2", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder 2: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, requested.ID, "pay-r", requested.TotalKRW); err != nil {
+		t.Fatalf("MarkOrderPaid 2: %v", err)
+	}
+	if _, err := svc.ConfirmOrder(ctx, requested.ID); err != nil {
+		t.Fatalf("ConfirmOrder: %v", err)
+	}
+	if _, err := svc.CustomerCancel(ctx, requested.ID, "too late"); err != nil {
+		t.Fatalf("CustomerCancel: %v", err)
+	}
+
+	clock = now.Add(domain.ManagerConfirmationWindow)
+	if err := svc.EnforceRefundPolicy(ctx); err != nil {
+		t.Fatalf("EnforceRefundPolicy: %v", err)
+	}
+
+	gotUnconfirmed, err := svc.GetOrder(ctx, unconfirmed.ID)
+	if err != nil {
+		t.Fatalf("GetOrder unconfirmed: %v", err)
+	}
+	if gotUnconfirmed.ConfirmedAt == nil || gotUnconfirmed.Status != domain.StatusPaid {
+		t.Fatalf("unconfirmed after SLA = %+v, want confirmed paid", gotUnconfirmed)
+	}
+
+	gotRequested, err := svc.GetOrder(ctx, requested.ID)
+	if err != nil {
+		t.Fatalf("GetOrder requested: %v", err)
+	}
+	if gotRequested.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want auto-approved canceled", gotRequested.Status)
+	}
+	if len(pay.canceled) != 1 || pay.canceled[0] != "pay-r" {
+		t.Fatalf("auto-approve refunds = %v, want [pay-r]", pay.canceled)
 	}
 }

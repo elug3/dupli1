@@ -517,7 +517,11 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | `GET` | `/api/v1/orders` | `order.read.all` | List all orders |
 | `GET` | `/api/v1/orders?customer_id={id}` | ABAC / `order.read.all` | List orders for a customer |
 | `GET` | `/api/v1/orders/{id}` | ABAC / `order.read.all` | Get a single order |
-| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | Ship order (`paid` → `in_transit`, commit stock) |
+| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | Ship order (`paid` → `in_transit`, commit stock); sets `confirmed_at` |
+| `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` | Confirm a paid order (`confirmed_at`, 2-hour SLA) |
+| `POST` | `/api/v1/orders/{id}/cancel` | ABAC owner | Immediate refund before confirm; cancel request after confirm / in transit |
+| `POST` | `/api/v1/orders/{id}/cancel/approve` | `order.status.update` | Approve a customer cancel request (refund) |
+| `POST` | `/api/v1/orders/{id}/cancel/reject` | `order.status.update` | Reject a customer cancel request |
 | `PUT` | `/api/v1/orders/{id}/status` | `order.status.update` | Cancel or fulfill |
 
 ### GET /api/v1/orders/health
@@ -579,9 +583,22 @@ Request:
 Valid status transitions via this endpoint:
 - `pending` → `canceled`
 - `paid` → `canceled`
+- `in_transit` → `canceled`
 - `in_transit` → `fulfilled`
 
-Response `200`: updated order object. Errors: `400` invalid transition, `404` not found.
+Paid and in-transit cancel refund the captured payment first. Customer-facing cancel uses `POST /api/v1/orders/{id}/cancel` instead (immediate before `confirmed_at`; request afterward).
+
+Response `200`: updated order object. Errors: `400` invalid transition, `404` not found, `502` when the PG rejects a refund.
+
+### POST /api/v1/orders/{id}/confirm
+
+Requires `order.status.update`. Sets `confirmed_at` on a **`paid`** order. Managers must confirm within 2 hours of `paid_at`; a worker auto-confirms after that. Ship also sets `confirmed_at`.
+
+### POST /api/v1/orders/{id}/cancel
+
+Owner ABAC. Before confirmation: same refund+cancel as manager status cancel. After confirmation or while `in_transit`: records `cancel_requested_at`. Manager `…/cancel/approve` or a 2-hour timeout completes the refund.
+
+Optional body: `{ "reason": "…" }`.
 
 ### POST /api/v1/orders/{id}/ship
 

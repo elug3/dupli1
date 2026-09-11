@@ -30,4 +30,4 @@ Customers can list orders and see shipping status + tracking. Ops must enter car
 
 ## Out of scope
 
-Live courier APIs, guest order lookup, customer cancel, email ship notifications.
+Live courier APIs, guest order lookup, email ship notifications.
