@@ -16,6 +16,13 @@ var (
 
 const DefaultPaymentTTL = 5 * time.Minute
 
+// ManagerConfirmationWindow is the SLA for both order confirmation after
+// payment and manager approval of a post-confirm / in-transit cancel request.
+const ManagerConfirmationWindow = 2 * time.Hour
+
+// MaxCancelRequestReasonLen caps the optional customer cancel-request note.
+const MaxCancelRequestReasonLen = 500
+
 // ReasonVariantNotFound is returned when a line cannot be resolved to an
 // active, sellable product variant.
 const ReasonVariantNotFound = "variant_not_found"
@@ -74,8 +81,22 @@ type Order struct {
 	Carrier         string          `json:"carrier,omitempty"`
 	TrackingNumber  string          `json:"tracking_number,omitempty"`
 	CarrierNote     string          `json:"carrier_note,omitempty"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	// ConfirmedAt is when a manager accepted the paid order for fulfillment.
+	// It is a timestamp on `paid` (and copied through ship), not a status.
+	ConfirmedAt *time.Time `json:"confirmed_at,omitempty"`
+	// CancelRequestedAt is set when the customer asks to cancel after
+	// confirmation or once the order is in transit. Cleared on reject.
+	CancelRequestedAt   *time.Time `json:"cancel_requested_at,omitempty"`
+	CancelRequestReason string     `json:"cancel_request_reason,omitempty"`
+	// Computed refund-policy flags — populated by ApplyRefundPolicy, not stored.
+	ConfirmationDueAt        *time.Time `json:"confirmation_due_at,omitempty"`
+	ConfirmationOverdue      bool       `json:"confirmation_overdue,omitempty"`
+	CancelConfirmDueAt       *time.Time `json:"cancel_confirm_due_at,omitempty"`
+	CancelConfirmOverdue     bool       `json:"cancel_confirm_overdue,omitempty"`
+	ImmediateCancelAllowed   bool       `json:"immediate_cancel_allowed"`
+	CancelRequestAllowed     bool       `json:"cancel_request_allowed"`
+	CreatedAt                time.Time  `json:"created_at"`
+	UpdatedAt                time.Time  `json:"updated_at"`
 }
 
 // NewOrder prices an order as subtotal - discount + shipping, all in whole KRW.
@@ -176,17 +197,145 @@ func (o *Order) Ship(shippedBy string, tracking ShipmentTracking, now time.Time)
 	} else {
 		o.CarrierNote = ""
 	}
+	if o.ConfirmedAt == nil {
+		o.ConfirmedAt = &now
+	}
 	o.UpdatedAt = now
 	return nil
 }
 
 func (o *Order) Cancel(now time.Time) error {
-	if o.Status != StatusPending && o.Status != StatusPaid {
+	if o.Status != StatusPending && o.Status != StatusPaid && o.Status != StatusInTransit {
 		return ErrInvalidTransition
 	}
 	o.Status = StatusCanceled
 	o.UpdatedAt = now
 	return nil
+}
+
+// IsManagerConfirmed reports whether a manager has accepted the order
+// (explicit confirm, or ship which confirms as a side effect).
+func (o *Order) IsManagerConfirmed() bool {
+	if o == nil {
+		return false
+	}
+	return o.ConfirmedAt != nil || o.Status == StatusInTransit || o.Status == StatusFulfilled
+}
+
+// AllowsImmediateCancel is true before manager confirmation: unpaid pending
+// or paid-but-unconfirmed. Those cancels refund immediately.
+func (o *Order) AllowsImmediateCancel() bool {
+	if o == nil {
+		return false
+	}
+	if o.Status == StatusPending {
+		return true
+	}
+	return o.Status == StatusPaid && !o.IsManagerConfirmed()
+}
+
+// AllowsCancelRequest is true after confirmation or while in transit, when
+// no cancel request is already pending.
+func (o *Order) AllowsCancelRequest() bool {
+	if o == nil || o.CancelRequestedAt != nil {
+		return false
+	}
+	if o.Status == StatusInTransit {
+		return true
+	}
+	return o.Status == StatusPaid && o.IsManagerConfirmed()
+}
+
+// Confirm records manager acceptance of a paid order. Idempotent when already confirmed.
+func (o *Order) Confirm(now time.Time) error {
+	if o.Status != StatusPaid {
+		return ErrInvalidTransition
+	}
+	if o.ConfirmedAt != nil {
+		return nil
+	}
+	o.ConfirmedAt = &now
+	o.UpdatedAt = now
+	return nil
+}
+
+// RequestCancel records a customer cancellation that needs manager approval.
+// Idempotent when a request is already pending.
+func (o *Order) RequestCancel(reason string, now time.Time) error {
+	if o.CancelRequestedAt != nil {
+		return nil
+	}
+	if o.Status != StatusInTransit && !(o.Status == StatusPaid && o.IsManagerConfirmed()) {
+		return ErrInvalidTransition
+	}
+	o.CancelRequestedAt = &now
+	o.CancelRequestReason = trimCancelReason(reason)
+	o.UpdatedAt = now
+	return nil
+}
+
+// RejectCancelRequest clears a pending customer cancel request.
+func (o *Order) RejectCancelRequest(now time.Time) error {
+	if o.CancelRequestedAt == nil {
+		return nil
+	}
+	if o.Status != StatusPaid && o.Status != StatusInTransit {
+		return ErrInvalidTransition
+	}
+	o.CancelRequestedAt = nil
+	o.CancelRequestReason = ""
+	o.UpdatedAt = now
+	return nil
+}
+
+func (o *Order) ConfirmationDueAtTime() *time.Time {
+	if o == nil || o.PaidAt == nil || o.ConfirmedAt != nil || o.Status != StatusPaid {
+		return nil
+	}
+	due := o.PaidAt.Add(ManagerConfirmationWindow)
+	return &due
+}
+
+func (o *Order) CancelConfirmDueAtTime() *time.Time {
+	if o == nil || o.CancelRequestedAt == nil {
+		return nil
+	}
+	if o.Status != StatusPaid && o.Status != StatusInTransit {
+		return nil
+	}
+	due := o.CancelRequestedAt.Add(ManagerConfirmationWindow)
+	return &due
+}
+
+func (o *Order) ConfirmationOverdueAt(now time.Time) bool {
+	due := o.ConfirmationDueAtTime()
+	return due != nil && !now.Before(*due)
+}
+
+func (o *Order) CancelConfirmOverdueAt(now time.Time) bool {
+	due := o.CancelConfirmDueAtTime()
+	return due != nil && !now.Before(*due)
+}
+
+// ApplyRefundPolicy fills computed JSON fields for API responses.
+func (o *Order) ApplyRefundPolicy(now time.Time) {
+	if o == nil {
+		return
+	}
+	o.ConfirmationDueAt = o.ConfirmationDueAtTime()
+	o.ConfirmationOverdue = o.ConfirmationOverdueAt(now)
+	o.CancelConfirmDueAt = o.CancelConfirmDueAtTime()
+	o.CancelConfirmOverdue = o.CancelConfirmOverdueAt(now)
+	o.ImmediateCancelAllowed = o.AllowsImmediateCancel()
+	o.CancelRequestAllowed = o.AllowsCancelRequest()
+}
+
+func trimCancelReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if len(reason) <= MaxCancelRequestReasonLen {
+		return reason
+	}
+	return reason[:MaxCancelRequestReasonLen]
 }
 
 // ReinstateForLatePayment moves an auto-canceled pending order back to pending

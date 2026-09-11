@@ -68,6 +68,50 @@ func (s *Service) expirePendingOrders(ctx context.Context) error {
 	return nil
 }
 
+// StartRefundPolicyWorker auto-confirms paid orders after 2 hours and
+// auto-approves overdue customer cancel requests (refund + cancel).
+func (s *Service) StartRefundPolicyWorker(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := s.EnforceRefundPolicy(ctx); err != nil {
+					log.Printf("enforce refund policy: %v", err)
+				}
+			}
+		}
+	}()
+}
+
+func (s *Service) EnforceRefundPolicy(ctx context.Context) error {
+	orders, err := s.repo.ListAll(ctx)
+	if err != nil {
+		return err
+	}
+	now := s.now()
+	for i := range orders {
+		order := orders[i]
+		if order.ConfirmationOverdueAt(now) {
+			if _, err := s.ConfirmOrder(ctx, order.ID); err != nil {
+				log.Printf("auto-confirm order %s: %v", order.ID, err)
+			}
+		}
+		if order.CancelConfirmOverdueAt(now) {
+			if _, err := s.ApproveCancelRequest(ctx, order.ID); err != nil {
+				log.Printf("auto-approve cancel request %s: %v", order.ID, err)
+			}
+		}
+	}
+	return nil
+}
+
 // cancelExpiredPendingOrder cancels an unpaid pending order past payment_due_at.
 // Uses an atomic status guard so a payment that completes concurrently cannot be undone.
 func (s *Service) cancelExpiredPendingOrder(ctx context.Context, orderID string) error {

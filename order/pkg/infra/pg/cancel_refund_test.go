@@ -126,3 +126,44 @@ func TestCancelIfPaidForRefundIsIdempotent(t *testing.T) {
 		t.Fatal("replay must not cancel again")
 	}
 }
+
+func TestSaveRoundTripConfirmedAndCancelRequest(t *testing.T) {
+	dsn := requireDSN(t)
+	pool := freshSchema(t, dsn, "order_refund_policy_roundtrip")
+	repo := &Repository{pool: pool}
+	if err := repo.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	ctx := t.Context()
+	now := time.Date(2026, 9, 11, 9, 0, 0, 0, time.UTC)
+	order, err := domain.NewOrder("ord-policy-1", "cust-1", "res-1", []domain.OrderItem{{
+		SkuID: "sku-1", SKU: "BAG-001", Quantity: 1, UnitPriceKRW: 1000,
+	}}, "", 0, 0, now)
+	if err != nil {
+		t.Fatalf("NewOrder: %v", err)
+	}
+	if err := order.MarkPaid("pay-policy-1", order.TotalKRW, now); err != nil {
+		t.Fatalf("MarkPaid: %v", err)
+	}
+	if err := order.Confirm(now.Add(time.Minute)); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	if err := order.RequestCancel("changed mind", now.Add(2*time.Minute)); err != nil {
+		t.Fatalf("RequestCancel: %v", err)
+	}
+	if err := repo.Save(ctx, order); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := repo.Get(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ConfirmedAt == nil || got.CancelRequestedAt == nil {
+		t.Fatalf("got = %+v, want confirmed_at and cancel_requested_at", got)
+	}
+	if got.CancelRequestReason != "changed mind" {
+		t.Fatalf("reason = %q", got.CancelRequestReason)
+	}
+}

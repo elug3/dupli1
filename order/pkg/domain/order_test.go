@@ -90,6 +90,9 @@ func TestShipRequiresPaidOrder(t *testing.T) {
 	if order.Status != domain.StatusInTransit || order.ShippedBy != "manager-1" || order.ShippedAt == nil {
 		t.Fatalf("order = %+v, want in_transit with ship metadata", order)
 	}
+	if order.ConfirmedAt == nil {
+		t.Fatal("ship must confirm the order")
+	}
 	if order.Carrier != domain.CarrierCJ || order.TrackingNumber != "1234567890" {
 		t.Fatalf("tracking = %s/%s", order.Carrier, order.TrackingNumber)
 	}
@@ -150,6 +153,80 @@ func TestCancelAndFulfillTransitions(t *testing.T) {
 	}
 	if paid.Status != domain.StatusFulfilled {
 		t.Fatalf("status = %q, want fulfilled", paid.Status)
+	}
+	if err := paid.Cancel(now); !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Fatalf("cancel fulfilled err = %v, want ErrInvalidTransition", err)
+	}
+
+	inTransit := newTestOrder(t)
+	if err := inTransit.MarkPaid("pay-2", inTransit.TotalKRW, now); err != nil {
+		t.Fatalf("MarkPaid: %v", err)
+	}
+	if err := inTransit.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-2"}, now); err != nil {
+		t.Fatalf("Ship: %v", err)
+	}
+	if err := inTransit.Cancel(now); err != nil {
+		t.Fatalf("Cancel in_transit: %v", err)
+	}
+	if inTransit.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", inTransit.Status)
+	}
+}
+
+func TestRefundPolicyImmediateVsRequest(t *testing.T) {
+	now := time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)
+	pending := newTestOrder(t)
+	if !pending.AllowsImmediateCancel() || pending.AllowsCancelRequest() {
+		t.Fatal("pending must allow immediate cancel only")
+	}
+
+	paid := newTestOrder(t)
+	if err := paid.MarkPaid("pay-1", paid.TotalKRW, now); err != nil {
+		t.Fatalf("MarkPaid: %v", err)
+	}
+	if !paid.AllowsImmediateCancel() || paid.IsManagerConfirmed() {
+		t.Fatal("unconfirmed paid must allow immediate cancel")
+	}
+	if err := paid.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	if paid.AllowsImmediateCancel() || !paid.AllowsCancelRequest() {
+		t.Fatal("confirmed paid must require a cancel request")
+	}
+
+	later := now.Add(domain.ManagerConfirmationWindow)
+	paid.ApplyRefundPolicy(later)
+	if paid.ConfirmationOverdue {
+		t.Fatal("confirmed order must not report confirmation overdue")
+	}
+
+	unconfirmed := newTestOrder(t)
+	if err := unconfirmed.MarkPaid("pay-2", unconfirmed.TotalKRW, now); err != nil {
+		t.Fatalf("MarkPaid: %v", err)
+	}
+	unconfirmed.ApplyRefundPolicy(now.Add(domain.ManagerConfirmationWindow))
+	if !unconfirmed.ConfirmationOverdue || unconfirmed.ConfirmationDueAt == nil {
+		t.Fatal("unconfirmed paid order is overdue after 2 hours")
+	}
+
+	if err := paid.RequestCancel("changed mind", now); err != nil {
+		t.Fatalf("RequestCancel: %v", err)
+	}
+	if paid.AllowsCancelRequest() {
+		t.Fatal("second cancel request must not be allowed")
+	}
+	if err := paid.RequestCancel("again", now.Add(time.Minute)); err != nil {
+		t.Fatalf("idempotent RequestCancel: %v", err)
+	}
+	paid.ApplyRefundPolicy(now.Add(domain.ManagerConfirmationWindow))
+	if !paid.CancelConfirmOverdue {
+		t.Fatal("cancel request is overdue after 2 hours")
+	}
+	if err := paid.RejectCancelRequest(now.Add(time.Hour)); err != nil {
+		t.Fatalf("RejectCancelRequest: %v", err)
+	}
+	if paid.CancelRequestedAt != nil || paid.CancelRequestReason != "" {
+		t.Fatal("reject must clear the cancel request")
 	}
 }
 

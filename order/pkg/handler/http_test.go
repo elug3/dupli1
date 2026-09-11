@@ -898,3 +898,91 @@ func TestUpdateStatusCanceledRefundRejectedLeavesPaid(t *testing.T) {
 		t.Fatalf("status = %q, want paid", got.Status)
 	}
 }
+
+func TestCustomerCancelImmediateBeforeConfirm(t *testing.T) {
+	pay := &recordingPayment{}
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay)
+	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay_1", 1000); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+
+	token := makeToken(t, "u-1", nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel", token, map[string]string{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if len(pay.ids) != 1 {
+		t.Fatalf("refunded = %v, want immediate refund", pay.ids)
+	}
+	var got domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", got.Status)
+	}
+}
+
+func TestCustomerCancelAfterConfirmCreatesRequest(t *testing.T) {
+	pay := &recordingPayment{}
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay)
+	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay_1", 1000); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	mgr := makeToken(t, "mgr-1", []string{permissions.OrderStatusUpdate})
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/confirm", mgr, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("confirm status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	customer := makeToken(t, "u-1", nil)
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel", customer, map[string]string{"reason": "changed mind"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("cancel status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if len(pay.ids) != 0 {
+		t.Fatalf("must not refund yet, got %v", pay.ids)
+	}
+	var got domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status != domain.StatusPaid || got.CancelRequestedAt == nil {
+		t.Fatalf("order = %+v, want paid with cancel request", got)
+	}
+
+	other := makeToken(t, "u-2", nil)
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel", other, map[string]string{})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("other customer status = %d, want 403", w.Code)
+	}
+
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel/approve", mgr, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("approve status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if len(pay.ids) != 1 {
+		t.Fatalf("refunded after approve = %v", pay.ids)
+	}
+}
+
+func TestConfirmForbiddenWithoutPermission(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+	orderID := seedOrder(t, svc, "u-1")
+	token := makeToken(t, "u-1", nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/confirm", token, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+}

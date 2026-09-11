@@ -112,6 +112,14 @@ func NewWithCheckout(
 	return s
 }
 
+// WithClock overrides the service clock. Tests use it to exercise the 2-hour SLA.
+func (s *Service) WithClock(now func() time.Time) *Service {
+	if now != nil {
+		s.now = now
+	}
+	return s
+}
+
 // WithProduct sets the catalog client used to resolve server-side line prices.
 func (s *Service) WithProduct(product ports.ProductClient) *Service {
 	s.product = product
@@ -218,7 +226,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 
 	// Soft-success: order is source of truth; outbox worker retries publish.
 	s.tryDrainOutbox(ctx)
-	return cloneOrder(order), nil
+	return s.present(order), nil
 }
 
 func (s *Service) GetOrder(ctx context.Context, id string) (*domain.Order, error) {
@@ -226,7 +234,7 @@ func (s *Service) GetOrder(ctx context.Context, id string) (*domain.Order, error
 	if err != nil {
 		return nil, err
 	}
-	return cloneOrder(order), nil
+	return s.present(order), nil
 }
 
 func (s *Service) ListCustomerOrders(ctx context.Context, customerID string) ([]domain.Order, error) {
@@ -234,7 +242,7 @@ func (s *Service) ListCustomerOrders(ctx context.Context, customerID string) ([]
 	if err != nil {
 		return nil, err
 	}
-	return cloneOrders(orders), nil
+	return s.presentOrders(orders), nil
 }
 
 func (s *Service) ListAllOrders(ctx context.Context) ([]domain.Order, error) {
@@ -242,7 +250,7 @@ func (s *Service) ListAllOrders(ctx context.Context) ([]domain.Order, error) {
 	if err != nil {
 		return nil, err
 	}
-	return cloneOrders(orders), nil
+	return s.presentOrders(orders), nil
 }
 
 func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, amountKRW int64) (*domain.Order, error) {
@@ -255,7 +263,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 	// has shipped. Any order already carrying this payment id is done, whatever its
 	// current status — re-running the transition would only fail.
 	if order.PaymentID == paymentID && order.Status != domain.StatusPending {
-		return cloneOrder(order), nil
+		return s.present(order), nil
 	}
 	startedPending := order.Status == domain.StatusPending
 	var reinstatedReservation string
@@ -287,7 +295,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 			if reinstatedReservation != "" {
 				_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
 			}
-			return cloneOrder(fresh), nil
+			return s.present(fresh), nil
 		}
 		if fresh.Status == domain.StatusCanceled {
 			order = fresh
@@ -318,7 +326,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 	}
 	if saved {
 		s.tryDrainOutbox(ctx)
-		return cloneOrder(order), nil
+		return s.present(order), nil
 	}
 
 	// Concurrent expiry or duplicate payment event — reconcile once.
@@ -333,7 +341,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 		if reinstatedReservation != "" {
 			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
 		}
-		return cloneOrder(fresh), nil
+		return s.present(fresh), nil
 	}
 	if fresh.Status == domain.StatusCanceled {
 		reservationID, err := s.reinstateCanceledOrder(ctx, fresh)
@@ -359,7 +367,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 			return nil, fmt.Errorf("mark order paid order_id=%s: concurrent status change", order.ID)
 		}
 		s.tryDrainOutbox(ctx)
-		return cloneOrder(fresh), nil
+		return s.present(fresh), nil
 	}
 	if reinstatedReservation != "" {
 		_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
@@ -411,7 +419,7 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string, trac
 			return nil, fmt.Errorf("ship order %s: concurrent status change", order.ID)
 		}
 		if fresh.Status == domain.StatusInTransit {
-			return fresh, nil
+			return s.present(fresh), nil
 		}
 		log.Printf(
 			"ship order %s: stock committed but order is %s (reservation %s); needs ops review",
@@ -420,7 +428,7 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string, trac
 		return nil, domain.ErrInvalidTransition
 	}
 	s.tryDrainOutbox(ctx)
-	return cloneOrder(order), nil
+	return s.present(order), nil
 }
 
 func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, error) {
@@ -428,10 +436,11 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if err != nil {
 		return nil, err
 	}
-	if order.Status != domain.StatusPending && order.Status != domain.StatusPaid {
+	if order.Status != domain.StatusPending && order.Status != domain.StatusPaid && order.Status != domain.StatusInTransit {
 		return nil, domain.ErrInvalidTransition
 	}
-	if order.Status == domain.StatusPaid {
+	wasInTransit := order.Status == domain.StatusInTransit
+	if order.Status == domain.StatusPaid || wasInTransit {
 		if err := s.refundCapturedPayment(ctx, order); err != nil {
 			return nil, err
 		}
@@ -442,12 +451,13 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 			return nil, err
 		}
 		if fresh.Status == domain.StatusCanceled {
-			return cloneOrder(fresh), nil
+			return s.present(fresh), nil
 		}
 		order = fresh
-		if order.Status != domain.StatusPaid && order.Status != domain.StatusPending {
+		if order.Status != domain.StatusPaid && order.Status != domain.StatusPending && order.Status != domain.StatusInTransit {
 			return nil, domain.ErrInvalidTransition
 		}
+		wasInTransit = order.Status == domain.StatusInTransit
 	}
 	if err := order.Cancel(s.now()); err != nil {
 		return nil, err
@@ -456,10 +466,70 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if err != nil {
 		return nil, err
 	}
-	if err := s.releaseReservationForCancel(ctx, saved.ReservationID); err != nil {
-		log.Printf("cancel order %s: release reservation %s: %v", saved.ID, saved.ReservationID, err)
+	// In-transit stock was committed on ship; a refund here does not restock.
+	if !wasInTransit {
+		if err := s.releaseReservationForCancel(ctx, saved.ReservationID); err != nil {
+			log.Printf("cancel order %s: release reservation %s: %v", saved.ID, saved.ReservationID, err)
+		}
 	}
 	return saved, nil
+}
+
+// ConfirmOrder is the manager acceptance of a paid order. After this (or ship),
+// customer cancel becomes a request instead of an immediate refund.
+func (s *Service) ConfirmOrder(ctx context.Context, id string) (*domain.Order, error) {
+	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if err := order.Confirm(s.now()); err != nil {
+		return nil, err
+	}
+	return s.saveStatusChange(ctx, order)
+}
+
+// CustomerCancel immediately refunds before manager confirmation, and otherwise
+// opens a cancel request the manager must confirm within 2 hours.
+func (s *Service) CustomerCancel(ctx context.Context, id, reason string) (*domain.Order, error) {
+	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if order.AllowsImmediateCancel() {
+		return s.CancelOrder(ctx, order.ID)
+	}
+	if order.CancelRequestedAt != nil {
+		return s.present(order), nil
+	}
+	if err := order.RequestCancel(reason, s.now()); err != nil {
+		return nil, err
+	}
+	return s.saveStatusChange(ctx, order)
+}
+
+// ApproveCancelRequest refunds and cancels after a customer request (or the
+// 2-hour auto-approve sweep).
+func (s *Service) ApproveCancelRequest(ctx context.Context, id string) (*domain.Order, error) {
+	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if order.CancelRequestedAt == nil {
+		return nil, domain.ErrInvalidTransition
+	}
+	return s.CancelOrder(ctx, order.ID)
+}
+
+// RejectCancelRequest leaves the order in place and clears the customer request.
+func (s *Service) RejectCancelRequest(ctx context.Context, id string) (*domain.Order, error) {
+	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if err := order.RejectCancelRequest(s.now()); err != nil {
+		return nil, err
+	}
+	return s.saveStatusChange(ctx, order)
 }
 
 func (s *Service) refundCapturedPayment(ctx context.Context, order *domain.Order) error {
@@ -493,7 +563,7 @@ func (s *Service) saveStatusChange(ctx context.Context, order *domain.Order) (*d
 		return nil, err
 	}
 	s.tryDrainOutbox(ctx)
-	return cloneOrder(order), nil
+	return s.present(order), nil
 }
 
 func (s *Service) loadIdempotentOrder(ctx context.Context, customerID, key, reqHash string) (*domain.Order, error) {
@@ -508,7 +578,7 @@ func (s *Service) loadIdempotentOrder(ctx context.Context, customerID, key, reqH
 	if err != nil {
 		return nil, err
 	}
-	return cloneOrder(order), nil
+	return s.present(order), nil
 }
 
 func hashCreateOrderInput(input CreateOrderInput) string {
@@ -723,6 +793,22 @@ func cloneOrder(order *domain.Order) *domain.Order {
 	return &copied
 }
 
+func (s *Service) present(order *domain.Order) *domain.Order {
+	out := cloneOrder(order)
+	if out != nil {
+		out.ApplyRefundPolicy(s.now())
+	}
+	return out
+}
+
+func (s *Service) presentOrders(orders []domain.Order) []domain.Order {
+	copied := make([]domain.Order, len(orders))
+	for i := range orders {
+		copied[i] = *s.present(&orders[i])
+	}
+	return copied
+}
+
 func applyFulfillmentToOrder(order *domain.Order, input CreateOrderInput) error {
 	if strings.TrimSpace(input.RecipientName) == "" &&
 		strings.TrimSpace(input.RecipientPhone) == "" &&
@@ -748,12 +834,4 @@ func applyCompleteCheckoutInput(input CompleteCheckoutInput) (*domain.Fulfillmen
 		input.ShippingAddress,
 		input.SourceAddressID,
 	)
-}
-
-func cloneOrders(orders []domain.Order) []domain.Order {
-	copied := make([]domain.Order, len(orders))
-	for i := range orders {
-		copied[i] = *cloneOrder(&orders[i])
-	}
-	return copied
 }

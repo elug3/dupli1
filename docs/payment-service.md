@@ -18,7 +18,7 @@ See also: [cart-service.md](cart-service.md), [checkout-session.md](checkout-ses
 | `paid` | PG success; ops queue | Reserved |
 | `in_transit` | Order-manager shipped | **Committed** |
 | `fulfilled` | Delivered | Committed |
-| `canceled` | Unpaid timeout, payment failed, or ops reject | **Released** |
+| `canceled` | Unpaid timeout, payment failed, customer/ops cancel | **Released** (in-transit cancel does not restock) |
 
 ```mermaid
 stateDiagram-v2
@@ -26,13 +26,23 @@ stateDiagram-v2
     pending --> paid: payment.succeeded
     pending --> canceled: 5min TTL / payment failed
     paid --> in_transit: POST /orders/{id}/ship
-    paid --> canceled: ops reject (+ refund)
+    paid --> canceled: cancel before confirm / manager cancel
     in_transit --> fulfilled: ops fulfill
+    in_transit --> canceled: manager confirms cancel request
     canceled --> [*]
     fulfilled --> [*]
 ```
 
-**Removed:** `confirmed` — replaced by `paid` (money received) and `in_transit` (approved to ship).
+`paid` is not a manager-accepted order by itself. **`confirmed_at`** (timestamp, not a status) is set by `POST /orders/{id}/confirm` or as a side effect of ship. Managers must confirm within **2 hours** of `paid_at`; the order worker auto-confirms after that window.
+
+**Refund policy**
+
+| When | Customer | Refund |
+|------|----------|--------|
+| `pending`, or `paid` without `confirmed_at` | `POST /orders/{id}/cancel` | **Immediate** (unpaid is local; paid refunds the capture first) |
+| After `confirmed_at`, or `in_transit` | same endpoint opens a **cancel request** | Refund after manager `POST …/cancel/approve`, or automatically if the manager does not respond within **2 hours** |
+
+Ops `PUT /orders/{id}/status` `{ "status": "canceled" }` still refunds immediately (the manager is confirming the cancellation). In-transit cancel refunds payment but does **not** release already-committed stock.
 
 ---
 
@@ -40,7 +50,7 @@ stateDiagram-v2
 
 `POST /api/v1/payments/{id}/cancel` (permission `payment.cancel`, staff-only — no ABAC) refunds a `succeeded` payment through the PG.
 
-Ops **Cancel** on a paid order (`PUT /api/v1/orders/{id}/status` `{ "status": "canceled" }`) calls that endpoint first (forwards the operator Bearer; falls back to the `dupli1-order` service account which is seeded with `payment.cancel`). A PG rejection leaves the order `paid`. Unpaid / pending cancel does not call payment.
+Ops **Cancel** on a paid or in-transit order (`PUT /api/v1/orders/{id}/status` `{ "status": "canceled" }`) calls that endpoint first (forwards the operator Bearer; falls back to the `dupli1-order` service account which is seeded with `payment.cancel`). A PG rejection leaves the order unchanged. Unpaid / pending cancel does not call payment. Customer cancel before manager confirmation uses the same refund path immediately.
 
 **Provider endpoint.** NANO `POST /api/payment/cancel.io`, documented in **[NANO] 수기결제 연동 API 안내 v2.5 §3**. The certified-payment guide (인증결제 v2.7 §4 취소) defines no cancel body of its own and defers to that section, so cert-approved card payments cancel through the same endpoint.
 
@@ -264,7 +274,11 @@ A refused callback the PG had already approved also publishes `payment.callback_
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
 | `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | `paid` → `in_transit`, commit stock, audit (transition validated **before** stock commit; Postgres **`ShipIfPaid`** on persist) |
-| `PUT` | `/api/v1/orders/{id}/status` | RBAC | `fulfilled` from `in_transit`; `canceled` from `pending`/`paid` |
+| `PUT` | `/api/v1/orders/{id}/status` | RBAC | `fulfilled` from `in_transit`; `canceled` from `pending`/`paid`/`in_transit` |
+| `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` | Set `confirmed_at` on a `paid` order (2-hour SLA) |
+| `POST` | `/api/v1/orders/{id}/cancel` | ABAC owner | Immediate refund before confirm; cancel request after confirm / in transit |
+| `POST` | `/api/v1/orders/{id}/cancel/approve` | `order.status.update` | Refund + cancel a pending customer request |
+| `POST` | `/api/v1/orders/{id}/cancel/reject` | `order.status.update` | Clear a customer cancel request |
 
 **Ship response** includes `shipped_by`, `shipped_at`.
 
@@ -277,7 +291,8 @@ A refused callback the PG had already approved also publishes `payment.callback_
 | Checkout `complete` | `Reserve` |
 | `pending` → `canceled` (timeout/fail) | `Release` |
 | `paid` → `in_transit` (ship) | `Commit` |
-| `paid` → `canceled` (reject) | `Release` |
+| `paid` → `canceled` (reject / customer before confirm) | `Release` |
+| `in_transit` → `canceled` | no restock (stock already committed) |
 
 ---
 
@@ -321,7 +336,9 @@ Local Postgres (payment): `postgres://dupli1:dupli1_dev@localhost:5437/payments?
 |------|--------|
 | Unpaid > 5 min | `canceled`, release stock |
 | Checkout abandoned / never completed | stay `pending` until TTL, then cancel |
-| Paid, ops rejects | `PUT /orders/{id}/status` `{ "status": "canceled" }` refunds the captured payment (`POST /payments/{payment_id}/cancel`, NANO or Bypass) **then** cancels the order. A PG rejection (`502`) leaves the order `paid`. The reverse path (`POST /payments/{id}/cancel` → `payment.canceled`) still cancels a still-`paid` matching order. |
+| Paid, ops rejects | `PUT /orders/{id}/status` `{ "status": "canceled" }` refunds the captured payment (`POST /payments/{payment_id}/cancel`, NANO or Bypass) **then** cancels the order (also from `in_transit`). A PG rejection (`502`) leaves the order unchanged. The reverse path (`POST /payments/{id}/cancel` → `payment.canceled`) still cancels a still-`paid` matching order. |
+| Customer cancel before confirm | Immediate refund + cancel (`POST /orders/{id}/cancel`) |
+| Customer cancel after confirm / in transit | Cancel request; manager approve within 2 hours or auto-refund |
 | Duplicate `payment.succeeded` | idempotent — order stays `paid` |
 | Replayed `payment.succeeded` after ship | no-op when `payment_id` already set and status ≠ `pending` |
 | Payment succeeds after 5 min auto-cancel | order **reinstated** to `pending` with a fresh reservation and extended payment window, then marked `paid` |
