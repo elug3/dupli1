@@ -61,7 +61,7 @@ See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criter
 
 Guest cart, refunds, co-view, legacy alias removal, manager settings, Redis cache — see v1.1 plan “Deferred to v1.2” table. Storefront UX backlog from the 2026-09-08 live review is tracked below under **Storefront UX**.
 
-- [ ] **Promo / referral codes** — two types (code-based + account-registered wallet); harden coupons (expiry, caps, ledger) + sales attribution by code/partner; no separate referral service — [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md)
+- [ ] **Promo / referral codes** — two types (single-user one-time + global once-per-customer); harden coupons (expiry, ledger) + sales attribution by code/partner; no separate referral service — [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md)
 
 ## Storefront UX (`dupli1-web` — reviewed 2026-09-08)
 

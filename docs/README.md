@@ -47,7 +47,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | Doc | Topic |
 |-----|-------|
 | [product-stock-tracking-plan.md](product-stock-tracking-plan.md) | Always-tracked SKUs, PDP `inStock`, cart stock-on-add (implemented) |
-| [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md) | Coupons: code-based + account-registered; promo / referral (planning) |
+| [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md) | Coupons: single-user one-time + global once-each; promo / referral (planning) |
 
 ## Release / ops
 
