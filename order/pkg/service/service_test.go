@@ -599,6 +599,117 @@ func (f *refundDuringShipStock) CommitReservation(ctx context.Context, reservati
 	return nil
 }
 
+type slowRefundPayment struct {
+	fakePayment
+	started chan struct{}
+	proceed chan struct{}
+}
+
+func (p *slowRefundPayment) CancelPayment(_ context.Context, paymentID, idempotencyKey string) error {
+	if p.started != nil {
+		close(p.started)
+	}
+	if p.proceed != nil {
+		<-p.proceed
+	}
+	if p.fakePayment.err != nil {
+		return p.fakePayment.err
+	}
+	p.fakePayment.canceled = append(p.fakePayment.canceled, paymentID)
+	p.fakePayment.keys = append(p.fakePayment.keys, idempotencyKey)
+	return nil
+}
+
+// CancelOrder must atomically mark paid orders canceled after refund so a
+// concurrent ship cannot reach in_transit once money is already back.
+func TestCancelOrderAtomicGuardBeatsConcurrentShip(t *testing.T) {
+	ctx := t.Context()
+	stock := &fakeStock{reservationID: "res-cancel-race"}
+	pay := &fakePayment{}
+	repo := memory.NewRepository()
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultKRW: 5000}).WithPayment(pay)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-cancel-race", order.TotalKRW); err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+
+	raceStock := &refundDuringShipStock{
+		fakeStock: stock,
+		onAfterCommit: func() {
+			if _, err := svc.CancelOrder(ctx, order.ID); err != nil {
+				t.Fatalf("CancelOrder during ship: %v", err)
+			}
+		},
+	}
+	svc = service.New(repo, raceStock).WithProduct(&fakeProduct{defaultKRW: 5000}).WithPayment(pay)
+
+	_, err = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
+	if !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Fatalf("ShipOrder error = %v, want ErrInvalidTransition", err)
+	}
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled (must not overwrite refund cancel with in_transit)", got.Status)
+	}
+	if len(pay.canceled) != 1 || pay.canceled[0] != "pay-cancel-race" {
+		t.Fatalf("canceled payments = %v, want [pay-cancel-race]", pay.canceled)
+	}
+}
+
+func TestCancelOrderConcurrentShipDuringRefund(t *testing.T) {
+	ctx := t.Context()
+	stock := &fakeStock{reservationID: "res-cancel-async"}
+	repo := memory.NewRepository()
+	started := make(chan struct{})
+	proceed := make(chan struct{})
+	pay := &slowRefundPayment{
+		started: started,
+		proceed: proceed,
+	}
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultKRW: 5000}).WithPayment(pay)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-cancel-async", order.TotalKRW); err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := svc.CancelOrder(ctx, order.ID)
+		errCh <- err
+	}()
+
+	<-started
+	_, _ = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
+	close(proceed)
+	if err := <-errCh; err != nil {
+		t.Fatalf("CancelOrder: %v", err)
+	}
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled after concurrent refund+ship", got.Status)
+	}
+}
+
 func TestShipOrderDoesNotOverwriteRefundCancel(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-ship-race"}
