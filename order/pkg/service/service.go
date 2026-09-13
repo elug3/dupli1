@@ -35,28 +35,28 @@ type Service struct {
 	outboxDrainer  *outbox.Drainer
 	couponClient   ports.CouponClient
 	checkoutTTL    time.Duration
-	// shippingFeeCents is the flat delivery charge applied to every order, in
+	// shippingFeeWon is the flat delivery charge applied to every order, in
 	// whole KRW. Zero (the default) means delivery is free, which keeps the
 	// service safe to run unconfigured.
-	shippingFeeCents int64
-	now              func() time.Time
+	shippingFeeWon int64
+	now            func() time.Time
 }
 
 type CreateOrderInput struct {
 	CustomerID      string
 	Items           []domain.OrderItem
 	CouponCode      string
-	DiscountCents   int64
+	DiscountWon     int64
 	IdempotencyKey  string
 	RecipientName   string
 	RecipientPhone  string
 	ShippingAddress domain.ShippingAddress
 	SourceAddressID string
-	// ShippingFeeCents, when non-nil, is the delivery charge to snapshot on
+	// ShippingFeeWon, when non-nil, is the delivery charge to snapshot on
 	// this order (checkout complete uses the session quote). Nil uses the
 	// service-configured fee so a direct POST /orders still charges the
 	// current amount.
-	ShippingFeeCents *int64
+	ShippingFeeWon *int64
 }
 
 type CompleteCheckoutInput struct {
@@ -69,7 +69,7 @@ type CompleteCheckoutInput struct {
 type idempotencyFingerprint struct {
 	CustomerID      string                 `json:"customer_id"`
 	CouponCode      string                 `json:"coupon_code,omitempty"`
-	DiscountCents   int64                  `json:"discount_cents,omitempty"`
+	DiscountWon     int64                  `json:"discount_won,omitempty"`
 	RecipientName   string                 `json:"recipient_name,omitempty"`
 	RecipientPhone  string                 `json:"recipient_phone,omitempty"`
 	ShippingAddress domain.ShippingAddress `json:"shipping_address,omitempty"`
@@ -120,12 +120,12 @@ func (s *Service) WithProduct(product ports.ProductClient) *Service {
 // WithShippingFee sets the flat delivery charge added to every order, in whole
 // KRW. A negative value is ignored so a misconfigured fee cannot make orders
 // cheaper than their goods.
-func (s *Service) WithShippingFee(cents int64) *Service {
-	if cents < 0 {
-		log.Printf("order: ignoring negative shipping fee %d", cents)
+func (s *Service) WithShippingFee(won int64) *Service {
+	if won < 0 {
+		log.Printf("order: ignoring negative shipping fee %d", won)
 		return s
 	}
-	s.shippingFeeCents = cents
+	s.shippingFeeWon = won
 	return s
 }
 
@@ -165,12 +165,12 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		return nil, err
 	}
 
-	shippingFee := s.shippingFeeCents
-	if input.ShippingFeeCents != nil && *input.ShippingFeeCents >= 0 {
-		shippingFee = *input.ShippingFeeCents
+	shippingFee := s.shippingFeeWon
+	if input.ShippingFeeWon != nil && *input.ShippingFeeWon >= 0 {
+		shippingFee = *input.ShippingFeeWon
 	}
 
-	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountCents, shippingFee, s.now())
+	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountWon, shippingFee, s.now())
 	if err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
@@ -236,7 +236,7 @@ func (s *Service) ListAllOrders(ctx context.Context) ([]domain.Order, error) {
 	return cloneOrders(orders), nil
 }
 
-func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, amountCents int64) (*domain.Order, error) {
+func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, amountWon int64) (*domain.Order, error) {
 	order, err := s.repo.Get(ctx, strings.TrimSpace(orderID))
 	if err != nil {
 		return nil, err
@@ -257,7 +257,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 		}
 		reinstatedReservation = reservationID
 	}
-	if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {
+	if err := order.MarkPaid(paymentID, amountWon, s.now()); err != nil {
 		if reinstatedReservation != "" {
 			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
 		}
@@ -287,7 +287,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 				return nil, err
 			}
 			reinstatedReservation = reservationID
-			if err := order.MarkPaid(paymentID, amountCents, s.now()); err != nil {
+			if err := order.MarkPaid(paymentID, amountWon, s.now()); err != nil {
 				_ = s.stock.ReleaseReservation(ctx, reservationID)
 				return nil, err
 			}
@@ -331,7 +331,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 		if err != nil {
 			return nil, err
 		}
-		if err := fresh.MarkPaid(paymentID, amountCents, s.now()); err != nil {
+		if err := fresh.MarkPaid(paymentID, amountWon, s.now()); err != nil {
 			_ = s.stock.ReleaseReservation(ctx, reservationID)
 			return nil, err
 		}
@@ -454,7 +454,7 @@ func hashCreateOrderInput(input CreateOrderInput) string {
 	fp := idempotencyFingerprint{
 		CustomerID:      strings.TrimSpace(input.CustomerID),
 		CouponCode:      strings.TrimSpace(input.CouponCode),
-		DiscountCents:   input.DiscountCents,
+		DiscountWon:     input.DiscountWon,
 		RecipientName:   strings.TrimSpace(input.RecipientName),
 		RecipientPhone:  strings.TrimSpace(input.RecipientPhone),
 		ShippingAddress: input.ShippingAddress,
@@ -507,24 +507,24 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 	items := make([]events.OrderItem, len(order.Items))
 	for i, item := range order.Items {
 		items[i] = events.OrderItem{
-			SkuID:          item.SkuID,
-			SKU:            item.SKU,
-			Quantity:       item.Quantity,
-			UnitPriceCents: item.UnitPriceCents,
+			SkuID:        item.SkuID,
+			SKU:          item.SKU,
+			Quantity:     item.Quantity,
+			UnitPriceWon: item.UnitPriceWon,
 		}
 	}
 	payload, err := json.Marshal(events.Order{
-		EventType:        subject,
-		OrderID:          order.ID,
-		CustomerID:       order.CustomerID,
-		Status:           string(order.Status),
-		SubtotalCents:    order.SubtotalCents,
-		DiscountCents:    order.DiscountCents,
-		ShippingFeeCents: order.ShippingFeeCents,
-		TotalCents:       order.TotalCents,
-		Items:            items,
-		CreatedAt:        order.CreatedAt,
-		Occurred:         s.now(),
+		EventType:      subject,
+		OrderID:        order.ID,
+		CustomerID:     order.CustomerID,
+		Status:         string(order.Status),
+		SubtotalWon:    order.SubtotalWon,
+		DiscountWon:    order.DiscountWon,
+		ShippingFeeWon: order.ShippingFeeWon,
+		TotalWon:       order.TotalWon,
+		Items:          items,
+		CreatedAt:      order.CreatedAt,
+		Occurred:       s.now(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal %s event: %w", subject, err)
@@ -546,7 +546,7 @@ func (s *Service) DrainOutbox(ctx context.Context) error {
 	return s.outboxDrainer.Drain(ctx)
 }
 
-// priceItems resolves each line from the product catalog and ignores any client unit_price_cents.
+// priceItems resolves each line from the product catalog and ignores any client unit_price_won.
 // When any variants are missing, every failed line is collected into UnavailableVariantsError
 // rather than failing on the first miss.
 func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]domain.OrderItem, error) {
@@ -567,16 +567,16 @@ func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]d
 			}
 			return nil, err
 		}
-		if info.UnitPriceCents <= 0 {
+		if info.UnitPriceWon <= 0 {
 			return nil, domain.ErrInvalidOrder
 		}
 		out = append(out, domain.OrderItem{
-			SkuID:          info.SkuID,
-			SKU:            info.SKU,
-			Quantity:       item.Quantity,
-			UnitPriceCents: info.UnitPriceCents,
-			ProductName:    info.ProductName,
-			ImageURL:       info.ImageURL,
+			SkuID:        info.SkuID,
+			SKU:          info.SKU,
+			Quantity:     item.Quantity,
+			UnitPriceWon: info.UnitPriceWon,
+			ProductName:  info.ProductName,
+			ImageURL:     info.ImageURL,
 		})
 	}
 	if len(unavailable) > 0 {

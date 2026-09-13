@@ -21,7 +21,6 @@ type fakeStock struct {
 	commitErr     error
 }
 
-
 func testShipTracking() domain.ShipmentTracking {
 	return domain.ShipmentTracking{Carrier: domain.CarrierCJ, TrackingNumber: "123456789012"}
 }
@@ -83,10 +82,10 @@ func (f *countingStock) Reserve(ctx context.Context, orderID string, items []por
 	return f.fakeStock.Reserve(ctx, orderID, items)
 }
 
-// fakeProduct resolves catalog prices; client UnitPriceCents is ignored by the service.
+// fakeProduct resolves catalog prices; client UnitPriceWon is ignored by the service.
 type fakeProduct struct {
-	defaultCents int64
-	byKey        map[string]*ports.VariantInfo
+	defaultWon int64
+	byKey      map[string]*ports.VariantInfo
 	// strictMissing makes unknown keys return ErrVariantNotFound when byKey is set.
 	strictMissing bool
 }
@@ -113,15 +112,15 @@ func (f *fakeProduct) lookup(key string, asSKU bool) (*ports.VariantInfo, error)
 			return nil, ports.ErrVariantNotFound
 		}
 	}
-	cents := f.defaultCents
-	if cents == 0 {
-		cents = 1000
+	won := f.defaultWon
+	if won == 0 {
+		won = 1000
 	}
 	if asSKU {
 		sku := strings.ToUpper(key)
-		return &ports.VariantInfo{SkuID: "ID-" + sku, SKU: sku, UnitPriceCents: cents}, nil
+		return &ports.VariantInfo{SkuID: "ID-" + sku, SKU: sku, UnitPriceWon: won}, nil
 	}
-	return &ports.VariantInfo{SkuID: key, SKU: strings.ToUpper(key), UnitPriceCents: cents}, nil
+	return &ports.VariantInfo{SkuID: key, SKU: strings.ToUpper(key), UnitPriceWon: won}, nil
 }
 
 func newSvc(stock ports.StockClient, product *fakeProduct, publisher ...ports.EventPublisher) *service.Service {
@@ -135,12 +134,12 @@ func TestCreateOrderReservesStockAndPublishesEvent(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	publisher := &recordedPublisher{}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 1250}, publisher)
+	svc := newSvc(stock, &fakeProduct{defaultWon: 1250}, publisher)
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
 		Items: []domain.OrderItem{
-			{SKU: "shoe-1", Quantity: 2, UnitPriceCents: 1}, // client price ignored
+			{SKU: "shoe-1", Quantity: 2, UnitPriceWon: 1}, // client price ignored
 		},
 	})
 	if err != nil {
@@ -150,8 +149,8 @@ func TestCreateOrderReservesStockAndPublishesEvent(t *testing.T) {
 	if order.Status != domain.StatusPending {
 		t.Fatalf("order status = %q, want pending", order.Status)
 	}
-	if order.TotalCents != 2500 {
-		t.Fatalf("total = %d, want 2500 from catalog (not client 1)", order.TotalCents)
+	if order.TotalWon != 2500 {
+		t.Fatalf("total = %d, want 2500 from catalog (not client 1)", order.TotalWon)
 	}
 	if order.PaymentDueAt.IsZero() {
 		t.Fatal("payment_due_at should be set")
@@ -163,17 +162,17 @@ func TestCreateOrderReservesStockAndPublishesEvent(t *testing.T) {
 
 func TestCreateOrderIgnoresClientUnitPrice(t *testing.T) {
 	ctx := t.Context()
-	svc := newSvc(&fakeStock{}, &fakeProduct{defaultCents: 2890000})
+	svc := newSvc(&fakeStock{}, &fakeProduct{defaultWon: 2890000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
-		Items:      []domain.OrderItem{{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 1}},
+		Items:      []domain.OrderItem{{SKU: "BAG-1", Quantity: 1, UnitPriceWon: 1}},
 	})
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if order.Items[0].UnitPriceCents != 2890000 || order.TotalCents != 2890000 {
-		t.Fatalf("priced = %+v total=%d, want catalog 2890000", order.Items[0], order.TotalCents)
+	if order.Items[0].UnitPriceWon != 2890000 || order.TotalWon != 2890000 {
+		t.Fatalf("priced = %+v total=%d, want catalog 2890000", order.Items[0], order.TotalWon)
 	}
 }
 
@@ -182,11 +181,11 @@ func TestCreateOrderCapturesProductNameAndImageURL(t *testing.T) {
 	product := &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
 			"BAG-001": {
-				SkuID:          "sku-bag-1",
-				SKU:            "BAG-001",
-				UnitPriceCents: 50000,
-				ProductName:    "Prada Galleria",
-				ImageURL:       "https://cdn.example/bag.jpg",
+				SkuID:        "sku-bag-1",
+				SKU:          "BAG-001",
+				UnitPriceWon: 50000,
+				ProductName:  "Prada Galleria",
+				ImageURL:     "https://cdn.example/bag.jpg",
 			},
 		},
 		strictMissing: true,
@@ -219,7 +218,7 @@ func TestCreateOrderCapturesProductNameAndImageURL(t *testing.T) {
 func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -229,7 +228,7 @@ func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
 
-	order, err = svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents)
+	order, err = svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon)
 	if err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
@@ -257,7 +256,7 @@ func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -266,7 +265,7 @@ func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
@@ -281,7 +280,7 @@ func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 		if err := status.advance(); err != nil {
 			t.Fatalf("advance to %s: %v", status.name, err)
 		}
-		replayed, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents)
+		replayed, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon)
 		if err != nil {
 			t.Fatalf("replayed payment.succeeded while %s returned error: %v", status.name, err)
 		}
@@ -293,7 +292,7 @@ func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 
 func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
 	ctx := t.Context()
-	svc := newSvc(&fakeStock{reservationID: "res-123"}, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(&fakeStock{reservationID: "res-123"}, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -302,11 +301,11 @@ func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
-	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-2", order.TotalCents)
+	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-2", order.TotalWon)
 	if !errors.Is(err, domain.ErrInvalidTransition) {
 		t.Fatalf("second payment error = %v, want ErrInvalidTransition", err)
 	}
@@ -315,7 +314,7 @@ func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
 func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-original"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -337,7 +336,7 @@ func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
 	}
 
 	stock.reservationID = "res-late-pay"
-	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents)
+	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalWon)
 	if err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
@@ -355,7 +354,7 @@ func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
 func TestMarkOrderPaidRollsBackReinstatedReservationOnAmountMismatch(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-original"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -369,7 +368,7 @@ func TestMarkOrderPaidRollsBackReinstatedReservationOnAmountMismatch(t *testing.
 	}
 
 	stock.reservationID = "res-late-pay"
-	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents+1)
+	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalWon+1)
 	if !errors.Is(err, domain.ErrPaymentAmountMismatch) {
 		t.Fatalf("MarkOrderPaid error = %v, want ErrPaymentAmountMismatch", err)
 	}
@@ -389,7 +388,7 @@ func TestMarkOrderPaidRollsBackReinstatedReservationOnAmountMismatch(t *testing.
 func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -419,7 +418,7 @@ func TestShipOrderRejectsPendingWithoutCommittingStock(t *testing.T) {
 func TestShipOrderRejectsInvalidTrackingWithoutCommittingStock(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -428,7 +427,7 @@ func TestShipOrderRejectsInvalidTrackingWithoutCommittingStock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
@@ -455,7 +454,7 @@ func TestShipOrderRejectsInvalidTrackingWithoutCommittingStock(t *testing.T) {
 func TestShipOrderRejectsEmptyShippedByWithoutCommittingStock(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -464,7 +463,7 @@ func TestShipOrderRejectsEmptyShippedByWithoutCommittingStock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
@@ -509,7 +508,7 @@ func TestMarkOrderPaidRollsBackReinstatedReservationOnSaveFailure(t *testing.T) 
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-original"}
 	repo := &saveFailOnPaidRepo{Repository: memory.NewRepository(), fail: true}
-	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -523,7 +522,7 @@ func TestMarkOrderPaidRollsBackReinstatedReservationOnSaveFailure(t *testing.T) 
 	}
 
 	stock.reservationID = "res-late-pay"
-	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents)
+	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalWon)
 	if err == nil {
 		t.Fatal("MarkOrderPaid expected save failure")
 	}
@@ -543,7 +542,7 @@ func TestMarkOrderPaidRollsBackReinstatedReservationOnSaveFailure(t *testing.T) 
 func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -552,7 +551,7 @@ func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
@@ -571,7 +570,7 @@ func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
 func TestShipOrderRejectsReleasedReservation(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -580,7 +579,7 @@ func TestShipOrderRejectsReleasedReservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
@@ -628,7 +627,7 @@ func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSave(t *testing.T) {
 		stock:      stock,
 		getCount:   make(map[string]int),
 	}
-	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -639,7 +638,7 @@ func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSave(t *testing.T) {
 	}
 
 	stock.reservationID = "res-late-pay"
-	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents)
+	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalWon)
 	if err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
@@ -681,7 +680,7 @@ func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSavePaid(t *testing.T) {
 		Repository: memory.NewRepository(),
 		stock:      stock,
 	}
-	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -692,7 +691,7 @@ func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSavePaid(t *testing.T) {
 	}
 
 	stock.reservationID = "res-late-pay"
-	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalCents)
+	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalWon)
 	if err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
@@ -710,7 +709,7 @@ func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSavePaid(t *testing.T) {
 func TestCancelPaidOrderReleasesStock(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 7500})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 7500})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -719,7 +718,7 @@ func TestCancelPaidOrderReleasesStock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
@@ -735,7 +734,7 @@ func TestCancelPaidOrderReleasesStock(t *testing.T) {
 func TestCancelInTransitOrderFails(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 7500})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 7500})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -744,7 +743,7 @@ func TestCancelInTransitOrderFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalCents); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 	if _, err := svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking()); err != nil {
@@ -773,7 +772,7 @@ func TestCancelOrderDoesNotReleaseStockWhenSaveFails(t *testing.T) {
 	ctx := t.Context()
 	stock := &fakeStock{reservationID: "res-123"}
 	repo := &saveFailOnCancelRepo{Repository: memory.NewRepository(), fail: true}
-	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultCents: 5000})
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -813,7 +812,7 @@ func (f *alreadyReleasedStock) ReleaseReservation(ctx context.Context, reservati
 func TestCancelOrderSucceedsWhenReservationAlreadyReleased(t *testing.T) {
 	ctx := t.Context()
 	stock := &alreadyReleasedStock{fakeStock: fakeStock{reservationID: "res-123"}}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 5000})
+	svc := newSvc(stock, &fakeProduct{defaultWon: 5000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -840,14 +839,14 @@ func TestCreateOrderReservesStockWithSkuID(t *testing.T) {
 	stock := &fakeStock{reservationID: "res-999"}
 	svc := newSvc(stock, &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
-			"SKUID-1": {SkuID: "SKUID-1", SKU: "SHOE-1", UnitPriceCents: 1250},
+			"SKUID-1": {SkuID: "SKUID-1", SKU: "SHOE-1", UnitPriceWon: 1250},
 		},
 	})
 
 	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
 		Items: []domain.OrderItem{
-			{SkuID: "SKUID-1", SKU: "shoe-1", Quantity: 2, UnitPriceCents: 1},
+			{SkuID: "SKUID-1", SKU: "shoe-1", Quantity: 2, UnitPriceWon: 1},
 		},
 	})
 	if err != nil {
@@ -864,14 +863,14 @@ func TestCreateOrderEventCarriesSkuID(t *testing.T) {
 	publisher := &recordedPublisher{}
 	svc := newSvc(stock, &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
-			"SKUID-2": {SkuID: "SKUID-2", SKU: "BAG-2", UnitPriceCents: 5000},
+			"SKUID-2": {SkuID: "SKUID-2", SKU: "BAG-2", UnitPriceWon: 5000},
 		},
 	}, publisher)
 
 	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
 		Items: []domain.OrderItem{
-			{SkuID: "SKUID-2", SKU: "bag-2", Quantity: 1, UnitPriceCents: 1},
+			{SkuID: "SKUID-2", SKU: "bag-2", Quantity: 1, UnitPriceWon: 1},
 		},
 	})
 	if err != nil {
@@ -903,7 +902,7 @@ func TestCreateOrderIdempotencyKeyReplaysWithoutSecondReserve(t *testing.T) {
 	ctx := t.Context()
 	stock := &countingStock{fakeStock: fakeStock{reservationID: "res-1"}}
 	publisher := &recordedPublisher{}
-	svc := newSvc(stock, &fakeProduct{defaultCents: 1000}, publisher)
+	svc := newSvc(stock, &fakeProduct{defaultWon: 1000}, publisher)
 
 	input := service.CreateOrderInput{
 		CustomerID:     "customer-1",
@@ -928,7 +927,7 @@ func TestCreateOrderIdempotencyKeyReplaysWithoutSecondReserve(t *testing.T) {
 
 func TestCreateOrderIdempotencyKeyConflict(t *testing.T) {
 	ctx := t.Context()
-	svc := newSvc(&fakeStock{reservationID: "res-1"}, &fakeProduct{defaultCents: 1000})
+	svc := newSvc(&fakeStock{reservationID: "res-1"}, &fakeProduct{defaultWon: 1000})
 
 	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID:     "customer-1",
@@ -953,7 +952,7 @@ func TestCreateOrderSucceedsWhenPublishFails(t *testing.T) {
 	stock := &fakeStock{reservationID: "res-1"}
 	publisher := &failingPublisher{}
 	repo := memory.NewRepository()
-	svc := service.New(repo, stock, publisher).WithProduct(&fakeProduct{defaultCents: 1000})
+	svc := service.New(repo, stock, publisher).WithProduct(&fakeProduct{defaultWon: 1000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -982,7 +981,7 @@ func TestDrainOutboxPublishesPending(t *testing.T) {
 	stock := &fakeStock{reservationID: "res-1"}
 	failPub := &failingPublisher{}
 	repo := memory.NewRepository()
-	svc := service.New(repo, stock, failPub).WithProduct(&fakeProduct{defaultCents: 1000})
+	svc := service.New(repo, stock, failPub).WithProduct(&fakeProduct{defaultWon: 1000})
 
 	if _, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -992,7 +991,7 @@ func TestDrainOutboxPublishesPending(t *testing.T) {
 	}
 
 	okPub := &recordedPublisher{}
-	svcOK := service.New(repo, stock, okPub).WithProduct(&fakeProduct{defaultCents: 1000})
+	svcOK := service.New(repo, stock, okPub).WithProduct(&fakeProduct{defaultWon: 1000})
 	if err := svcOK.DrainOutbox(ctx); err != nil {
 		t.Fatalf("DrainOutbox: %v", err)
 	}

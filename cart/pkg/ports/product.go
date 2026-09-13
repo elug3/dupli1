@@ -11,12 +11,12 @@ var (
 )
 
 type VariantInfo struct {
-	SkuID          string
-	SKU            string
-	ProductID      string
-	Color          string
-	UnitPriceCents int64 // whole KRW won (from product.price; not ×100)
-	ImageURL       string
+	SkuID        string
+	SKU          string
+	ProductID    string
+	Color        string
+	UnitPriceWon int64 // whole won, from product.price
+	ImageURL     string
 }
 
 type ProductClient interface {

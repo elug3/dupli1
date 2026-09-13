@@ -38,10 +38,10 @@ type UnavailableItem struct {
 }
 
 type OrderItem struct {
-	SkuID          string `json:"sku_id,omitempty"`
-	SKU            string `json:"sku"`
-	Quantity       int    `json:"quantity"`
-	UnitPriceCents int64  `json:"unit_price_cents"` // whole KRW won
+	SkuID        string `json:"sku_id,omitempty"`
+	SKU          string `json:"sku"`
+	Quantity     int    `json:"quantity"`
+	UnitPriceWon int64  `json:"unit_price_won"` // whole KRW won
 	// ProductName and ImageURL are captured at order creation from the product catalog.
 	ProductName string `json:"product_name,omitempty"`
 	ImageURL    string `json:"image_url,omitempty"`
@@ -56,36 +56,36 @@ type Order struct {
 	Items         []OrderItem `json:"items"`
 	Status        OrderStatus `json:"status"`
 	CouponCode    string      `json:"coupon_code,omitempty"`
-	SubtotalCents int64       `json:"subtotal_cents"`
-	DiscountCents int64       `json:"discount_cents"`
-	// ShippingFeeCents is the delivery charge in whole KRW, captured at order
+	SubtotalWon   int64       `json:"subtotal_won"`
+	DiscountWon   int64       `json:"discount_won"`
+	// ShippingFeeWon is the delivery charge in whole KRW, captured at order
 	// creation so a later config change never re-prices a placed order.
-	ShippingFeeCents int64           `json:"shipping_fee_cents"`
-	TotalCents       int64           `json:"total_cents"`
-	RecipientName    string          `json:"recipient_name,omitempty"`
-	RecipientPhone   string          `json:"recipient_phone,omitempty"`
-	ShippingAddress  ShippingAddress `json:"shipping_address,omitempty"`
-	SourceAddressID  string          `json:"source_address_id,omitempty"`
-	PaymentID        string          `json:"payment_id,omitempty"`
-	PaidAt           *time.Time      `json:"paid_at,omitempty"`
-	PaymentDueAt     time.Time       `json:"payment_due_at"`
-	ShippedBy        string          `json:"shipped_by,omitempty"`
-	ShippedAt        *time.Time      `json:"shipped_at,omitempty"`
-	Carrier          string          `json:"carrier,omitempty"`
-	TrackingNumber   string          `json:"tracking_number,omitempty"`
-	CarrierNote      string          `json:"carrier_note,omitempty"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	ShippingFeeWon  int64           `json:"shipping_fee_won"`
+	TotalWon        int64           `json:"total_won"`
+	RecipientName   string          `json:"recipient_name,omitempty"`
+	RecipientPhone  string          `json:"recipient_phone,omitempty"`
+	ShippingAddress ShippingAddress `json:"shipping_address,omitempty"`
+	SourceAddressID string          `json:"source_address_id,omitempty"`
+	PaymentID       string          `json:"payment_id,omitempty"`
+	PaidAt          *time.Time      `json:"paid_at,omitempty"`
+	PaymentDueAt    time.Time       `json:"payment_due_at"`
+	ShippedBy       string          `json:"shipped_by,omitempty"`
+	ShippedAt       *time.Time      `json:"shipped_at,omitempty"`
+	Carrier         string          `json:"carrier,omitempty"`
+	TrackingNumber  string          `json:"tracking_number,omitempty"`
+	CarrierNote     string          `json:"carrier_note,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 // NewOrder prices an order as subtotal - discount + shipping, all in whole KRW.
-// shippingFeeCents is passed in rather than read from config so the charge is
+// shippingFeeWon is passed in rather than read from config so the charge is
 // snapshotted on the order: changing the configured fee must not alter what an
 // already-placed order costs.
 //
 // The discount applies to goods only and is capped at the subtotal, so the total
 // can never fall below the shipping fee — a 100%-off coupon still pays delivery.
-func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCode string, discountCents, shippingFeeCents int64, now time.Time) (*Order, error) {
+func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCode string, discountWon, shippingFeeWon int64, now time.Time) (*Order, error) {
 	id = strings.TrimSpace(id)
 	customerID = strings.TrimSpace(customerID)
 	reservationID = strings.TrimSpace(reservationID)
@@ -98,40 +98,40 @@ func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCod
 	for i, item := range items {
 		item.SkuID = strings.TrimSpace(item.SkuID)
 		item.SKU = strings.ToUpper(strings.TrimSpace(item.SKU))
-		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceCents < 0 {
+		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceWon < 0 {
 			return nil, ErrInvalidOrder
 		}
-		subtotal += int64(item.Quantity) * item.UnitPriceCents
+		subtotal += int64(item.Quantity) * item.UnitPriceWon
 		copiedItems[i] = item
 	}
 	if len(copiedItems) == 0 {
 		return nil, ErrInvalidOrder
 	}
-	if discountCents < 0 || discountCents > subtotal {
+	if discountWon < 0 || discountWon > subtotal {
 		return nil, ErrInvalidOrder
 	}
-	if shippingFeeCents < 0 {
+	if shippingFeeWon < 0 {
 		return nil, ErrInvalidOrder
 	}
 
 	return &Order{
-		ID:               id,
-		CustomerID:       customerID,
-		ReservationID:    reservationID,
-		Items:            copiedItems,
-		Status:           StatusPending,
-		CouponCode:       strings.ToUpper(strings.TrimSpace(couponCode)),
-		SubtotalCents:    subtotal,
-		DiscountCents:    discountCents,
-		ShippingFeeCents: shippingFeeCents,
-		TotalCents:       subtotal - discountCents + shippingFeeCents,
-		PaymentDueAt:     now.Add(DefaultPaymentTTL),
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:             id,
+		CustomerID:     customerID,
+		ReservationID:  reservationID,
+		Items:          copiedItems,
+		Status:         StatusPending,
+		CouponCode:     strings.ToUpper(strings.TrimSpace(couponCode)),
+		SubtotalWon:    subtotal,
+		DiscountWon:    discountWon,
+		ShippingFeeWon: shippingFeeWon,
+		TotalWon:       subtotal - discountWon + shippingFeeWon,
+		PaymentDueAt:   now.Add(DefaultPaymentTTL),
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}, nil
 }
 
-func (o *Order) MarkPaid(paymentID string, amountCents int64, now time.Time) error {
+func (o *Order) MarkPaid(paymentID string, amountWon int64, now time.Time) error {
 	if o.Status != StatusPending {
 		return ErrInvalidTransition
 	}
@@ -139,7 +139,7 @@ func (o *Order) MarkPaid(paymentID string, amountCents int64, now time.Time) err
 	if paymentID == "" {
 		return ErrInvalidOrder
 	}
-	if amountCents != o.TotalCents {
+	if amountWon != o.TotalWon {
 		return ErrPaymentAmountMismatch
 	}
 	o.Status = StatusPaid

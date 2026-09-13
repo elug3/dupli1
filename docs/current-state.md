@@ -10,7 +10,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 |------|--------|
 | Auth (login, JWT, fine-grained permissions) | Implemented |
 | Product catalog (bags, coupons, images, PDP) | Implemented |
-| Currency | **KRW only** — product prices and `*_cents` amounts are whole won ([payment-service.md](payment-service.md)) |
+| Currency | **KRW only** — product prices and `*_won` amounts are whole won ([payment-service.md](payment-service.md)) |
 | Inventory (stock, reservations) | Implemented (PostgreSQL, owned by product) |
 | Orders + checkout sessions | Implemented (PostgreSQL) |
 | Shopping cart | Implemented (PostgreSQL) |
@@ -110,9 +110,9 @@ See [service-layout.md](service-layout.md) for details.
   - Order lifecycle at `/api/v1/orders` — statuses: `pending`, `paid`, `in_transit`, `fulfilled`, `canceled`
   - List: `GET /api/v1/orders` (all — requires `order.read.all`); `GET /api/v1/orders?customer_id=` (ABAC). There is no `/orders/all` or `/orders/me`.
   - Consumes **`payment.succeeded`** (NATS) → `paid` (idempotent on `payment_id`; replays after ship/fulfill are no-ops); late payment on auto-`canceled` orders **re-reserves stock** and reopens the payment window before marking `paid`
-  - Consumes **`payment.canceled`** (NATS) → cancels a still-`paid` order on a full refund (`remaining_cents == 0`) only when `payment_id` matches; omitted `remaining_cents`, partial refunds, pending, and already-shipped orders are skipped. Atomic `paid`+`payment_id` guard so a concurrent ship is not last-write-wins canceled.
+  - Consumes **`payment.canceled`** (NATS) → cancels a still-`paid` order on a full refund (`remaining_won == 0`) only when `payment_id` matches; omitted `remaining_won`, partial refunds, pending, and already-shipped orders are skipped. Atomic `paid`+`payment_id` guard so a concurrent ship is not last-write-wins canceled.
   - 5-minute unpaid `pending` expiry worker (skips when payment wins the race)
-  - **Shipping fee:** flat per-order delivery charge via `DUPLI1_ORDER_SHIPPING_FEE_CENTS` (whole KRW, default 30000 = 30,000 KRW; set 0 for free). `total = subtotal - discount + shipping`; no free-shipping threshold; coupons discount goods only. Snapshotted on the checkout session when it opens; `complete` charges that quoted fee even if the configured amount changed mid-checkout. Direct `POST /orders` uses the current configured fee.
+  - **Shipping fee:** flat per-order delivery charge via `DUPLI1_ORDER_SHIPPING_FEE_WON` (whole KRW, default 30000 = 30,000 KRW; set 0 for free). `total = subtotal - discount + shipping`; no free-shipping threshold; coupons discount goods only. Snapshotted on the checkout session when it opens; `complete` charges that quoted fee even if the configured amount changed mid-checkout. Direct `POST /orders` uses the current configured fee.
   - Publishes order events via transactional **outbox** (`order.created` / status updates); outbox drain worker
   - Optional `Idempotency-Key` on `POST /api/v1/orders` (replay-safe create)
   - Checkout `complete` snapshots recipient + shipping address (optional prefill from auth profile)
@@ -141,9 +141,9 @@ See [service-layout.md](service-layout.md) for details.
 - **Persistence:** PostgreSQL (`payments` on `postgres-payment`)
 - **Features:**
   - **NANO** certified card PG when `NANO_*` credentials set; else `credit_card` is unavailable (501) and manager **Bypass** is used, including for local testing (see [payment-service.md](payment-service.md))
-  - Default payment currency: **`krw` only** (whole won; `*_cents` fields are KRW minor units = won)
+  - Default payment currency: **`krw` only** (every `*_won` field is whole won)
   - Publishes **`payment.succeeded`** via transactional **outbox** (soft-success complete; drain + reconcile workers)
-  - **Cancel / refund:** `POST /api/v1/payments/{id}/cancel` (`payment.cancel`, staff-only) calls NANO `/api/payment/cancel.io`; full or partial (`amount_cents`), `Idempotency-Key` honored. Concurrent cancels serialize on a row lock (`SELECT … FOR UPDATE` / in-memory mutex) so two in-flight requests cannot both call NANO. Publishes **`payment.canceled`** via outbox; order cancels a still-`paid` matching order on a full refund, notification alerts ops.
+  - **Cancel / refund:** `POST /api/v1/payments/{id}/cancel` (`payment.cancel`, staff-only) calls NANO `/api/payment/cancel.io`; full or partial (`amount_won`), `Idempotency-Key` honored. Concurrent cancels serialize on a row lock (`SELECT … FOR UPDATE` / in-memory mutex) so two in-flight requests cannot both call NANO. Publishes **`payment.canceled`** via outbox; order cancels a still-`paid` matching order on a full refund, notification alerts ops.
   - **NANO browser return** (`POST /nano/return`) always answers with a redirect or a page, never a JSON error body; an approval it cannot verify redirects with `?error=verify_failed`, which the storefront renders as *do not pay again* ([#232](https://github.com/elug3/dupli1/issues/232))
   - Publishes **`payment.callback_rejected`** (direct, not via outbox) when the PG reported approval and dupli1 refused the callback — notification alerts ops that a card may be charged with no paid order
   - **Methods:** `method` on create — `credit_card` (NANO; 501 when unconfigured), `bypass` (requires `payment.bypass`; succeeds immediately), `bitcoin` (501). See [payment-methods-plan.md](payment-methods-plan.md)

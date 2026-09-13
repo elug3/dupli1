@@ -13,7 +13,7 @@ import (
 func TestCreateOrder_AppliesConfiguredShippingFee(t *testing.T) {
 	ctx := t.Context()
 	svc := service.New(memory.NewRepository(), &fakeStock{}).
-		WithProduct(&fakeProduct{defaultCents: 250000}).
+		WithProduct(&fakeProduct{defaultWon: 250000}).
 		WithShippingFee(3000)
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
@@ -23,11 +23,11 @@ func TestCreateOrder_AppliesConfiguredShippingFee(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if order.ShippingFeeCents != 3000 {
-		t.Fatalf("shipping = %d, want the configured 3000", order.ShippingFeeCents)
+	if order.ShippingFeeWon != 3000 {
+		t.Fatalf("shipping = %d, want the configured 3000", order.ShippingFeeWon)
 	}
-	if order.TotalCents != 253000 {
-		t.Fatalf("total = %d, want 253000", order.TotalCents)
+	if order.TotalWon != 253000 {
+		t.Fatalf("total = %d, want 253000", order.TotalWon)
 	}
 }
 
@@ -37,7 +37,7 @@ func TestCreateOrder_AppliesConfiguredShippingFee(t *testing.T) {
 func TestCreateOrder_UnconfiguredServiceChargesNothing(t *testing.T) {
 	ctx := t.Context()
 	svc := service.New(memory.NewRepository(), &fakeStock{}).
-		WithProduct(&fakeProduct{defaultCents: 250000})
+		WithProduct(&fakeProduct{defaultWon: 250000})
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
@@ -46,8 +46,8 @@ func TestCreateOrder_UnconfiguredServiceChargesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if order.ShippingFeeCents != 0 || order.TotalCents != 250000 {
-		t.Fatalf("shipping = %d, total = %d; want 0 / 250000", order.ShippingFeeCents, order.TotalCents)
+	if order.ShippingFeeWon != 0 || order.TotalWon != 250000 {
+		t.Fatalf("shipping = %d, total = %d; want 0 / 250000", order.ShippingFeeWon, order.TotalWon)
 	}
 }
 
@@ -56,7 +56,7 @@ func TestCreateOrder_UnconfiguredServiceChargesNothing(t *testing.T) {
 func TestWithShippingFee_IgnoresNegative(t *testing.T) {
 	ctx := t.Context()
 	svc := service.New(memory.NewRepository(), &fakeStock{}).
-		WithProduct(&fakeProduct{defaultCents: 250000}).
+		WithProduct(&fakeProduct{defaultWon: 250000}).
 		WithShippingFee(-500)
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
@@ -66,11 +66,11 @@ func TestWithShippingFee_IgnoresNegative(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if order.ShippingFeeCents != 0 {
-		t.Fatalf("shipping = %d, want a negative fee ignored", order.ShippingFeeCents)
+	if order.ShippingFeeWon != 0 {
+		t.Fatalf("shipping = %d, want a negative fee ignored", order.ShippingFeeWon)
 	}
-	if order.TotalCents != 250000 {
-		t.Fatalf("total = %d, want 250000", order.TotalCents)
+	if order.TotalWon != 250000 {
+		t.Fatalf("total = %d, want 250000", order.TotalWon)
 	}
 }
 
@@ -80,7 +80,7 @@ func TestCreateOrder_ShippingFeeIsSnapshotted(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
 	svc := service.New(repo, &fakeStock{}).
-		WithProduct(&fakeProduct{defaultCents: 250000}).
+		WithProduct(&fakeProduct{defaultWon: 250000}).
 		WithShippingFee(3000)
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
@@ -97,9 +97,9 @@ func TestCreateOrder_ShippingFeeIsSnapshotted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetOrder: %v", err)
 	}
-	if reloaded.ShippingFeeCents != 3000 || reloaded.TotalCents != 253000 {
+	if reloaded.ShippingFeeWon != 3000 || reloaded.TotalWon != 253000 {
 		t.Fatalf("reloaded shipping = %d total = %d; a config change must not re-price a placed order",
-			reloaded.ShippingFeeCents, reloaded.TotalCents)
+			reloaded.ShippingFeeWon, reloaded.TotalWon)
 	}
 }
 
@@ -109,7 +109,7 @@ func TestCreateOrder_PublishesShippingFeeInEvent(t *testing.T) {
 	ctx := t.Context()
 	publisher := &recordedPublisher{}
 	svc := service.New(memory.NewRepository(), &fakeStock{}, publisher).
-		WithProduct(&fakeProduct{defaultCents: 250000}).
+		WithProduct(&fakeProduct{defaultWon: 250000}).
 		WithShippingFee(3000)
 
 	if _, err := svc.CreateOrder(ctx, service.CreateOrderInput{
@@ -129,10 +129,10 @@ func TestCreateOrder_PublishesShippingFeeInEvent(t *testing.T) {
 	if err := json.Unmarshal(raw, &ev); err != nil {
 		t.Fatal(err)
 	}
-	if ev.ShippingFeeCents != 3000 {
-		t.Fatalf("event shipping = %d, want 3000", ev.ShippingFeeCents)
+	if ev.ShippingFeeWon != 3000 {
+		t.Fatalf("event shipping = %d, want 3000", ev.ShippingFeeWon)
 	}
-	if ev.SubtotalCents+ev.ShippingFeeCents-ev.DiscountCents != ev.TotalCents {
+	if ev.SubtotalWon+ev.ShippingFeeWon-ev.DiscountWon != ev.TotalWon {
 		t.Fatalf("event totals do not reconcile: %+v", ev)
 	}
 }
@@ -143,7 +143,7 @@ func TestCompleteCheckout_UsesSessionQuotedShippingFee(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
 	svc := service.NewWithCheckout(repo, &fakeStock{reservationID: "res-fee"}, nil, 0).
-		WithProduct(&fakeProduct{defaultCents: 250000}).
+		WithProduct(&fakeProduct{defaultWon: 250000}).
 		WithShippingFee(3000)
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{CustomerID: "customer-1"})
@@ -160,10 +160,10 @@ func TestCompleteCheckout_UsesSessionQuotedShippingFee(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompleteCheckout: %v", err)
 	}
-	if result.Order.ShippingFeeCents != 3000 {
-		t.Fatalf("order shipping = %d, want the session-quoted 3000", result.Order.ShippingFeeCents)
+	if result.Order.ShippingFeeWon != 3000 {
+		t.Fatalf("order shipping = %d, want the session-quoted 3000", result.Order.ShippingFeeWon)
 	}
-	if result.Order.TotalCents != 253000 {
-		t.Fatalf("order total = %d, want 253000", result.Order.TotalCents)
+	if result.Order.TotalWon != 253000 {
+		t.Fatalf("order total = %d, want 253000", result.Order.TotalWon)
 	}
 }

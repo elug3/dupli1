@@ -100,7 +100,7 @@ run twice each for idempotency); the two structural items are intentionally left
 
 ### Consistency with project conventions
 
-- [ ] **`products.price` / `official_price` break the KRW `_cents` convention** — stored as `NUMERIC(10,2)` (`product/pkg/infra/pg/product_store.go`) while every other money field in the codebase (`orders.*_cents`, `payments.amount_cents`, `order_items.unit_price_cents`) is a whole-won `BIGINT`, per the "Currency: KRW only" rule in `CLAUDE.md`. Deliberately **not fixed** — needs its own migration plan (domain struct, JSON API shape, search/sort queries, possibly frontend consumers); too invasive for a routine schema cleanup, especially on v1.0 release day.
+- [ ] **`products.price` / `official_price` break the KRW `_won` convention** — stored as `NUMERIC(10,2)` (`product/pkg/infra/pg/product_store.go`) while every other money field in the codebase (`orders.*_won`, `payments.amount_won`, `order_items.unit_price_won`) is a whole-won `BIGINT`, per the "Currency: KRW only" rule in `CLAUDE.md`. Deliberately **not fixed** — needs its own migration plan (domain struct, JSON API shape, search/sort queries, possibly frontend consumers); too invasive for a routine schema cleanup, especially on v1.0 release day.
 - [ ] **Two different ID-sequencing mechanisms** — order and product use a hand-rolled `id_sequences` table; payment uses a native Postgres `SEQUENCE`. Both work; pick one pattern for new services to avoid a third variant appearing. Not fixed — no functional benefit to migrating existing services, just a convention pick for the future.
 
 ### Missing indexes / cleanup gaps
@@ -151,7 +151,7 @@ Implement remaining open items in [quality-bugs-fix-plan.md](quality-bugs-fix-pl
     | `/api/v1/checkout/*` | `/api/v1/orders/checkout/*` |
     | `/api/v1/carts/{id}` | `/api/v1/cart/customers/{id}` |
 - [x] **Product images CDN** — CloudFront + OAC in prod; `imageUrls` use CloudFront hosts ([product-images-browser-access.md](product-images-browser-access.md)). Checklist A2–A3 done.
-- [x] **Server-side order/checkout pricing (C1)** — ignore client `unit_price_cents`; resolve from product like cart ([quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)#1-c1--server-side-pricing-critical)
+- [x] **Server-side order/checkout pricing (C1)** — ignore client `unit_price_won`; resolve from product like cart ([quality-bugs-fix-plan.md](quality-bugs-fix-plan.md)#1-c1--server-side-pricing-critical)
 - [x] Inventory service token refresh in order bootstrap
 - [x] **H1** Order create `Idempotency-Key` + transactional outbox (soft-success publish; worker drain)
 - [x] **H3** Payment `payment.succeeded` outbox + soft-success; order NATS queue group + handler error logging; reconcile republish

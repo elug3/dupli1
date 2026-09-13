@@ -30,24 +30,24 @@ type CheckoutSession struct {
 	UnavailableItems []UnavailableItem     `json:"unavailable_items,omitempty"`
 	Status           CheckoutSessionStatus `json:"status"`
 	CouponCode       string                `json:"coupon_code,omitempty"`
-	SubtotalCents    int64                 `json:"subtotal_cents"`
-	DiscountCents    int64                 `json:"discount_cents"`
-	// ShippingFeeCents is the delivery charge quoted for this session, in whole
+	SubtotalWon      int64                 `json:"subtotal_won"`
+	DiscountWon      int64                 `json:"discount_won"`
+	// ShippingFeeWon is the delivery charge quoted for this session, in whole
 	// KRW. It is fixed when the session opens so a mid-session config change
 	// cannot move the price the customer was shown.
-	ShippingFeeCents int64     `json:"shipping_fee_cents"`
-	TotalCents       int64     `json:"total_cents"`
-	OrderID          string    `json:"order_id,omitempty"`
-	ExpiresAt        time.Time `json:"expires_at"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ShippingFeeWon int64     `json:"shipping_fee_won"`
+	TotalWon       int64     `json:"total_won"`
+	OrderID        string    `json:"order_id,omitempty"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-// NewCheckoutSession opens a session quoting shippingFeeCents for delivery. The
+// NewCheckoutSession opens a session quoting shippingFeeWon for delivery. The
 // fee is stored on the session so every later recalculation reuses the quote the
 // customer was first shown, rather than re-reading a config value that may have
 // changed mid-checkout.
-func NewCheckoutSession(id, customerID string, now time.Time, ttl time.Duration, shippingFeeCents int64) (*CheckoutSession, error) {
+func NewCheckoutSession(id, customerID string, now time.Time, ttl time.Duration, shippingFeeWon int64) (*CheckoutSession, error) {
 	id = strings.TrimSpace(id)
 	customerID = strings.TrimSpace(customerID)
 	if id == "" || customerID == "" {
@@ -56,19 +56,19 @@ func NewCheckoutSession(id, customerID string, now time.Time, ttl time.Duration,
 	if ttl <= 0 {
 		ttl = DefaultCheckoutTTL
 	}
-	if shippingFeeCents < 0 {
+	if shippingFeeWon < 0 {
 		return nil, ErrInvalidCheckoutSession
 	}
 
 	return &CheckoutSession{
-		ID:               id,
-		CustomerID:       customerID,
-		Items:            []OrderItem{},
-		Status:           CheckoutStatusOpen,
-		ShippingFeeCents: shippingFeeCents,
-		ExpiresAt:        now.Add(ttl),
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:             id,
+		CustomerID:     customerID,
+		Items:          []OrderItem{},
+		Status:         CheckoutStatusOpen,
+		ShippingFeeWon: shippingFeeWon,
+		ExpiresAt:      now.Add(ttl),
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}, nil
 }
 
@@ -92,7 +92,7 @@ func (s *CheckoutSession) SetItems(items []OrderItem, now time.Time) error {
 	for i, item := range items {
 		item.SkuID = strings.TrimSpace(item.SkuID)
 		item.SKU = strings.ToUpper(strings.TrimSpace(item.SKU))
-		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceCents < 0 {
+		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceWon < 0 {
 			return ErrInvalidCheckoutSession
 		}
 		copied[i] = item
@@ -111,7 +111,7 @@ func (s *CheckoutSession) UpsertItem(item OrderItem, now time.Time) error {
 
 	item.SkuID = strings.TrimSpace(item.SkuID)
 	item.SKU = strings.ToUpper(strings.TrimSpace(item.SKU))
-	if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceCents < 0 {
+	if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceWon < 0 {
 		return ErrInvalidCheckoutSession
 	}
 
@@ -238,16 +238,16 @@ func (s *CheckoutSession) recalculateTotals() {
 func (s *CheckoutSession) recalculateTotalsWithDiscount(discountFraction float64) {
 	var subtotal int64
 	for _, item := range s.Items {
-		subtotal += int64(item.Quantity) * item.UnitPriceCents
+		subtotal += int64(item.Quantity) * item.UnitPriceWon
 	}
 
-	s.SubtotalCents = subtotal
+	s.SubtotalWon = subtotal
 	if discountFraction > 0 && s.CouponCode != "" {
-		s.DiscountCents = int64(float64(subtotal) * discountFraction)
+		s.DiscountWon = int64(float64(subtotal) * discountFraction)
 	} else {
-		s.DiscountCents = 0
+		s.DiscountWon = 0
 	}
-	s.TotalCents = subtotal - s.DiscountCents + s.shippingFeeForTotal()
+	s.TotalWon = subtotal - s.DiscountWon + s.shippingFeeForTotal()
 }
 
 // shippingFeeForTotal is the delivery charge to include in the session total.
@@ -257,5 +257,5 @@ func (s *CheckoutSession) shippingFeeForTotal() int64 {
 	if len(s.Items) == 0 {
 		return 0
 	}
-	return s.ShippingFeeCents
+	return s.ShippingFeeWon
 }

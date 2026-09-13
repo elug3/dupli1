@@ -18,6 +18,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/infra/pg"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
+	"github.com/elug3/dupli1/order/pkg/stream"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
 )
 
@@ -41,9 +42,9 @@ type Config struct {
 	JWKSURL            string
 	NATSURL            string
 
-	// ShippingFeeCents is the flat delivery charge added to every order, in
+	// ShippingFeeWon is the flat delivery charge added to every order, in
 	// whole KRW. Zero means free delivery.
-	ShippingFeeCents int64
+	ShippingFeeWon int64
 
 	HTTPClient *http.Client
 }
@@ -54,6 +55,7 @@ type App struct {
 	Service        *service.Service
 	Repo           ports.Repository
 	Stock          ports.StockClient
+	OrderStream    *stream.Hub
 	natsPublisher  *natsinfra.Publisher
 	natsSubscriber *natsinfra.Subscriber
 	expiryCancel   context.CancelFunc
@@ -105,6 +107,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	var eventPublisher ports.EventPublisher
 	var natsPublisher *natsinfra.Publisher
 	var natsSubscriber *natsinfra.Subscriber
+	var orderStream *stream.Hub
 	if cfg.NATSURL != "" {
 		var err error
 		natsPublisher, err = natsinfra.NewPublisher(cfg.NATSURL)
@@ -122,7 +125,7 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	svc := service.NewWithCheckout(repo, stock, couponClient, 0, eventPublisher).
 		WithProduct(product).
-		WithShippingFee(cfg.ShippingFeeCents)
+		WithShippingFee(cfg.ShippingFeeWon)
 
 	if natsSubscriber != nil {
 		// Long-lived worker/subscriber root; cancelled on process shutdown.
@@ -137,6 +140,15 @@ func Bootstrap(cfg Config) (*App, error) {
 			natsPublisher.Close()
 			closeFn()
 			return nil, fmt.Errorf("payment canceled consumer: %w", err)
+		}
+		// Live admin order feed. Without NATS there is nothing to relay, so the
+		// hub stays nil and GET /api/v1/orders/events reports 503.
+		orderStream = stream.NewHub(stream.DefaultHistory)
+		if err := svc.RegisterOrderEventRelay(context.Background(), natsSubscriber, orderStream); err != nil {
+			natsSubscriber.Close()
+			natsPublisher.Close()
+			closeFn()
+			return nil, fmt.Errorf("order event relay: %w", err)
 		}
 	}
 	// Long-lived worker/subscriber root; cancelled on process shutdown.
@@ -157,7 +169,9 @@ func Bootstrap(cfg Config) (*App, error) {
 		return nil, fmt.Errorf("auth validator: %w", err)
 	}
 
-	h := handler.New(svc, jwtValidator).WithSettings(BuildSettings(cfg))
+	h := handler.New(svc, jwtValidator).
+		WithSettings(BuildSettings(cfg)).
+		WithOrderStream(orderStream)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
@@ -167,6 +181,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		Service:        svc,
 		Repo:           repo,
 		Stock:          stock,
+		OrderStream:    orderStream,
 		natsPublisher:  natsPublisher,
 		natsSubscriber: natsSubscriber,
 		expiryCancel:   expiryCancel,

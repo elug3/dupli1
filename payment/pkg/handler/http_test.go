@@ -26,7 +26,7 @@ import (
 type stubOrderClient struct{}
 
 func (s stubOrderClient) GetOrder(_ context.Context, _, _ string) (*ports.OrderSummary, error) {
-	return &ports.OrderSummary{ID: "ord-1", CustomerID: "u-1", Status: "pending", TotalCents: 1000}, nil
+	return &ports.OrderSummary{ID: "ord-1", CustomerID: "u-1", Status: "pending", TotalWon: 1000}, nil
 }
 
 // fakeCheckoutProvider is a minimal working ports.CheckoutProvider stand-in for
@@ -45,8 +45,8 @@ func (fakeCheckoutProvider) CreateSession(_ context.Context, input ports.Checkou
 // balance, standing in for a PG that accepts every cancel.
 func (fakeCheckoutProvider) CancelPayment(_ context.Context, input ports.CancelPaymentInput) (*ports.CancelPaymentResult, error) {
 	return &ports.CancelPaymentResult{
-		CanceledAmountCents: input.AmountCents,
-		ProviderRef:         input.ProviderRef,
+		CanceledAmountWon: input.AmountWon,
+		ProviderRef:       input.ProviderRef,
 	}, nil
 }
 
@@ -231,7 +231,7 @@ type nanoOrderClient struct{}
 
 func (s nanoOrderClient) GetOrder(_ context.Context, _, _ string) (*ports.OrderSummary, error) {
 	return &ports.OrderSummary{
-		ID: "ord-1", CustomerID: "u-1", Status: "pending", TotalCents: 1000,
+		ID: "ord-1", CustomerID: "u-1", Status: "pending", TotalWon: 1000,
 		RecipientName: "홍길동", RecipientPhone: "01012345678",
 	}, nil
 }
@@ -495,8 +495,8 @@ func TestNanoReturn_ApprovedButUnverifiedNeverInvitesRetry(t *testing.T) {
 	if alert.ResultCode != "0000" {
 		t.Errorf("alert result_code = %q, want 0000", alert.ResultCode)
 	}
-	if alert.ExpectedCents != 1000 || alert.ReportedAmount != "1000" {
-		t.Errorf("alert amounts = %d/%q, want 1000/\"1000\"", alert.ExpectedCents, alert.ReportedAmount)
+	if alert.ExpectedWon != 1000 || alert.ReportedAmount != "1000" {
+		t.Errorf("alert amounts = %d/%q, want 1000/\"1000\"", alert.ExpectedWon, alert.ReportedAmount)
 	}
 }
 

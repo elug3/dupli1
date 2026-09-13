@@ -35,7 +35,7 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	svc := service.NewWithCheckout(repo, stock, &fakeCouponClient{
 		code:     "SUMMER30",
 		discount: 0.30,
-	}, 0).WithProduct(&fakeProduct{defaultCents: 5000})
+	}, 0).WithProduct(&fakeProduct{defaultWon: 5000})
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",
@@ -48,21 +48,21 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	}
 
 	session, err = svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
-		SKU: "bag-1", Quantity: 2, UnitPriceCents: 1, // client price ignored
+		SKU: "bag-1", Quantity: 2, UnitPriceWon: 1, // client price ignored
 	})
 	if err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
-	if session.SubtotalCents != 10000 || session.TotalCents != 10000 {
-		t.Fatalf("session totals = %d/%d, want 10000/10000", session.SubtotalCents, session.TotalCents)
+	if session.SubtotalWon != 10000 || session.TotalWon != 10000 {
+		t.Fatalf("session totals = %d/%d, want 10000/10000", session.SubtotalWon, session.TotalWon)
 	}
 
 	session, err = svc.ApplyCheckoutCoupon(ctx, session.ID, "SUMMER30")
 	if err != nil {
 		t.Fatalf("ApplyCheckoutCoupon returned error: %v", err)
 	}
-	if session.DiscountCents != 3000 || session.TotalCents != 7000 {
-		t.Fatalf("discounted totals = %d/%d, want 3000/7000", session.DiscountCents, session.TotalCents)
+	if session.DiscountWon != 3000 || session.TotalWon != 7000 {
+		t.Fatalf("discounted totals = %d/%d, want 3000/7000", session.DiscountWon, session.TotalWon)
 	}
 
 	result, err := svc.CompleteCheckout(ctx, session.ID, testCompleteCheckoutInput())
@@ -75,8 +75,8 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	if result.Order.Status != domain.StatusPending {
 		t.Fatalf("order status = %q, want pending", result.Order.Status)
 	}
-	if result.Order.TotalCents != 7000 {
-		t.Fatalf("order total = %d, want 7000", result.Order.TotalCents)
+	if result.Order.TotalWon != 7000 {
+		t.Fatalf("order total = %d, want 7000", result.Order.TotalWon)
 	}
 	if result.Order.CouponCode != "SUMMER30" {
 		t.Fatalf("order coupon = %q, want SUMMER30", result.Order.CouponCode)
@@ -89,7 +89,7 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	}
 
 	_, err = svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
-		SKU: "bag-2", Quantity: 1, UnitPriceCents: 1000,
+		SKU: "bag-2", Quantity: 1, UnitPriceWon: 1000,
 	})
 	if !errors.Is(err, domain.ErrSessionNotOpen) {
 		t.Fatalf("UpsertCheckoutItem on completed session error = %v, want ErrSessionNotOpen", err)
@@ -99,7 +99,7 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 func TestCompleteCheckoutPersistsPCCC(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
-	svc := service.NewWithCheckout(repo, &fakeStock{reservationID: "res-pccc"}, nil, 0).WithProduct(&fakeProduct{defaultCents: 1000})
+	svc := service.NewWithCheckout(repo, &fakeStock{reservationID: "res-pccc"}, nil, 0).WithProduct(&fakeProduct{defaultWon: 1000})
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",
@@ -108,7 +108,7 @@ func TestCompleteCheckoutPersistsPCCC(t *testing.T) {
 		t.Fatalf("CreateCheckoutSession returned error: %v", err)
 	}
 	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
-		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1,
+		SKU: "bag-1", Quantity: 1, UnitPriceWon: 1,
 	}); err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestCompleteCheckoutPersistsPCCC(t *testing.T) {
 func TestCompleteCheckoutRejectsMalformedPCCC(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
-	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultCents: 1000})
+	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultWon: 1000})
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",
@@ -137,7 +137,7 @@ func TestCompleteCheckoutRejectsMalformedPCCC(t *testing.T) {
 		t.Fatalf("CreateCheckoutSession returned error: %v", err)
 	}
 	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
-		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1,
+		SKU: "bag-1", Quantity: 1, UnitPriceWon: 1,
 	}); err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestCompleteCheckoutRejectsMalformedPCCC(t *testing.T) {
 func TestCompleteCheckoutRejectsInvalidFulfillment(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
-	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultCents: 1000})
+	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultWon: 1000})
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",
@@ -163,7 +163,7 @@ func TestCompleteCheckoutRejectsInvalidFulfillment(t *testing.T) {
 		t.Fatalf("CreateCheckoutSession returned error: %v", err)
 	}
 	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
-		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1,
+		SKU: "bag-1", Quantity: 1, UnitPriceWon: 1,
 	}); err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestCompleteCheckoutRequiresItems(t *testing.T) {
 func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
-	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultCents: 1000})
+	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultWon: 1000})
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",
@@ -213,7 +213,7 @@ func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
 		t.Fatalf("CreateCheckoutSession returned error: %v", err)
 	}
 	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
-		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1,
+		SKU: "bag-1", Quantity: 1, UnitPriceWon: 1,
 	}); err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestCompleteCheckoutRecomputesCouponDiscountAfterRepricing(t *testing.T) {
 		t.Fatalf("CreateCheckoutSession returned error: %v", err)
 	}
 	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
-		SKU: "bag-1", Quantity: 1, UnitPriceCents: 1,
+		SKU: "bag-1", Quantity: 1, UnitPriceWon: 1,
 	}); err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
@@ -262,8 +262,8 @@ func TestCompleteCheckoutRecomputesCouponDiscountAfterRepricing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyCheckoutCoupon returned error: %v", err)
 	}
-	if session.DiscountCents != 3000 || session.TotalCents != 7000 {
-		t.Fatalf("session discounted totals = %d/%d, want 3000/7000", session.DiscountCents, session.TotalCents)
+	if session.DiscountWon != 3000 || session.TotalWon != 7000 {
+		t.Fatalf("session discounted totals = %d/%d, want 3000/7000", session.DiscountWon, session.TotalWon)
 	}
 
 	product.price = 3000
@@ -272,14 +272,14 @@ func TestCompleteCheckoutRecomputesCouponDiscountAfterRepricing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompleteCheckout returned error: %v", err)
 	}
-	if result.Order.SubtotalCents != 3000 {
-		t.Fatalf("order subtotal = %d, want 3000", result.Order.SubtotalCents)
+	if result.Order.SubtotalWon != 3000 {
+		t.Fatalf("order subtotal = %d, want 3000", result.Order.SubtotalWon)
 	}
-	if result.Order.DiscountCents != 900 {
-		t.Fatalf("order discount = %d, want 900 (30%% of repriced subtotal)", result.Order.DiscountCents)
+	if result.Order.DiscountWon != 900 {
+		t.Fatalf("order discount = %d, want 900 (30%% of repriced subtotal)", result.Order.DiscountWon)
 	}
-	if result.Order.TotalCents != 2100 {
-		t.Fatalf("order total = %d, want 2100", result.Order.TotalCents)
+	if result.Order.TotalWon != 2100 {
+		t.Fatalf("order total = %d, want 2100", result.Order.TotalWon)
 	}
 }
 
@@ -289,19 +289,19 @@ type mutableProduct struct {
 
 func (m *mutableProduct) GetVariant(_ context.Context, sku string) (*ports.VariantInfo, error) {
 	sku = strings.ToUpper(strings.TrimSpace(sku))
-	return &ports.VariantInfo{SkuID: "ID-" + sku, SKU: sku, UnitPriceCents: m.price}, nil
+	return &ports.VariantInfo{SkuID: "ID-" + sku, SKU: sku, UnitPriceWon: m.price}, nil
 }
 
 func (m *mutableProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports.VariantInfo, error) {
 	skuID = strings.TrimSpace(skuID)
-	return &ports.VariantInfo{SkuID: skuID, SKU: strings.ToUpper(skuID), UnitPriceCents: m.price}, nil
+	return &ports.VariantInfo{SkuID: skuID, SKU: strings.ToUpper(skuID), UnitPriceWon: m.price}, nil
 }
 
 func TestCompleteCheckoutRejectsSecondComplete(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
 	stock := &fakeStock{reservationID: "res-checkout"}
-	svc := service.NewWithCheckout(repo, stock, nil, 0).WithProduct(&fakeProduct{defaultCents: 5000})
+	svc := service.NewWithCheckout(repo, stock, nil, 0).WithProduct(&fakeProduct{defaultWon: 5000})
 
 	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{
 		CustomerID: "customer-1",
@@ -310,7 +310,7 @@ func TestCompleteCheckoutRejectsSecondComplete(t *testing.T) {
 		t.Fatalf("CreateCheckoutSession returned error: %v", err)
 	}
 	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
-		SKU: "bag-1", Quantity: 1, UnitPriceCents: 5000,
+		SKU: "bag-1", Quantity: 1, UnitPriceWon: 5000,
 	}); err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
@@ -341,7 +341,7 @@ func TestSetCheckoutItems_CollectsAllUnavailable(t *testing.T) {
 	ctx := t.Context()
 	product := &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
-			"BAG-OK": {SkuID: "ID-BAG-OK", SKU: "BAG-OK", UnitPriceCents: 5000},
+			"BAG-OK": {SkuID: "ID-BAG-OK", SKU: "BAG-OK", UnitPriceWon: 5000},
 		},
 		strictMissing: true,
 	}
@@ -378,8 +378,8 @@ func TestGetCheckoutSession_ReportsUnavailableItems(t *testing.T) {
 	ctx := t.Context()
 	product := &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
-			"BAG-1":    {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceCents: 5000},
-			"ID-BAG-1": {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceCents: 5000},
+			"BAG-1":    {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceWon: 5000},
+			"ID-BAG-1": {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceWon: 5000},
 		},
 		strictMissing: true,
 	}
@@ -420,8 +420,8 @@ func TestCompleteCheckout_UnavailableVariants(t *testing.T) {
 	ctx := t.Context()
 	product := &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
-			"BAG-1":    {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceCents: 5000},
-			"ID-BAG-1": {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceCents: 5000},
+			"BAG-1":    {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceWon: 5000},
+			"ID-BAG-1": {SkuID: "ID-BAG-1", SKU: "BAG-1", UnitPriceWon: 5000},
 		},
 		strictMissing: true,
 	}

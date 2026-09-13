@@ -10,6 +10,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
+	"github.com/elug3/dupli1/order/pkg/stream"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
@@ -20,6 +21,9 @@ type Handler struct {
 	svc          *service.Service
 	jwtValidator authjwt.AccessTokenValidator
 	settings     settings.Response
+	// orderStream fans NATS order events out to SSE clients. Nil when NATS is
+	// not configured, which makes the stream endpoint report 503.
+	orderStream *stream.Hub
 }
 
 func New(svc *service.Service, jwtValidator authjwt.AccessTokenValidator) *Handler {
@@ -28,6 +32,12 @@ func New(svc *service.Service, jwtValidator authjwt.AccessTokenValidator) *Handl
 		jwtValidator: jwtValidator,
 		settings:     settings.NewResponse("order"),
 	}
+}
+
+// WithOrderStream enables GET /api/v1/orders/events, the live order feed.
+func (h *Handler) WithOrderStream(hub *stream.Hub) *Handler {
+	h.orderStream = hub
+	return h
 }
 
 // WithSettings sets the non-secret settings payload served by GET /settings.
@@ -46,6 +56,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/orders/checkout/sessions/", h.requireAuth(h.checkoutSession))
 	mux.HandleFunc("/api/v1/checkout/sessions", h.requireAuth(h.checkoutSessions))
 	mux.HandleFunc("/api/v1/checkout/sessions/", h.requireAuth(h.checkoutSession))
+	// Exact pattern, so ServeMux prefers it over the /api/v1/orders/ catch-all.
+	mux.HandleFunc("/api/v1/orders/events", h.requireAuth(h.orderEvents))
 	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
 	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
 }

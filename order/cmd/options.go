@@ -106,11 +106,11 @@ func applyEnv(opts *order.ServerOptions) {
 	} else if v := os.Getenv("DB_URL"); v != "" {
 		opts.DatabaseConnString = v
 	}
-	if v := os.Getenv("DUPLI1_ORDER_SHIPPING_FEE_CENTS"); v != "" {
-		if cents, err := strconv.ParseInt(v, 10, 64); err == nil && cents >= 0 {
-			opts.ShippingFeeCents = cents
+	if v := os.Getenv("DUPLI1_ORDER_SHIPPING_FEE_WON"); v != "" {
+		if won, err := strconv.ParseInt(v, 10, 64); err == nil && won >= 0 {
+			opts.ShippingFeeWon = won
 		} else {
-			log.Printf("order: ignoring invalid DUPLI1_ORDER_SHIPPING_FEE_CENTS=%q", v)
+			log.Printf("order: ignoring invalid DUPLI1_ORDER_SHIPPING_FEE_WON=%q", v)
 		}
 	}
 	if v := os.Getenv("DUPLI1_ORDER_NATS_URL"); v != "" {

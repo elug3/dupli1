@@ -210,14 +210,14 @@ Order and checkout line items already use `sku`:
 {
   "sku": "BOT-001-GRN",
   "quantity": 1,
-  "unit_price_cents": 250000
+  "unit_price_won": 250000
 }
 ```
 
 Rules:
 
 - `sku` = **variant.sku**
-- `unit_price_cents` = `Math.round(product.price)` (or `variant.price`, which mirrors the parent) — product prices are already **KRW won**; do **not** multiply by 100 (KRW is a zero-decimal Stripe currency). JSON field name remains `*_cents` for historical reasons; the value is whole won.
+- `unit_price_won` = `Math.round(product.price)` (or `variant.price`, which mirrors the parent) — product prices are already **whole won**, so this is a 1:1 mapping.
 
 ### Storefront checklist
 

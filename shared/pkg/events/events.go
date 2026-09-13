@@ -34,29 +34,29 @@ const (
 
 // OrderItem is one line of an Order event payload.
 type OrderItem struct {
-	SkuID          string `json:"sku_id,omitempty"`
-	SKU            string `json:"sku"`
-	Quantity       int    `json:"quantity"`
-	UnitPriceCents int64  `json:"unit_price_cents"`
+	SkuID        string `json:"sku_id,omitempty"`
+	SKU          string `json:"sku"`
+	Quantity     int    `json:"quantity"`
+	UnitPriceWon int64  `json:"unit_price_won"`
 }
 
 // Order is the payload for OrderCreated, OrderStatusUpdate, and OrderPaid —
 // published by order, consumed by notification.
 type Order struct {
-	EventType     string `json:"event_type"`
-	OrderID       string `json:"order_id"`
-	CustomerID    string `json:"customer_id"`
-	Status        string `json:"status"`
-	SubtotalCents int64  `json:"subtotal_cents"`
-	DiscountCents int64  `json:"discount_cents"`
-	// ShippingFeeCents is the delivery charge included in TotalCents, in whole
+	EventType   string `json:"event_type"`
+	OrderID     string `json:"order_id"`
+	CustomerID  string `json:"customer_id"`
+	Status      string `json:"status"`
+	SubtotalWon int64  `json:"subtotal_won"`
+	DiscountWon int64  `json:"discount_won"`
+	// ShippingFeeWon is the delivery charge included in TotalWon, in whole
 	// KRW. Zero for orders placed before shipping fees existed, and for any
 	// deployment running with delivery free.
-	ShippingFeeCents int64       `json:"shipping_fee_cents"`
-	TotalCents       int64       `json:"total_cents"`
-	Items            []OrderItem `json:"items"`
-	CreatedAt        time.Time   `json:"created_at"`
-	Occurred         time.Time   `json:"occurred_at"`
+	ShippingFeeWon int64       `json:"shipping_fee_won"`
+	TotalWon       int64       `json:"total_won"`
+	Items          []OrderItem `json:"items"`
+	CreatedAt      time.Time   `json:"created_at"`
+	Occurred       time.Time   `json:"occurred_at"`
 }
 
 // Product is the payload for ProductCreated, ProductUpdated,
@@ -79,31 +79,31 @@ type Product struct {
 // PaymentSucceededEvent is the payload for PaymentSucceeded — published by
 // payment, consumed by order.
 type PaymentSucceededEvent struct {
-	EventType   string `json:"event_type"`
-	OrderID     string `json:"order_id"`
-	PaymentID   string `json:"payment_id"`
-	AmountCents int64  `json:"amount_cents"`
+	EventType string `json:"event_type"`
+	OrderID   string `json:"order_id"`
+	PaymentID string `json:"payment_id"`
+	AmountWon int64  `json:"amount_won"`
 }
 
 // PaymentCanceledEvent is the payload for PaymentCanceled — published by
 // payment when a succeeded payment is canceled (fully or partially) at the PG.
-// AmountCents is the amount canceled by this event; RemainingCents is what is
+// AmountWon is the amount canceled by this event; RemainingWon is what is
 // still captured afterwards (0 on a full cancel). Order cancels a still-paid
-// order on a full refund (remaining_cents == 0) when payment_id matches;
-// notification alerts ops. A missing remaining_cents must not be treated as 0.
+// order on a full refund (remaining_won == 0) when payment_id matches;
+// notification alerts ops. A missing remaining_won must not be treated as 0.
 type PaymentCanceledEvent struct {
-	EventType      string    `json:"event_type"`
-	OrderID        string    `json:"order_id"`
-	PaymentID      string    `json:"payment_id"`
-	AmountCents    int64     `json:"amount_cents"`
-	RemainingCents int64     `json:"remaining_cents"`
-	Reason         string    `json:"reason,omitempty"`
-	CanceledBy     string    `json:"canceled_by,omitempty"`
-	Occurred       time.Time `json:"occurred_at"`
-	remainingSet   bool      `json:"-"`
+	EventType    string    `json:"event_type"`
+	OrderID      string    `json:"order_id"`
+	PaymentID    string    `json:"payment_id"`
+	AmountWon    int64     `json:"amount_won"`
+	RemainingWon int64     `json:"remaining_won"`
+	Reason       string    `json:"reason,omitempty"`
+	CanceledBy   string    `json:"canceled_by,omitempty"`
+	Occurred     time.Time `json:"occurred_at"`
+	remainingSet bool      `json:"-"`
 }
 
-// RemainingSpecified reports whether remaining_cents was present in the JSON
+// RemainingSpecified reports whether remaining_won was present in the JSON
 // payload. encoding/json treats a missing int64 as 0, which order would
 // otherwise interpret as a full refund.
 func (e PaymentCanceledEvent) RemainingSpecified() bool {
@@ -112,14 +112,14 @@ func (e PaymentCanceledEvent) RemainingSpecified() bool {
 
 func (e *PaymentCanceledEvent) UnmarshalJSON(data []byte) error {
 	type wire struct {
-		EventType      string    `json:"event_type"`
-		OrderID        string    `json:"order_id"`
-		PaymentID      string    `json:"payment_id"`
-		AmountCents    int64     `json:"amount_cents"`
-		RemainingCents *int64    `json:"remaining_cents"`
-		Reason         string    `json:"reason"`
-		CanceledBy     string    `json:"canceled_by"`
-		Occurred       time.Time `json:"occurred_at"`
+		EventType    string    `json:"event_type"`
+		OrderID      string    `json:"order_id"`
+		PaymentID    string    `json:"payment_id"`
+		AmountWon    int64     `json:"amount_won"`
+		RemainingWon *int64    `json:"remaining_won"`
+		Reason       string    `json:"reason"`
+		CanceledBy   string    `json:"canceled_by"`
+		Occurred     time.Time `json:"occurred_at"`
 	}
 	var w wire
 	if err := json.Unmarshal(data, &w); err != nil {
@@ -128,12 +128,12 @@ func (e *PaymentCanceledEvent) UnmarshalJSON(data []byte) error {
 	e.EventType = w.EventType
 	e.OrderID = w.OrderID
 	e.PaymentID = w.PaymentID
-	e.AmountCents = w.AmountCents
+	e.AmountWon = w.AmountWon
 	e.Reason = w.Reason
 	e.CanceledBy = w.CanceledBy
 	e.Occurred = w.Occurred
-	if w.RemainingCents != nil {
-		e.RemainingCents = *w.RemainingCents
+	if w.RemainingWon != nil {
+		e.RemainingWon = *w.RemainingWon
 		e.remainingSet = true
 	}
 	return nil
@@ -162,10 +162,10 @@ type PaymentCallbackRejectedEvent struct {
 	Reason string `json:"reason"`
 	// ResultCode is the PG's own result code, retained verbatim.
 	ResultCode string `json:"result_code,omitempty"`
-	// ExpectedCents is the amount dupli1 holds for the payment, in whole KRW;
+	// ExpectedWon is the amount dupli1 holds for the payment, in whole KRW;
 	// ReportedAmount is what the PG sent, unparsed, so a malformed value survives
 	// into the alert instead of being flattened to 0.
-	ExpectedCents  int64  `json:"expected_cents,omitempty"`
+	ExpectedWon    int64  `json:"expected_won,omitempty"`
 	ReportedAmount string `json:"reported_amount,omitempty"`
 	TranNo         string `json:"tran_no,omitempty"`
 	// Detail is a short human-readable note for the alert (never a secret).

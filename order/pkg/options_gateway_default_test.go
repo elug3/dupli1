@@ -20,10 +20,10 @@ func TestNewServerOptions_GatewayURLEmptyByDefault(t *testing.T) {
 // out, so it is worth pinning: a silent change here re-prices every order.
 func TestNewServerOptions_ShippingFeeDefault(t *testing.T) {
 	opts := order.NewServerOptions()
-	if opts.ShippingFeeCents != 30000 {
-		t.Fatalf("ShippingFeeCents default = %d, want 30000 (30,000 KRW)", opts.ShippingFeeCents)
+	if opts.ShippingFeeWon != 30000 {
+		t.Fatalf("ShippingFeeWon default = %d, want 30000 (30,000 KRW)", opts.ShippingFeeWon)
 	}
-	if order.DefaultShippingFeeCents != 30000 {
-		t.Fatalf("DefaultShippingFeeCents = %d, want 30000", order.DefaultShippingFeeCents)
+	if order.DefaultShippingFeeWon != 30000 {
+		t.Fatalf("DefaultShippingFeeWon = %d, want 30000", order.DefaultShippingFeeWon)
 	}
 }

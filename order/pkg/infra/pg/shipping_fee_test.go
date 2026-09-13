@@ -25,12 +25,12 @@ func TestMigrateAddsShippingFeeColumns(t *testing.T) {
 		var count int
 		if err := repo.pool.QueryRow(t.Context(), `
 			SELECT count(*) FROM information_schema.columns
-			WHERE table_schema = $1 AND table_name = $2 AND column_name = 'shipping_fee_cents'
+			WHERE table_schema = $1 AND table_name = $2 AND column_name = 'shipping_fee_won'
 		`, schema, table).Scan(&count); err != nil {
 			t.Fatalf("inspect %s: %v", table, err)
 		}
 		if count != 1 {
-			t.Fatalf("%s.shipping_fee_cents column count = %d, want 1", table, count)
+			t.Fatalf("%s.shipping_fee_won column count = %d, want 1", table, count)
 		}
 	}
 }
@@ -43,7 +43,7 @@ func TestOrderShippingFeeSurvivesEveryReadPath(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
 	order, err := domain.NewOrder("ord-fee-1", "cust-1", "res-1", []domain.OrderItem{{
-		SkuID: "sku-1", SKU: "BAG-001", Quantity: 1, UnitPriceCents: 250000,
+		SkuID: "sku-1", SKU: "BAG-001", Quantity: 1, UnitPriceWon: 250000,
 	}}, "", 0, 3000, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
@@ -56,15 +56,15 @@ func TestOrderShippingFeeSurvivesEveryReadPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.ShippingFeeCents != 3000 || got.TotalCents != 253000 {
-		t.Fatalf("Get: shipping = %d total = %d, want 3000 / 253000", got.ShippingFeeCents, got.TotalCents)
+	if got.ShippingFeeWon != 3000 || got.TotalWon != 253000 {
+		t.Fatalf("Get: shipping = %d total = %d, want 3000 / 253000", got.ShippingFeeWon, got.TotalWon)
 	}
 
 	byCustomer, err := repo.ListByCustomer(ctx, "cust-1")
 	if err != nil {
 		t.Fatalf("ListByCustomer: %v", err)
 	}
-	if len(byCustomer) != 1 || byCustomer[0].ShippingFeeCents != 3000 {
+	if len(byCustomer) != 1 || byCustomer[0].ShippingFeeWon != 3000 {
 		t.Fatalf("ListByCustomer shipping = %+v, want 3000", byCustomer)
 	}
 
@@ -72,7 +72,7 @@ func TestOrderShippingFeeSurvivesEveryReadPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAll: %v", err)
 	}
-	if len(all) != 1 || all[0].ShippingFeeCents != 3000 {
+	if len(all) != 1 || all[0].ShippingFeeWon != 3000 {
 		t.Fatalf("ListAll shipping = %+v, want 3000", all)
 	}
 
@@ -81,7 +81,7 @@ func TestOrderShippingFeeSurvivesEveryReadPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPendingPaymentExpired: %v", err)
 	}
-	if len(expired) != 1 || expired[0].ShippingFeeCents != 3000 {
+	if len(expired) != 1 || expired[0].ShippingFeeWon != 3000 {
 		t.Fatalf("ListPendingPaymentExpired shipping = %+v, want 3000", expired)
 	}
 }
@@ -96,7 +96,7 @@ func TestCheckoutSessionShippingFeeRoundTrip(t *testing.T) {
 		t.Fatalf("NewCheckoutSession: %v", err)
 	}
 	if err := session.UpsertItem(domain.OrderItem{
-		SkuID: "sku-1", SKU: "BAG-001", Quantity: 1, UnitPriceCents: 250000,
+		SkuID: "sku-1", SKU: "BAG-001", Quantity: 1, UnitPriceWon: 250000,
 	}, now); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
 	}
@@ -108,11 +108,11 @@ func TestCheckoutSessionShippingFeeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCheckoutSession: %v", err)
 	}
-	if got.ShippingFeeCents != 3000 {
-		t.Fatalf("shipping = %d, want 3000", got.ShippingFeeCents)
+	if got.ShippingFeeWon != 3000 {
+		t.Fatalf("shipping = %d, want 3000", got.ShippingFeeWon)
 	}
-	if got.TotalCents != 253000 {
-		t.Fatalf("total = %d, want 253000", got.TotalCents)
+	if got.TotalWon != 253000 {
+		t.Fatalf("total = %d, want 253000", got.TotalWon)
 	}
 }
 
@@ -131,17 +131,17 @@ func TestMigrateOverPreShippingFeeSchemaKeepsRowsIntact(t *testing.T) {
 			reservation_id TEXT NOT NULL,
 			status TEXT NOT NULL,
 			coupon_code TEXT NOT NULL DEFAULT '',
-			subtotal_cents BIGINT NOT NULL,
-			discount_cents BIGINT NOT NULL,
-			total_cents BIGINT NOT NULL,
+			subtotal_won BIGINT NOT NULL,
+			discount_won BIGINT NOT NULL,
+			total_won BIGINT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
 		)`); err != nil {
 		t.Fatalf("create pre-fee orders table: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO orders (id, customer_id, reservation_id, status, subtotal_cents,
-		                    discount_cents, total_cents, created_at, updated_at)
+		INSERT INTO orders (id, customer_id, reservation_id, status, subtotal_won,
+		                    discount_won, total_won, created_at, updated_at)
 		VALUES ('ord-legacy', 'cust-1', 'res-legacy', 'pending', 250000, 0, 250000, $1, $1)
 	`, now); err != nil {
 		t.Fatalf("seed legacy order: %v", err)
@@ -156,10 +156,10 @@ func TestMigrateOverPreShippingFeeSchemaKeepsRowsIntact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read legacy order after migrate: %v", err)
 	}
-	if got.ShippingFeeCents != 0 {
-		t.Fatalf("legacy shipping = %d, want 0", got.ShippingFeeCents)
+	if got.ShippingFeeWon != 0 {
+		t.Fatalf("legacy shipping = %d, want 0", got.ShippingFeeWon)
 	}
-	if got.TotalCents != 250000 {
-		t.Fatalf("legacy total = %d, want 250000 — the migration must not re-price it", got.TotalCents)
+	if got.TotalWon != 250000 {
+		t.Fatalf("legacy total = %d, want 250000 — the migration must not re-price it", got.TotalWon)
 	}
 }

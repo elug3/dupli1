@@ -29,7 +29,7 @@ func TestBootstrapConfig_CarriesEveryMatchingOption(t *testing.T) {
 		JWTSecret:            "jwt-secret",
 		JWKSURL:              "http://auth.test/jwks.json",
 		NATSURL:              "nats://nats.test:4222",
-		ShippingFeeCents:     30000,
+		ShippingFeeWon:       30000,
 	}
 
 	cfg := order.BootstrapConfig(opts)
@@ -60,11 +60,11 @@ func TestBootstrapConfig_CarriesEveryMatchingOption(t *testing.T) {
 
 // The fee specifically, since it is the one that reached production wrong.
 func TestBootstrapConfig_CarriesShippingFee(t *testing.T) {
-	cfg := order.BootstrapConfig(order.ServerOptions{ShippingFeeCents: 30000})
-	if cfg.ShippingFeeCents != 30000 {
-		t.Fatalf("ShippingFeeCents = %d, want 30000", cfg.ShippingFeeCents)
+	cfg := order.BootstrapConfig(order.ServerOptions{ShippingFeeWon: 30000})
+	if cfg.ShippingFeeWon != 30000 {
+		t.Fatalf("ShippingFeeWon = %d, want 30000", cfg.ShippingFeeWon)
 	}
-	if zero := order.BootstrapConfig(order.ServerOptions{}); zero.ShippingFeeCents != 0 {
-		t.Fatalf("unset fee = %d, want 0", zero.ShippingFeeCents)
+	if zero := order.BootstrapConfig(order.ServerOptions{}); zero.ShippingFeeWon != 0 {
+		t.Fatalf("unset fee = %d, want 0", zero.ShippingFeeWon)
 	}
 }

@@ -31,12 +31,12 @@ func paidOrderForRefund(t *testing.T, repo *memory.Repository, id string) *domai
 	t.Helper()
 	now := time.Now().UTC()
 	order, err := domain.NewOrder(id, "cust-1", "res-"+id, []domain.OrderItem{
-		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 250000},
+		{SKU: "BAG-1", Quantity: 1, UnitPriceWon: 250000},
 	}, "", 0, 30000, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
-	if err := order.MarkPaid("pay-"+id, order.TotalCents, now); err != nil {
+	if err := order.MarkPaid("pay-"+id, order.TotalWon, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := repo.Save(t.Context(), order); err != nil {
@@ -163,7 +163,7 @@ func TestPaymentCanceled_ConsumerHandlesPublishedEvent(t *testing.T) {
 
 	payload, _ := json.Marshal(map[string]any{
 		"event_type": "payment.canceled", "order_id": order.ID,
-		"payment_id": "pay-ord_refund_4", "amount_cents": order.TotalCents, "remaining_cents": 0,
+		"payment_id": "pay-ord_refund_4", "amount_won": order.TotalWon, "remaining_won": 0,
 	})
 	if err := sub.handler(t.Context(), "payment.canceled", payload); err != nil {
 		t.Fatalf("handler: %v", err)
@@ -202,7 +202,7 @@ func TestPaymentCanceled_PendingOrderIsLeftAlone(t *testing.T) {
 	svc := service.New(repo, stock)
 	now := time.Now().UTC()
 	order, err := domain.NewOrder("ord_pending_refund", "cust-1", "res-pending", []domain.OrderItem{
-		{SKU: "BAG-1", Quantity: 1, UnitPriceCents: 250000},
+		{SKU: "BAG-1", Quantity: 1, UnitPriceWon: 250000},
 	}, "", 0, 30000, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
@@ -224,9 +224,9 @@ func TestPaymentCanceled_PendingOrderIsLeftAlone(t *testing.T) {
 	}
 }
 
-// encoding/json treats a missing remaining_cents as 0, which would look like a
+// encoding/json treats a missing remaining_won as 0, which would look like a
 // full refund. The consumer must skip that payload instead of cancelling.
-func TestPaymentCanceled_OmittedRemainingCentsDoesNotCancel(t *testing.T) {
+func TestPaymentCanceled_OmittedRemainingWonDoesNotCancel(t *testing.T) {
 	repo := memory.NewRepository()
 	stock := &fakeStock{}
 	svc := service.New(repo, stock)
@@ -238,16 +238,16 @@ func TestPaymentCanceled_OmittedRemainingCentsDoesNotCancel(t *testing.T) {
 	}
 	payload, _ := json.Marshal(map[string]any{
 		"event_type": "payment.canceled", "order_id": order.ID,
-		"payment_id": "pay-ord_refund_omit", "amount_cents": order.TotalCents,
+		"payment_id": "pay-ord_refund_omit", "amount_won": order.TotalWon,
 	})
 	if err := sub.handler(t.Context(), "payment.canceled", payload); err != nil {
 		t.Fatalf("handler: %v", err)
 	}
 	got, _ := repo.Get(t.Context(), order.ID)
 	if got.Status != domain.StatusPaid {
-		t.Fatalf("status = %q, want paid when remaining_cents is omitted", got.Status)
+		t.Fatalf("status = %q, want paid when remaining_won is omitted", got.Status)
 	}
 	if stock.released != "" {
-		t.Fatalf("omitted remaining_cents must not release stock, released %q", stock.released)
+		t.Fatalf("omitted remaining_won must not release stock, released %q", stock.released)
 	}
 }
