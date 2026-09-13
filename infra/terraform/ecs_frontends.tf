@@ -197,6 +197,10 @@ resource "aws_ecs_task_definition" "web" {
         { name = "PORT", value = "3000" },
         { name = "HOST", value = "0.0.0.0" },
         { name = "DUPLI1_API_BASE_URL", value = "http://proxy.dupli1.local" },
+        # Shared server-side customer sessions; same reasoning as manage-web
+        # below. Without it the BFF session store is per-process and a request
+        # landing on another task signs the customer out everywhere.
+        { name = "REDIS_URL", value = "redis://redis.dupli1.local:6379" },
       ]
       secrets = [
         {
@@ -245,6 +249,12 @@ resource "aws_ecs_task_definition" "manage_web" {
         { name = "HOST", value = "0.0.0.0" },
         { name = "DUPLI1_GATEWAY_URL", value = "http://proxy.dupli1.local" },
         { name = "DUPLI1_API_BASE_URL", value = "http://proxy.dupli1.local" },
+        # Shared server-side admin sessions. Without this the store falls back
+        # to a per-process Map: the target group has no stickiness, so a request
+        # landing on another task finds no session, clears the cookie and logs
+        # the operator out everywhere. Also survives a rolling deploy, where
+        # two tasks serve for the 300s deregistration delay.
+        { name = "REDIS_URL", value = "redis://redis.dupli1.local:6379" },
       ]
       logConfiguration = {
         logDriver = "awslogs"
