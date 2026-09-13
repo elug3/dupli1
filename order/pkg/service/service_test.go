@@ -1330,3 +1330,41 @@ func TestRefundPolicyWorkerAutoConfirmsAndAutoApproves(t *testing.T) {
 		t.Fatalf("auto-approve refunds = %v, want [pay-r]", pay.canceled)
 	}
 }
+
+func TestApproveCancelRequestFailsClosedWhenRefundRejected(t *testing.T) {
+	ctx := t.Context()
+	pay := &fakePayment{err: ports.ErrPaymentRefundRejected}
+	svc := newSvc(&fakeStock{reservationID: "res-1"}, &fakeProduct{defaultKRW: 5000}).WithPayment(pay)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+		t.Fatalf("ConfirmOrder: %v", err)
+	}
+	if _, err := svc.CustomerCancel(ctx, order.ID, "please cancel"); err != nil {
+		t.Fatalf("CustomerCancel: %v", err)
+	}
+
+	_, err = svc.ApproveCancelRequest(ctx, order.ID)
+	if !errors.Is(err, ports.ErrPaymentRefundRejected) {
+		t.Fatalf("err = %v, want ErrPaymentRefundRejected", err)
+	}
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusPaid || got.CancelRequestedAt == nil {
+		t.Fatalf("order = %+v, want paid with pending cancel request when PG rejects", got)
+	}
+	if len(pay.canceled) != 0 {
+		t.Fatalf("must not mark refunded when PG rejects, got %v", pay.canceled)
+	}
+}

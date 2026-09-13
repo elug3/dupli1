@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,6 +228,28 @@ func TestRefundPolicyImmediateVsRequest(t *testing.T) {
 	}
 	if paid.CancelRequestedAt != nil || paid.CancelRequestReason != "" {
 		t.Fatal("reject must clear the cancel request")
+	}
+}
+
+func TestTrimCancelReasonTruncatesLongNotes(t *testing.T) {
+	now := time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)
+	paid := newTestOrder(t)
+	if err := paid.MarkPaid("pay-1", paid.TotalKRW, now); err != nil {
+		t.Fatalf("MarkPaid: %v", err)
+	}
+	if err := paid.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+
+	long := strings.Repeat("x", domain.MaxCancelRequestReasonLen+50)
+	if err := paid.RequestCancel(long, now); err != nil {
+		t.Fatalf("RequestCancel: %v", err)
+	}
+	if len(paid.CancelRequestReason) != domain.MaxCancelRequestReasonLen {
+		t.Fatalf("reason len = %d, want %d", len(paid.CancelRequestReason), domain.MaxCancelRequestReasonLen)
+	}
+	if paid.CancelRequestReason != strings.Repeat("x", domain.MaxCancelRequestReasonLen) {
+		t.Fatal("reason must be truncated without altering prefix")
 	}
 }
 
