@@ -74,6 +74,13 @@ func TestSyncListingImageURLs_NewImageDerivesSibling(t *testing.T) {
 	}
 }
 
+func TestDeriveListingImageURL_IdempotentForExistingThumb(t *testing.T) {
+	thumb := "http://x/img/key.w600.jpg"
+	if got := domain.DeriveListingImageURL(thumb); got != thumb {
+		t.Fatalf("DeriveListingImageURL(%q) = %q, want unchanged", thumb, got)
+	}
+}
+
 func TestVariantMergeUpdate_PartialBodyKeepsOmittedFields(t *testing.T) {
 	existing := domain.Variant{
 		SKU:           "BOT-001-GRN",
