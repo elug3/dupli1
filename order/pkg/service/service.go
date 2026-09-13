@@ -459,10 +459,46 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 		}
 		wasInTransit = order.Status == domain.StatusInTransit
 	}
-	if err := order.Cancel(s.now()); err != nil {
+	now := s.now()
+	cancelled := cloneOrder(order)
+	if err := cancelled.Cancel(now); err != nil {
 		return nil, err
 	}
-	saved, err := s.saveStatusChange(ctx, order)
+	events, err := s.outboxEvents(cancelled, orderUpdatedSubject)
+	if err != nil {
+		return nil, err
+	}
+	// Atomically flip paid → canceled so a concurrent ship cannot commit stock
+	// after the refund has already gone through (CancelIfPaidForRefund is also
+	// used by the payment.canceled consumer for the same reason).
+	if order.Status == domain.StatusPaid {
+		canceledOrder, didCancel, err := s.repo.CancelIfPaidForRefund(ctx, order.ID, order.PaymentID, now, events)
+		if err != nil {
+			return nil, err
+		}
+		if didCancel {
+			s.tryDrainOutbox(ctx)
+			if err := s.releaseReservationForCancel(ctx, canceledOrder.ReservationID); err != nil {
+				log.Printf("cancel order %s: release reservation %s: %v", canceledOrder.ID, canceledOrder.ReservationID, err)
+			}
+			return s.present(canceledOrder), nil
+		}
+		reconciled, err := s.repo.Get(ctx, order.ID)
+		if err != nil {
+			return nil, err
+		}
+		if reconciled.Status == domain.StatusCanceled {
+			return s.present(reconciled), nil
+		}
+		// Ship won the race after refund — finish cancel without re-refunding.
+		order = reconciled
+		wasInTransit = order.Status == domain.StatusInTransit
+		cancelled = cloneOrder(order)
+		if err := cancelled.Cancel(now); err != nil {
+			return nil, err
+		}
+	}
+	saved, err := s.saveStatusChange(ctx, cancelled)
 	if err != nil {
 		return nil, err
 	}
