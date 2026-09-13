@@ -27,10 +27,13 @@ type Variant struct {
 	// ProductName is the parent product's display name, populated on public variant reads.
 	ProductName string `json:"productName,omitempty"`
 	CreatedAt   string `json:"createdAt,omitempty"`
-	// AvailableQty is max(0, stock.quantity - stock.reserved). Response-only;
-	// not stored on the variant row. See docs/product-stock-tracking-plan.md.
+	// AvailableQty is -1 when quantity is QuantityWithoutStock (sellable
+	// without an on-hand count); otherwise max(0, quantity - reserved).
+	// Response-only; not stored on the variant row.
+	// See docs/product-stock-tracking-plan.md.
 	AvailableQty int `json:"availableQty"`
-	// InStock is true when AvailableQty > 0. Response-only.
+	// InStock is true when the SKU is without-stock or AvailableQty > 0.
+	// Response-only. AvailableQty 0 is out of stock.
 	InStock bool `json:"inStock"`
 }
 

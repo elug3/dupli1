@@ -144,7 +144,7 @@ On `GET /api/v1/cart` and after mutations, cart calls product for both variant i
 | Source | Endpoint | Fields added |
 |--------|----------|--------------|
 | Product | `GET /api/v1/products/variants?sku_ids=` (preferred) or `/api/v1/products/variants/by-sku/{sku}` / `by-sku-id/{skuId}` | `product_id`, `unit_price_cents`, `color`, `image_url` |
-| Product (inventory) | `GET /api/v1/products/inventory/items/{sku}` or `.../items/by-sku-id/{skuId}` | `available_qty` (optional) |
+| Product (inventory) | `GET /api/v1/products/inventory/items/{sku}` or `.../items/by-sku-id/{skuId}` | `available_qty` (optional; `-1` means available without stock and does not cap add qty) |
 
 Prices are **server-sourced** from product — clients send only `{ "sku" or "sku_id", "quantity" }` on add. Catalog `price` is **KRW won**; cart maps it 1:1 into `unit_price_cents` (whole won — do not ×100).
 

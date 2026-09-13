@@ -29,6 +29,22 @@ func TestGetAvailableQty_SubtractsReserved(t *testing.T) {
 	}
 }
 
+func TestGetAvailableQty_WithoutStock(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]int{"quantity": -1, "reserved": 4})
+	}))
+	defer srv.Close()
+
+	client := httpinventory.NewClient(srv.URL, srv.Client())
+	qty, err := client.GetAvailableQty(t.Context(), "BOT-001-GRN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if qty != -1 {
+		t.Fatalf("available = %d, want -1 for without-stock", qty)
+	}
+}
+
 func TestGetAvailableQty_FloorsNegativeAtZero(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]int{"quantity": 2, "reserved": 5})

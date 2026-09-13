@@ -281,6 +281,40 @@ func TestUpsertItem_RejectsZeroAvailable(t *testing.T) {
 	}
 }
 
+func TestUpsertItem_AllowsWithoutStock(t *testing.T) {
+	variant := &ports.VariantInfo{
+		SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", ProductID: "BOT-001",
+		UnitPriceCents: 250000,
+	}
+	inv := &fakeInventoryClient{
+		bySKU:   map[string]int{"BOT-001-GRN": -1},
+		bySkuID: map[string]int{"SKUID-GRN": -1},
+	}
+	product := &fakeProductClient{
+		bySKU:   map[string]*ports.VariantInfo{"BOT-001-GRN": variant},
+		bySkuID: map[string]*ports.VariantInfo{"SKUID-GRN": variant},
+	}
+	svc := service.New(memory.NewRepository(), product, inv)
+
+	cart, err := svc.UpsertItem(t.Context(), "cust-without-stock", service.ItemInput{SkuID: "SKUID-GRN", Quantity: 99})
+	if err != nil {
+		t.Fatalf("UpsertItem without-stock: %v", err)
+	}
+	if len(cart.Items) != 1 || cart.Items[0].Quantity != 99 || cart.Items[0].AvailableQty != -1 {
+		t.Fatalf("unexpected cart after upsert: %+v", cart.Items)
+	}
+
+	cart, err = svc.ReplaceItems(t.Context(), "cust-without-stock", []service.ItemInput{
+		{SkuID: "SKUID-GRN", Quantity: 12},
+	})
+	if err != nil {
+		t.Fatalf("ReplaceItems without-stock: %v", err)
+	}
+	if len(cart.Items) != 1 || cart.Items[0].Quantity != 12 || cart.Items[0].AvailableQty != -1 {
+		t.Fatalf("unexpected cart after replace: %+v", cart.Items)
+	}
+}
+
 func TestReplaceItems_RejectsOversell(t *testing.T) {
 	svc := newTestService(t)
 	ctx := t.Context()

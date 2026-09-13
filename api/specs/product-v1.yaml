@@ -723,8 +723,10 @@ paths:
         - bearerAuth: []
       x-required-permissions: [inventory.stock.write]
       description: |
-        Sets the absolute on-hand quantity. Rejected with `400` when the quantity is
-        negative or lower than the currently reserved amount.
+        Sets the absolute on-hand quantity. `0` is out of stock. `-1` means
+        available for sale without an on-hand count (allowed even when reserved
+        is greater than 0). Other negatives are rejected with `400`. Finite
+        quantities below the currently reserved amount are also rejected.
       parameters:
         - $ref: '#/components/parameters/VariantSku'
       requestBody:
@@ -2138,7 +2140,9 @@ components:
           example: BOT-001-GRN
         quantity:
           type: integer
-          description: On-hand quantity, including the reserved portion
+          description: >
+            On-hand quantity including the reserved portion. `0` is out of stock.
+            `-1` means available for sale without stock.
         reserved:
           type: integer
           description: Quantity held by active reservations
@@ -2152,7 +2156,10 @@ components:
       properties:
         quantity:
           type: integer
-          minimum: 0
+          minimum: -1
+          description: >
+            Absolute on-hand quantity. `0` is out of stock. `-1` means available
+            for sale without stock.
 
     StockDeltaInput:
       type: object

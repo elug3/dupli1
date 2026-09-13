@@ -115,7 +115,7 @@ func (s *InventoryStore) SetQuantity(ctx context.Context, skuID string, quantity
 	if !ok {
 		return nil, ports.ErrInventoryItemNotFound
 	}
-	if quantity < item.Reserved {
+	if quantity != domain.QuantityWithoutStock && quantity < item.Reserved {
 		return nil, ports.ErrInsufficientStock
 	}
 	item.Quantity = quantity
@@ -135,6 +135,9 @@ func (s *InventoryStore) AdjustQuantity(ctx context.Context, skuID string, delta
 	item, ok := s.items[skuID]
 	if !ok {
 		return nil, ports.ErrInventoryItemNotFound
+	}
+	if item.IsWithoutStock() {
+		return nil, ports.ErrInsufficientStock
 	}
 	nextQuantity := item.Quantity + delta
 	if nextQuantity < 0 || nextQuantity < item.Reserved {
@@ -189,7 +192,7 @@ func (s *InventoryStore) CreateReservation(ctx context.Context, orderID string, 
 		if !ok {
 			return nil, ports.ErrInventoryItemNotFound
 		}
-		if item.Available() < reservationItem.Quantity {
+		if !item.IsWithoutStock() && item.Available() < reservationItem.Quantity {
 			return nil, ports.ErrInsufficientStock
 		}
 	}
@@ -250,7 +253,7 @@ func (s *InventoryStore) FinalizeReservation(ctx context.Context, id string, sta
 			return nil, ports.ErrInsufficientStock
 		}
 		item.Reserved -= reservationItem.Quantity
-		if status == domain.ReservationCommitted {
+		if status == domain.ReservationCommitted && !item.IsWithoutStock() {
 			if item.Quantity < reservationItem.Quantity {
 				return nil, ports.ErrInsufficientStock
 			}

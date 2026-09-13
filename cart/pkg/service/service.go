@@ -282,6 +282,9 @@ func (s *Service) checkAvailableQty(ctx context.Context, item domain.StoredItem)
 	if err != nil {
 		return err
 	}
+	if qty < 0 {
+		return nil
+	}
 	if item.Quantity > qty {
 		return &InsufficientStockError{
 			SkuID:        item.SkuID,

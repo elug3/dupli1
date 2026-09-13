@@ -80,7 +80,7 @@ func (s *InventoryService) UpsertItem(ctx context.Context, ref SkuRef, quantity 
 	if err != nil {
 		return nil, err
 	}
-	if quantity < 0 {
+	if quantity < domain.QuantityWithoutStock {
 		return nil, ErrInvalidQuantity
 	}
 

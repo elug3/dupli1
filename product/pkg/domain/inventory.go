@@ -12,7 +12,18 @@ type StockItem struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// QuantityWithoutStock is the stock_items.quantity sentinel meaning the SKU
+// is available for sale without an on-hand count. 0 remains out of stock.
+const QuantityWithoutStock = -1
+
+func (i StockItem) IsWithoutStock() bool {
+	return i.Quantity == QuantityWithoutStock
+}
+
 func (i StockItem) Available() int {
+	if i.IsWithoutStock() {
+		return QuantityWithoutStock
+	}
 	return i.Quantity - i.Reserved
 }
 

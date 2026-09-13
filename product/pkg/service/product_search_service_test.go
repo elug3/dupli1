@@ -113,6 +113,31 @@ func TestGetPublicProduct_EnrichesInStock(t *testing.T) {
 	}
 }
 
+func TestGetPublicProduct_EnrichesWithoutStock(t *testing.T) {
+	store := memory.NewProductStore()
+	inv := memory.NewInventoryStore()
+	store.WithInventory(inv)
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", Status: "active", Price: 2500},
+	}
+	store.Variants = []domain.Variant{
+		{SkuID: "SKUID-RED", SKU: "BOT-001-RED", ProductID: "BOT-001", Color: "Red", Status: "active"},
+	}
+	_ = inv.SaveItem(t.Context(), &domain.StockItem{
+		SkuID: "SKUID-RED", SKU: "BOT-001-RED", Quantity: domain.QuantityWithoutStock, Reserved: 2,
+	})
+	svc := service.NewProductSearchService(store, nil).WithInventory(inv)
+
+	p, err := svc.GetPublicProduct(t.Context(), "BOT-001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := p.Variants[0]
+	if !v.InStock || v.AvailableQty != domain.QuantityWithoutStock {
+		t.Fatalf("without-stock: want inStock available=-1, got inStock=%v qty=%d", v.InStock, v.AvailableQty)
+	}
+}
+
 func TestGetPublicProduct_MissingStockRowIsOOS(t *testing.T) {
 	store := memory.NewProductStore()
 	inv := memory.NewInventoryStore()

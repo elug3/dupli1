@@ -561,6 +561,11 @@ func applyStockItem(v *domain.Variant, item *domain.StockItem) {
 		v.InStock = false
 		return
 	}
+	if item.IsWithoutStock() {
+		v.AvailableQty = domain.QuantityWithoutStock
+		v.InStock = true
+		return
+	}
 	avail := item.Available()
 	if avail < 0 {
 		avail = 0

@@ -59,6 +59,9 @@ func (c *Client) fetchAvailableQty(ctx context.Context, path string) (int, error
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return 0, err
 	}
+	if body.Quantity == -1 {
+		return -1, nil
+	}
 	available := body.Quantity - body.Reserved
 	if available < 0 {
 		return 0, nil

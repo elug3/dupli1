@@ -550,7 +550,7 @@ Redeem a coupon code. No authentication required.
 
 Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Cart lines use each variant's `sku` / `skuId` (inventory key). Parent `price` is the charged amount; `officialPrice` is display-only. Each variant may include `dimensions` (`widthMm` / `heightMm` / `depthMm` in millimeters) — distinct from letter `size`/`sizeCode`; see [product-sku-dimensions.md](product-sku-dimensions.md).
 
-Each embedded variant includes stock enrichment: `availableQty` (`max(0, quantity − reserved)`) and `inStock` (`availableQty > 0`). Every sellable SKU has a `stock_items` row (created with qty 0 on variant create; see [product-stock-tracking-plan.md](product-stock-tracking-plan.md)). Legacy parent `stock` is omitted from responses.
+Each embedded variant includes stock enrichment: `availableQty` is `-1` when the SKU is available without stock (`quantity = -1`); otherwise `max(0, quantity − reserved)`. `inStock` is true when `availableQty` is `-1` or greater than 0. Quantity `0` is out of stock. Every sellable SKU has a `stock_items` row (created with qty 0 on variant create; see [product-stock-tracking-plan.md](product-stock-tracking-plan.md)). Legacy parent `stock` is omitted from responses.
 
 On success, the handler ensures a `dupli1_guest` cookie and records a unique view (one count per guest × product). Response includes public `viewCount` and `soldCount` (units committed on ship — [product-sold-count.md](product-sold-count.md)). View-store failures are logged and do not fail the PDP — see [product-guest-views-plan.md](product-guest-views-plan.md).
 

@@ -213,7 +213,7 @@ func (s *InventoryStore) SetQuantity(ctx context.Context, skuID string, quantity
 		FROM product_variants AS pv
 		WHERE s.sku_id = $1
 		  AND pv.sku_id = s.sku_id
-		  AND $2 >= s.reserved
+		  AND ($2 = -1 OR $2 >= s.reserved)
 		RETURNING s.sku_id, pv.sku, s.quantity, s.reserved, s.updated_at
 	`, skuID, quantity, updatedAt).Scan(&item.SkuID, &item.SKU, &item.Quantity, &item.Reserved, &item.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -247,6 +247,7 @@ func (s *InventoryStore) AdjustQuantity(ctx context.Context, skuID string, delta
 		FROM product_variants AS pv
 		WHERE s.sku_id = $1
 		  AND pv.sku_id = s.sku_id
+		  AND s.quantity <> -1
 		  AND s.quantity + $2 >= 0
 		  AND s.quantity + $2 >= s.reserved
 		RETURNING s.sku_id, pv.sku, s.quantity, s.reserved, s.updated_at
@@ -375,7 +376,7 @@ func (s *InventoryStore) CreateReservation(ctx context.Context, orderID string, 
 		if err != nil {
 			return nil, err
 		}
-		if quantity-reserved < item.Quantity {
+		if quantity != domain.QuantityWithoutStock && quantity-reserved < item.Quantity {
 			return nil, ports.ErrInsufficientStock
 		}
 		if _, err := tx.Exec(ctx, `
@@ -480,10 +481,14 @@ func (s *InventoryStore) FinalizeReservation(ctx context.Context, id string, sta
 		nextReserved := reserved - item.Quantity
 		nextQuantity := quantity
 		if status == domain.ReservationCommitted {
-			if quantity < item.Quantity {
-				return nil, ports.ErrInsufficientStock
+			if quantity == domain.QuantityWithoutStock {
+				nextQuantity = domain.QuantityWithoutStock
+			} else {
+				if quantity < item.Quantity {
+					return nil, ports.ErrInsufficientStock
+				}
+				nextQuantity = quantity - item.Quantity
 			}
-			nextQuantity = quantity - item.Quantity
 		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE stock_items SET quantity = $2, reserved = $3, updated_at = $4 WHERE sku_id = $1

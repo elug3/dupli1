@@ -286,6 +286,14 @@ func TestSetQuantityPreservesReserved(t *testing.T) {
 	if item.Quantity != 20 || item.Reserved != 8 {
 		t.Fatalf("after SetQuantity: quantity=%d reserved=%d, want 20/8", item.Quantity, item.Reserved)
 	}
+
+	withoutStock, err := store.SetQuantity(ctx, "sku-1", domain.QuantityWithoutStock, now)
+	if err != nil {
+		t.Fatalf("SetQuantity(-1) with reserved>0: %v", err)
+	}
+	if withoutStock.Quantity != domain.QuantityWithoutStock || withoutStock.Reserved != 8 {
+		t.Fatalf("after without-stock set: quantity=%d reserved=%d, want -1/8", withoutStock.Quantity, withoutStock.Reserved)
+	}
 }
 
 func TestEnsureItemDoesNotClobberReserved(t *testing.T) {

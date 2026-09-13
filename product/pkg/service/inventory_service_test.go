@@ -285,6 +285,85 @@ func TestInventoryAdjustStockPreservesActiveReservation(t *testing.T) {
 	}
 }
 
+func TestInventoryUpsertItem_WithoutStock(t *testing.T) {
+	svc, products := newInventoryTestService(t)
+	ctx := t.Context()
+	ref := service.SkuRef{SkuID: "SKUID-GRN"}
+
+	if _, err := svc.UpsertItem(ctx, ref, -2); err != service.ErrInvalidQuantity {
+		t.Fatalf("want ErrInvalidQuantity for -2, got %v", err)
+	}
+
+	item, err := svc.UpsertItem(ctx, ref, domain.QuantityWithoutStock)
+	if err != nil {
+		t.Fatalf("UpsertItem(-1): %v", err)
+	}
+	if item.Quantity != domain.QuantityWithoutStock || item.Available() != domain.QuantityWithoutStock {
+		t.Fatalf("unexpected without-stock item: %+v available=%d", item, item.Available())
+	}
+
+	if _, err := svc.AdjustStock(ctx, ref, 1); err != service.ErrInsufficientStock {
+		t.Fatalf("want ErrInsufficientStock adjusting without-stock, got %v", err)
+	}
+
+	reservation, err := svc.Reserve(ctx, "order-without-stock", []service.ReservationItemRef{
+		{Ref: ref, Quantity: 50},
+	})
+	if err != nil {
+		t.Fatalf("Reserve against without-stock: %v", err)
+	}
+	item, err = svc.GetItem(ctx, ref)
+	if err != nil {
+		t.Fatalf("GetItem after reserve: %v", err)
+	}
+	if item.Quantity != domain.QuantityWithoutStock || item.Reserved != 50 {
+		t.Fatalf("after reserve: quantity=%d reserved=%d, want -1/50", item.Quantity, item.Reserved)
+	}
+
+	again, err := svc.UpsertItem(ctx, ref, domain.QuantityWithoutStock)
+	if err != nil {
+		t.Fatalf("UpsertItem(-1) with reserved>0: %v", err)
+	}
+	if again.Reserved != 50 {
+		t.Fatalf("reserved = %d, want 50", again.Reserved)
+	}
+
+	if _, err := svc.UpsertItem(ctx, ref, 10); err != service.ErrInsufficientStock {
+		t.Fatalf("want ErrInsufficientStock setting finite below reserved, got %v", err)
+	}
+
+	committed, err := svc.CommitReservation(ctx, reservation.ID)
+	if err != nil {
+		t.Fatalf("CommitReservation: %v", err)
+	}
+	if committed.Status != domain.ReservationCommitted {
+		t.Fatalf("want committed, got %s", committed.Status)
+	}
+	item, err = svc.GetItem(ctx, ref)
+	if err != nil {
+		t.Fatalf("GetItem after commit: %v", err)
+	}
+	if item.Quantity != domain.QuantityWithoutStock || item.Reserved != 0 {
+		t.Fatalf("after commit: quantity=%d reserved=%d, want -1/0", item.Quantity, item.Reserved)
+	}
+
+	got, err := products.GetProduct(ctx, "BOT-001")
+	if err != nil {
+		t.Fatalf("GetProduct: %v", err)
+	}
+	if got.SoldCount != 50 {
+		t.Fatalf("want soldCount=50 after without-stock commit, got %d", got.SoldCount)
+	}
+
+	zero, err := svc.UpsertItem(ctx, ref, 0)
+	if err != nil {
+		t.Fatalf("UpsertItem(0): %v", err)
+	}
+	if zero.Quantity != 0 || zero.Available() != 0 {
+		t.Fatalf("quantity 0 should be OOS, got %+v available=%d", zero, zero.Available())
+	}
+}
+
 func TestInventoryUpsertItemCreatesMissingRow(t *testing.T) {
 	svc, _ := newInventoryTestService(t)
 	ctx := t.Context()

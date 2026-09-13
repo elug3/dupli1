@@ -45,11 +45,11 @@ Stock is **optional** today. Variants without a `stock_items` row are treated as
 
 | Field | Where | Meaning |
 |-------|-------|---------|
-| `quantity` | `stock_items` | On-hand units (includes reserved) |
+| `quantity` | `stock_items` | On-hand units (includes reserved). `0` is out of stock. `-1` means available for sale without stock. |
 | `reserved` | `stock_items` | Units held by active reservations |
-| `available` | derived | `max(0, quantity - reserved)` |
-| `inStock` | PDP JSON | `available > 0` |
-| `availableQty` | PDP / cart JSON | Same as `available` |
+| `available` | derived | `-1` when quantity is `-1`; otherwise `max(0, quantity - reserved)` |
+| `inStock` | PDP JSON | `true` when without-stock or `available > 0` |
+| `availableQty` | PDP / cart JSON | Same as `available` (`-1` = no qty cap) |
 
 Untracked (no row) after Phase 1 backfill must not occur for active variants. If a row is somehow missing, treat as `available = 0` / `inStock = false` in enrichment paths (do not fall back to "assume available").
 
