@@ -12,6 +12,7 @@ import (
 
 	"github.com/elug3/dupli1/order/pkg/domain"
 	"github.com/elug3/dupli1/order/pkg/handler"
+	"github.com/elug3/dupli1/order/pkg/infra/httppayment"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
@@ -896,6 +897,40 @@ func TestUpdateStatusCanceledRefundRejectedLeavesPaid(t *testing.T) {
 	}
 	if got.Status != domain.StatusPaid {
 		t.Fatalf("status = %q, want paid", got.Status)
+	}
+}
+
+func TestCustomerCancelRefundsViaServiceAccountNotCustomerToken(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/payments/pay_1/cancel" {
+			http.NotFound(w, r)
+			return
+		}
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"pay_1","status":"canceled"}`))
+	}))
+	defer srv.Close()
+
+	pay := httppayment.NewClientWithBearer(srv.URL, srv.Client(), "order-svc-token")
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay)
+	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay_1", 1000); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+
+	customer := makeToken(t, "u-1", nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel", customer, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if gotAuth != "Bearer order-svc-token" {
+		t.Fatalf("payment auth = %q, want order service account (customer token lacks payment.cancel)", gotAuth)
 	}
 }
 
