@@ -265,6 +265,12 @@ func (o *Order) ConfirmReceipt(now time.Time) error {
 
 // ReportNotReceived opens a manager-reviewed dispute on a delivered order the
 // customer says never arrived.
+//
+// Clears any still-pending cancel request: a customer can request a cancel
+// and then, before a manager answers it, also report non-receipt on the same
+// delivered order. The dispute supersedes it — AllowsCancelRequest is false
+// once disputed, so a stale request would otherwise show a cancel-request
+// banner with no manager-response deadline attached.
 func (o *Order) ReportNotReceived(reason string, now time.Time) error {
 	if o.Status != StatusDelivered {
 		return ErrInvalidTransition
@@ -272,6 +278,8 @@ func (o *Order) ReportNotReceived(reason string, now time.Time) error {
 	o.Status = StatusDisputed
 	o.DisputedAt = &now
 	o.DisputeReason = trimReason(reason, MaxDisputeReasonLen)
+	o.CancelRequestedAt = nil
+	o.CancelRequestReason = ""
 	o.UpdatedAt = now
 	return nil
 }

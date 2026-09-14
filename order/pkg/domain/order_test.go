@@ -408,3 +408,38 @@ func TestIsPaymentExpired(t *testing.T) {
 		t.Fatal("paid order must not report payment expired")
 	}
 }
+
+// A dispute supersedes an unanswered cancel request on the same delivered
+// order, so a manager sees one clear signal instead of two conflicting ones.
+func TestReportNotReceivedClearsPendingCancelRequest(t *testing.T) {
+	now := time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)
+	o := newTestOrder(t)
+	if err := o.MarkPaid("pay-1", o.TotalKRW, now); err != nil {
+		t.Fatalf("MarkPaid: %v", err)
+	}
+	if err := o.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	if err := o.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-1"}, now); err != nil {
+		t.Fatalf("Ship: %v", err)
+	}
+	if err := o.Deliver("driver-1", now); err != nil {
+		t.Fatalf("Deliver: %v", err)
+	}
+	if err := o.RequestCancel("wrong size", now); err != nil {
+		t.Fatalf("RequestCancel: %v", err)
+	}
+	if o.CancelRequestedAt == nil {
+		t.Fatal("cancel request must be recorded before the dispute")
+	}
+
+	if err := o.ReportNotReceived("never showed up", now.Add(time.Hour)); err != nil {
+		t.Fatalf("ReportNotReceived: %v", err)
+	}
+	if o.CancelRequestedAt != nil || o.CancelRequestReason != "" {
+		t.Fatalf("order = %+v, want the stale cancel request cleared", o)
+	}
+	if o.CancelConfirmDueAtTime() != nil {
+		t.Fatal("a disputed order must not carry a cancel-response due time")
+	}
+}
