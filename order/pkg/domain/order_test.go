@@ -67,7 +67,7 @@ func TestMarkPaidRequiresPendingAndMatchingAmount(t *testing.T) {
 	}
 }
 
-func TestShipRequiresPaidOrder(t *testing.T) {
+func TestShipRequiresConfirmedOrder(t *testing.T) {
 	order := newTestOrder(t)
 	now := time.Date(2026, 8, 11, 10, 10, 0, 0, time.UTC)
 	tracking := domain.ShipmentTracking{Carrier: domain.CarrierCJ, TrackingNumber: "1234567890"}
@@ -78,6 +78,15 @@ func TestShipRequiresPaidOrder(t *testing.T) {
 
 	if err := order.MarkPaid("pay-1", order.TotalWon, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
+	}
+	if err := order.Ship("manager-1", tracking, now); !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Fatalf("ship unconfirmed paid err = %v, want ErrInvalidTransition", err)
+	}
+	if err := order.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	if order.Status != domain.StatusConfirmed || order.ConfirmedAt == nil {
+		t.Fatalf("order = %+v, want confirmed with confirmed_at set", order)
 	}
 	if err := order.Ship("", tracking, now); !errors.Is(err, domain.ErrInvalidOrder) {
 		t.Fatalf("empty shippedBy err = %v, want ErrInvalidOrder", err)
@@ -91,11 +100,13 @@ func TestShipRequiresPaidOrder(t *testing.T) {
 	if order.Status != domain.StatusInTransit || order.ShippedBy != "manager-1" || order.ShippedAt == nil {
 		t.Fatalf("order = %+v, want in_transit with ship metadata", order)
 	}
-	if order.ConfirmedAt == nil {
-		t.Fatal("ship must confirm the order")
-	}
 	if order.Carrier != domain.CarrierCJ || order.TrackingNumber != "1234567890" {
 		t.Fatalf("tracking = %s/%s", order.Carrier, order.TrackingNumber)
+	}
+
+	// Shipping again (already in_transit) is not a valid transition.
+	if err := order.Ship("manager-1", tracking, now); !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Fatalf("re-ship err = %v, want ErrInvalidTransition", err)
 	}
 }
 
@@ -146,8 +157,20 @@ func TestCancelAndFulfillTransitions(t *testing.T) {
 	if err := paid.MarkPaid("pay-1", paid.TotalWon, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
+	if err := paid.Fulfill(now); !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Fatalf("fulfill before delivered err = %v, want ErrInvalidTransition", err)
+	}
+	if err := paid.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
 	if err := paid.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-1"}, now); err != nil {
 		t.Fatalf("Ship: %v", err)
+	}
+	if err := paid.Deliver("driver-1", now); err != nil {
+		t.Fatalf("Deliver: %v", err)
+	}
+	if paid.Status != domain.StatusDelivered || paid.DeliveredBy != "driver-1" || paid.DeliveredAt == nil {
+		t.Fatalf("order = %+v, want delivered with delivery metadata", paid)
 	}
 	if err := paid.Fulfill(now); err != nil {
 		t.Fatalf("Fulfill: %v", err)
@@ -163,6 +186,9 @@ func TestCancelAndFulfillTransitions(t *testing.T) {
 	if err := inTransit.MarkPaid("pay-2", inTransit.TotalWon, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
+	if err := inTransit.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
 	if err := inTransit.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-2"}, now); err != nil {
 		t.Fatalf("Ship: %v", err)
 	}
@@ -172,6 +198,116 @@ func TestCancelAndFulfillTransitions(t *testing.T) {
 	if inTransit.Status != domain.StatusCanceled {
 		t.Fatalf("status = %q, want canceled", inTransit.Status)
 	}
+}
+
+func TestDeliveryReceiptAndDispute(t *testing.T) {
+	now := time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)
+
+	shipped := func() *domain.Order {
+		o := newTestOrder(t)
+		if err := o.MarkPaid("pay-1", o.TotalWon, now); err != nil {
+			t.Fatalf("MarkPaid: %v", err)
+		}
+		if err := o.Confirm(now); err != nil {
+			t.Fatalf("Confirm: %v", err)
+		}
+		if err := o.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-1"}, now); err != nil {
+			t.Fatalf("Ship: %v", err)
+		}
+		return o
+	}
+
+	t.Run("confirm receipt", func(t *testing.T) {
+		o := shipped()
+		if err := o.ConfirmReceipt(now); !errors.Is(err, domain.ErrInvalidTransition) {
+			t.Fatalf("confirm receipt before delivered err = %v, want ErrInvalidTransition", err)
+		}
+		if err := o.Deliver("driver-1", now); err != nil {
+			t.Fatalf("Deliver: %v", err)
+		}
+		later := now.Add(time.Hour)
+		if err := o.ConfirmReceipt(later); err != nil {
+			t.Fatalf("ConfirmReceipt: %v", err)
+		}
+		if o.Status != domain.StatusFulfilled || o.ReceiptConfirmedAt == nil || !o.ReceiptConfirmedAt.Equal(later) {
+			t.Fatalf("order = %+v, want fulfilled with receipt_confirmed_at set", o)
+		}
+	})
+
+	t.Run("report not received opens a dispute a manager resolves", func(t *testing.T) {
+		o := shipped()
+		if err := o.Deliver("driver-1", now); err != nil {
+			t.Fatalf("Deliver: %v", err)
+		}
+		if err := o.ReportNotReceived("never arrived", now.Add(time.Hour)); err != nil {
+			t.Fatalf("ReportNotReceived: %v", err)
+		}
+		if o.Status != domain.StatusDisputed || o.DisputedAt == nil || o.DisputeReason != "never arrived" {
+			t.Fatalf("order = %+v, want disputed with reason", o)
+		}
+		// Once disputed, it is no longer a plain cancel-request candidate...
+		if o.AllowsCancelRequest() {
+			t.Fatal("disputed order must not offer a fresh cancel request")
+		}
+		// ...but a manager can still resolve it either way: fulfilled (proof
+		// of delivery) or canceled (refund).
+		if err := o.ResolveDisputeFulfilled(now.Add(2 * time.Hour)); err != nil {
+			t.Fatalf("ResolveDisputeFulfilled: %v", err)
+		}
+		if o.Status != domain.StatusFulfilled {
+			t.Fatalf("status = %q, want fulfilled", o.Status)
+		}
+	})
+
+	t.Run("manager can cancel a dispute instead, and it refunds without restocking", func(t *testing.T) {
+		o := shipped()
+		if err := o.Deliver("driver-1", now); err != nil {
+			t.Fatalf("Deliver: %v", err)
+		}
+		if err := o.ReportNotReceived("", now); err != nil {
+			t.Fatalf("ReportNotReceived: %v", err)
+		}
+		if !o.StockCommitted() {
+			t.Fatal("disputed order must still report stock committed")
+		}
+		if err := o.Cancel(now.Add(time.Hour)); err != nil {
+			t.Fatalf("Cancel disputed: %v", err)
+		}
+		if o.Status != domain.StatusCanceled {
+			t.Fatalf("status = %q, want canceled", o.Status)
+		}
+	})
+
+	t.Run("cancel request flows through delivered", func(t *testing.T) {
+		o := shipped()
+		if err := o.Deliver("driver-1", now); err != nil {
+			t.Fatalf("Deliver: %v", err)
+		}
+		if !o.AllowsCancelRequest() {
+			t.Fatal("delivered order must still allow a cancel request")
+		}
+		if err := o.RequestCancel("wrong size", now); err != nil {
+			t.Fatalf("RequestCancel: %v", err)
+		}
+		if o.CancelConfirmDueAtTime() == nil {
+			t.Fatal("delivered cancel request must carry a manager response due time")
+		}
+	})
+
+	t.Run("auto-fulfill window", func(t *testing.T) {
+		o := shipped()
+		if err := o.Deliver("driver-1", now); err != nil {
+			t.Fatalf("Deliver: %v", err)
+		}
+		justBefore := now.Add(domain.DeliveryAutoFulfillWindow - time.Minute)
+		if o.AutoFulfillOverdueAt(justBefore) {
+			t.Fatal("must not be overdue before the 14-day window closes")
+		}
+		atWindow := now.Add(domain.DeliveryAutoFulfillWindow)
+		if !o.AutoFulfillOverdueAt(atWindow) {
+			t.Fatal("must be overdue once the 14-day window closes")
+		}
+	})
 }
 
 func TestRefundPolicyImmediateVsRequest(t *testing.T) {
@@ -185,7 +321,7 @@ func TestRefundPolicyImmediateVsRequest(t *testing.T) {
 	if err := paid.MarkPaid("pay-1", paid.TotalWon, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
-	if !paid.AllowsImmediateCancel() || paid.IsManagerConfirmed() {
+	if !paid.AllowsImmediateCancel() || paid.ConfirmedAt != nil {
 		t.Fatal("unconfirmed paid must allow immediate cancel")
 	}
 	if err := paid.Confirm(now); err != nil {
@@ -270,5 +406,40 @@ func TestIsPaymentExpired(t *testing.T) {
 	}
 	if order.IsPaymentExpired(afterDue) {
 		t.Fatal("paid order must not report payment expired")
+	}
+}
+
+// A dispute supersedes an unanswered cancel request on the same delivered
+// order, so a manager sees one clear signal instead of two conflicting ones.
+func TestReportNotReceivedClearsPendingCancelRequest(t *testing.T) {
+	now := time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC)
+	o := newTestOrder(t)
+	if err := o.MarkPaid("pay-1", o.TotalWon, now); err != nil {
+		t.Fatalf("MarkPaid: %v", err)
+	}
+	if err := o.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	if err := o.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-1"}, now); err != nil {
+		t.Fatalf("Ship: %v", err)
+	}
+	if err := o.Deliver("driver-1", now); err != nil {
+		t.Fatalf("Deliver: %v", err)
+	}
+	if err := o.RequestCancel("wrong size", now); err != nil {
+		t.Fatalf("RequestCancel: %v", err)
+	}
+	if o.CancelRequestedAt == nil {
+		t.Fatal("cancel request must be recorded before the dispute")
+	}
+
+	if err := o.ReportNotReceived("never showed up", now.Add(time.Hour)); err != nil {
+		t.Fatalf("ReportNotReceived: %v", err)
+	}
+	if o.CancelRequestedAt != nil || o.CancelRequestReason != "" {
+		t.Fatalf("order = %+v, want the stale cancel request cleared", o)
+	}
+	if o.CancelConfirmDueAtTime() != nil {
+		t.Fatal("a disputed order must not carry a cancel-response due time")
 	}
 }

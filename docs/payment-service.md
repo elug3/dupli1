@@ -4,7 +4,7 @@
 
 The **payment service** (`dupli1-payment`) records money for **pending** orders via **NANO card** or manager **Bypass**. There is no separate dev-simulate path — local/manual testing uses Bypass too. Dupli1 **never** handles card numbers, CVC, or card passwords — NANO hosts the payment window.
 
-On PG success, payment enqueues **`payment.succeeded`** in a transactional outbox (soft-success even if NATS is briefly down). The **order service** consumes it (queue group + logged handler errors), verifies amount, and moves the order to **`paid`**. A payment reconcile worker re-publishes recent succeeded payments so lost Core NATS deliveries still land (`MarkOrderPaid` is idempotent). The **notification service** sends a Telegram alert to ops. An **order manager** ships the order (`paid` → **`in_transit`**), which **commits** inventory (plan B).
+On PG success, payment enqueues **`payment.succeeded`** in a transactional outbox (soft-success even if NATS is briefly down). The **order service** consumes it (queue group + logged handler errors), verifies amount, and moves the order to **`paid`**. A payment reconcile worker re-publishes recent succeeded payments so lost Core NATS deliveries still land (`MarkOrderPaid` is idempotent). The **notification service** sends a Telegram alert to ops. An **order manager** confirms (`paid` → **`confirmed`**) and ships (`confirmed` → **`in_transit`**), which **commits** inventory (plan B).
 
 See also: [cart-service.md](cart-service.md), [checkout-session.md](checkout-session.md), [payment-methods-plan.md](payment-methods-plan.md) (credit card / Bypass / Bitcoin methods).
 
@@ -15,34 +15,45 @@ See also: [cart-service.md](cart-service.md), [checkout-session.md](checkout-ses
 | Status | Meaning | Stock (plan B) |
 |--------|---------|----------------|
 | `pending` | Created at checkout, **not paid** | **Reserved** |
-| `paid` | PG success; ops queue | Reserved |
+| `paid` | PG success; awaiting manager confirmation | Reserved |
+| `confirmed` | Manager accepted for fulfillment | Reserved |
 | `in_transit` | Order-manager shipped | **Committed** |
-| `fulfilled` | Delivered | Committed |
-| `canceled` | Unpaid timeout, payment failed, customer/ops cancel | **Released** (in-transit cancel does not restock) |
+| `delivered` | Carrier/manager marked delivered; awaiting customer response | Committed |
+| `fulfilled` | Customer confirmed receipt, manager override, or 14-day auto-fulfill | Committed |
+| `disputed` | Customer says the parcel never arrived; awaiting manager resolution | Committed |
+| `canceled` | Unpaid timeout, payment failed, customer/ops cancel | **Released** (once stock is committed at ship, canceling does not restock) |
 
 ```mermaid
 stateDiagram-v2
     [*] --> pending: checkout complete
     pending --> paid: payment.succeeded
     pending --> canceled: 5min TTL / payment failed
-    paid --> in_transit: POST /orders/{id}/ship
-    paid --> canceled: cancel before confirm / manager cancel
-    in_transit --> fulfilled: ops fulfill
-    in_transit --> canceled: manager confirms cancel request
+    paid --> confirmed: POST /orders/{id}/confirm (or 2h auto-confirm)
+    paid --> canceled: cancel before confirm
+    confirmed --> in_transit: POST /orders/{id}/ship
+    confirmed --> canceled: manager approves cancel request
+    in_transit --> delivered: POST /orders/{id}/deliver
+    in_transit --> canceled: manager approves cancel request
+    delivered --> fulfilled: customer confirms receipt / 14d auto-fulfill / manager override
+    delivered --> disputed: customer reports non-receipt
+    delivered --> canceled: manager approves cancel request
+    disputed --> fulfilled: POST /orders/{id}/dispute/resolve
+    disputed --> canceled: manager sides with the customer
     canceled --> [*]
     fulfilled --> [*]
 ```
 
-`paid` is not a manager-accepted order by itself. **`confirmed_at`** (timestamp, not a status) is set by `POST /orders/{id}/confirm` or as a side effect of ship. Managers must confirm within **2 hours** of `paid_at`; the order worker auto-confirms after that window.
+See [current-state.md](current-state.md) and [api.md](api.md) for the full endpoint-by-endpoint transition table.
 
 **Refund policy**
 
 | When | Customer | Refund |
 |------|----------|--------|
-| `pending`, or `paid` without `confirmed_at` | `POST /orders/{id}/cancel` | **Immediate** (unpaid is local; paid refunds the capture first) |
-| After `confirmed_at`, or `in_transit` | same endpoint opens a **cancel request** | Refund after manager `POST …/cancel/approve`, or automatically if the manager does not respond within **2 hours** |
+| `pending`, or `paid` (not yet confirmed) | `POST /orders/{id}/cancel` | **Immediate** (unpaid is local; paid refunds the capture first) |
+| `confirmed` through `delivered` | same endpoint opens a **cancel request** | Refund after manager `POST …/cancel/approve`, or automatically if the manager does not respond within **2 hours** |
+| `disputed` | manager decides, not the customer | Manager `PUT /status` → `canceled` refunds; `POST …/dispute/resolve` closes it `fulfilled` with no refund |
 
-Ops `PUT /orders/{id}/status` `{ "status": "canceled" }` still refunds immediately (the manager is confirming the cancellation). In-transit cancel refunds payment but does **not** release already-committed stock.
+Ops `PUT /orders/{id}/status` `{ "status": "canceled" }` still refunds immediately (the manager is confirming the cancellation). Once stock is committed at ship (`in_transit`, `delivered`, or `disputed`), canceling refunds payment but does **not** release already-committed stock.
 
 ---
 
@@ -113,9 +124,12 @@ sequenceDiagram
 
     Note over Client: "Payment received — we're preparing your order"
 
+    Ops->>Order: POST /api/v1/orders/{id}/confirm
+    Order->>Order: paid → confirmed
     Ops->>Order: POST /api/v1/orders/{id}/ship
-    Order->>Order: paid → in_transit (commit stock)
-    Ops->>Order: PUT status → fulfilled (later)
+    Order->>Order: confirmed → in_transit (commit stock)
+    Ops->>Order: POST /api/v1/orders/{id}/deliver (later)
+    Order->>Order: in_transit → delivered
 ```
 
 ---
@@ -182,7 +196,7 @@ sequenceDiagram
 }
 ```
 
-Order consumer: idempotent on `payment_id`; reject if `amount_won != order.total_won`. If the order already carries the same `payment_id` and is no longer `pending` (e.g. `paid`, `in_transit`, or `fulfilled`), a replay is a no-op — the payment reconcile worker republishes for up to two hours after success, so late deliveries must not fail after ship.
+Order consumer: idempotent on `payment_id`; reject if `amount_won != order.total_won`. If the order already carries the same `payment_id` and is no longer `pending` (e.g. `paid`, `confirmed`, `in_transit`, `delivered`, `disputed`, or `fulfilled`), a replay is a no-op — the payment reconcile worker republishes for up to two hours after success, so late deliveries must not fail after ship.
 
 ### `payment.callback_rejected` (payment → notification)
 
@@ -273,10 +287,14 @@ A refused callback the PG had already approved also publishes `payment.callback_
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | `paid` → `in_transit`, commit stock, audit (transition validated **before** stock commit; Postgres **`ShipIfPaid`** on persist) |
-| `PUT` | `/api/v1/orders/{id}/status` | RBAC | `fulfilled` from `in_transit`; `canceled` from `pending`/`paid`/`in_transit` |
-| `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` | Set `confirmed_at` on a `paid` order (2-hour SLA) |
-| `POST` | `/api/v1/orders/{id}/cancel` | ABAC owner | Immediate refund before confirm; cancel request after confirm / in transit |
+| `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` | `paid` → `confirmed` (2-hour SLA, or auto-confirmed) |
+| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | `confirmed` → `in_transit`, commit stock, audit (transition validated **before** stock commit; Postgres **`ShipIfConfirmed`** on persist) |
+| `POST` | `/api/v1/orders/{id}/deliver` | `order.ship` | `in_transit` → `delivered` |
+| `POST` | `/api/v1/orders/{id}/receipt/confirm` | ABAC owner | `delivered` → `fulfilled` |
+| `POST` | `/api/v1/orders/{id}/receipt/dispute` | ABAC owner | `delivered` → `disputed` |
+| `POST` | `/api/v1/orders/{id}/dispute/resolve` | `order.status.update` | `disputed` → `fulfilled`, no refund |
+| `PUT` | `/api/v1/orders/{id}/status` | RBAC | `fulfilled` from `delivered`/`disputed` (override / auto-fulfill); `canceled` from any non-final status |
+| `POST` | `/api/v1/orders/{id}/cancel` | ABAC owner | Immediate refund before confirm; cancel request from `confirmed` through `delivered` |
 | `POST` | `/api/v1/orders/{id}/cancel/approve` | `order.status.update` | Refund + cancel a pending customer request |
 | `POST` | `/api/v1/orders/{id}/cancel/reject` | `order.status.update` | Clear a customer cancel request |
 
@@ -290,9 +308,9 @@ A refused callback the PG had already approved also publishes `payment.callback_
 |------|--------|
 | Checkout `complete` | `Reserve` |
 | `pending` → `canceled` (timeout/fail) | `Release` |
-| `paid` → `in_transit` (ship) | `Commit` |
+| `confirmed` → `in_transit` (ship) | `Commit` |
 | `paid` → `canceled` (reject / customer before confirm) | `Release` |
-| `in_transit` → `canceled` | no restock (stock already committed) |
+| `in_transit`/`delivered`/`disputed` → `canceled` | no restock (stock already committed) |
 
 ---
 
@@ -336,14 +354,16 @@ Local Postgres (payment): `postgres://dupli1:dupli1_dev@localhost:5437/payments?
 |------|--------|
 | Unpaid > 5 min | `canceled`, release stock |
 | Checkout abandoned / never completed | stay `pending` until TTL, then cancel |
-| Paid, ops rejects | `PUT /orders/{id}/status` `{ "status": "canceled" }` refunds the captured payment (`POST /payments/{payment_id}/cancel`, NANO or Bypass) **then** cancels the order (also from `in_transit`). A PG rejection (`502`) leaves the order unchanged. The reverse path (`POST /payments/{id}/cancel` → `payment.canceled`) still cancels a still-`paid` matching order. |
+| Paid/confirmed, ops rejects | `PUT /orders/{id}/status` `{ "status": "canceled" }` refunds the captured payment (`POST /payments/{payment_id}/cancel`, NANO or Bypass) **then** cancels the order (also from `in_transit`, `delivered`, `disputed`). A PG rejection (`502`) leaves the order unchanged. The reverse path (`POST /payments/{id}/cancel` → `payment.canceled`) still cancels a still-`paid`/`confirmed` matching order. |
 | Customer cancel before confirm | Immediate refund + cancel (`POST /orders/{id}/cancel`) |
-| Customer cancel after confirm / in transit | Cancel request; manager approve within 2 hours or auto-refund |
+| Customer cancel from confirmed through delivered | Cancel request; manager approve within 2 hours or auto-refund |
+| Customer reports non-receipt after delivery | Dispute; manager resolves fulfilled (no refund) or cancels (refund) |
+| No customer response 14 days after delivery | Auto-fulfilled |
 | Duplicate `payment.succeeded` | idempotent — order stays `paid` |
 | Replayed `payment.succeeded` after ship | no-op when `payment_id` already set and status ≠ `pending` |
 | Payment succeeds after 5 min auto-cancel | order **reinstated** to `pending` with a fresh reservation and extended payment window, then marked `paid` |
-| Ship on non-`paid` order | rejected before stock commit — inventory unchanged |
-| Concurrent ship + full refund cancel | stock may commit first; `ShipIfPaid` skips persist when order is no longer `paid` — ops log when stock committed but status did not move |
+| Ship on non-`confirmed` order | rejected before stock commit — inventory unchanged |
+| Concurrent ship + full refund cancel | stock may commit first; `ShipIfConfirmed` skips persist when order is no longer `confirmed` — ops log when stock committed but status did not move |
 
 ---
 

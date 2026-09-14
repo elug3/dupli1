@@ -396,7 +396,7 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string, trac
 		return nil, err
 	}
 	// Validate before touching stock — CommitReservation is irreversible.
-	if order.Status != domain.StatusPaid {
+	if order.Status != domain.StatusConfirmed {
 		return nil, domain.ErrInvalidTransition
 	}
 	if err := s.commitReservationForShip(ctx, order.ReservationID); err != nil {
@@ -409,7 +409,7 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string, trac
 	if err != nil {
 		return nil, err
 	}
-	ok, err := s.repo.ShipIfPaid(ctx, order, events)
+	ok, err := s.repo.ShipIfConfirmed(ctx, order, events)
 	if err != nil {
 		return nil, err
 	}
@@ -436,11 +436,16 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if err != nil {
 		return nil, err
 	}
-	if order.Status != domain.StatusPending && order.Status != domain.StatusPaid && order.Status != domain.StatusInTransit {
+	if !order.Cancelable() {
 		return nil, domain.ErrInvalidTransition
 	}
-	wasInTransit := order.Status == domain.StatusInTransit
-	if order.Status == domain.StatusPaid || wasInTransit {
+	stockCommitted := order.StockCommitted()
+	hasCapturedPayment := order.Status != domain.StatusPending
+	// Pre-ship statuses (paid, confirmed) get the atomic guard below because a
+	// concurrent ship can still commit stock; once stock is committed
+	// (in_transit, delivered, disputed) there is nothing left to race.
+	preShip := order.Status == domain.StatusPaid || order.Status == domain.StatusConfirmed
+	if hasCapturedPayment {
 		if err := s.refundCapturedPayment(ctx, order); err != nil {
 			return nil, err
 		}
@@ -454,10 +459,11 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 			return s.present(fresh), nil
 		}
 		order = fresh
-		if order.Status != domain.StatusPaid && order.Status != domain.StatusPending && order.Status != domain.StatusInTransit {
+		if !order.Cancelable() {
 			return nil, domain.ErrInvalidTransition
 		}
-		wasInTransit = order.Status == domain.StatusInTransit
+		stockCommitted = order.StockCommitted()
+		preShip = order.Status == domain.StatusPaid || order.Status == domain.StatusConfirmed
 	}
 	now := s.now()
 	cancelled := cloneOrder(order)
@@ -468,10 +474,11 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if err != nil {
 		return nil, err
 	}
-	// Atomically flip paid → canceled so a concurrent ship cannot commit stock
-	// after the refund has already gone through (CancelIfPaidForRefund is also
-	// used by the payment.canceled consumer for the same reason).
-	if order.Status == domain.StatusPaid {
+	// Atomically flip paid/confirmed → canceled so a concurrent ship cannot
+	// commit stock after the refund has already gone through
+	// (CancelIfPaidForRefund is also used by the payment.canceled consumer
+	// for the same reason).
+	if preShip {
 		canceledOrder, didCancel, err := s.repo.CancelIfPaidForRefund(ctx, order.ID, order.PaymentID, now, events)
 		if err != nil {
 			return nil, err
@@ -492,7 +499,7 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 		}
 		// Ship won the race after refund — finish cancel without re-refunding.
 		order = reconciled
-		wasInTransit = order.Status == domain.StatusInTransit
+		stockCommitted = order.StockCommitted()
 		cancelled = cloneOrder(order)
 		if err := cancelled.Cancel(now); err != nil {
 			return nil, err
@@ -502,8 +509,8 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if err != nil {
 		return nil, err
 	}
-	// In-transit stock was committed on ship; a refund here does not restock.
-	if !wasInTransit {
+	// Once stock is committed (shipped) a refund here does not restock.
+	if !stockCommitted {
 		if err := s.releaseReservationForCancel(ctx, saved.ReservationID); err != nil {
 			log.Printf("cancel order %s: release reservation %s: %v", saved.ID, saved.ReservationID, err)
 		}
@@ -511,14 +518,68 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	return saved, nil
 }
 
-// ConfirmOrder is the manager acceptance of a paid order. After this (or ship),
-// customer cancel becomes a request instead of an immediate refund.
+// ConfirmOrder is the manager acceptance of a paid order (paid → confirmed).
+// After this, customer cancel becomes a request instead of an immediate refund.
 func (s *Service) ConfirmOrder(ctx context.Context, id string) (*domain.Order, error) {
 	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
 	if err != nil {
 		return nil, err
 	}
 	if err := order.Confirm(s.now()); err != nil {
+		return nil, err
+	}
+	return s.saveStatusChange(ctx, order)
+}
+
+// DeliverOrder records the carrier (or a manager) handing the parcel to the
+// customer (in_transit → delivered).
+func (s *Service) DeliverOrder(ctx context.Context, id, deliveredBy string) (*domain.Order, error) {
+	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if err := order.Deliver(deliveredBy, s.now()); err != nil {
+		return nil, err
+	}
+	return s.saveStatusChange(ctx, order)
+}
+
+// ConfirmReceipt is the customer acknowledging they received a delivered
+// order (delivered → fulfilled).
+func (s *Service) ConfirmReceipt(ctx context.Context, id string) (*domain.Order, error) {
+	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if err := order.ConfirmReceipt(s.now()); err != nil {
+		return nil, err
+	}
+	return s.saveStatusChange(ctx, order)
+}
+
+// ReportNotReceived is the customer disputing a delivered order they say
+// never arrived (delivered → disputed). A manager resolves it from there.
+func (s *Service) ReportNotReceived(ctx context.Context, id, reason string) (*domain.Order, error) {
+	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if err := order.ReportNotReceived(reason, s.now()); err != nil {
+		return nil, err
+	}
+	return s.saveStatusChange(ctx, order)
+}
+
+// ResolveDisputeFulfilled closes a dispute in the delivery's favor — a
+// manager found the parcel was in fact delivered — without a refund.
+// A manager who instead believes the customer uses PUT /status → canceled,
+// which refunds like any other cancel.
+func (s *Service) ResolveDisputeFulfilled(ctx context.Context, id string) (*domain.Order, error) {
+	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return nil, err
+	}
+	if err := order.ResolveDisputeFulfilled(s.now()); err != nil {
 		return nil, err
 	}
 	return s.saveStatusChange(ctx, order)
@@ -579,6 +640,8 @@ func (s *Service) refundCapturedPayment(ctx context.Context, order *domain.Order
 	return s.payment.CancelPayment(ctx, paymentID, "order-cancel-"+order.ID)
 }
 
+// FulfillOrder is the manager override / 14-day auto-fulfill path for a
+// delivered or disputed order, bypassing the customer's own ConfirmReceipt.
 func (s *Service) FulfillOrder(ctx context.Context, id string) (*domain.Order, error) {
 	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
 	if err != nil {

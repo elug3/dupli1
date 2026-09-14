@@ -255,6 +255,13 @@ func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 		t.Fatal("stock should not commit on paid")
 	}
 
+	if order, err = svc.ConfirmOrder(ctx, order.ID); err != nil {
+		t.Fatalf("ConfirmOrder returned error: %v", err)
+	}
+	if order.Status != domain.StatusConfirmed {
+		t.Fatalf("order status = %q, want confirmed", order.Status)
+	}
+
 	order, err = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	if err != nil {
 		t.Fatalf("ShipOrder returned error: %v", err)
@@ -284,6 +291,9 @@ func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
+	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+		t.Fatalf("ConfirmOrder returned error: %v", err)
+	}
 
 	for _, status := range []struct {
 		name    string
@@ -291,6 +301,7 @@ func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 		want    domain.OrderStatus
 	}{
 		{"in_transit", func() error { _, err := svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking()); return err }, domain.StatusInTransit},
+		{"delivered", func() error { _, err := svc.DeliverOrder(ctx, order.ID, "driver-1"); return err }, domain.StatusDelivered},
 		{"fulfilled", func() error { _, err := svc.FulfillOrder(ctx, order.ID); return err }, domain.StatusFulfilled},
 	} {
 		if err := status.advance(); err != nil {
@@ -570,6 +581,9 @@ func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
 	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
+	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+		t.Fatalf("ConfirmOrder returned error: %v", err)
+	}
 
 	// Simulate a prior ShipOrder that committed stock but failed before saving status.
 	stock.committed = order.ReservationID
@@ -638,6 +652,9 @@ func TestCancelOrderAtomicGuardBeatsConcurrentShip(t *testing.T) {
 	}
 	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-cancel-race", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+		t.Fatalf("ConfirmOrder returned error: %v", err)
 	}
 
 	raceStock := &refundDuringShipStock{
@@ -726,6 +743,9 @@ func TestShipOrderDoesNotOverwriteRefundCancel(t *testing.T) {
 	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-race", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
+	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+		t.Fatalf("ConfirmOrder returned error: %v", err)
+	}
 
 	raceStock := &refundDuringShipStock{
 		fakeStock: stock,
@@ -767,6 +787,9 @@ func TestShipOrderRejectsReleasedReservation(t *testing.T) {
 	}
 	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+		t.Fatalf("ConfirmOrder returned error: %v", err)
 	}
 
 	// Simulate paid order rows that still reference a reservation released elsewhere
@@ -993,6 +1016,9 @@ func TestCancelInTransitOrderRefundsWithoutReleasingStock(t *testing.T) {
 	}
 	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+		t.Fatalf("ConfirmOrder: %v", err)
 	}
 	if _, err := svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking()); err != nil {
 		t.Fatalf("ShipOrder: %v", err)
@@ -1324,8 +1350,8 @@ func TestCustomerCancelAfterConfirmRequestsManagerApproval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CustomerCancel: %v", err)
 	}
-	if got.Status != domain.StatusPaid {
-		t.Fatalf("status = %q, want paid until manager confirms", got.Status)
+	if got.Status != domain.StatusConfirmed {
+		t.Fatalf("status = %q, want confirmed until manager approves the cancel", got.Status)
 	}
 	if got.CancelRequestedAt == nil || got.CancelRequestReason != "changed mind" {
 		t.Fatalf("cancel request = %+v", got)
@@ -1372,8 +1398,8 @@ func TestRejectCancelRequestLeavesOrderPaid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RejectCancelRequest: %v", err)
 	}
-	if rejected.Status != domain.StatusPaid || rejected.CancelRequestedAt != nil {
-		t.Fatalf("rejected = %+v, want paid with no request", rejected)
+	if rejected.Status != domain.StatusConfirmed || rejected.CancelRequestedAt != nil {
+		t.Fatalf("rejected = %+v, want confirmed with no request", rejected)
 	}
 	if len(pay.canceled) != 0 {
 		t.Fatalf("reject must not refund, got %v", pay.canceled)
@@ -1426,8 +1452,8 @@ func TestRefundPolicyWorkerAutoConfirmsAndAutoApproves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetOrder unconfirmed: %v", err)
 	}
-	if gotUnconfirmed.ConfirmedAt == nil || gotUnconfirmed.Status != domain.StatusPaid {
-		t.Fatalf("unconfirmed after SLA = %+v, want confirmed paid", gotUnconfirmed)
+	if gotUnconfirmed.ConfirmedAt == nil || gotUnconfirmed.Status != domain.StatusConfirmed {
+		t.Fatalf("unconfirmed after SLA = %+v, want auto-confirmed", gotUnconfirmed)
 	}
 
 	gotRequested, err := svc.GetOrder(ctx, requested.ID)
@@ -1472,8 +1498,8 @@ func TestApproveCancelRequestFailsClosedWhenRefundRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetOrder: %v", err)
 	}
-	if got.Status != domain.StatusPaid || got.CancelRequestedAt == nil {
-		t.Fatalf("order = %+v, want paid with pending cancel request when PG rejects", got)
+	if got.Status != domain.StatusConfirmed || got.CancelRequestedAt == nil {
+		t.Fatalf("order = %+v, want confirmed with pending cancel request when PG rejects", got)
 	}
 	if len(pay.canceled) != 0 {
 		t.Fatalf("must not mark refunded when PG rejects, got %v", pay.canceled)

@@ -126,18 +126,21 @@ func (r *Repository) migrate() error {
 	// silently corrupting state that every downstream query assumes is clean.
 	// Postgres has no ADD CONSTRAINT IF NOT EXISTS, so existence is checked
 	// against pg_constraint first (same pattern as product's SKU-master FKs).
-	checks := []struct{ name, sql string }{
-		{"orders_status_check", `
-			ALTER TABLE orders ADD CONSTRAINT orders_status_check
-			CHECK (status IN ('pending', 'paid', 'in_transit', 'fulfilled', 'canceled'))`},
-		{"checkout_sessions_status_check", `
-			ALTER TABLE checkout_sessions ADD CONSTRAINT checkout_sessions_status_check
-			CHECK (status IN ('open', 'completed', 'expired'))`},
+	// orders_status_check's value list grew (confirmed/delivered/disputed added
+	// alongside the original five), so it is replaced rather than only added
+	// when missing — an existing constraint from before this change would
+	// otherwise keep rejecting the new statuses forever.
+	if err := r.replaceCheckConstraint(ctx, "orders", "orders_status_check", `
+		ALTER TABLE orders ADD CONSTRAINT orders_status_check
+		CHECK (status IN ('pending', 'paid', 'confirmed', 'in_transit', 'delivered', 'fulfilled', 'disputed', 'canceled'))`,
+	); err != nil {
+		return fmt.Errorf("migrate order schema: %w", err)
 	}
-	for _, c := range checks {
-		if err := r.addConstraintIfMissing(ctx, c.name, c.sql); err != nil {
-			return fmt.Errorf("migrate order schema: %w", err)
-		}
+	if err := r.addConstraintIfMissing(ctx, "checkout_sessions_status_check", `
+		ALTER TABLE checkout_sessions ADD CONSTRAINT checkout_sessions_status_check
+		CHECK (status IN ('open', 'completed', 'expired'))`,
+	); err != nil {
+		return fmt.Errorf("migrate order schema: %w", err)
 	}
 	// Rename before ADD COLUMN so existing *_cents money columns keep their
 	// snapshotted values instead of a second column appearing at default 0.
@@ -160,6 +163,11 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier_note TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_by TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_confirmed_at TIMESTAMPTZ`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS disputed_at TIMESTAMPTZ`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispute_reason TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_requested_at TIMESTAMPTZ`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancel_request_reason TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
@@ -171,6 +179,17 @@ func (r *Repository) migrate() error {
 		_, _ = r.pool.Exec(ctx, stmt)
 	}
 	_, _ = r.pool.Exec(ctx, `UPDATE orders SET payment_due_at = created_at + INTERVAL '5 minutes' WHERE payment_due_at IS NULL`)
+	// Confirmed is now a real status instead of a timestamp on `paid` — a row
+	// left over from before this change (status still 'paid' but
+	// confirmed_at already set) means a manager had already confirmed it
+	// under the old semantics, so it becomes 'confirmed' here. Idempotent:
+	// once migrated, Confirm() always moves status and confirmed_at together.
+	if _, err := r.pool.Exec(ctx, `UPDATE orders SET status = 'confirmed' WHERE status = 'paid' AND confirmed_at IS NOT NULL`); err != nil {
+		// Not silently ignored like the additive ALTERs above: an order left
+		// on `paid` with confirmed_at set can never ship (Ship requires
+		// confirmed), so a failure here strands real orders.
+		return fmt.Errorf("migrate order schema: promote legacy confirmed orders: %w", err)
+	}
 
 	// Indexes over columns the ALTERs above add. Creating these alongside the base
 	// tables would fail on a fresh database, where orders has no payment_due_at yet.
@@ -261,6 +280,20 @@ func (r *Repository) addConstraintIfMissing(ctx context.Context, name, sql strin
 	}
 	if exists {
 		return nil
+	}
+	if _, err := r.pool.Exec(ctx, sql); err != nil {
+		return fmt.Errorf("add constraint %s: %w", name, err)
+	}
+	return nil
+}
+
+// replaceCheckConstraint drops a named constraint (if present) and re-adds it
+// from sql — for a CHECK whose allowed values grow over time, unlike
+// addConstraintIfMissing this keeps a constraint added before the change from
+// permanently rejecting the new values.
+func (r *Repository) replaceCheckConstraint(ctx context.Context, table, name, sql string) error {
+	if _, err := r.pool.Exec(ctx, fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s`, table, name)); err != nil {
+		return fmt.Errorf("drop constraint %s: %w", name, err)
 	}
 	if _, err := r.pool.Exec(ctx, sql); err != nil {
 		return fmt.Errorf("add constraint %s: %w", name, err)
@@ -386,9 +419,10 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
-			confirmed_at, cancel_requested_at, cancel_request_reason,
+			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
+			cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			reservation_id = EXCLUDED.reservation_id,
@@ -411,6 +445,11 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			tracking_number = EXCLUDED.tracking_number,
 			carrier_note = EXCLUDED.carrier_note,
 			confirmed_at = EXCLUDED.confirmed_at,
+			delivered_at = EXCLUDED.delivered_at,
+			delivered_by = EXCLUDED.delivered_by,
+			receipt_confirmed_at = EXCLUDED.receipt_confirmed_at,
+			disputed_at = EXCLUDED.disputed_at,
+			dispute_reason = EXCLUDED.dispute_reason,
 			cancel_requested_at = EXCLUDED.cancel_requested_at,
 			cancel_request_reason = EXCLUDED.cancel_request_reason,
 			updated_at = EXCLUDED.updated_at
@@ -419,7 +458,8 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 		order.RecipientName, order.RecipientPhone, shippingJSON, order.SourceAddressID,
 		order.PaymentID, order.PaidAt, order.PaymentDueAt, order.ShippedBy, order.ShippedAt,
 		order.Carrier, order.TrackingNumber, order.CarrierNote,
-		order.ConfirmedAt, order.CancelRequestedAt, order.CancelRequestReason,
+		order.ConfirmedAt, order.DeliveredAt, order.DeliveredBy, order.ReceiptConfirmedAt, order.DisputedAt, order.DisputeReason,
+		order.CancelRequestedAt, order.CancelRequestReason,
 		order.CreatedAt, order.UpdatedAt)
 	if err != nil {
 		return err
@@ -547,14 +587,15 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	}
 
 	var order domain.Order
-	var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
+	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 	var shippingJSON []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
-			confirmed_at, cancel_requested_at, cancel_request_reason,
+			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
+			cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id).Scan(
@@ -563,7 +604,8 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
-		&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
+		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
+		&cancelRequestedAt, &order.CancelRequestReason,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -578,6 +620,9 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	order.PaidAt = paidAt
 	order.ShippedAt = shippedAt
 	order.ConfirmedAt = confirmedAt
+	order.DeliveredAt = deliveredAt
+	order.ReceiptConfirmedAt = receiptConfirmedAt
+	order.DisputedAt = disputedAt
 	order.CancelRequestedAt = cancelRequestedAt
 
 	items, err := r.loadOrderItems(ctx, id)
@@ -649,7 +694,8 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
-			confirmed_at, cancel_requested_at, cancel_request_reason,
+			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
+			cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders WHERE customer_id = $1 ORDER BY created_at DESC
 	`, customerID)
@@ -662,7 +708,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	var ids []string
 	for rows.Next() {
 		var order domain.Order
-		var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
+		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
@@ -670,7 +716,8 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
-			&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
+			&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
+			&cancelRequestedAt, &order.CancelRequestReason,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -681,6 +728,9 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 		order.PaidAt = paidAt
 		order.ShippedAt = shippedAt
 		order.ConfirmedAt = confirmedAt
+		order.DeliveredAt = deliveredAt
+		order.ReceiptConfirmedAt = receiptConfirmedAt
+		order.DisputedAt = disputedAt
 		order.CancelRequestedAt = cancelRequestedAt
 		orders = append(orders, order)
 		ids = append(ids, order.ID)
@@ -708,7 +758,8 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
-			confirmed_at, cancel_requested_at, cancel_request_reason,
+			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
+			cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders ORDER BY created_at DESC
 	`)
@@ -721,7 +772,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 	var ids []string
 	for rows.Next() {
 		var order domain.Order
-		var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
+		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
@@ -729,7 +780,8 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
-			&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
+			&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
+			&cancelRequestedAt, &order.CancelRequestReason,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -740,6 +792,9 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 		order.PaidAt = paidAt
 		order.ShippedAt = shippedAt
 		order.ConfirmedAt = confirmedAt
+		order.DeliveredAt = deliveredAt
+		order.ReceiptConfirmedAt = receiptConfirmedAt
+		order.DisputedAt = disputedAt
 		order.CancelRequestedAt = cancelRequestedAt
 		orders = append(orders, order)
 		ids = append(ids, order.ID)
@@ -767,7 +822,8 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
-			confirmed_at, cancel_requested_at, cancel_request_reason,
+			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
+			cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders
 		WHERE status = $1 AND payment_due_at < $2
@@ -781,7 +837,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 	var ids []string
 	for rows.Next() {
 		var order domain.Order
-		var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
+		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
@@ -789,7 +845,8 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
-			&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
+			&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
+			&cancelRequestedAt, &order.CancelRequestReason,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -800,6 +857,9 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 		order.PaidAt = paidAt
 		order.ShippedAt = shippedAt
 		order.ConfirmedAt = confirmedAt
+		order.DeliveredAt = deliveredAt
+		order.ReceiptConfirmedAt = receiptConfirmedAt
+		order.DisputedAt = disputedAt
 		order.CancelRequestedAt = cancelRequestedAt
 		orders = append(orders, order)
 		ids = append(ids, order.ID)
@@ -905,14 +965,15 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	}
 
 	var order domain.Order
-	var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
+	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
-			confirmed_at, cancel_requested_at, cancel_request_reason,
+			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
+			cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
@@ -921,7 +982,8 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
-		&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
+		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
+		&cancelRequestedAt, &order.CancelRequestReason,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if err != nil {
@@ -933,6 +995,9 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	order.PaidAt = paidAt
 	order.ShippedAt = shippedAt
 	order.ConfirmedAt = confirmedAt
+	order.DeliveredAt = deliveredAt
+	order.ReceiptConfirmedAt = receiptConfirmedAt
+	order.DisputedAt = disputedAt
 	order.CancelRequestedAt = cancelRequestedAt
 
 	rows, err := tx.Query(ctx, `
@@ -980,11 +1045,13 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	}
 	defer tx.Rollback(ctx)
 
+	// Paid or confirmed: both are pre-ship, so a matching row here can only be
+	// refunded and canceled, never restocked.
 	tag, err := tx.Exec(ctx, `
 		UPDATE orders
 		SET status = $4, updated_at = $5
-		WHERE id = $1 AND status = $2 AND payment_id = $3
-	`, orderID, domain.StatusPaid, paymentID, domain.StatusCanceled, now)
+		WHERE id = $1 AND status = ANY($2) AND payment_id = $3
+	`, orderID, []string{string(domain.StatusPaid), string(domain.StatusConfirmed)}, paymentID, domain.StatusCanceled, now)
 	if err != nil {
 		return nil, false, err
 	}
@@ -993,14 +1060,15 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	}
 
 	var order domain.Order
-	var paidAt, shippedAt, confirmedAt, cancelRequestedAt *time.Time
+	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, coupon_code,
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
-			confirmed_at, cancel_requested_at, cancel_request_reason,
+			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
+			cancel_requested_at, cancel_request_reason,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
@@ -1009,7 +1077,8 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
-		&confirmedAt, &cancelRequestedAt, &order.CancelRequestReason,
+		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
+		&cancelRequestedAt, &order.CancelRequestReason,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if err != nil {
@@ -1021,6 +1090,9 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	order.PaidAt = paidAt
 	order.ShippedAt = shippedAt
 	order.ConfirmedAt = confirmedAt
+	order.DeliveredAt = deliveredAt
+	order.ReceiptConfirmedAt = receiptConfirmedAt
+	order.DisputedAt = disputedAt
 	order.CancelRequestedAt = cancelRequestedAt
 
 	rows, err := tx.Query(ctx, `
@@ -1142,7 +1214,7 @@ func (r *Repository) SavePaidIfCanceled(ctx context.Context, order *domain.Order
 	return true, nil
 }
 
-func (r *Repository) ShipIfPaid(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
+func (r *Repository) ShipIfConfirmed(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -1165,7 +1237,7 @@ func (r *Repository) ShipIfPaid(ctx context.Context, order *domain.Order, events
 			updated_at = $9
 		WHERE id = $1 AND status = $10
 	`, order.ID, domain.StatusInTransit, order.ShippedBy, order.ShippedAt,
-		order.Carrier, order.TrackingNumber, order.CarrierNote, order.ConfirmedAt, order.UpdatedAt, domain.StatusPaid)
+		order.Carrier, order.TrackingNumber, order.CarrierNote, order.ConfirmedAt, order.UpdatedAt, domain.StatusConfirmed)
 	if err != nil {
 		return false, err
 	}

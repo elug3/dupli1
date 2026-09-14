@@ -100,10 +100,18 @@ Price lives on the **parent** (not the variant). Variants inherit price for cart
 ### Order lifecycle & money path
 
 ```
-POST /orders  →  pending  →  paid  →  in_transit  →  fulfilled
-                    ↓                      ↑ (commit stock)
-                 canceled ←──── auto-cancel after 5 min unpaid
+POST /orders → pending → paid → confirmed → in_transit → delivered → fulfilled
+                  ↓         ↓(2h SLA) ↑         ↑(commit stock)  ↓(14d SLA or dispute)
+               canceled ←──────────────────────────────────  disputed
+                  ↑ auto-cancel after 5 min unpaid (pending only)
 ```
+
+- `paid → confirmed`: manager accepts the order for fulfillment (`POST /orders/{id}/confirm`), auto-confirmed after a 2-hour SLA if the manager doesn't act (`EnforceRefundPolicy`).
+- `confirmed → in_transit`: manager ships (`POST /orders/{id}/ship`), which commits the inventory reservation.
+- `in_transit → delivered`: carrier or manager marks delivered (`POST /orders/{id}/deliver`).
+- `delivered → fulfilled`: customer confirms receipt (`POST /orders/{id}/receipt/confirm`), a manager override (`PUT /orders/{id}/status`), or auto-fulfilled 14 days after delivery with no response (`EnforceDeliveryPolicy`).
+- `delivered → disputed`: customer reports non-receipt (`POST /orders/{id}/receipt/dispute`). A manager resolves it either way — `POST /orders/{id}/dispute/resolve` closes it fulfilled (proof of delivery), or `PUT /orders/{id}/status` → `canceled` refunds it like any other cancel.
+- Cancellation: immediate refund while `pending`/`paid` (not yet confirmed); from `confirmed` through `delivered` a customer cancel opens a manager-approval request (`POST /orders/{id}/cancel`, approved/rejected via `.../cancel/approve` / `.../cancel/reject`, auto-approved after the same 2-hour SLA). Once shipped, canceling refunds but never auto-restocks.
 
 Order calls product stock/coupons via the internal nginx gateway (`DUPLI1_GATEWAY_URL`), not direct service URLs. Pricing is resolved server-side — client `unit_price_won` is ignored.
 
