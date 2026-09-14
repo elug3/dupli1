@@ -1223,7 +1223,7 @@ paths:
         schema:
           type: string
     post:
-      summary: Ship a paid order (paid to in_transit)
+      summary: Ship a confirmed order (confirmed to in_transit)
       tags: [Order]
       security:
         - bearerAuth: []
@@ -1241,7 +1241,7 @@ paths:
         schema:
           type: string
     post:
-      summary: Confirm a paid order (sets confirmed_at; 2-hour SLA)
+      summary: Confirm a paid order (paid to confirmed; 2-hour SLA)
       tags: [Order]
       security:
         - bearerAuth: []
@@ -1263,7 +1263,7 @@ paths:
       tags: [Order]
       security:
         - bearerAuth: []
-      description: Owner ABAC. Immediate refund until confirmed_at; afterward records a cancel request.
+      description: Owner ABAC. Immediate refund before confirm; cancel request from confirmed through delivered.
       responses:
         '200':
           description: Success
@@ -1304,6 +1304,78 @@ paths:
         '200':
           description: Success
 
+  /api/v1/orders/{id}/deliver:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Mark order delivered (in_transit to delivered)
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [order.ship]
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/{id}/receipt/confirm:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Customer confirms receipt (delivered to fulfilled)
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      description: Owner ABAC.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/{id}/receipt/dispute:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Customer reports non-receipt (delivered to disputed)
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      description: Owner ABAC. Optional reason body.
+      responses:
+        '200':
+          description: Success
+
+  /api/v1/orders/{id}/dispute/resolve:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource id
+        schema:
+          type: string
+    post:
+      summary: Resolve dispute in delivery's favor (disputed to fulfilled)
+      tags: [Order]
+      security:
+        - bearerAuth: []
+      x-required-permissions: [order.status.update]
+      responses:
+        '200':
+          description: Success
+
   /api/v1/orders/{id}/status:
     parameters:
       - name: id
@@ -1318,7 +1390,7 @@ paths:
       security:
         - bearerAuth: []
       x-required-permissions: [order.status.update]
-      description: Accepts canceled (from pending, paid, or in_transit) and fulfilled only; paid is payment-driven and in_transit from paid uses /ship. Confirm uses /confirm.
+      description: Accepts canceled and fulfilled only. paid is payment-driven; confirmed uses /confirm; in_transit uses /ship; delivered uses /deliver. Receipt and dispute routes handle customer fulfillment paths.
       responses:
         '200':
           description: Success

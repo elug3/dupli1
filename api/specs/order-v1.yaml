@@ -154,13 +154,31 @@ paths:
   /api/v1/orders/{id}/ship:
     post:
       tags: [Orders]
-      summary: Ship a paid order
+      summary: Ship a confirmed order
       operationId: orderShip
       security:
         - bearerAuth: []
       description: |
         Requires `order.ship`. Commits the inventory reservation, then moves
-        `paid` → `in_transit`. Any other current status is an invalid transition (`400`).
+        `confirmed` → `in_transit` (atomic `ShipIfConfirmed`). Requires `carrier`
+        and `tracking_number` in the body. Any other current status is an invalid
+        transition (`400`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [carrier, tracking_number]
+              properties:
+                carrier:
+                  type: string
+                  enum: [cj, hanjin, lotte, logen, epost, other]
+                tracking_number:
+                  type: string
+                carrier_note:
+                  type: string
+                  description: Required when carrier is other
       parameters:
         - $ref: '#/components/parameters/OrderId'
       responses:
@@ -181,6 +199,194 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/orders/{id}/confirm:
+    post:
+      tags: [Orders]
+      summary: Confirm a paid order
+      operationId: orderConfirm
+      security:
+        - bearerAuth: []
+      description: |
+        Requires `order.status.update`. Moves `paid` → `confirmed`. Auto-confirmed
+        after 2 hours if the manager does not act.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/orders/{id}/deliver:
+    post:
+      tags: [Orders]
+      summary: Mark an order delivered
+      operationId: orderDeliver
+      security:
+        - bearerAuth: []
+      description: Requires `order.ship`. Moves `in_transit` → `delivered`.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order delivered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/orders/{id}/receipt/confirm:
+    post:
+      tags: [Orders]
+      summary: Customer confirms receipt
+      operationId: orderReceiptConfirm
+      security:
+        - bearerAuth: []
+      description: Owner ABAC. Moves `delivered` → `fulfilled`.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Receipt confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /api/v1/orders/{id}/receipt/dispute:
+    post:
+      tags: [Orders]
+      summary: Customer reports non-receipt
+      operationId: orderReceiptDispute
+      security:
+        - bearerAuth: []
+      description: Owner ABAC. Moves `delivered` → `disputed`.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Dispute opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /api/v1/orders/{id}/dispute/resolve:
+    post:
+      tags: [Orders]
+      summary: Resolve dispute in delivery's favor
+      operationId: orderDisputeResolve
+      security:
+        - bearerAuth: []
+      description: |
+        Requires `order.status.update`. Moves `disputed` → `fulfilled` with no
+        refund. To refund the customer, use PUT …/status → canceled instead.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Dispute resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /api/v1/orders/{id}/cancel:
+    post:
+      tags: [Orders]
+      summary: Customer cancel
+      operationId: orderCustomerCancel
+      security:
+        - bearerAuth: []
+      description: |
+        Owner ABAC. Immediate refund before confirm; cancel request from
+        `confirmed` through `delivered`.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Canceled or cancel requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /api/v1/orders/{id}/cancel/approve:
+    post:
+      tags: [Orders]
+      summary: Approve customer cancel request
+      operationId: orderCancelApprove
+      security:
+        - bearerAuth: []
+      description: Requires `order.status.update`. Refunds and cancels.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Cancel approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /api/v1/orders/{id}/cancel/reject:
+    post:
+      tags: [Orders]
+      summary: Reject customer cancel request
+      operationId: orderCancelReject
+      security:
+        - bearerAuth: []
+      description: Requires `order.status.update`. Clears the cancel request.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Cancel rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
   /api/v1/orders/{id}/status:
     put:
       tags: [Orders]
@@ -189,16 +395,16 @@ paths:
       security:
         - bearerAuth: []
       description: |
-        Requires `order.status.update`. Accepts only `canceled` and `fulfilled` —
-        any other value (including the removed `confirmed`) returns `400`.
+        Requires `order.status.update`. Accepts only `canceled` and `fulfilled`.
 
-        Valid transitions:
-        - `pending` → `canceled` (releases the reservation)
-        - `paid` → `canceled` (releases the reservation; refund is manual in v1.0)
-        - `in_transit` → `fulfilled`
+        `pending` → `paid` is payment-driven only. `paid` → `confirmed` uses
+        `POST …/confirm`. `confirmed` → `in_transit` uses `POST …/ship`.
+        `in_transit` → `delivered` uses `POST …/deliver`. Customer receipt and
+        dispute routes handle `delivered` → `fulfilled` / `disputed`.
 
-        `pending` → `paid` is driven by the payment service (`payment.succeeded`) and
-        has no client route. `paid` → `in_transit` uses `POST /api/v1/orders/{id}/ship`.
+        Cancels from `paid` or later refund the captured payment first; a PG
+        rejection leaves the order unchanged. Customer cancel before confirm uses
+        `POST …/cancel` instead.
       parameters:
         - $ref: '#/components/parameters/OrderId'
       requestBody:
@@ -546,10 +752,10 @@ components:
     OrderStatus:
       type: string
       description: |
-        `pending` (created, awaiting payment) → `paid` (payment succeeded) →
-        `in_transit` (shipped, stock committed) → `fulfilled` (delivered).
-        `canceled` is reachable from `pending` and `paid`.
-      enum: [pending, paid, in_transit, fulfilled, canceled]
+        `pending` → `paid` → `confirmed` → `in_transit` → `delivered` → `fulfilled`.
+        `canceled` from most non-final states; `disputed` when the customer reports
+        non-receipt on a delivered order. See docs/order-service.md.
+      enum: [pending, paid, confirmed, in_transit, delivered, fulfilled, disputed, canceled]
 
     OrderStatusUpdate:
       type: string
@@ -634,9 +840,41 @@ components:
         discount_won:
           type: integer
           format: int64
+        shipping_fee_won:
+          type: integer
+          format: int64
         total_won:
           type: integer
           format: int64
+        payment_id:
+          type: string
+        paid_at:
+          type: string
+          format: date-time
+        confirmed_at:
+          type: string
+          format: date-time
+        shipped_at:
+          type: string
+          format: date-time
+        carrier:
+          type: string
+        tracking_number:
+          type: string
+        delivered_at:
+          type: string
+          format: date-time
+        receipt_confirmed_at:
+          type: string
+          format: date-time
+        disputed_at:
+          type: string
+          format: date-time
+        dispute_reason:
+          type: string
+        cancel_requested_at:
+          type: string
+          format: date-time
         created_at:
           type: string
           format: date-time
