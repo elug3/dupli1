@@ -17,6 +17,8 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [TODO.md](TODO.md) | Living backlog and schedule |
 | [payment-service.md](payment-service.md) | Money path (NANO / Bypass) |
 | [payment-nano-return-verification.md](payment-nano-return-verification.md) | Why v2.7 returns are unsigned, and how `receiveUrl` MAC binds them |
+| [order-service.md](order-service.md) | Order lifecycle, workers, gateway deps |
+| [order-live-events.md](order-live-events.md) | Admin SSE feed contract (backend pending) |
 | [checkout-session.md](checkout-session.md) | Checkout sessions in order |
 | [cart-service.md](cart-service.md) | Persistent cart |
 | [profile-service.md](profile-service.md) | Customer commerce profile + saved addresses |
