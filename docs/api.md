@@ -820,12 +820,16 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 | GET | `/api/v1/orders` | List all orders (`order.read.all`) |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
-| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship order (`paid` → `in_transit`); body requires `carrier` + `tracking_number` (`carrier_note` when `carrier=other`); sets `confirmed_at` |
-| POST | `/api/v1/orders/{id}/confirm` | `order.status.update` — set `confirmed_at` on a paid order (2-hour SLA from `paid_at`) |
-| POST | `/api/v1/orders/{id}/cancel` | Customer ABAC — immediate refund before confirm; cancel request after confirm / in transit |
+| POST | `/api/v1/orders/{id}/confirm` | `order.status.update` — manager accepts a paid order (`paid` → `confirmed`; 2-hour SLA from `paid_at`, auto-confirmed by the sweep otherwise) |
+| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship a confirmed order (`confirmed` → `in_transit`); body requires `carrier` + `tracking_number` (`carrier_note` when `carrier=other`) |
+| POST | `/api/v1/orders/{id}/deliver` | `order.ship` — carrier/manager marks delivered (`in_transit` → `delivered`) |
+| POST | `/api/v1/orders/{id}/receipt/confirm` | Customer ABAC — confirms receipt (`delivered` → `fulfilled`) |
+| POST | `/api/v1/orders/{id}/receipt/dispute` | Customer ABAC — reports non-receipt (`delivered` → `disputed`); optional `{ "reason": "…" }` |
+| POST | `/api/v1/orders/{id}/dispute/resolve` | `order.status.update` — closes a dispute in the delivery's favor, no refund (`disputed` → `fulfilled`); a manager siding with the customer instead uses `PUT /status` → `canceled` |
+| POST | `/api/v1/orders/{id}/cancel` | Customer ABAC — immediate refund before confirm; cancel request from `confirmed` through `delivered` |
 | POST | `/api/v1/orders/{id}/cancel/approve` | `order.status.update` — refund + cancel a customer request |
 | POST | `/api/v1/orders/{id}/cancel/reject` | `order.status.update` — keep the order, clear the request |
-| PUT | `/api/v1/orders/{id}/status` | `order.status.update` — cancel or fulfill |
+| PUT | `/api/v1/orders/{id}/status` | `order.status.update` — cancel (from any non-final status) or fulfill (manager override / auto-fulfill sweep, from `delivered` or `disputed`) |
 
 **Create order request**
 ```json
@@ -843,11 +847,15 @@ Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices
 |------|----|---------|
 | — | `pending` | Order created |
 | `pending` | `paid` | `payment.succeeded` consumer or bypass payment — **payment-driven only**, no client route |
-| `paid` | `in_transit` | `POST /api/v1/orders/{id}/ship` (commits reserved stock) |
-| `in_transit` | `fulfilled` | `PUT /api/v1/orders/{id}/status` with `fulfilled` |
-| `pending`, `paid`, `in_transit` | `canceled` | Customer `POST /cancel` (immediate before confirm; request after), manager `PUT /status` `{ "status": "canceled" }`, unpaid-expiry worker, or auto-approve of an overdue cancel request. **Paid / in-transit** cancel refunds the captured payment (`POST /payments/{payment_id}/cancel`) first; a PG rejection leaves the order unchanged. Unpaid expiry never calls payment. |
+| `paid` | `confirmed` | `POST /api/v1/orders/{id}/confirm`, or the refund-policy sweep after the 2-hour SLA |
+| `confirmed` | `in_transit` | `POST /api/v1/orders/{id}/ship` (commits reserved stock) |
+| `in_transit` | `delivered` | `POST /api/v1/orders/{id}/deliver` |
+| `delivered` | `fulfilled` | Customer `POST /receipt/confirm`, manager `PUT /status` `{ "status": "fulfilled" }`, or the delivery-policy sweep 14 days after delivery with no response |
+| `delivered` | `disputed` | Customer `POST /receipt/dispute` (customer says the parcel never arrived) |
+| `disputed` | `fulfilled` | `POST /api/v1/orders/{id}/dispute/resolve` (manager finds the delivery was fine; no refund) |
+| `pending`, `paid`, `confirmed`, `in_transit`, `delivered`, `disputed` | `canceled` | Customer `POST /cancel` (immediate before confirm; a manager-approved request from `confirmed` through `delivered`), manager `PUT /status` `{ "status": "canceled" }` (also how a manager resolves a dispute in the customer's favor), unpaid-expiry worker, or auto-approve of an overdue cancel request. **Paid and later** cancels refund the captured payment (`POST /payments/{payment_id}/cancel`) first; a PG rejection leaves the order unchanged. Once shipped (`in_transit` or later), canceling refunds but never auto-restocks. Unpaid expiry never calls payment. |
 
-`PUT /status` accepts only `canceled` and `fulfilled`; use `POST /ship` to reach `in_transit`. There is no `confirmed` **status** — manager acceptance is `confirmed_at` on a still-`paid` order (or implied by ship). See [payment-service.md](payment-service.md).
+`PUT /status` accepts only `canceled` and `fulfilled`; use `POST /ship` to reach `in_transit` and `POST /deliver` to reach `delivered`. See [payment-service.md](payment-service.md).
 
 ---
 
@@ -980,7 +988,15 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | GET/PUT/POST/DELETE | `/api/v1/orders/checkout/sessions/{id}/...` | ABAC (same as orders) | order |
 | POST/GET | `/api/v1/orders` | ABAC / `order.create` / `order.read.all` | order |
 | GET | `/api/v1/orders/{id}` | ABAC / `order.read.all` | order |
+| POST | `/api/v1/orders/{id}/confirm` | `order.status.update` | order |
 | POST | `/api/v1/orders/{id}/ship` | `order.ship` | order |
+| POST | `/api/v1/orders/{id}/deliver` | `order.ship` | order |
+| POST | `/api/v1/orders/{id}/receipt/confirm` | ABAC | order |
+| POST | `/api/v1/orders/{id}/receipt/dispute` | ABAC | order |
+| POST | `/api/v1/orders/{id}/dispute/resolve` | `order.status.update` | order |
+| POST | `/api/v1/orders/{id}/cancel` | ABAC | order |
+| POST | `/api/v1/orders/{id}/cancel/approve` | `order.status.update` | order |
+| POST | `/api/v1/orders/{id}/cancel/reject` | `order.status.update` | order |
 | PUT | `/api/v1/orders/{id}/status` | `order.status.update` | order |
 | GET | `/api/v1/cart/health` | — | cart |
 | GET | `/api/v1/cart/settings` | — | cart |
