@@ -149,7 +149,7 @@ func TestCancelIfPaidForRefundSkipsMismatchedPayment(t *testing.T) {
 	}
 }
 
-func TestShipIfPaidSkipsCanceledOrder(t *testing.T) {
+func TestShipIfConfirmedSkipsCanceledOrder(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
 	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
@@ -181,12 +181,12 @@ func TestShipIfPaidSkipsCanceledOrder(t *testing.T) {
 	toShip.TrackingNumber = "123456789012"
 	toShip.UpdatedAt = now
 
-	saved, err := repo.ShipIfPaid(ctx, &toShip, nil)
+	saved, err := repo.ShipIfConfirmed(ctx, &toShip, nil)
 	if err != nil {
-		t.Fatalf("ShipIfPaid: %v", err)
+		t.Fatalf("ShipIfConfirmed: %v", err)
 	}
 	if saved {
-		t.Fatal("expected ShipIfPaid to skip canceled order")
+		t.Fatal("expected ShipIfConfirmed to skip canceled order")
 	}
 	loaded, err := repo.Get(ctx, "ord-ship-1")
 	if err != nil {

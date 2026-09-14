@@ -7,11 +7,11 @@ import (
 	"github.com/elug3/dupli1/order/pkg/domain"
 )
 
-// ShipIfPaid is the atomic guard that keeps a concurrent refund cancel from
-// being last-write-wins undone when an admin ships at the same moment.
-func TestShipIfPaidUpdatesPaidOrder(t *testing.T) {
+// ShipIfConfirmed is the atomic guard that keeps a concurrent refund cancel
+// from being last-write-wins undone when an admin ships at the same moment.
+func TestShipIfConfirmedUpdatesConfirmedOrder(t *testing.T) {
 	dsn := requireDSN(t)
-	pool := freshSchema(t, dsn, "order_ship_if_paid_success_test")
+	pool := freshSchema(t, dsn, "order_ship_if_confirmed_success_test")
 	repo := &Repository{pool: pool}
 	if err := repo.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -28,6 +28,9 @@ func TestShipIfPaidUpdatesPaidOrder(t *testing.T) {
 	if err := order.MarkPaid("pay-ship-pg-1", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
+	if err := order.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
 	if err := repo.Save(ctx, order); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -40,12 +43,12 @@ func TestShipIfPaidUpdatesPaidOrder(t *testing.T) {
 	toShip.TrackingNumber = "123456789012"
 	toShip.UpdatedAt = now
 
-	saved, err := repo.ShipIfPaid(ctx, &toShip, nil)
+	saved, err := repo.ShipIfConfirmed(ctx, &toShip, nil)
 	if err != nil {
-		t.Fatalf("ShipIfPaid: %v", err)
+		t.Fatalf("ShipIfConfirmed: %v", err)
 	}
 	if !saved {
-		t.Fatal("expected ShipIfPaid to persist in_transit")
+		t.Fatal("expected ShipIfConfirmed to persist in_transit")
 	}
 
 	loaded, err := repo.Get(ctx, "ord-ship-pg-1")
@@ -60,9 +63,9 @@ func TestShipIfPaidUpdatesPaidOrder(t *testing.T) {
 	}
 }
 
-func TestShipIfPaidSkipsCanceledOrder(t *testing.T) {
+func TestShipIfConfirmedSkipsCanceledOrder(t *testing.T) {
 	dsn := requireDSN(t)
-	pool := freshSchema(t, dsn, "order_ship_if_paid_canceled_test")
+	pool := freshSchema(t, dsn, "order_ship_if_confirmed_canceled_test")
 	repo := &Repository{pool: pool}
 	if err := repo.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -78,6 +81,9 @@ func TestShipIfPaidSkipsCanceledOrder(t *testing.T) {
 	}
 	if err := order.MarkPaid("pay-ship-pg-2", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
+	}
+	if err := order.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
 	}
 	if err := repo.Save(ctx, order); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -103,12 +109,12 @@ func TestShipIfPaidSkipsCanceledOrder(t *testing.T) {
 	toShip.TrackingNumber = "123456789012"
 	toShip.UpdatedAt = now
 
-	saved, err := repo.ShipIfPaid(ctx, &toShip, nil)
+	saved, err := repo.ShipIfConfirmed(ctx, &toShip, nil)
 	if err != nil {
-		t.Fatalf("ShipIfPaid: %v", err)
+		t.Fatalf("ShipIfConfirmed: %v", err)
 	}
 	if saved {
-		t.Fatal("expected ShipIfPaid to skip canceled order")
+		t.Fatal("expected ShipIfConfirmed to skip canceled order")
 	}
 
 	loaded, err := repo.Get(ctx, "ord-ship-pg-2")

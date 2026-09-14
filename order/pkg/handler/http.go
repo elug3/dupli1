@@ -187,6 +187,26 @@ func (h *Handler) order(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "deliver" && r.Method == http.MethodPost {
+		h.deliverOrder(w, r, parts[0])
+		return
+	}
+
+	if len(parts) == 3 && parts[1] == "receipt" && parts[2] == "confirm" && r.Method == http.MethodPost {
+		h.confirmReceipt(w, r, parts[0])
+		return
+	}
+
+	if len(parts) == 3 && parts[1] == "receipt" && parts[2] == "dispute" && r.Method == http.MethodPost {
+		h.reportNotReceived(w, r, parts[0])
+		return
+	}
+
+	if len(parts) == 3 && parts[1] == "dispute" && parts[2] == "resolve" && r.Method == http.MethodPost {
+		h.resolveDisputeFulfilled(w, r, parts[0])
+		return
+	}
+
 	if len(parts) == 2 && parts[1] == "cancel" && r.Method == http.MethodPost {
 		h.customerCancel(w, r, parts[0])
 		return
@@ -269,6 +289,90 @@ func (h *Handler) confirmOrder(w http.ResponseWriter, r *http.Request, orderID s
 		return
 	}
 	order, err := h.svc.ConfirmOrder(r.Context(), orderID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, order)
+}
+
+// deliverOrder records the carrier (or a manager) handing the parcel to the
+// customer. Gated on order.ship — the same fulfillment staff who can ship can
+// mark a shipment delivered; there is no separate delivery-driver identity in
+// this system yet.
+func (h *Handler) deliverOrder(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+	if h.jwtValidator != nil && !claims.HasPermission(permissions.OrderShip) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
+		return
+	}
+	order, err := h.svc.DeliverOrder(r.Context(), orderID, claims.UserID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, order)
+}
+
+// confirmReceipt is the customer acknowledging they received a delivered order.
+func (h *Handler) confirmReceipt(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+	order, err := h.svc.GetOrder(r.Context(), orderID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	if h.jwtValidator != nil && order.CustomerID != claims.UserID {
+		respondError(w, http.StatusForbidden, "forbidden: you do not own this order")
+		return
+	}
+	updated, err := h.svc.ConfirmReceipt(r.Context(), orderID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, updated)
+}
+
+// reportNotReceived is the customer disputing a delivered order they say
+// never arrived. A manager reviews and resolves it from there.
+func (h *Handler) reportNotReceived(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+	order, err := h.svc.GetOrder(r.Context(), orderID)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	if h.jwtValidator != nil && order.CustomerID != claims.UserID {
+		respondError(w, http.StatusForbidden, "forbidden: you do not own this order")
+		return
+	}
+
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	if r.Body != nil && r.Body != http.NoBody {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+
+	updated, err := h.svc.ReportNotReceived(r.Context(), orderID, req.Reason)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, updated)
+}
+
+// resolveDisputeFulfilled is a manager closing a dispute in the delivery's
+// favor (proof of delivery, the customer found it, etc.) without a refund. A
+// manager who instead believes the customer uses PUT /status → canceled.
+func (h *Handler) resolveDisputeFulfilled(w http.ResponseWriter, r *http.Request, orderID string) {
+	claims, _ := authjwt.FromContext(r.Context())
+	if h.jwtValidator != nil && !claims.HasPermission(permissions.OrderStatusUpdate) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
+		return
+	}
+	order, err := h.svc.ResolveDisputeFulfilled(r.Context(), orderID)
 	if err != nil {
 		respondServiceError(w, err)
 		return

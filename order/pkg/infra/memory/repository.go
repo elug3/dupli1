@@ -347,7 +347,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	if !ok {
 		return nil, false, nil
 	}
-	if order.Status != domain.StatusPaid {
+	if order.Status != domain.StatusPaid && order.Status != domain.StatusConfirmed {
 		return cloneOrder(order), false, nil
 	}
 	if paymentID == "" || order.PaymentID != paymentID {
@@ -448,7 +448,7 @@ func (r *Repository) SavePaidIfCanceled(ctx context.Context, order *domain.Order
 	return true, nil
 }
 
-func (r *Repository) ShipIfPaid(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
+func (r *Repository) ShipIfConfirmed(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -460,7 +460,7 @@ func (r *Repository) ShipIfPaid(ctx context.Context, order *domain.Order, events
 	if !ok {
 		return false, nil
 	}
-	if existing.Status != domain.StatusPaid {
+	if existing.Status != domain.StatusConfirmed {
 		return false, nil
 	}
 

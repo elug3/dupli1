@@ -553,11 +553,22 @@ func seedPaidOrder(t *testing.T, svc *service.Service, customerID string) string
 	return orderID
 }
 
+// seedConfirmedOrder seeds a paid order and has the manager confirm it —
+// the required stage before shipping.
+func seedConfirmedOrder(t *testing.T, svc *service.Service, customerID string) string {
+	t.Helper()
+	orderID := seedPaidOrder(t, svc, customerID)
+	if _, err := svc.ConfirmOrder(t.Context(), orderID); err != nil {
+		t.Fatalf("ConfirmOrder: %v", err)
+	}
+	return orderID
+}
+
 func TestShipOrder_OrderManagerSuccess(t *testing.T) {
 	h, svc := newTestHandler(t)
 	mux := newMux(h)
 
-	orderID := seedPaidOrder(t, svc, "u-1")
+	orderID := seedConfirmedOrder(t, svc, "u-1")
 	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
 
 	body := map[string]string{
@@ -594,7 +605,7 @@ func TestShipOrder_OtherRequiresNote(t *testing.T) {
 	h, svc := newTestHandler(t)
 	mux := newMux(h)
 
-	orderID := seedPaidOrder(t, svc, "u-1")
+	orderID := seedConfirmedOrder(t, svc, "u-1")
 	token := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
 
 	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/ship", token, map[string]string{
@@ -992,8 +1003,8 @@ func TestCustomerCancelAfterConfirmCreatesRequest(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Status != domain.StatusPaid || got.CancelRequestedAt == nil {
-		t.Fatalf("order = %+v, want paid with cancel request", got)
+	if got.Status != domain.StatusConfirmed || got.CancelRequestedAt == nil {
+		t.Fatalf("order = %+v, want confirmed with cancel request", got)
 	}
 
 	other := makeToken(t, "u-2", nil)
@@ -1056,8 +1067,8 @@ func TestRejectCancelRequestHTTP(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Status != domain.StatusPaid || got.CancelRequestedAt != nil || got.CancelRequestReason != "" {
-		t.Fatalf("order = %+v, want paid with no cancel request", got)
+	if got.Status != domain.StatusConfirmed || got.CancelRequestedAt != nil || got.CancelRequestReason != "" {
+		t.Fatalf("order = %+v, want confirmed with no cancel request", got)
 	}
 }
 
@@ -1092,8 +1103,8 @@ func TestApproveCancelRefundRejectedLeavesPaid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetOrder: %v", err)
 	}
-	if got.Status != domain.StatusPaid || got.CancelRequestedAt == nil {
-		t.Fatalf("order = %+v, want paid with cancel request when PG rejects refund", got)
+	if got.Status != domain.StatusConfirmed || got.CancelRequestedAt == nil {
+		t.Fatalf("order = %+v, want confirmed with cancel request when PG rejects refund", got)
 	}
 }
 
@@ -1129,5 +1140,153 @@ func TestGetOrderIncludesRefundPolicyFields(t *testing.T) {
 	}
 	if raw["cancel_request_allowed"] == true {
 		t.Fatal("cancel_request_allowed must be false before confirm")
+	}
+}
+
+// seedShippedOrder confirms and ships a paid order — the state a delivery
+// starts from.
+func seedShippedOrder(t *testing.T, svc *service.Service, customerID string) string {
+	t.Helper()
+	orderID := seedConfirmedOrder(t, svc, customerID)
+	if _, err := svc.ShipOrder(t.Context(), orderID, "manager-1", domain.ShipmentTracking{
+		Carrier: domain.CarrierCJ, TrackingNumber: "123456789012",
+	}); err != nil {
+		t.Fatalf("ShipOrder: %v", err)
+	}
+	return orderID
+}
+
+func TestDeliverOrderHTTP(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	orderID := seedShippedOrder(t, svc, "u-1")
+	mgr := makeToken(t, "mgr-1", permissions.ExpandLegacyRoles([]string{permissions.RoleOrderManager}))
+
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/deliver", mgr, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var order domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&order); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if order.Status != domain.StatusDelivered || order.DeliveredBy != "mgr-1" {
+		t.Fatalf("order = %+v, want delivered by mgr-1", order)
+	}
+
+	// Without order.ship, deliver is forbidden.
+	customer := makeToken(t, "u-1", nil)
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/deliver", customer, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("customer deliver status = %d, want 403", w.Code)
+	}
+}
+
+func TestConfirmReceiptHTTP(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	orderID := seedShippedOrder(t, svc, "u-1")
+	if _, err := svc.DeliverOrder(t.Context(), orderID, "driver-1"); err != nil {
+		t.Fatalf("DeliverOrder: %v", err)
+	}
+
+	// The owning customer can confirm receipt.
+	other := makeToken(t, "u-2", nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/receipt/confirm", other, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("other customer status = %d, want 403", w.Code)
+	}
+
+	customer := makeToken(t, "u-1", nil)
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/receipt/confirm", customer, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var order domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&order); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if order.Status != domain.StatusFulfilled || order.ReceiptConfirmedAt == nil {
+		t.Fatalf("order = %+v, want fulfilled with receipt_confirmed_at set", order)
+	}
+}
+
+func TestReportNotReceivedAndResolveDisputeHTTP(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+
+	orderID := seedShippedOrder(t, svc, "u-1")
+	if _, err := svc.DeliverOrder(t.Context(), orderID, "driver-1"); err != nil {
+		t.Fatalf("DeliverOrder: %v", err)
+	}
+
+	customer := makeToken(t, "u-1", nil)
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/receipt/dispute", customer, map[string]string{
+		"reason": "box was empty",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("dispute status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var disputed domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&disputed); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if disputed.Status != domain.StatusDisputed || disputed.DisputeReason != "box was empty" {
+		t.Fatalf("order = %+v, want disputed with reason", disputed)
+	}
+
+	// Only a manager (order.status.update) can resolve the dispute.
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/dispute/resolve", customer, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("customer resolve status = %d, want 403", w.Code)
+	}
+
+	mgr := makeToken(t, "mgr-1", []string{permissions.OrderStatusUpdate})
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/dispute/resolve", mgr, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("resolve status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resolved domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&resolved); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resolved.Status != domain.StatusFulfilled {
+		t.Fatalf("status = %q, want fulfilled", resolved.Status)
+	}
+}
+
+// A manager can instead side with the customer and cancel a disputed order —
+// PUT /status still refunds like any other cancel, even post-delivery.
+func TestCancelDisputedOrderRefundsHTTP(t *testing.T) {
+	pay := &recordingPayment{}
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay)
+	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
+	mux := newMux(h)
+
+	orderID := seedShippedOrder(t, svc, "u-1")
+	if _, err := svc.DeliverOrder(t.Context(), orderID, "driver-1"); err != nil {
+		t.Fatalf("DeliverOrder: %v", err)
+	}
+	if _, err := svc.ReportNotReceived(t.Context(), orderID, "never showed up"); err != nil {
+		t.Fatalf("ReportNotReceived: %v", err)
+	}
+
+	mgr := makeToken(t, "mgr-1", []string{permissions.OrderStatusUpdate})
+	w := do(t, mux, http.MethodPut, "/api/v1/orders/"+orderID+"/status", mgr, map[string]string{"status": "canceled"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if len(pay.ids) != 1 {
+		t.Fatalf("want a refund for the canceled dispute, got %v", pay.ids)
+	}
+	var order domain.Order
+	if err := json.NewDecoder(w.Body).Decode(&order); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if order.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", order.Status)
 	}
 }
