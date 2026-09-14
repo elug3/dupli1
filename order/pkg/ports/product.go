@@ -15,7 +15,7 @@ type VariantInfo struct {
 	SkuID        string
 	SKU          string
 	ProductID    string
-	UnitPriceKRW int64  // whole KRW won (from product.price; not ×100)
+	UnitPriceWon int64  // whole KRW won (from product.price; not ×100)
 	ProductName  string // display name from parent product
 	ImageURL     string // first variant image URL, empty if none
 }

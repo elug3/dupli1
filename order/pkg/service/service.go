@@ -47,17 +47,17 @@ type CreateOrderInput struct {
 	CustomerID      string
 	Items           []domain.OrderItem
 	CouponCode      string
-	DiscountKRW     int64
+	DiscountWon     int64
 	IdempotencyKey  string
 	RecipientName   string
 	RecipientPhone  string
 	ShippingAddress domain.ShippingAddress
 	SourceAddressID string
-	// ShippingFeeKRW, when non-nil, is the delivery charge to snapshot on
+	// ShippingFeeWon, when non-nil, is the delivery charge to snapshot on
 	// this order (checkout complete uses the session quote). Nil uses the
 	// service-configured fee so a direct POST /orders still charges the
 	// current amount.
-	ShippingFeeKRW *int64
+	ShippingFeeWon *int64
 }
 
 type CompleteCheckoutInput struct {
@@ -70,7 +70,7 @@ type CompleteCheckoutInput struct {
 type idempotencyFingerprint struct {
 	CustomerID      string                 `json:"customer_id"`
 	CouponCode      string                 `json:"coupon_code,omitempty"`
-	DiscountKRW     int64                  `json:"discount_krw,omitempty"`
+	DiscountWon     int64                  `json:"discount_won,omitempty"`
 	RecipientName   string                 `json:"recipient_name,omitempty"`
 	RecipientPhone  string                 `json:"recipient_phone,omitempty"`
 	ShippingAddress domain.ShippingAddress `json:"shipping_address,omitempty"`
@@ -183,11 +183,11 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 	}
 
 	shippingFee := s.shippingFeeKRW
-	if input.ShippingFeeKRW != nil && *input.ShippingFeeKRW >= 0 {
-		shippingFee = *input.ShippingFeeKRW
+	if input.ShippingFeeWon != nil && *input.ShippingFeeWon >= 0 {
+		shippingFee = *input.ShippingFeeWon
 	}
 
-	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountKRW, shippingFee, s.now())
+	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountWon, shippingFee, s.now())
 	if err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
@@ -621,7 +621,7 @@ func hashCreateOrderInput(input CreateOrderInput) string {
 	fp := idempotencyFingerprint{
 		CustomerID:      strings.TrimSpace(input.CustomerID),
 		CouponCode:      strings.TrimSpace(input.CouponCode),
-		DiscountKRW:     input.DiscountKRW,
+		DiscountWon:     input.DiscountWon,
 		RecipientName:   strings.TrimSpace(input.RecipientName),
 		RecipientPhone:  strings.TrimSpace(input.RecipientPhone),
 		ShippingAddress: input.ShippingAddress,
@@ -677,7 +677,7 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 			SkuID:        item.SkuID,
 			SKU:          item.SKU,
 			Quantity:     item.Quantity,
-			UnitPriceKRW: item.UnitPriceKRW,
+			UnitPriceWon: item.UnitPriceWon,
 		}
 	}
 	payload, err := json.Marshal(events.Order{
@@ -685,10 +685,10 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 		OrderID:        order.ID,
 		CustomerID:     order.CustomerID,
 		Status:         string(order.Status),
-		SubtotalKRW:    order.SubtotalKRW,
-		DiscountKRW:    order.DiscountKRW,
-		ShippingFeeKRW: order.ShippingFeeKRW,
-		TotalKRW:       order.TotalKRW,
+		SubtotalWon:    order.SubtotalWon,
+		DiscountWon:    order.DiscountWon,
+		ShippingFeeWon: order.ShippingFeeWon,
+		TotalWon:       order.TotalWon,
 		Items:          items,
 		CreatedAt:      order.CreatedAt,
 		Occurred:       s.now(),
@@ -713,7 +713,7 @@ func (s *Service) DrainOutbox(ctx context.Context) error {
 	return s.outboxDrainer.Drain(ctx)
 }
 
-// priceItems resolves each line from the product catalog and ignores any client unit_price_krw.
+// priceItems resolves each line from the product catalog and ignores any client unit_price_won.
 // When any variants are missing, every failed line is collected into UnavailableVariantsError
 // rather than failing on the first miss.
 func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]domain.OrderItem, error) {
@@ -734,14 +734,14 @@ func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]d
 			}
 			return nil, err
 		}
-		if info.UnitPriceKRW <= 0 {
+		if info.UnitPriceWon <= 0 {
 			return nil, domain.ErrInvalidOrder
 		}
 		out = append(out, domain.OrderItem{
 			SkuID:        info.SkuID,
 			SKU:          info.SKU,
 			Quantity:     item.Quantity,
-			UnitPriceKRW: info.UnitPriceKRW,
+			UnitPriceWon: info.UnitPriceWon,
 			ProductName:  info.ProductName,
 			ImageURL:     info.ImageURL,
 		})

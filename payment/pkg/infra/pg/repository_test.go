@@ -104,7 +104,7 @@ func TestMigrateAddsCancelColumns(t *testing.T) {
 	repo := migratedRepo(t, schema)
 
 	for _, column := range []string{
-		"canceled_amount_krw", "canceled_at", "cancel_reason",
+		"canceled_amount_won", "canceled_at", "cancel_reason",
 		"canceled_by", "cancel_idempotency_key",
 	} {
 		var count int
@@ -146,7 +146,7 @@ func TestMigrateOverPreCancelSchemaKeepsExistingRowsReadable(t *testing.T) {
 			id              TEXT PRIMARY KEY,
 			order_id        TEXT NOT NULL,
 			customer_id     TEXT NOT NULL,
-			amount_krw    BIGINT NOT NULL CHECK (amount_krw > 0),
+			amount_won    BIGINT NOT NULL CHECK (amount_won > 0),
 			currency        TEXT NOT NULL,
 			status          TEXT NOT NULL,
 			method          TEXT NOT NULL DEFAULT 'credit_card',
@@ -168,7 +168,7 @@ func TestMigrateOverPreCancelSchemaKeepsExistingRowsReadable(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO payments (
-			id, order_id, customer_id, amount_krw, currency, status, method,
+			id, order_id, customer_id, amount_won, currency, status, method,
 			provider, provider_ref, expires_at, created_at, updated_at
 		) VALUES ('pay_legacy', 'ord_legacy', 'cust_1', 70000, 'krw', 'succeeded',
 		          'credit_card', 'nano', '2409030071109', $1, $1, $1)
@@ -185,11 +185,11 @@ func TestMigrateOverPreCancelSchemaKeepsExistingRowsReadable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read legacy row after migrate: %v", err)
 	}
-	if got.Status != domain.StatusSucceeded || got.AmountKRW != 70000 {
-		t.Fatalf("legacy row = %q / %d", got.Status, got.AmountKRW)
+	if got.Status != domain.StatusSucceeded || got.AmountWon != 70000 {
+		t.Fatalf("legacy row = %q / %d", got.Status, got.AmountWon)
 	}
-	if got.CanceledAmountKRW != 0 {
-		t.Fatalf("canceled_amount_krw = %d, want 0 for a legacy row", got.CanceledAmountKRW)
+	if got.CanceledAmountWon != 0 {
+		t.Fatalf("canceled_amount_won = %d, want 0 for a legacy row", got.CanceledAmountWon)
 	}
 	if got.CanceledAt != nil {
 		t.Fatalf("canceled_at = %v, want nil for a legacy row", got.CanceledAt)
@@ -205,7 +205,7 @@ func TestMigrateOverPreCancelSchemaKeepsExistingRowsReadable(t *testing.T) {
 }
 
 // Databases that stored payment amounts under amount_cents must keep those
-// values after the column is renamed to amount_krw.
+// values after the column is renamed to amount_won.
 func TestMigrateRenamesMoneyCentsColumns(t *testing.T) {
 	dsn := requireDSN(t)
 	pool := freshSchema(t, dsn, "payment_money_rename_test")
@@ -250,8 +250,8 @@ func TestMigrateRenamesMoneyCentsColumns(t *testing.T) {
 	}
 
 	for _, pair := range [][2]string{
-		{"amount_krw", "amount_cents"},
-		{"canceled_amount_krw", "canceled_amount_cents"},
+		{"amount_won", "amount_cents"},
+		{"canceled_amount_won", "canceled_amount_cents"},
 	} {
 		var krw, legacy int
 		if err := repo.pool.QueryRow(ctx, `
@@ -272,11 +272,11 @@ func TestMigrateRenamesMoneyCentsColumns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get after rename: %v", err)
 	}
-	if got.AmountKRW != 70000 {
-		t.Fatalf("renamed amount_krw = %d, want 70000", got.AmountKRW)
+	if got.AmountWon != 70000 {
+		t.Fatalf("renamed amount_won = %d, want 70000", got.AmountWon)
 	}
-	if got.CanceledAmountKRW != 5000 {
-		t.Fatalf("renamed canceled_amount_krw = %d, want 5000", got.CanceledAmountKRW)
+	if got.CanceledAmountWon != 5000 {
+		t.Fatalf("renamed canceled_amount_won = %d, want 5000", got.CanceledAmountWon)
 	}
 }
 
@@ -301,8 +301,8 @@ func TestSaveAndLoadFullCancel(t *testing.T) {
 	if got.Status != domain.StatusCanceled {
 		t.Fatalf("status = %q, want canceled", got.Status)
 	}
-	if got.CanceledAmountKRW != 70000 {
-		t.Fatalf("canceled_amount_krw = %d, want 70000", got.CanceledAmountKRW)
+	if got.CanceledAmountWon != 70000 {
+		t.Fatalf("canceled_amount_won = %d, want 70000", got.CanceledAmountWon)
 	}
 	if got.CancelReason != "ops reject" || got.CanceledBy != "mgr_1" {
 		t.Fatalf("audit = %q / %q", got.CancelReason, got.CanceledBy)
@@ -339,8 +339,8 @@ func TestSaveAndLoadPartialCancel(t *testing.T) {
 	if got.Status != domain.StatusSucceeded {
 		t.Fatalf("status = %q, want succeeded after a partial cancel", got.Status)
 	}
-	if got.CanceledAmountKRW != 20000 {
-		t.Fatalf("canceled = %d, want 20000", got.CanceledAmountKRW)
+	if got.CanceledAmountWon != 20000 {
+		t.Fatalf("canceled = %d, want 20000", got.CanceledAmountWon)
 	}
 	if got.RemainingCancelableKRW() != 50000 {
 		t.Fatalf("remaining = %d, want 50000", got.RemainingCancelableKRW())
@@ -377,8 +377,8 @@ func TestPartialCancelsAccumulateAcrossSaves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("final reload: %v", err)
 	}
-	if got.CanceledAmountKRW != 70000 {
-		t.Fatalf("canceled = %d, want 70000 cumulative", got.CanceledAmountKRW)
+	if got.CanceledAmountWon != 70000 {
+		t.Fatalf("canceled = %d, want 70000 cumulative", got.CanceledAmountWon)
 	}
 	if got.Status != domain.StatusCanceled {
 		t.Fatalf("status = %q, want canceled once fully refunded", got.Status)

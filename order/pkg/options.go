@@ -2,10 +2,10 @@ package order
 
 import "time"
 
-// DefaultShippingFeeKRW is the flat per-order delivery charge in whole KRW
-// applied when DUPLI1_ORDER_SHIPPING_FEE_KRW (and the deprecated
-// DUPLI1_ORDER_SHIPPING_FEE_CENTS alias) are not set.
-const DefaultShippingFeeKRW int64 = 30000
+// DefaultShippingFeeWon is the flat per-order delivery charge in whole KRW
+// applied when DUPLI1_ORDER_SHIPPING_FEE_WON (and the deprecated
+// DUPLI1_ORDER_SHIPPING_FEE_KRW / DUPLI1_ORDER_SHIPPING_FEE_CENTS aliases) are not set.
+const DefaultShippingFeeWon int64 = 30000
 
 type ServerOptions struct {
 	Addr string
@@ -29,11 +29,11 @@ type ServerOptions struct {
 	JWKSURL            string
 	NATSURL            string
 
-	// ShippingFeeKRW is the flat delivery charge added to every order, in
-	// whole KRW. Set DUPLI1_ORDER_SHIPPING_FEE_KRW to override (deprecated
-	// alias: DUPLI1_ORDER_SHIPPING_FEE_CENTS). An explicit 0 means free
+	// ShippingFeeWon is the flat delivery charge added to every order, in
+	// whole KRW. Set DUPLI1_ORDER_SHIPPING_FEE_WON to override (deprecated
+	// aliases: DUPLI1_ORDER_SHIPPING_FEE_KRW, DUPLI1_ORDER_SHIPPING_FEE_CENTS). An explicit 0 means free
 	// delivery.
-	ShippingFeeKRW int64
+	ShippingFeeWon int64
 
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
@@ -50,7 +50,7 @@ func NewServerOptions() *ServerOptions {
 		// Local Compose sets DUPLI1_GATEWAY_URL; bare `go run` can still use ProductURL.
 		ProductURL: "http://localhost:8081",
 		// Flat delivery charge in whole KRW (30,000 KRW).
-		ShippingFeeKRW: DefaultShippingFeeKRW,
+		ShippingFeeWon: DefaultShippingFeeWon,
 		ReadTimeout:    5 * time.Second,
 		// WriteTimeout covers paid cancel, which waits on NANO through payment.
 		WriteTimeout:    25 * time.Second,

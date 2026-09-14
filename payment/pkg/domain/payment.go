@@ -50,7 +50,7 @@ type Payment struct {
 	ID          string        `json:"id"`
 	OrderID     string        `json:"order_id"`
 	CustomerID  string        `json:"customer_id"`
-	AmountKRW   int64         `json:"amount_krw"` // whole KRW won (zero-decimal minor units)
+	AmountWon   int64         `json:"amount_won"` // whole KRW won (zero-decimal minor units)
 	Currency    string        `json:"currency"`
 	Status      PaymentStatus `json:"status"`
 	Method      string        `json:"method"`
@@ -65,11 +65,11 @@ type Payment struct {
 	PayerPhone     string `json:"-"`
 	PayerEmail     string `json:"-"`
 	IdempotencyKey string `json:"-"`
-	// CanceledAmountKRW is the cumulative amount canceled at the PG. It stays
-	// 0 for an untouched payment, sits between 1 and AmountKRW-1 after a
-	// partial cancel (Status remains succeeded), and equals AmountKRW once
+	// CanceledAmountWon is the cumulative amount canceled at the PG. It stays
+	// 0 for an untouched payment, sits between 1 and AmountWon-1 after a
+	// partial cancel (Status remains succeeded), and equals AmountWon once
 	// fully canceled (Status becomes canceled).
-	CanceledAmountKRW int64      `json:"canceled_amount_krw,omitempty"`
+	CanceledAmountWon int64      `json:"canceled_amount_won,omitempty"`
 	CanceledAt        *time.Time `json:"canceled_at,omitempty"`
 	CancelReason      string     `json:"cancel_reason,omitempty"`
 	CanceledBy        string     `json:"canceled_by,omitempty"`
@@ -100,7 +100,7 @@ func NewPayment(id, orderID, customerID string, amountKRW int64, currency, provi
 		ID:          id,
 		OrderID:     orderID,
 		CustomerID:  customerID,
-		AmountKRW:   amountKRW,
+		AmountWon:   amountKRW,
 		Currency:    normalized,
 		Status:      StatusRequiresPayment,
 		Method:      MethodCreditCard,
@@ -136,7 +136,7 @@ func (p *Payment) MarkSucceeded(now time.Time) {
 // RemainingCancelableKRW is the amount still captured and therefore still
 // cancelable at the PG.
 func (p *Payment) RemainingCancelableKRW() int64 {
-	remaining := p.AmountKRW - p.CanceledAmountKRW
+	remaining := p.AmountWon - p.CanceledAmountWon
 	if remaining < 0 {
 		return 0
 	}
@@ -172,7 +172,7 @@ func (p *Payment) ApplyCancel(amountKRW int64, reason, canceledBy string, now ti
 	if err := p.ValidateCancel(amountKRW); err != nil {
 		return err
 	}
-	p.CanceledAmountKRW += amountKRW
+	p.CanceledAmountWon += amountKRW
 	// Keep whatever a previous cancel recorded when this one supplies nothing:
 	// a later cancel without a reason must not erase the earlier audit trail.
 	// Only the most recent stated reason/actor is kept — a full per-cancel

@@ -36,7 +36,7 @@ type CartItem struct {
 	SKU          string `json:"sku"`
 	ProductID    string `json:"product_id"`
 	Quantity     int    `json:"quantity"`
-	UnitPriceKRW int64  `json:"unit_price_krw"` // whole KRW won (enriched from product)
+	UnitPriceWon int64  `json:"unit_price_won"` // whole KRW won (enriched from product)
 	Color        string `json:"color,omitempty"`
 	ImageURL     string `json:"image_url,omitempty"`
 	AvailableQty int    `json:"available_qty,omitempty"`
@@ -49,7 +49,7 @@ type Cart struct {
 	CustomerID       string            `json:"customer_id"`
 	Items            []CartItem        `json:"items"`
 	UnavailableItems []UnavailableItem `json:"unavailable_items,omitempty"`
-	SubtotalKRW      int64             `json:"subtotal_krw"` // whole KRW won; excludes unavailable lines
+	SubtotalWon      int64             `json:"subtotal_won"` // whole KRW won; excludes unavailable lines
 	UpdatedAt        time.Time         `json:"updated_at"`
 }
 

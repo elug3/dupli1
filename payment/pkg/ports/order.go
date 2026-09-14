@@ -23,7 +23,7 @@ type OrderSummary struct {
 	ID              string
 	CustomerID      string
 	Status          string
-	TotalKRW        int64
+	TotalWon        int64
 	RecipientName   string
 	RecipientPhone  string
 	ShippingAddress ShippingAddress

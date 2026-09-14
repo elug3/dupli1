@@ -28,8 +28,8 @@ func TestGetVariantUsesWholeWon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.UnitPriceKRW != 2890000 {
-		t.Fatalf("UnitPriceKRW=%d, want 2890000 (KRW won, not ×100)", v.UnitPriceKRW)
+	if v.UnitPriceWon != 2890000 {
+		t.Fatalf("UnitPriceWon=%d, want 2890000 (KRW won, not ×100)", v.UnitPriceWon)
 	}
 	if v.Color != "Green" {
 		t.Fatalf("Color = %q, want Green", v.Color)
@@ -65,8 +65,8 @@ func TestGetVariantMapsProductNameAndImageURL(t *testing.T) {
 	if v.ImageURL != "https://cdn.example/a.jpg" {
 		t.Fatalf("ImageURL = %q, want first image URL", v.ImageURL)
 	}
-	if v.UnitPriceKRW != 250000 {
-		t.Fatalf("UnitPriceKRW = %d, want 250000", v.UnitPriceKRW)
+	if v.UnitPriceWon != 250000 {
+		t.Fatalf("UnitPriceWon = %d, want 250000", v.UnitPriceWon)
 	}
 }
 

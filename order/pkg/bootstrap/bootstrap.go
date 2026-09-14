@@ -42,9 +42,9 @@ type Config struct {
 	JWKSURL            string
 	NATSURL            string
 
-	// ShippingFeeKRW is the flat delivery charge added to every order, in
+	// ShippingFeeWon is the flat delivery charge added to every order, in
 	// whole KRW. Zero means free delivery.
-	ShippingFeeKRW int64
+	ShippingFeeWon int64
 
 	HTTPClient *http.Client
 }
@@ -124,7 +124,7 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	svc := service.NewWithCheckout(repo, stock, couponClient, 0, eventPublisher).
 		WithProduct(product).
-		WithShippingFee(cfg.ShippingFeeKRW).
+		WithShippingFee(cfg.ShippingFeeWon).
 		WithPayment(payment)
 
 	if natsSubscriber != nil {

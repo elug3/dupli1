@@ -33,8 +33,8 @@ func TestApplyCancel_FullMovesToCanceled(t *testing.T) {
 	if p.RemainingCancelableKRW() != 0 {
 		t.Fatalf("remaining = %d, want 0", p.RemainingCancelableKRW())
 	}
-	if p.CanceledAmountKRW != 70000 {
-		t.Fatalf("canceled = %d, want 70000", p.CanceledAmountKRW)
+	if p.CanceledAmountWon != 70000 {
+		t.Fatalf("canceled = %d, want 70000", p.CanceledAmountWon)
 	}
 	if p.CancelReason != "ops reject" || p.CanceledBy != "mgr_1" {
 		t.Fatalf("reason/by = %q/%q", p.CancelReason, p.CanceledBy)
@@ -78,8 +78,8 @@ func TestApplyCancel_PartialsAccumulateThenClose(t *testing.T) {
 	if p.Status != domain.StatusCanceled {
 		t.Fatalf("status = %q, want canceled once fully refunded", p.Status)
 	}
-	if p.CanceledAmountKRW != 70000 {
-		t.Fatalf("canceled = %d, want 70000", p.CanceledAmountKRW)
+	if p.CanceledAmountWon != 70000 {
+		t.Fatalf("canceled = %d, want 70000", p.CanceledAmountWon)
 	}
 }
 
@@ -94,8 +94,8 @@ func TestApplyCancel_RejectsOverRemaining(t *testing.T) {
 	if !errors.Is(err, domain.ErrCancelAmountInvalid) {
 		t.Fatalf("err = %v, want ErrCancelAmountInvalid", err)
 	}
-	if p.CanceledAmountKRW != 50000 {
-		t.Fatalf("rejected cancel mutated state: canceled = %d", p.CanceledAmountKRW)
+	if p.CanceledAmountWon != 50000 {
+		t.Fatalf("rejected cancel mutated state: canceled = %d", p.CanceledAmountWon)
 	}
 }
 
@@ -138,8 +138,8 @@ func TestApplyCancel_DoubleFullCancelRejected(t *testing.T) {
 	if !errors.Is(err, domain.ErrNotCancelable) {
 		t.Fatalf("err = %v, want ErrNotCancelable", err)
 	}
-	if p.CanceledAmountKRW != 70000 {
-		t.Fatalf("double cancel changed total: %d", p.CanceledAmountKRW)
+	if p.CanceledAmountWon != 70000 {
+		t.Fatalf("double cancel changed total: %d", p.CanceledAmountWon)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestValidateCancel_DoesNotMutate(t *testing.T) {
 	if err := p.ValidateCancel(70000); err != nil {
 		t.Fatalf("ValidateCancel: %v", err)
 	}
-	if p.CanceledAmountKRW != 0 || p.Status != domain.StatusSucceeded || p.CanceledAt != nil {
+	if p.CanceledAmountWon != 0 || p.Status != domain.StatusSucceeded || p.CanceledAt != nil {
 		t.Fatal("ValidateCancel must not mutate the payment")
 	}
 }

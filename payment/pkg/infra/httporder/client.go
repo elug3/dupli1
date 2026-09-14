@@ -49,6 +49,7 @@ func (c *Client) GetOrder(ctx context.Context, bearerToken, orderID string) (*po
 		ID              string `json:"id"`
 		CustomerID      string `json:"customer_id"`
 		Status          string `json:"status"`
+		TotalWon        int64  `json:"total_won"`
 		TotalKRW        int64  `json:"total_krw"`
 		RecipientName   string `json:"recipient_name"`
 		RecipientPhone  string `json:"recipient_phone"`
@@ -63,11 +64,15 @@ func (c *Client) GetOrder(ctx context.Context, bearerToken, orderID string) (*po
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return nil, err
 	}
+	total := body.TotalWon
+	if total == 0 {
+		total = body.TotalKRW
+	}
 	return &ports.OrderSummary{
 		ID:             body.ID,
 		CustomerID:     body.CustomerID,
 		Status:         body.Status,
-		TotalKRW:       body.TotalKRW,
+		TotalWon:       total,
 		RecipientName:  body.RecipientName,
 		RecipientPhone: body.RecipientPhone,
 		ShippingAddress: ports.ShippingAddress{

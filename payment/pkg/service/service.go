@@ -100,7 +100,7 @@ func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInpu
 	session, err := s.checkout.CreateSession(ctx, ports.CheckoutSessionInput{
 		OrderID:    order.ID,
 		PaymentID:  paymentID,
-		AmountKRW:  order.TotalKRW,
+		AmountWon:  order.TotalWon,
 		Currency:   domain.DefaultCurrency,
 		CustomerID: order.CustomerID,
 		OrderName:  order.RecipientName,
@@ -112,7 +112,7 @@ func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInpu
 		return nil, err
 	}
 
-	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalKRW, domain.DefaultCurrency, session.Provider, session.ProviderRef, session.CheckoutURL, now)
+	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalWon, domain.DefaultCurrency, session.Provider, session.ProviderRef, session.CheckoutURL, now)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (s *Service) createBypassPayment(ctx context.Context, input CreatePaymentIn
 	}
 	now := s.now()
 	providerRef := "bypass_" + paymentID
-	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalKRW, domain.DefaultCurrency, domain.ProviderBypass, providerRef, "", now)
+	payment, err := domain.NewPayment(paymentID, order.ID, order.CustomerID, order.TotalWon, domain.DefaultCurrency, domain.ProviderBypass, providerRef, "", now)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +301,7 @@ func (s *Service) HandleNanoResult(ctx context.Context, auth NanoCallbackAuth, r
 		return nil, s.nanoReject(ctx, result, NanoRejectNotNano, payment, domain.ErrInvalidPayment)
 	}
 	amt := strings.TrimSpace(result.ReqPayAmt)
-	if amt == "" || amt != fmt.Sprintf("%d", payment.AmountKRW) {
+	if amt == "" || amt != fmt.Sprintf("%d", payment.AmountWon) {
 		return nil, s.nanoReject(ctx, result, NanoRejectAmountMismatch, payment, domain.ErrInvalidPayment)
 	}
 	if !NanoApproved(result) {
@@ -359,7 +359,7 @@ func (s *Service) paymentSucceededOutbox(payment *domain.Payment) ([]ports.Outbo
 		EventType: ports.PaymentSucceededSubject,
 		OrderID:   payment.OrderID,
 		PaymentID: payment.ID,
-		AmountKRW: payment.AmountKRW,
+		AmountWon: payment.AmountWon,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal payment.succeeded: %w", err)
@@ -429,7 +429,7 @@ func (s *Service) ReconcileSucceededPayments(ctx context.Context, lookback time.
 			EventType: ports.PaymentSucceededSubject,
 			OrderID:   p.OrderID,
 			PaymentID: p.ID,
-			AmountKRW: p.AmountKRW,
+			AmountWon: p.AmountWon,
 		}); err != nil && firstErr == nil {
 			firstErr = err
 		}
@@ -440,9 +440,9 @@ func (s *Service) ReconcileSucceededPayments(ctx context.Context, lookback time.
 // CancelPaymentInput requests a cancel (refund) of a captured payment.
 type CancelPaymentInput struct {
 	PaymentID string
-	// AmountKRW is the amount to cancel. Zero means the full remaining
+	// AmountWon is the amount to cancel. Zero means the full remaining
 	// balance, which is the common ops case (order rejected after payment).
-	AmountKRW  int64
+	AmountWon  int64
 	Reason     string
 	CanceledBy string
 	// IdempotencyKey makes a retry of this exact cancel a no-op. Strongly
@@ -479,7 +479,7 @@ func (s *Service) CancelPayment(ctx context.Context, input CancelPaymentInput) (
 			return nil, nil
 		}
 
-		requested := input.AmountKRW
+		requested := input.AmountWon
 		if requested == 0 {
 			requested = payment.RemainingCancelableKRW()
 		}
@@ -494,7 +494,7 @@ func (s *Service) CancelPayment(ctx context.Context, input CancelPaymentInput) (
 			result, err := s.checkout.CancelPayment(ctx, ports.CancelPaymentInput{
 				ProviderRef: payment.ProviderRef,
 				PaymentID:   payment.ID,
-				AmountKRW:   requested,
+				AmountWon:   requested,
 				Currency:    payment.Currency,
 			})
 			if err != nil {
@@ -535,16 +535,16 @@ func reconcileCanceledAmount(paymentID string, result *ports.CancelPaymentResult
 	if result == nil {
 		return amount
 	}
-	if result.CanceledAmountKRW > 0 {
-		amount = result.CanceledAmountKRW
+	if result.CanceledAmountWon > 0 {
+		amount = result.CanceledAmountWon
 	}
 	if result.RemainingKnown {
-		amount = remainingBefore - result.RemainingKRW
+		amount = remainingBefore - result.RemainingWon
 	}
 	if amount != requested {
 		log.Printf(
 			"cancel payment %s: provider canceled %d (remaining_known=%t remaining=%d), requested %d",
-			paymentID, amount, result.RemainingKnown, result.RemainingKRW, requested,
+			paymentID, amount, result.RemainingKnown, result.RemainingWon, requested,
 		)
 	}
 	if amount < 1 {
@@ -566,8 +566,8 @@ func (s *Service) paymentCanceledOutbox(payment *domain.Payment, amountKRW int64
 		EventType:    ports.PaymentCanceledSubject,
 		OrderID:      payment.OrderID,
 		PaymentID:    payment.ID,
-		AmountKRW:    amountKRW,
-		RemainingKRW: payment.RemainingCancelableKRW(),
+		AmountWon:    amountKRW,
+		RemainingWon: payment.RemainingCancelableKRW(),
 		Reason:       payment.CancelReason,
 		CanceledBy:   payment.CanceledBy,
 		Occurred:     s.now(),

@@ -111,11 +111,11 @@ func (s *Service) alertCallbackRejected(ctx context.Context, result NanoResult, 
 		Occurred:       s.now(),
 	}
 	if payment != nil {
-		event.ExpectedKRW = payment.AmountKRW
+		event.ExpectedWon = payment.AmountWon
 	}
 
-	log.Printf("payment: ALERT nano callback approved but rejected: reason=%s source=%s payment=%s order=%s reported_amount=%s expected_krw=%d tran=%s",
-		event.Reason, event.Source, event.PaymentID, event.OrderID, event.ReportedAmount, event.ExpectedKRW, event.TranNo)
+	log.Printf("payment: ALERT nano callback approved but rejected: reason=%s source=%s payment=%s order=%s reported_amount=%s expected_won=%d tran=%s",
+		event.Reason, event.Source, event.PaymentID, event.OrderID, event.ReportedAmount, event.ExpectedWon, event.TranNo)
 
 	if s.events == nil {
 		return

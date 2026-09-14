@@ -40,7 +40,7 @@ func toVariantInfo(v *productclient.Variant, err error) (*ports.VariantInfo, err
 		SKU:          v.SKU,
 		ProductID:    v.ProductID,
 		Color:        v.Color,
-		UnitPriceKRW: v.UnitPriceKRW,
+		UnitPriceWon: v.UnitPriceWon,
 		ImageURL:     v.ImageURL,
 	}, nil
 }

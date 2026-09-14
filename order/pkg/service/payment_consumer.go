@@ -27,7 +27,7 @@ func (s *Service) handlePaymentSucceeded(ctx context.Context, _ string, payload 
 	if event.OrderID == "" || event.PaymentID == "" {
 		return fmt.Errorf("payment.succeeded missing order_id or payment_id")
 	}
-	_, err := s.MarkOrderPaid(ctx, event.OrderID, event.PaymentID, event.AmountKRW)
+	_, err := s.MarkOrderPaid(ctx, event.OrderID, event.PaymentID, event.AmountWon)
 	if err != nil {
 		return fmt.Errorf("mark order paid order_id=%s payment_id=%s: %w", event.OrderID, event.PaymentID, err)
 	}
@@ -165,10 +165,10 @@ func (s *Service) handlePaymentCanceled(ctx context.Context, _ string, payload [
 		return nil
 	}
 	if !event.RemainingSpecified() {
-		log.Printf("payment.canceled missing remaining_krw (order %s payment %s): skip", event.OrderID, event.PaymentID)
+		log.Printf("payment.canceled missing remaining_won (order %s payment %s): skip", event.OrderID, event.PaymentID)
 		return nil
 	}
-	return s.CancelOrderForRefund(ctx, event.OrderID, event.PaymentID, event.RemainingKRW)
+	return s.CancelOrderForRefund(ctx, event.OrderID, event.PaymentID, event.RemainingWon)
 }
 
 // CancelOrderForRefund cancels an order whose payment was fully refunded.

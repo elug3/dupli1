@@ -35,8 +35,8 @@ type Variant struct {
 	ProductID   string
 	Color       string
 	ProductName string
-	// UnitPriceKRW is whole KRW won (from product.price; not ×100).
-	UnitPriceKRW int64
+	// UnitPriceWon is whole KRW won (from product.price; not ×100).
+	UnitPriceWon int64
 	ImageURL     string
 	// Status is decoded from the response but not currently read by any
 	// caller.
@@ -109,8 +109,8 @@ func (c *Client) fetchVariant(ctx context.Context, path string) (*Variant, error
 		ProductID:   body.ProductID,
 		Color:       body.Color,
 		ProductName: body.ProductName,
-		// Product prices are KRW won; UnitPriceKRW stores whole won (Stripe minor units for krw).
-		UnitPriceKRW: money.FromProductPrice(body.Price),
+		// Product prices are KRW won; UnitPriceWon stores whole won (Stripe minor units for krw).
+		UnitPriceWon: money.FromProductPrice(body.Price),
 		ImageURL:     firstOf(body.ImageURLs),
 		Status:       body.Status,
 	}, nil

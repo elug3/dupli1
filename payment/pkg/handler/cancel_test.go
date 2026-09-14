@@ -28,7 +28,7 @@ type cancelOrderClient struct {
 
 func (c cancelOrderClient) GetOrder(_ context.Context, _, _ string) (*ports.OrderSummary, error) {
 	return &ports.OrderSummary{
-		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalKRW: c.totalKRW,
+		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalWon: c.totalKRW,
 	}, nil
 }
 
@@ -110,8 +110,8 @@ func TestCancelPayment_WithPermissionCancelsFully(t *testing.T) {
 	if got.Status != domain.StatusCanceled {
 		t.Fatalf("status = %q, want canceled", got.Status)
 	}
-	if got.CanceledAmountKRW != 70000 {
-		t.Fatalf("canceled = %d, want the full 70000", got.CanceledAmountKRW)
+	if got.CanceledAmountWon != 70000 {
+		t.Fatalf("canceled = %d, want the full 70000", got.CanceledAmountWon)
 	}
 	if got.CanceledBy != "mgr-1" || got.CancelReason != "ops reject" {
 		t.Fatalf("audit = %q / %q", got.CanceledBy, got.CancelReason)
@@ -148,7 +148,7 @@ func TestCancelPayment_PartialAmount(t *testing.T) {
 	mux, payment := newCancelFixture(t, 70000)
 	token := makeToken(t, cancelTestSecret, "mgr-1", []string{permissions.PaymentCancel})
 
-	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_krw":20000}`))
+	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_won":20000}`))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -159,8 +159,8 @@ func TestCancelPayment_PartialAmount(t *testing.T) {
 	if got.Status != domain.StatusSucceeded {
 		t.Fatalf("status = %q, want succeeded after partial", got.Status)
 	}
-	if got.CanceledAmountKRW != 20000 {
-		t.Fatalf("canceled = %d, want 20000", got.CanceledAmountKRW)
+	if got.CanceledAmountWon != 20000 {
+		t.Fatalf("canceled = %d, want 20000", got.CanceledAmountWon)
 	}
 }
 
@@ -168,7 +168,7 @@ func TestCancelPayment_AmountOverTotalIsBadRequest(t *testing.T) {
 	mux, payment := newCancelFixture(t, 70000)
 	token := makeToken(t, cancelTestSecret, "mgr-1", []string{permissions.PaymentCancel})
 
-	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_krw":70001}`))
+	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_won":70001}`))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
 	}
@@ -178,7 +178,7 @@ func TestCancelPayment_NegativeAmountIsBadRequest(t *testing.T) {
 	mux, payment := newCancelFixture(t, 70000)
 	token := makeToken(t, cancelTestSecret, "mgr-1", []string{permissions.PaymentCancel})
 
-	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_krw":-1}`))
+	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_won":-1}`))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
 	}
@@ -231,7 +231,7 @@ func TestCancelPayment_IdempotencyKeyHeaderIsHonored(t *testing.T) {
 	send := func() *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/"+payment.ID+"/cancel",
-			bytes.NewReader([]byte(`{"amount_krw":20000}`)))
+			bytes.NewReader([]byte(`{"amount_won":20000}`)))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Idempotency-Key", "retry-1")
@@ -250,7 +250,7 @@ func TestCancelPayment_IdempotencyKeyHeaderIsHonored(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatal(err)
 	}
-	if got.CanceledAmountKRW != 20000 {
-		t.Fatalf("canceled = %d, want 20000 — the retry must not refund twice", got.CanceledAmountKRW)
+	if got.CanceledAmountWon != 20000 {
+		t.Fatalf("canceled = %d, want 20000 — the retry must not refund twice", got.CanceledAmountWon)
 	}
 }

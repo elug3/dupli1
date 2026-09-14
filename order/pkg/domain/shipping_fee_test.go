@@ -9,7 +9,7 @@ import (
 
 func feeTestItems() []domain.OrderItem {
 	return []domain.OrderItem{
-		{SKU: "BAG-001", Quantity: 1, UnitPriceKRW: 250000},
+		{SKU: "BAG-001", Quantity: 1, UnitPriceWon: 250000},
 	}
 }
 
@@ -19,14 +19,14 @@ func TestNewOrder_AddsShippingFeeToTotal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
-	if order.SubtotalKRW != 250000 {
-		t.Fatalf("subtotal = %d, want 250000", order.SubtotalKRW)
+	if order.SubtotalWon != 250000 {
+		t.Fatalf("subtotal = %d, want 250000", order.SubtotalWon)
 	}
-	if order.ShippingFeeKRW != 3000 {
-		t.Fatalf("shipping = %d, want 3000", order.ShippingFeeKRW)
+	if order.ShippingFeeWon != 3000 {
+		t.Fatalf("shipping = %d, want 3000", order.ShippingFeeWon)
 	}
-	if order.TotalKRW != 253000 {
-		t.Fatalf("total = %d, want subtotal + shipping = 253000", order.TotalKRW)
+	if order.TotalWon != 253000 {
+		t.Fatalf("total = %d, want subtotal + shipping = 253000", order.TotalWon)
 	}
 }
 
@@ -37,8 +37,8 @@ func TestNewOrder_ShippingAppliesAfterDiscount(t *testing.T) {
 		t.Fatalf("NewOrder: %v", err)
 	}
 	// 250000 - 25000 + 3000
-	if order.TotalKRW != 228000 {
-		t.Fatalf("total = %d, want 228000 (subtotal - discount + shipping)", order.TotalKRW)
+	if order.TotalWon != 228000 {
+		t.Fatalf("total = %d, want 228000 (subtotal - discount + shipping)", order.TotalWon)
 	}
 }
 
@@ -50,10 +50,10 @@ func TestNewOrder_FullDiscountStillPaysShipping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
-	if order.TotalKRW != 3000 {
-		t.Fatalf("total = %d, want 3000 — the shipping fee survives a full discount", order.TotalKRW)
+	if order.TotalWon != 3000 {
+		t.Fatalf("total = %d, want 3000 — the shipping fee survives a full discount", order.TotalWon)
 	}
-	if order.TotalKRW < order.ShippingFeeKRW {
+	if order.TotalWon < order.ShippingFeeWon {
 		t.Fatal("total must never fall below the shipping fee")
 	}
 }
@@ -64,11 +64,11 @@ func TestNewOrder_ZeroShippingKeepsOldPricing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
-	if order.TotalKRW != 225000 {
-		t.Fatalf("total = %d, want 225000 with free delivery", order.TotalKRW)
+	if order.TotalWon != 225000 {
+		t.Fatalf("total = %d, want 225000 with free delivery", order.TotalWon)
 	}
-	if order.ShippingFeeKRW != 0 {
-		t.Fatalf("shipping = %d, want 0", order.ShippingFeeKRW)
+	if order.ShippingFeeWon != 0 {
+		t.Fatalf("shipping = %d, want 0", order.ShippingFeeWon)
 	}
 }
 
@@ -79,7 +79,7 @@ func TestNewOrder_RejectsNegativeShippingFee(t *testing.T) {
 	}
 }
 
-// The payment service charges order.TotalKRW and MarkPaid compares against
+// The payment service charges order.TotalWon and MarkPaid compares against
 // the same field, so a shipped-fee order must reconcile at the inclusive total
 // and reject the goods-only amount.
 func TestMarkPaid_RequiresTotalIncludingShipping(t *testing.T) {
@@ -105,11 +105,11 @@ func TestCheckoutSession_EmptySessionQuotesNoShipping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCheckoutSession: %v", err)
 	}
-	if session.TotalKRW != 0 {
-		t.Fatalf("empty session total = %d, want 0 — an empty cart owes no delivery", session.TotalKRW)
+	if session.TotalWon != 0 {
+		t.Fatalf("empty session total = %d, want 0 — an empty cart owes no delivery", session.TotalWon)
 	}
-	if session.ShippingFeeKRW != 3000 {
-		t.Fatalf("quoted fee = %d, want the configured 3000 retained on the session", session.ShippingFeeKRW)
+	if session.ShippingFeeWon != 3000 {
+		t.Fatalf("quoted fee = %d, want the configured 3000 retained on the session", session.ShippingFeeWon)
 	}
 }
 
@@ -119,14 +119,14 @@ func TestCheckoutSession_TotalIncludesShippingOnceItemsExist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCheckoutSession: %v", err)
 	}
-	if err := session.UpsertItem(domain.OrderItem{SKU: "BAG-001", Quantity: 1, UnitPriceKRW: 250000}, now); err != nil {
+	if err := session.UpsertItem(domain.OrderItem{SKU: "BAG-001", Quantity: 1, UnitPriceWon: 250000}, now); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
 	}
-	if session.SubtotalKRW != 250000 {
-		t.Fatalf("subtotal = %d, want 250000", session.SubtotalKRW)
+	if session.SubtotalWon != 250000 {
+		t.Fatalf("subtotal = %d, want 250000", session.SubtotalWon)
 	}
-	if session.TotalKRW != 253000 {
-		t.Fatalf("total = %d, want 253000", session.TotalKRW)
+	if session.TotalWon != 253000 {
+		t.Fatalf("total = %d, want 253000", session.TotalWon)
 	}
 }
 
@@ -138,15 +138,15 @@ func TestCheckoutSession_RemovingLastItemDropsShipping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCheckoutSession: %v", err)
 	}
-	item := domain.OrderItem{SKU: "BAG-001", Quantity: 1, UnitPriceKRW: 250000}
+	item := domain.OrderItem{SKU: "BAG-001", Quantity: 1, UnitPriceWon: 250000}
 	if err := session.UpsertItem(item, now); err != nil {
 		t.Fatalf("UpsertItem: %v", err)
 	}
 	if err := session.RemoveItem("BAG-001", now); err != nil {
 		t.Fatalf("RemoveItem: %v", err)
 	}
-	if session.TotalKRW != 0 {
-		t.Fatalf("emptied session total = %d, want 0", session.TotalKRW)
+	if session.TotalWon != 0 {
+		t.Fatalf("emptied session total = %d, want 0", session.TotalWon)
 	}
 }
 

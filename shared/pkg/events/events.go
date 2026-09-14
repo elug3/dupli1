@@ -37,7 +37,7 @@ type OrderItem struct {
 	SkuID        string `json:"sku_id,omitempty"`
 	SKU          string `json:"sku"`
 	Quantity     int    `json:"quantity"`
-	UnitPriceKRW int64  `json:"unit_price_krw"`
+	UnitPriceWon int64  `json:"unit_price_won"`
 }
 
 // Order is the payload for OrderCreated, OrderStatusUpdate, and OrderPaid —
@@ -47,16 +47,74 @@ type Order struct {
 	OrderID     string `json:"order_id"`
 	CustomerID  string `json:"customer_id"`
 	Status      string `json:"status"`
-	SubtotalKRW int64  `json:"subtotal_krw"`
-	DiscountKRW int64  `json:"discount_krw"`
-	// ShippingFeeKRW is the delivery charge included in TotalKRW, in whole
+	SubtotalWon int64  `json:"subtotal_won"`
+	DiscountWon int64  `json:"discount_won"`
+	// ShippingFeeWon is the delivery charge included in TotalWon, in whole
 	// KRW. Zero for orders placed before shipping fees existed, and for any
 	// deployment running with delivery free.
-	ShippingFeeKRW int64       `json:"shipping_fee_krw"`
-	TotalKRW       int64       `json:"total_krw"`
+	ShippingFeeWon int64       `json:"shipping_fee_won"`
+	TotalWon       int64       `json:"total_won"`
 	Items          []OrderItem `json:"items"`
 	CreatedAt      time.Time   `json:"created_at"`
 	Occurred       time.Time   `json:"occurred_at"`
+}
+
+func (e *Order) UnmarshalJSON(data []byte) error {
+	type itemWire struct {
+		SkuID         string `json:"sku_id"`
+		SKU           string `json:"sku"`
+		Quantity      int    `json:"quantity"`
+		UnitPriceWon  *int64 `json:"unit_price_won"`
+		UnitPriceKRW  *int64 `json:"unit_price_krw"`
+		UnitPriceCent *int64 `json:"unit_price_cents"`
+	}
+	type wire struct {
+		EventType      string     `json:"event_type"`
+		OrderID        string     `json:"order_id"`
+		CustomerID     string     `json:"customer_id"`
+		Status         string     `json:"status"`
+		SubtotalWon    *int64     `json:"subtotal_won"`
+		SubtotalKRW    *int64     `json:"subtotal_krw"`
+		DiscountWon    *int64     `json:"discount_won"`
+		DiscountKRW    *int64     `json:"discount_krw"`
+		ShippingFeeWon *int64     `json:"shipping_fee_won"`
+		ShippingFeeKRW *int64     `json:"shipping_fee_krw"`
+		TotalWon       *int64     `json:"total_won"`
+		TotalKRW       *int64     `json:"total_krw"`
+		Items          []itemWire `json:"items"`
+		CreatedAt      time.Time  `json:"created_at"`
+		Occurred       time.Time  `json:"occurred_at"`
+	}
+	var w wire
+	if err := json.Unmarshal(data, &w); err != nil {
+		return err
+	}
+	e.EventType = w.EventType
+	e.OrderID = w.OrderID
+	e.CustomerID = w.CustomerID
+	e.Status = w.Status
+	e.CreatedAt = w.CreatedAt
+	e.Occurred = w.Occurred
+	if v, ok := pickWon(w.SubtotalWon, w.SubtotalKRW, nil); ok {
+		e.SubtotalWon = v
+	}
+	if v, ok := pickWon(w.DiscountWon, w.DiscountKRW, nil); ok {
+		e.DiscountWon = v
+	}
+	if v, ok := pickWon(w.ShippingFeeWon, w.ShippingFeeKRW, nil); ok {
+		e.ShippingFeeWon = v
+	}
+	if v, ok := pickWon(w.TotalWon, w.TotalKRW, nil); ok {
+		e.TotalWon = v
+	}
+	e.Items = make([]OrderItem, len(w.Items))
+	for i, item := range w.Items {
+		e.Items[i] = OrderItem{SkuID: item.SkuID, SKU: item.SKU, Quantity: item.Quantity}
+		if v, ok := pickWon(item.UnitPriceWon, item.UnitPriceKRW, item.UnitPriceCent); ok {
+			e.Items[i].UnitPriceWon = v
+		}
+	}
+	return nil
 }
 
 // Product is the payload for ProductCreated, ProductUpdated,
@@ -82,16 +140,17 @@ type PaymentSucceededEvent struct {
 	EventType string `json:"event_type"`
 	OrderID   string `json:"order_id"`
 	PaymentID string `json:"payment_id"`
-	AmountKRW int64  `json:"amount_krw"`
+	AmountWon int64  `json:"amount_won"`
 }
 
 func (e *PaymentSucceededEvent) UnmarshalJSON(data []byte) error {
 	type wire struct {
-		EventType    string `json:"event_type"`
-		OrderID      string `json:"order_id"`
-		PaymentID    string `json:"payment_id"`
-		AmountKRW    *int64 `json:"amount_krw"`
-		AmountLegacy *int64 `json:"amount_cents"`
+		EventType   string `json:"event_type"`
+		OrderID     string `json:"order_id"`
+		PaymentID   string `json:"payment_id"`
+		AmountWon   *int64 `json:"amount_won"`
+		AmountKRW   *int64 `json:"amount_krw"`
+		AmountCents *int64 `json:"amount_cents"`
 	}
 	var w wire
 	if err := json.Unmarshal(data, &w); err != nil {
@@ -100,32 +159,32 @@ func (e *PaymentSucceededEvent) UnmarshalJSON(data []byte) error {
 	e.EventType = w.EventType
 	e.OrderID = w.OrderID
 	e.PaymentID = w.PaymentID
-	if amount, ok := pickKRW(w.AmountKRW, w.AmountLegacy); ok {
-		e.AmountKRW = amount
+	if amount, ok := pickWon(w.AmountWon, w.AmountKRW, w.AmountCents); ok {
+		e.AmountWon = amount
 	}
 	return nil
 }
 
 // PaymentCanceledEvent is the payload for PaymentCanceled — published by
 // payment when a succeeded payment is canceled (fully or partially) at the PG.
-// AmountKRW is the amount canceled by this event; RemainingKRW is what is
+// AmountWon is the amount canceled by this event; RemainingWon is what is
 // still captured afterwards (0 on a full cancel). Order cancels a still-paid
-// order on a full refund (remaining_krw == 0) when payment_id matches;
-// notification alerts ops. A missing remaining_krw (and legacy remaining_cents)
+// order on a full refund (remaining_won == 0) when payment_id matches;
+// notification alerts ops. A missing remaining_won (and legacy remaining_cents)
 // must not be treated as 0.
 type PaymentCanceledEvent struct {
 	EventType    string    `json:"event_type"`
 	OrderID      string    `json:"order_id"`
 	PaymentID    string    `json:"payment_id"`
-	AmountKRW    int64     `json:"amount_krw"`
-	RemainingKRW int64     `json:"remaining_krw"`
+	AmountWon    int64     `json:"amount_won"`
+	RemainingWon int64     `json:"remaining_won"`
 	Reason       string    `json:"reason,omitempty"`
 	CanceledBy   string    `json:"canceled_by,omitempty"`
 	Occurred     time.Time `json:"occurred_at"`
 	remainingSet bool      `json:"-"`
 }
 
-// RemainingSpecified reports whether remaining_krw (or the legacy
+// RemainingSpecified reports whether remaining_won (or the legacy
 // remaining_cents alias) was present in the JSON payload. encoding/json treats
 // a missing int64 as 0, which order would otherwise interpret as a full refund.
 func (e PaymentCanceledEvent) RemainingSpecified() bool {
@@ -134,16 +193,18 @@ func (e PaymentCanceledEvent) RemainingSpecified() bool {
 
 func (e *PaymentCanceledEvent) UnmarshalJSON(data []byte) error {
 	type wire struct {
-		EventType       string    `json:"event_type"`
-		OrderID         string    `json:"order_id"`
-		PaymentID       string    `json:"payment_id"`
-		AmountKRW       *int64    `json:"amount_krw"`
-		AmountLegacy    *int64    `json:"amount_cents"`
-		RemainingKRW    *int64    `json:"remaining_krw"`
-		RemainingLegacy *int64    `json:"remaining_cents"`
-		Reason          string    `json:"reason"`
-		CanceledBy      string    `json:"canceled_by"`
-		Occurred        time.Time `json:"occurred_at"`
+		EventType      string    `json:"event_type"`
+		OrderID        string    `json:"order_id"`
+		PaymentID      string    `json:"payment_id"`
+		AmountWon      *int64    `json:"amount_won"`
+		AmountKRW      *int64    `json:"amount_krw"`
+		AmountCents    *int64    `json:"amount_cents"`
+		RemainingWon   *int64    `json:"remaining_won"`
+		RemainingKRW   *int64    `json:"remaining_krw"`
+		RemainingCents *int64    `json:"remaining_cents"`
+		Reason         string    `json:"reason"`
+		CanceledBy     string    `json:"canceled_by"`
+		Occurred       time.Time `json:"occurred_at"`
 	}
 	var w wire
 	if err := json.Unmarshal(data, &w); err != nil {
@@ -155,24 +216,27 @@ func (e *PaymentCanceledEvent) UnmarshalJSON(data []byte) error {
 	e.Reason = w.Reason
 	e.CanceledBy = w.CanceledBy
 	e.Occurred = w.Occurred
-	if amount, ok := pickKRW(w.AmountKRW, w.AmountLegacy); ok {
-		e.AmountKRW = amount
+	if amount, ok := pickWon(w.AmountWon, w.AmountKRW, w.AmountCents); ok {
+		e.AmountWon = amount
 	}
-	if remaining, ok := pickKRW(w.RemainingKRW, w.RemainingLegacy); ok {
-		e.RemainingKRW = remaining
+	if remaining, ok := pickWon(w.RemainingWon, w.RemainingKRW, w.RemainingCents); ok {
+		e.RemainingWon = remaining
 		e.remainingSet = true
 	}
 	return nil
 }
 
-// pickKRW prefers the canonical *_krw JSON field and falls back to a leftover
-// *_cents alias so in-flight outbox rows still decode after the rename.
-func pickKRW(krw, legacy *int64) (int64, bool) {
+// pickWon prefers the canonical *_won JSON field, then leftover *_krw, then
+// leftover *_cents, so in-flight outbox rows still decode after the rename.
+func pickWon(won, krw, cents *int64) (int64, bool) {
+	if won != nil {
+		return *won, true
+	}
 	if krw != nil {
 		return *krw, true
 	}
-	if legacy != nil {
-		return *legacy, true
+	if cents != nil {
+		return *cents, true
 	}
 	return 0, false
 }
@@ -200,10 +264,10 @@ type PaymentCallbackRejectedEvent struct {
 	Reason string `json:"reason"`
 	// ResultCode is the PG's own result code, retained verbatim.
 	ResultCode string `json:"result_code,omitempty"`
-	// ExpectedKRW is the amount dupli1 holds for the payment, in whole KRW;
+	// ExpectedWon is the amount dupli1 holds for the payment, in whole KRW;
 	// ReportedAmount is what the PG sent, unparsed, so a malformed value survives
 	// into the alert instead of being flattened to 0.
-	ExpectedKRW    int64  `json:"expected_krw,omitempty"`
+	ExpectedWon    int64  `json:"expected_won,omitempty"`
 	ReportedAmount string `json:"reported_amount,omitempty"`
 	TranNo         string `json:"tran_no,omitempty"`
 	// Detail is a short human-readable note for the alert (never a secret).
