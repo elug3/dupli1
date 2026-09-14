@@ -1522,7 +1522,7 @@ func TestEnforceDeliveryPolicyAutoFulfills(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateOrder: %v", err)
 		}
-		if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-"+order.ID, order.TotalKRW); err != nil {
+		if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-"+order.ID, order.TotalWon); err != nil {
 			t.Fatalf("MarkOrderPaid: %v", err)
 		}
 		if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
