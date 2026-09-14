@@ -184,7 +184,12 @@ func (r *Repository) migrate() error {
 	// confirmed_at already set) means a manager had already confirmed it
 	// under the old semantics, so it becomes 'confirmed' here. Idempotent:
 	// once migrated, Confirm() always moves status and confirmed_at together.
-	_, _ = r.pool.Exec(ctx, `UPDATE orders SET status = 'confirmed' WHERE status = 'paid' AND confirmed_at IS NOT NULL`)
+	if _, err := r.pool.Exec(ctx, `UPDATE orders SET status = 'confirmed' WHERE status = 'paid' AND confirmed_at IS NOT NULL`); err != nil {
+		// Not silently ignored like the additive ALTERs above: an order left
+		// on `paid` with confirmed_at set can never ship (Ship requires
+		// confirmed), so a failure here strands real orders.
+		return fmt.Errorf("migrate order schema: promote legacy confirmed orders: %w", err)
+	}
 
 	// Indexes over columns the ALTERs above add. Creating these alongside the base
 	// tables would fail on a fresh database, where orders has no payment_due_at yet.

@@ -225,6 +225,10 @@ func TestSaveAndLoadOrderShipmentTracking(t *testing.T) {
 	if err := order.MarkPaid("pay-ship-1", order.TotalKRW, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
+	// Ship is only valid from confirmed — a manager accepts the order first.
+	if err := order.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
 	tracking := domain.ShipmentTracking{
 		Carrier:        domain.CarrierOther,
 		TrackingNumber: "INTL-TRACK-99",
