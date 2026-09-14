@@ -6,7 +6,7 @@ import (
 )
 
 // Databases that stored order money under *_cents must keep those snapshotted
-// values after the columns are renamed to *_krw.
+// values after the columns are renamed to *_won.
 func TestMigrateRenamesMoneyCentsColumns(t *testing.T) {
 	dsn := requireDSN(t)
 	pool := freshSchema(t, dsn, "order_money_rename_test")
@@ -99,16 +99,16 @@ func TestMigrateRenamesMoneyCentsColumns(t *testing.T) {
 	}
 
 	pairs := []struct{ table, krw, legacy string }{
-		{"orders", "subtotal_krw", "subtotal_cents"},
-		{"orders", "discount_krw", "discount_cents"},
-		{"orders", "shipping_fee_krw", "shipping_fee_cents"},
-		{"orders", "total_krw", "total_cents"},
-		{"checkout_sessions", "subtotal_krw", "subtotal_cents"},
-		{"checkout_sessions", "discount_krw", "discount_cents"},
-		{"checkout_sessions", "shipping_fee_krw", "shipping_fee_cents"},
-		{"checkout_sessions", "total_krw", "total_cents"},
-		{"order_items", "unit_price_krw", "unit_price_cents"},
-		{"checkout_session_items", "unit_price_krw", "unit_price_cents"},
+		{"orders", "subtotal_won", "subtotal_cents"},
+		{"orders", "discount_won", "discount_cents"},
+		{"orders", "shipping_fee_won", "shipping_fee_cents"},
+		{"orders", "total_won", "total_cents"},
+		{"checkout_sessions", "subtotal_won", "subtotal_cents"},
+		{"checkout_sessions", "discount_won", "discount_cents"},
+		{"checkout_sessions", "shipping_fee_won", "shipping_fee_cents"},
+		{"checkout_sessions", "total_won", "total_cents"},
+		{"order_items", "unit_price_won", "unit_price_cents"},
+		{"checkout_session_items", "unit_price_won", "unit_price_cents"},
 	}
 	for _, pair := range pairs {
 		var krw, legacy int
@@ -130,23 +130,23 @@ func TestMigrateRenamesMoneyCentsColumns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get after rename: %v", err)
 	}
-	if got.SubtotalKRW != 250000 || got.DiscountKRW != 10000 || got.ShippingFeeKRW != 3000 || got.TotalKRW != 243000 {
+	if got.SubtotalWon != 250000 || got.DiscountWon != 10000 || got.ShippingFeeWon != 3000 || got.TotalWon != 243000 {
 		t.Fatalf("renamed order money = subtotal %d discount %d shipping %d total %d",
-			got.SubtotalKRW, got.DiscountKRW, got.ShippingFeeKRW, got.TotalKRW)
+			got.SubtotalWon, got.DiscountWon, got.ShippingFeeWon, got.TotalWon)
 	}
-	if len(got.Items) != 1 || got.Items[0].UnitPriceKRW != 250000 {
-		t.Fatalf("renamed order item = %+v, want unit_price_krw 250000", got.Items)
+	if len(got.Items) != 1 || got.Items[0].UnitPriceWon != 250000 {
+		t.Fatalf("renamed order item = %+v, want unit_price_won 250000", got.Items)
 	}
 
 	session, err := repo.GetCheckoutSession(ctx, "cs-cents")
 	if err != nil {
 		t.Fatalf("GetCheckoutSession after rename: %v", err)
 	}
-	if session.SubtotalKRW != 250000 || session.DiscountKRW != 10000 || session.ShippingFeeKRW != 3000 || session.TotalKRW != 243000 {
+	if session.SubtotalWon != 250000 || session.DiscountWon != 10000 || session.ShippingFeeWon != 3000 || session.TotalWon != 243000 {
 		t.Fatalf("renamed session money = subtotal %d discount %d shipping %d total %d",
-			session.SubtotalKRW, session.DiscountKRW, session.ShippingFeeKRW, session.TotalKRW)
+			session.SubtotalWon, session.DiscountWon, session.ShippingFeeWon, session.TotalWon)
 	}
-	if len(session.Items) != 1 || session.Items[0].UnitPriceKRW != 250000 {
-		t.Fatalf("renamed session item = %+v, want unit_price_krw 250000", session.Items)
+	if len(session.Items) != 1 || session.Items[0].UnitPriceWon != 250000 {
+		t.Fatalf("renamed session item = %+v, want unit_price_won 250000", session.Items)
 	}
 }

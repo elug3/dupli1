@@ -11,7 +11,7 @@ One promo system that can **discount**, **attribute sales**, or **both**, with:
 1. **Two coupon types** by audience / use limit — **single-user one-time** and **global once-per-customer**.
 2. **Flexible usage conditions** — eligibility and benefit can depend on **almost any checkout / catalog attribute** (prices, categories, shipping, brand/style/SKU, customer signals, etc.), not a fixed handful of columns.
 
-Delivery (type code vs wallet) is a possession path, not a third type. All paths share discount math and order fields (`coupon_code` / `discount_krw`, plus optional shipping discount fields when benefit targets delivery).
+Delivery (type code vs wallet) is a possession path, not a third type. All paths share discount math and order fields (`coupon_code` / `discount_won`, plus optional shipping discount fields when benefit targets delivery).
 
 ## Two coupon types (product taxonomy)
 
@@ -50,7 +50,7 @@ Built from the checkout session / order draft:
 
 | Area | Examples |
 |------|----------|
-| **Money** | Line `unit_price_krw`, line extension, `subtotal_krw`, `shipping_fee_krw`, `total_krw` before coupon, discount caps |
+| **Money** | Line `unit_price_won`, line extension, `subtotal_won`, `shipping_fee_won`, `total_won` before coupon, discount caps |
 | **Catalog / taxonomy** | `category`, `subCategory`, `brandCode`, `styleCode`, `colorCode`, `sizeCode`, `edition`, merchandising fields, future category facets (`details.*`) |
 | **Line identity** | `sku`, `skuId`, parent product id, quantity |
 | **Shipping** | Flat fee amount; whether fee is present; free-shipping threshold style rules |
@@ -64,9 +64,9 @@ Built from the checkout session / order draft:
 | `benefit.target` | Effect |
 |------------------|--------|
 | `goods` | Discount eligible line goods only (today’s default; still capped so total ≥ shipping unless shipping is also targeted) |
-| `shipping` | Reduce / zero `shipping_fee_krw` (free or partial shipping) |
+| `shipping` | Reduce / zero `shipping_fee_won` (free or partial shipping) |
 | `goods_and_shipping` | Apply configured discount across both per rule |
-| `none` | Track-only / referral (`discount_krw = 0`, no fee change) |
+| `none` | Track-only / referral (`discount_won = 0`, no fee change) |
 
 Eligible lines for `goods` are those matching **include** rules (category/brand/price band/…); non-matching lines stay full price. If no line matches, apply fails with a clear error (`not_eligible`).
 
@@ -78,11 +78,11 @@ Store as JSONB on the coupon definition (versioned shape; validate on write in p
 conditions: {
   version: 1,
   all: [                 -- AND of predicates (empty = always eligible)
-    { attr: "subtotal_krw", op: "gte", value: 100000 },
-    { attr: "shipping_fee_krw", op: "gt", value: 0 },
+    { attr: "subtotal_won", op: "gte", value: 100000 },
+    { attr: "shipping_fee_won", op: "gt", value: 0 },
     { attr: "line.category", op: "in", value: ["bags", "wallets"] },
     { attr: "line.brandCode", op: "in", value: ["PRADA"] },
-    { attr: "line.unit_price_krw", op: "gte", value: 500000 },
+    { attr: "line.unit_price_won", op: "gte", value: 500000 },
     { attr: "customer.paid_order_count", op: "eq", value: 0 }
   ],
   line_match: "any" | "all" | "eligible_only",  -- how line predicates combine with cart
@@ -95,13 +95,13 @@ benefit: {
   target: "goods" | "shipping" | "goods_and_shipping" | "none",
   discount_type: "percent" | "fixed" | "none",
   discount_fraction: 0.3,          -- when percent
-  discount_fixed_krw: 0,           -- when fixed (whole KRW)
-  max_discount_krw: null,          -- optional cap
+  discount_fixed_won: 0,           -- when fixed (whole KRW)
+  max_discount_won: null,          -- optional cap
   apply_to: "eligible_lines" | "entire_subtotal" | "shipping_fee"
 }
 ```
 
-**Evaluation ownership:** **order** builds the context from the session and asks **product** to validate the definition + compute the discount breakdown (or product exposes `Evaluate(coupon, context) → { ok, discount_krw, shipping_discount_krw, eligible_sku_ids, error }`). Re-run on checkout **complete** so cart edits cannot bypass rules.
+**Evaluation ownership:** **order** builds the context from the session and asks **product** to validate the definition + compute the discount breakdown (or product exposes `Evaluate(coupon, context) → { ok, discount_won, shipping_discount_won, eligible_sku_ids, error }`). Re-run on checkout **complete** so cart edits cannot bypass rules.
 
 **manage-web:** condition builder UI (predicates + benefit target), not only % / expires. Start with curated attribute pickers (money, category, brand, shipping, price); allow advanced JSON only if needed for power users.
 
@@ -124,7 +124,7 @@ benefit: {
 | Product `coupons` | `code`, `discount` (fraction), `description`, `expires` (free-text), `active` — PG + memory; seed `SUMMER30` |
 | Redeem | `POST /api/v1/products/coupons/redeem` — **lookup only**; no once-per-customer, no cart-aware eligibility |
 | Order checkout | Apply → `%` of **full goods subtotal**; **shipping never discounted** ([api.md](api.md)) |
-| Order row | Immutable `coupon_code` / `discount_krw` / `total_krw` |
+| Order row | Immutable `coupon_code` / `discount_won` / `total_won` |
 | manage-web | CRUD code, %, description, expires, active — **no condition builder** |
 | Storefront | Type code at cart/checkout; profile wallet stub |
 | Permissions | `coupon.*` in catalog_editor bundle |
@@ -162,7 +162,7 @@ benefit: {
 | Condition extensibility | Versioned document + allowlisted `attr` paths; add attrs as product/order expose them (align with multi-category facets later) |
 | Ownership of definitions | **Product** — keep `/products/coupons` paths |
 | Ownership of entitlements | **Product** — `customer_coupons`; profile UI only |
-| Ownership of applied amounts | **Order** — `coupon_code`, `discount_krw`; add `shipping_discount_krw` (or fold into fee) when benefit hits shipping |
+| Ownership of applied amounts | **Order** — `coupon_code`, `discount_won`; add `shipping_discount_won` (or fold into fee) when benefit hits shipping |
 | Global once-per-customer | Ledger unique on `(code, customer_id)` |
 | Single-user once | One entitlement → one consumed redemption |
 | Redemption consume | **Reserve** on checkout complete, **consume** on `paid`, **release** on `canceled` (see § Policy decisions) |
@@ -184,7 +184,7 @@ benefit: {
 | Case | Decision |
 |------|----------|
 | Default | **Goods only**, capped at eligible subtotal — matches today ([api.md](api.md): a 100%-off coupon still pays delivery) |
-| Free / partial shipping | Supported via `benefit.target = shipping` or `goods_and_shipping`; expressed as fraction or fixed ₩ off `shipping_fee_krw`, floored at 0 |
+| Free / partial shipping | Supported via `benefit.target = shipping` or `goods_and_shipping`; expressed as fraction or fixed ₩ off `shipping_fee_won`, floored at 0 |
 | Brand / SKU / category scope | `conditions` predicates on `line.category`, `line.subCategory`, `line.brandCode`, `line.styleCode`, `line.skuId`; percent applies to **eligible lines only** when `benefit.apply_to = eligible_lines` |
 | First order only | `conditions.all[{ attr: "customer.paid_order_count", op: "eq", value: 0 }]` — counts **paid** orders, so unpaid/canceled attempts do not consume the privilege |
 | New customers only | Same predicate as first-order for v1; account-age (`customer.created_within_days`) added when needed rather than a separate flag |
@@ -224,7 +224,7 @@ Rationale: the coupon mirrors the stock rule — before shipment nothing was con
 ### 5. Lifecycle operations
 
 - **Pause** = `active = false`. Takes effect immediately for new applies; already-`reserved`/`consumed` redemptions are untouched, and sessions holding it re-validate at complete (so a paused code fails there).
-- **Edit** benefit / conditions is allowed and is **never retroactive**. Orders keep their immutable `coupon_code` / `discount_krw`, and the ledger stores the **applied benefit snapshot** so reports stay truthful after an edit.
+- **Edit** benefit / conditions is allowed and is **never retroactive**. Orders keep their immutable `coupon_code` / `discount_won`, and the ledger stores the **applied benefit snapshot** so reports stay truthful after an edit.
 - **Delete** = deactivate (soft). Hard delete only when `redemption_count = 0` and no ledger rows; otherwise the definition is needed to explain historical orders.
 - **Revoke** applies to one entitlement (`status = revoked`), for issued-by-mistake cases; revoking never rewrites a paid order.
 - Every definition carries `updated_at` (and optional `version`) so the condition builder can warn “this code is live, N customers already used it”.
@@ -259,10 +259,10 @@ Issuing must be **idempotent** on `(code, customer_id, trigger_key)` so a redeli
 
 ### 8. Accounting and finance reporting
 
-- Discount is treated as **contra-revenue** (a reduction of goods revenue), not a marketing expense. Net revenue = `subtotal_krw - discount_krw`; shipping is reported separately.
-- **Goods discount and shipping discount are reported separately** (`discount_krw` vs `shipping_discount_krw`) so delivery subsidy is visible as its own line.
+- Discount is treated as **contra-revenue** (a reduction of goods revenue), not a marketing expense. Net revenue = `subtotal_won - discount_won`; shipping is reported separately.
+- **Goods discount and shipping discount are reported separately** (`discount_won` vs `shipping_discount_won`) so delivery subsidy is visible as its own line.
 - Campaign reporting comes from the **product redemption ledger filtered to `consumed` (paid)**, cross-checkable against order rows by `coupon_code`. Released redemptions are excluded from GMV but retained for audit.
-- manage-web analytics is client-side today (sums `total_krw` from `GET /orders`); campaign stats need the server endpoint added in Phase 3 rather than more browser aggregation.
+- manage-web analytics is client-side today (sums `total_won` from `GET /orders`); campaign stats need the server endpoint added in Phase 3 rather than more browser aggregation.
 
 ### 9. Guests
 
@@ -300,13 +300,13 @@ Issuing must be **idempotent** on `(code, customer_id, trigger_key)` so a redeli
 | `redemption_count` | int | Denormalized |
 | `updated_at` | timestamptz | Warn in admin UI when editing a live code |
 
-Drop relying on a lone `min_subtotal_krw` column long-term — express min spend as `conditions.all[{ attr: subtotal_krw, op: gte, … }]`. A generated/cached `min_subtotal_krw` for list UI is optional.
+Drop relying on a lone `min_subtotal_won` column long-term — express min spend as `conditions.all[{ attr: subtotal_won, op: gte, … }]`. A generated/cached `min_subtotal_won` for list UI is optional.
 
 Validate + complete rules:
 
 - active / expiry / scope caps (as before)
 - **conditions match** current context (else `not_eligible` with reason code)
-- compute `discount_krw` / shipping adjustment from **benefit** against eligible base only
+- compute `discount_won` / shipping adjustment from **benefit** against eligible base only
 - re-check on complete after final line prices
 
 ### Account entitlement (product) — `single_user`
@@ -328,8 +328,8 @@ Claim/issue does **not** consume; paid (or reserved) checkout does.
 coupon_redemptions (
   id, code, order_id, customer_id,
   customer_coupon_id nullable,
-  discount_krw, shipping_discount_krw,
-  order_subtotal_krw, eligible_subtotal_krw,
+  discount_won, shipping_discount_won,
+  order_subtotal_won, eligible_subtotal_won,
   applied_benefit jsonb,          -- snapshot so later edits don't rewrite history
   status: reserved | consumed | released,
   created_at, paid_at nullable, released_at nullable
@@ -340,13 +340,13 @@ Lifecycle: `reserved` at checkout complete → `consumed` on `paid` → `release
 
 ### Order wire
 
-Keep `coupon_code`, `discount_krw`. Shipping benefits add an explicit **`shipping_discount_krw`** (decided: do not silently mutate `shipping_fee_krw`, so the subsidy stays reportable), making the total:
+Keep `coupon_code`, `discount_won`. Shipping benefits add an explicit **`shipping_discount_won`** (decided: do not silently mutate `shipping_fee_won`, so the subsidy stays reportable), making the total:
 
 ```text
-total_krw = subtotal_krw - discount_krw + shipping_fee_krw - shipping_discount_krw
+total_won = subtotal_won - discount_won + shipping_fee_won - shipping_discount_won
 ```
 
-with `shipping_discount_krw ≤ shipping_fee_krw`. Optional `customer_coupon_id`, `partner_id` snapshot.
+with `shipping_discount_won ≤ shipping_fee_won`. Optional `customer_coupon_id`, `partner_id` snapshot.
 
 ## Attribution & reporting
 
@@ -393,8 +393,8 @@ Same evaluate step, but input is `customer_coupon_id`; entitlement must be `avai
 ### Phase 1 — Harden + global once-each + condition engine v1
 
 1. `scope`, `expires_at` (KST end-of-day authoring), caps, `terms`, redemption ledger with `applied_benefit`; existing rows → `scope=global`.
-2. **`conditions` + `benefit` JSONB** with allowlisted attrs for v1: `subtotal_krw`, `shipping_fee_krw`, `line.category`, `line.brandCode`, `line.unit_price_krw`, `line.skuId` / parent id, `line.on_sale`; ops `eq|neq|in|nin|gte|lte|gt|lt`.
-3. Benefit targets `goods` | `shipping` | `none` (add `goods_and_shipping` if cheap); `shipping_discount_krw` on session/order.
+2. **`conditions` + `benefit` JSONB** with allowlisted attrs for v1: `subtotal_won`, `shipping_fee_won`, `line.category`, `line.brandCode`, `line.unit_price_won`, `line.skuId` / parent id, `line.on_sale`; ops `eq|neq|in|nin|gte|lte|gt|lt`.
+3. Benefit targets `goods` | `shipping` | `none` (add `goods_and_shipping` if cheap); `shipping_discount_won` on session/order.
 4. Order apply/complete calls Evaluate; migrate legacy `discount` fraction into default `benefit`.
 5. Reserve → consume → release wiring: consume on `payment.succeeded`, release on cancel from `pending`/`paid`, keep consumed on `in_transit` cancel.
 6. Redeem/validate rate limit (per IP + per customer) reusing the auth Redis limiter pattern.
@@ -412,7 +412,7 @@ Same evaluate step, but input is `customer_coupon_id`; entitlement must be `avai
 
 1. Expand allowlist: `subCategory`, style/color/size, `details.*` facets as multi-category lands, `customer.paid_order_count` (first-order-only), account age.
 2. `kind`, `partner_id`, self-referral block; stats API (paid-only ledger) splitting goods vs shipping discount; manage-web campaign report.
-3. Eligible-lines-only percent/fixed + `max_discount_krw` polish.
+3. Eligible-lines-only percent/fixed + `max_discount_won` polish.
 
 ### Phase 4 — Optional later
 
@@ -428,7 +428,7 @@ Same evaluate step, but input is `customer_coupon_id`; entitlement must be `avai
 - Per-customer multi-use of the same global code
 - Automatic partner commission / tax
 - Guest-held single-user coupons
-- Renaming wire fields away from `coupon_code` / `discount_krw`
+- Renaming wire fields away from `coupon_code` / `discount_won`
 - Formal SQL migration tooling
 - Wallet ledger in `profile`
 - Arbitrary unvalidated script/code as conditions (allowlisted attrs + ops only)
@@ -441,7 +441,7 @@ Same evaluate step, but input is `customer_coupon_id`; entitlement must be `avai
 | Question | Resolution |
 |----------|------------|
 | Consume on create vs paid | Reserve at complete, consume at `paid`, release on cancel |
-| Shipping wire | Explicit `shipping_discount_krw`, never a silent `shipping_fee_krw` rewrite |
+| Shipping wire | Explicit `shipping_discount_won`, never a silent `shipping_fee_won` rewrite |
 | Refund restores the use? | Yes for cancel from `pending`/`paid`; no for `in_transit` |
 | Self-referral | Blocked |
 | Sale + coupon | Coupon applies to selling `price`; optional `line.on_sale` exclusion condition |

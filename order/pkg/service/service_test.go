@@ -98,7 +98,7 @@ func (f *countingStock) Reserve(ctx context.Context, orderID string, items []por
 	return f.fakeStock.Reserve(ctx, orderID, items)
 }
 
-// fakeProduct resolves catalog prices; client UnitPriceKRW is ignored by the service.
+// fakeProduct resolves catalog prices; client UnitPriceWon is ignored by the service.
 type fakeProduct struct {
 	defaultKRW int64
 	byKey      map[string]*ports.VariantInfo
@@ -134,9 +134,9 @@ func (f *fakeProduct) lookup(key string, asSKU bool) (*ports.VariantInfo, error)
 	}
 	if asSKU {
 		sku := strings.ToUpper(key)
-		return &ports.VariantInfo{SkuID: "ID-" + sku, SKU: sku, UnitPriceKRW: krw}, nil
+		return &ports.VariantInfo{SkuID: "ID-" + sku, SKU: sku, UnitPriceWon: krw}, nil
 	}
-	return &ports.VariantInfo{SkuID: key, SKU: strings.ToUpper(key), UnitPriceKRW: krw}, nil
+	return &ports.VariantInfo{SkuID: key, SKU: strings.ToUpper(key), UnitPriceWon: krw}, nil
 }
 
 func newSvc(stock ports.StockClient, product *fakeProduct, publisher ...ports.EventPublisher) *service.Service {
@@ -155,7 +155,7 @@ func TestCreateOrderReservesStockAndPublishesEvent(t *testing.T) {
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
 		Items: []domain.OrderItem{
-			{SKU: "shoe-1", Quantity: 2, UnitPriceKRW: 1}, // client price ignored
+			{SKU: "shoe-1", Quantity: 2, UnitPriceWon: 1}, // client price ignored
 		},
 	})
 	if err != nil {
@@ -165,8 +165,8 @@ func TestCreateOrderReservesStockAndPublishesEvent(t *testing.T) {
 	if order.Status != domain.StatusPending {
 		t.Fatalf("order status = %q, want pending", order.Status)
 	}
-	if order.TotalKRW != 2500 {
-		t.Fatalf("total = %d, want 2500 from catalog (not client 1)", order.TotalKRW)
+	if order.TotalWon != 2500 {
+		t.Fatalf("total = %d, want 2500 from catalog (not client 1)", order.TotalWon)
 	}
 	if order.PaymentDueAt.IsZero() {
 		t.Fatal("payment_due_at should be set")
@@ -182,13 +182,13 @@ func TestCreateOrderIgnoresClientUnitPrice(t *testing.T) {
 
 	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
-		Items:      []domain.OrderItem{{SKU: "BAG-1", Quantity: 1, UnitPriceKRW: 1}},
+		Items:      []domain.OrderItem{{SKU: "BAG-1", Quantity: 1, UnitPriceWon: 1}},
 	})
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if order.Items[0].UnitPriceKRW != 2890000 || order.TotalKRW != 2890000 {
-		t.Fatalf("priced = %+v total=%d, want catalog 2890000", order.Items[0], order.TotalKRW)
+	if order.Items[0].UnitPriceWon != 2890000 || order.TotalWon != 2890000 {
+		t.Fatalf("priced = %+v total=%d, want catalog 2890000", order.Items[0], order.TotalWon)
 	}
 }
 
@@ -199,7 +199,7 @@ func TestCreateOrderCapturesProductNameAndImageURL(t *testing.T) {
 			"BAG-001": {
 				SkuID:        "sku-bag-1",
 				SKU:          "BAG-001",
-				UnitPriceKRW: 50000,
+				UnitPriceWon: 50000,
 				ProductName:  "Prada Galleria",
 				ImageURL:     "https://cdn.example/bag.jpg",
 			},
@@ -244,7 +244,7 @@ func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
 
-	order, err = svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW)
+	order, err = svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon)
 	if err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
@@ -307,7 +307,7 @@ func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 		if err := status.advance(); err != nil {
 			t.Fatalf("advance to %s: %v", status.name, err)
 		}
-		replayed, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW)
+		replayed, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon)
 		if err != nil {
 			t.Fatalf("replayed payment.succeeded while %s returned error: %v", status.name, err)
 		}
@@ -328,11 +328,11 @@ func TestMarkOrderPaidRejectsDifferentPaymentForPaidOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
-	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-2", order.TotalKRW)
+	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-2", order.TotalWon)
 	if !errors.Is(err, domain.ErrInvalidTransition) {
 		t.Fatalf("second payment error = %v, want ErrInvalidTransition", err)
 	}
@@ -363,7 +363,7 @@ func TestMarkOrderPaidReinstatesExpiredCanceledOrder(t *testing.T) {
 	}
 
 	stock.reservationID = "res-late-pay"
-	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalKRW)
+	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalWon)
 	if err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestMarkOrderPaidRollsBackReinstatedReservationOnAmountMismatch(t *testing.
 	}
 
 	stock.reservationID = "res-late-pay"
-	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalKRW+1)
+	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalWon+1)
 	if !errors.Is(err, domain.ErrPaymentAmountMismatch) {
 		t.Fatalf("MarkOrderPaid error = %v, want ErrPaymentAmountMismatch", err)
 	}
@@ -454,7 +454,7 @@ func TestShipOrderRejectsInvalidTrackingWithoutCommittingStock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
@@ -490,7 +490,7 @@ func TestShipOrderRejectsEmptyShippedByWithoutCommittingStock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
@@ -549,7 +549,7 @@ func TestMarkOrderPaidRollsBackReinstatedReservationOnSaveFailure(t *testing.T) 
 	}
 
 	stock.reservationID = "res-late-pay"
-	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalKRW)
+	_, err = svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalWon)
 	if err == nil {
 		t.Fatal("MarkOrderPaid expected save failure")
 	}
@@ -578,7 +578,7 @@ func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
@@ -650,7 +650,7 @@ func TestCancelOrderAtomicGuardBeatsConcurrentShip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-cancel-race", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-cancel-race", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
@@ -702,7 +702,7 @@ func TestCancelOrderConcurrentShipDuringRefund(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-cancel-async", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-cancel-async", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
@@ -740,7 +740,7 @@ func TestShipOrderDoesNotOverwriteRefundCancel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-race", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-race", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
@@ -785,7 +785,7 @@ func TestShipOrderRejectsReleasedReservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
@@ -847,7 +847,7 @@ func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSave(t *testing.T) {
 	}
 
 	stock.reservationID = "res-late-pay"
-	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalKRW)
+	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalWon)
 	if err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
@@ -900,7 +900,7 @@ func TestMarkOrderPaidReinstatesWhenExpiryCancelsBeforeSavePaid(t *testing.T) {
 	}
 
 	stock.reservationID = "res-late-pay"
-	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalKRW)
+	paid, err := svc.MarkOrderPaid(ctx, order.ID, "pay-late", order.TotalWon)
 	if err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
@@ -928,7 +928,7 @@ func TestCancelPaidOrderReleasesStock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
@@ -960,7 +960,7 @@ func TestCancelPaidOrderFailsClosedWhenRefundRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 
@@ -1014,7 +1014,7 @@ func TestCancelInTransitOrderRefundsWithoutReleasingStock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
@@ -1122,14 +1122,14 @@ func TestCreateOrderReservesStockWithSkuID(t *testing.T) {
 	stock := &fakeStock{reservationID: "res-999"}
 	svc := newSvc(stock, &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
-			"SKUID-1": {SkuID: "SKUID-1", SKU: "SHOE-1", UnitPriceKRW: 1250},
+			"SKUID-1": {SkuID: "SKUID-1", SKU: "SHOE-1", UnitPriceWon: 1250},
 		},
 	})
 
 	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
 		Items: []domain.OrderItem{
-			{SkuID: "SKUID-1", SKU: "shoe-1", Quantity: 2, UnitPriceKRW: 1},
+			{SkuID: "SKUID-1", SKU: "shoe-1", Quantity: 2, UnitPriceWon: 1},
 		},
 	})
 	if err != nil {
@@ -1146,14 +1146,14 @@ func TestCreateOrderEventCarriesSkuID(t *testing.T) {
 	publisher := &recordedPublisher{}
 	svc := newSvc(stock, &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
-			"SKUID-2": {SkuID: "SKUID-2", SKU: "BAG-2", UnitPriceKRW: 5000},
+			"SKUID-2": {SkuID: "SKUID-2", SKU: "BAG-2", UnitPriceWon: 5000},
 		},
 	}, publisher)
 
 	_, err := svc.CreateOrder(ctx, service.CreateOrderInput{
 		CustomerID: "customer-1",
 		Items: []domain.OrderItem{
-			{SkuID: "SKUID-2", SKU: "bag-2", Quantity: 1, UnitPriceKRW: 1},
+			{SkuID: "SKUID-2", SKU: "bag-2", Quantity: 1, UnitPriceWon: 1},
 		},
 	})
 	if err != nil {
@@ -1303,7 +1303,7 @@ func TestCustomerCancelImmediateBeforeConfirm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 
@@ -1339,7 +1339,7 @@ func TestCustomerCancelAfterConfirmRequestsManagerApproval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
@@ -1384,7 +1384,7 @@ func TestRejectCancelRequestLeavesOrderPaid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
@@ -1422,7 +1422,7 @@ func TestRefundPolicyWorkerAutoConfirmsAndAutoApproves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, unconfirmed.ID, "pay-u", unconfirmed.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, unconfirmed.ID, "pay-u", unconfirmed.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 
@@ -1433,7 +1433,7 @@ func TestRefundPolicyWorkerAutoConfirmsAndAutoApproves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder 2: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, requested.ID, "pay-r", requested.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, requested.ID, "pay-r", requested.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid 2: %v", err)
 	}
 	if _, err := svc.ConfirmOrder(ctx, requested.ID); err != nil {
@@ -1480,7 +1480,7 @@ func TestApproveCancelRequestFailsClosedWhenRefundRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
-	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalKRW); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {

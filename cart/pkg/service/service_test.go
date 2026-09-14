@@ -55,7 +55,7 @@ func newTestService(t *testing.T) *service.Service {
 		SKU:          "BOT-001-GRN",
 		ProductID:    "BOT-001",
 		Color:        "Green",
-		UnitPriceKRW: 250000,
+		UnitPriceWon: 250000,
 		ImageURL:     "https://example.com/green.jpg",
 	}
 	product := &fakeProductClient{
@@ -84,7 +84,7 @@ func TestUpsertItem_BySKU_PersistsResolvedSkuID(t *testing.T) {
 	if item.SkuID != "SKUID-GRN" || item.SKU != "BOT-001-GRN" {
 		t.Fatalf("want resolved skuId+sku, got %+v", item)
 	}
-	if item.AvailableQty != 7 || item.UnitPriceKRW != 250000 {
+	if item.AvailableQty != 7 || item.UnitPriceWon != 250000 {
 		t.Fatalf("unexpected enrichment: %+v", item)
 	}
 }
@@ -178,7 +178,7 @@ func TestGetCart_ReportsUnavailableItems(t *testing.T) {
 		SKU:          "BOT-001-GRN",
 		ProductID:    "BOT-001",
 		Color:        "Green",
-		UnitPriceKRW: 250000,
+		UnitPriceWon: 250000,
 	}
 	product := &fakeProductClient{
 		bySKU:   map[string]*ports.VariantInfo{"BOT-001-GRN": variant},
@@ -210,8 +210,8 @@ func TestGetCart_ReportsUnavailableItems(t *testing.T) {
 	if cart.Items[1].Available == nil || *cart.Items[1].Available {
 		t.Fatalf("want available=false on stale line, got %+v", cart.Items[1])
 	}
-	if cart.SubtotalKRW != 250000 {
-		t.Fatalf("subtotal = %d, want 250000 (exclude unavailable)", cart.SubtotalKRW)
+	if cart.SubtotalWon != 250000 {
+		t.Fatalf("subtotal = %d, want 250000 (exclude unavailable)", cart.SubtotalWon)
 	}
 }
 
@@ -263,7 +263,7 @@ func TestUpsertItem_RejectsZeroAvailable(t *testing.T) {
 	}
 	variant := &ports.VariantInfo{
 		SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", ProductID: "BOT-001",
-		UnitPriceKRW: 250000,
+		UnitPriceWon: 250000,
 	}
 	product := &fakeProductClient{
 		bySKU:   map[string]*ports.VariantInfo{"BOT-001-GRN": variant},

@@ -5,7 +5,7 @@ import "context"
 type CheckoutSessionInput struct {
 	OrderID    string
 	PaymentID  string
-	AmountKRW  int64
+	AmountWon  int64
 	Currency   string
 	CustomerID string
 	// Order snapshot fields for certified PG requests (NANO).
@@ -31,7 +31,7 @@ type CheckoutProvider interface {
 }
 
 // CancelPaymentInput asks the PG to cancel (refund) part or all of a captured
-// payment. AmountKRW is the amount to cancel, not the original total —
+// payment. AmountWon is the amount to cancel, not the original total —
 // providers that support partial cancel refund exactly this much.
 type CancelPaymentInput struct {
 	// ProviderRef is the provider's own transaction id for the original
@@ -39,7 +39,7 @@ type CancelPaymentInput struct {
 	ProviderRef string
 	// PaymentID is echoed to the provider for reconciliation (NANO: compOrderNo).
 	PaymentID string
-	AmountKRW int64
+	AmountWon int64
 	Currency  string
 }
 
@@ -47,8 +47,8 @@ type CancelPaymentInput struct {
 // that does not report a remaining balance sets RemainingKnown false, leaving
 // the caller's own accounting authoritative.
 type CancelPaymentResult struct {
-	CanceledAmountKRW int64
-	RemainingKRW      int64
+	CanceledAmountWon int64
+	RemainingWon      int64
 	RemainingKnown    bool
 	// ProviderRef is the provider's id for the original transaction, echoed
 	// back on the cancel response (NANO: apprTranNo).

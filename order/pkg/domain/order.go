@@ -69,7 +69,7 @@ type OrderItem struct {
 	SkuID        string `json:"sku_id,omitempty"`
 	SKU          string `json:"sku"`
 	Quantity     int    `json:"quantity"`
-	UnitPriceKRW int64  `json:"unit_price_krw"` // whole KRW won
+	UnitPriceWon int64  `json:"unit_price_won"` // whole KRW won
 	// ProductName and ImageURL are captured at order creation from the product catalog.
 	ProductName string `json:"product_name,omitempty"`
 	ImageURL    string `json:"image_url,omitempty"`
@@ -84,12 +84,12 @@ type Order struct {
 	Items         []OrderItem `json:"items"`
 	Status        OrderStatus `json:"status"`
 	CouponCode    string      `json:"coupon_code,omitempty"`
-	SubtotalKRW   int64       `json:"subtotal_krw"`
-	DiscountKRW   int64       `json:"discount_krw"`
-	// ShippingFeeKRW is the delivery charge in whole KRW, captured at order
+	SubtotalWon   int64       `json:"subtotal_won"`
+	DiscountWon   int64       `json:"discount_won"`
+	// ShippingFeeWon is the delivery charge in whole KRW, captured at order
 	// creation so a later config change never re-prices a placed order.
-	ShippingFeeKRW  int64           `json:"shipping_fee_krw"`
-	TotalKRW        int64           `json:"total_krw"`
+	ShippingFeeWon  int64           `json:"shipping_fee_won"`
+	TotalWon        int64           `json:"total_won"`
 	RecipientName   string          `json:"recipient_name,omitempty"`
 	RecipientPhone  string          `json:"recipient_phone,omitempty"`
 	ShippingAddress ShippingAddress `json:"shipping_address,omitempty"`
@@ -156,10 +156,10 @@ func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCod
 	for i, item := range items {
 		item.SkuID = strings.TrimSpace(item.SkuID)
 		item.SKU = strings.ToUpper(strings.TrimSpace(item.SKU))
-		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceKRW < 0 {
+		if (item.SKU == "" && item.SkuID == "") || item.Quantity <= 0 || item.UnitPriceWon < 0 {
 			return nil, ErrInvalidOrder
 		}
-		subtotal += int64(item.Quantity) * item.UnitPriceKRW
+		subtotal += int64(item.Quantity) * item.UnitPriceWon
 		copiedItems[i] = item
 	}
 	if len(copiedItems) == 0 {
@@ -179,10 +179,10 @@ func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCod
 		Items:          copiedItems,
 		Status:         StatusPending,
 		CouponCode:     strings.ToUpper(strings.TrimSpace(couponCode)),
-		SubtotalKRW:    subtotal,
-		DiscountKRW:    discountKRW,
-		ShippingFeeKRW: shippingFeeKRW,
-		TotalKRW:       subtotal - discountKRW + shippingFeeKRW,
+		SubtotalWon:    subtotal,
+		DiscountWon:    discountKRW,
+		ShippingFeeWon: shippingFeeKRW,
+		TotalWon:       subtotal - discountKRW + shippingFeeKRW,
 		PaymentDueAt:   now.Add(DefaultPaymentTTL),
 		CreatedAt:      now,
 		UpdatedAt:      now,
@@ -197,7 +197,7 @@ func (o *Order) MarkPaid(paymentID string, amountKRW int64, now time.Time) error
 	if paymentID == "" {
 		return ErrInvalidOrder
 	}
-	if amountKRW != o.TotalKRW {
+	if amountKRW != o.TotalWon {
 		return ErrPaymentAmountMismatch
 	}
 	o.Status = StatusPaid

@@ -1,7 +1,7 @@
 // Package money defines Dupli1's single storefront currency (KRW) and amount helpers.
 //
 // Catalog prices (product.price) and cart/order/payment integer fields use the same
-// unit: whole Korean won. JSON fields are named *_krw (historically *_cents, a
+// unit: whole Korean won. JSON fields are named *_won (historically *_krw, then *_cents, a
 // Stripe "minor units" leftover). For KRW (a zero-decimal currency) that is whole
 // won — not won×100.
 package money
@@ -34,8 +34,8 @@ func NormalizeCurrency(raw string) (string, error) {
 	return "", fmt.Errorf("unsupported currency %q: only %s is allowed", raw, Currency)
 }
 
-// FormatKRW formats an integer won amount for display (e.g. Telegram alerts).
-func FormatKRW(amount int64) string {
+// FormatWon formats an integer won amount for display (e.g. Telegram alerts).
+func FormatWon(amount int64) string {
 	sign := ""
 	if amount < 0 {
 		sign = "-"

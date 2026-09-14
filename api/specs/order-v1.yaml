@@ -327,7 +327,7 @@ paths:
       operationId: checkoutUpsertItem
       security:
         - bearerAuth: []
-      description: Matches existing items by `sku`. Server resolves `unit_price_krw` from product.
+      description: Matches existing items by `sku`. Server resolves `unit_price_won` from product.
       parameters:
         - $ref: '#/components/parameters/SessionId'
       requestBody:
@@ -562,7 +562,7 @@ components:
 
     OrderItem:
       type: object
-      required: [sku, quantity, unit_price_krw]
+      required: [sku, quantity, unit_price_won]
       properties:
         sku_id:
           type: string
@@ -573,7 +573,7 @@ components:
         quantity:
           type: integer
           minimum: 1
-        unit_price_krw:
+        unit_price_won:
           type: integer
           format: int64
           description: |
@@ -608,9 +608,9 @@ components:
         - reservation_id
         - items
         - status
-        - subtotal_krw
-        - discount_krw
-        - total_krw
+        - subtotal_won
+        - discount_won
+        - total_won
         - created_at
         - updated_at
       properties:
@@ -628,13 +628,13 @@ components:
           $ref: '#/components/schemas/OrderStatus'
         coupon_code:
           type: string
-        subtotal_krw:
+        subtotal_won:
           type: integer
           format: int64
-        discount_krw:
+        discount_won:
           type: integer
           format: int64
-        total_krw:
+        total_won:
           type: integer
           format: int64
         created_at:
@@ -674,9 +674,9 @@ components:
         - customer_id
         - items
         - status
-        - subtotal_krw
-        - discount_krw
-        - total_krw
+        - subtotal_won
+        - discount_won
+        - total_won
         - expires_at
         - created_at
         - updated_at
@@ -693,13 +693,13 @@ components:
           $ref: '#/components/schemas/CheckoutSessionStatus'
         coupon_code:
           type: string
-        subtotal_krw:
+        subtotal_won:
           type: integer
           format: int64
-        discount_krw:
+        discount_won:
           type: integer
           format: int64
-        total_krw:
+        total_won:
           type: integer
           format: int64
         order_id:

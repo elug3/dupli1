@@ -20,12 +20,12 @@ func TestShipIfConfirmedUpdatesConfirmedOrder(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	order, err := domain.NewOrder("ord-ship-pg-1", "cust-1", "res-ship-1", []domain.OrderItem{{
-		SkuID: "sku-1", SKU: "BAG-001", Quantity: 1, UnitPriceKRW: 1000,
+		SkuID: "sku-1", SKU: "BAG-001", Quantity: 1, UnitPriceWon: 1000,
 	}}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
-	if err := order.MarkPaid("pay-ship-pg-1", order.TotalKRW, now); err != nil {
+	if err := order.MarkPaid("pay-ship-pg-1", order.TotalWon, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := order.Confirm(now); err != nil {
@@ -74,12 +74,12 @@ func TestShipIfConfirmedSkipsCanceledOrder(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	order, err := domain.NewOrder("ord-ship-pg-2", "cust-1", "res-ship-2", []domain.OrderItem{{
-		SkuID: "sku-2", SKU: "BAG-002", Quantity: 1, UnitPriceKRW: 1000,
+		SkuID: "sku-2", SKU: "BAG-002", Quantity: 1, UnitPriceWon: 1000,
 	}}, "", 0, 0, now)
 	if err != nil {
 		t.Fatalf("NewOrder: %v", err)
 	}
-	if err := order.MarkPaid("pay-ship-pg-2", order.TotalKRW, now); err != nil {
+	if err := order.MarkPaid("pay-ship-pg-2", order.TotalWon, now); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if err := order.Confirm(now); err != nil {

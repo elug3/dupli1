@@ -153,22 +153,22 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 		couponCode = coupon.Code
 		var subtotal int64
 		for _, item := range pricedItems {
-			subtotal += int64(item.Quantity) * item.UnitPriceKRW
+			subtotal += int64(item.Quantity) * item.UnitPriceWon
 		}
 		discountKRW = int64(float64(subtotal) * coupon.DiscountFraction)
 	}
 
-	shippingFee := session.ShippingFeeKRW
+	shippingFee := session.ShippingFeeWon
 	order, err := s.CreateOrder(ctx, CreateOrderInput{
 		CustomerID:      session.CustomerID,
 		Items:           pricedItems,
 		CouponCode:      couponCode,
-		DiscountKRW:     discountKRW,
+		DiscountWon:     discountKRW,
 		RecipientName:   snapshot.RecipientName,
 		RecipientPhone:  snapshot.RecipientPhone,
 		ShippingAddress: snapshot.ShippingAddress,
 		SourceAddressID: snapshot.SourceAddressID,
-		ShippingFeeKRW:  &shippingFee,
+		ShippingFeeWon:  &shippingFee,
 	})
 	if err != nil {
 		return nil, err

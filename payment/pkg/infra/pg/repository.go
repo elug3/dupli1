@@ -47,7 +47,7 @@ func (r *Repository) migrate() error {
 			id              TEXT PRIMARY KEY,
 			order_id        TEXT NOT NULL,
 			customer_id     TEXT NOT NULL,
-			amount_krw    BIGINT NOT NULL CHECK (amount_krw > 0),
+			amount_won    BIGINT NOT NULL CHECK (amount_won > 0),
 			currency        TEXT NOT NULL,
 			status          TEXT NOT NULL,
 			method          TEXT NOT NULL DEFAULT 'credit_card',
@@ -97,7 +97,7 @@ func (r *Repository) migrate() error {
 	if err := r.renameMoneyCentsColumns(ctx); err != nil {
 		return fmt.Errorf("migrate payment schema: %w", err)
 	}
-	if _, err := r.pool.Exec(ctx, `ALTER TABLE payments ADD COLUMN IF NOT EXISTS canceled_amount_krw BIGINT NOT NULL DEFAULT 0`); err != nil {
+	if _, err := r.pool.Exec(ctx, `ALTER TABLE payments ADD COLUMN IF NOT EXISTS canceled_amount_won BIGINT NOT NULL DEFAULT 0`); err != nil {
 		return fmt.Errorf("migrate payment schema: %w", err)
 	}
 
@@ -124,8 +124,10 @@ func (r *Repository) migrate() error {
 
 func (r *Repository) renameMoneyCentsColumns(ctx context.Context) error {
 	renames := []struct{ from, to string }{
-		{"amount_cents", "amount_krw"},
-		{"canceled_amount_cents", "canceled_amount_krw"},
+		{"amount_cents", "amount_won"},
+		{"amount_krw", "amount_won"},
+		{"canceled_amount_cents", "canceled_amount_won"},
+		{"canceled_amount_krw", "canceled_amount_won"},
 	}
 	for _, item := range renames {
 		if err := r.renameColumnIfNeeded(ctx, "payments", item.from, item.to); err != nil {
@@ -272,11 +274,11 @@ func persistPaymentTx(ctx context.Context, tx pgx.Tx, payment *domain.Payment, e
 	}
 	_, err := tx.Exec(ctx, `
 		INSERT INTO payments (
-			id, order_id, customer_id, amount_krw, currency, status, method,
+			id, order_id, customer_id, amount_won, currency, status, method,
 			provider, provider_ref, checkout_url, created_by, note,
 			payer_name, payer_phone, payer_email, idempotency_key,
 			expires_at, created_at, updated_at,
-			canceled_amount_krw, canceled_at, cancel_reason, canceled_by,
+			canceled_amount_won, canceled_at, cancel_reason, canceled_by,
 			cancel_idempotency_key
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
 		ON CONFLICT (id) DO UPDATE SET
@@ -290,16 +292,16 @@ func persistPaymentTx(ctx context.Context, tx pgx.Tx, payment *domain.Payment, e
 			payer_phone = EXCLUDED.payer_phone,
 			payer_email = EXCLUDED.payer_email,
 			updated_at = EXCLUDED.updated_at,
-			canceled_amount_krw = EXCLUDED.canceled_amount_krw,
+			canceled_amount_won = EXCLUDED.canceled_amount_won,
 			canceled_at = EXCLUDED.canceled_at,
 			cancel_reason = EXCLUDED.cancel_reason,
 			canceled_by = EXCLUDED.canceled_by,
 			cancel_idempotency_key = EXCLUDED.cancel_idempotency_key
-	`, payment.ID, payment.OrderID, payment.CustomerID, payment.AmountKRW, payment.Currency,
+	`, payment.ID, payment.OrderID, payment.CustomerID, payment.AmountWon, payment.Currency,
 		string(payment.Status), method, payment.Provider, payment.ProviderRef, payment.CheckoutURL,
 		createdBy, note, payerName, payerPhone, payerEmail, idempotencyKey,
 		payment.ExpiresAt, payment.CreatedAt, payment.UpdatedAt,
-		payment.CanceledAmountKRW, canceledAt, cancelReason, canceledByUser, cancelKey)
+		payment.CanceledAmountWon, canceledAt, cancelReason, canceledByUser, cancelKey)
 	if err != nil {
 		return err
 	}
@@ -444,14 +446,14 @@ func (r *Repository) FindSucceededByOrderID(ctx context.Context, orderID string)
 }
 
 const paymentSelect = `
-	SELECT id, order_id, customer_id, amount_krw, currency, status,
+	SELECT id, order_id, customer_id, amount_won, currency, status,
 	       COALESCE(method, 'credit_card'),
 	       provider, provider_ref, COALESCE(checkout_url, ''),
 	       COALESCE(created_by, ''), COALESCE(note, ''),
 	       COALESCE(payer_name, ''), COALESCE(payer_phone, ''), COALESCE(payer_email, ''),
 	       COALESCE(idempotency_key, ''),
 	       expires_at, created_at, updated_at,
-	       COALESCE(canceled_amount_krw, 0), canceled_at,
+	       COALESCE(canceled_amount_won, 0), canceled_at,
 	       COALESCE(cancel_reason, ''), COALESCE(canceled_by, ''),
 	       COALESCE(cancel_idempotency_key, '')
 	FROM payments`
@@ -461,11 +463,11 @@ func scanPayment(row pgx.Row) (*domain.Payment, error) {
 	var status string
 	var idempotencyKey string
 	err := row.Scan(
-		&p.ID, &p.OrderID, &p.CustomerID, &p.AmountKRW, &p.Currency, &status,
+		&p.ID, &p.OrderID, &p.CustomerID, &p.AmountWon, &p.Currency, &status,
 		&p.Method, &p.Provider, &p.ProviderRef, &p.CheckoutURL,
 		&p.CreatedBy, &p.Note, &p.PayerName, &p.PayerPhone, &p.PayerEmail,
 		&idempotencyKey, &p.ExpiresAt, &p.CreatedAt, &p.UpdatedAt,
-		&p.CanceledAmountKRW, &p.CanceledAt,
+		&p.CanceledAmountWon, &p.CanceledAt,
 		&p.CancelReason, &p.CanceledBy, &p.CancelIdempotencyKey,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {

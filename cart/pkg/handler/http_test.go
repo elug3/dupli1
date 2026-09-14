@@ -27,7 +27,7 @@ func (f *fakeProduct) GetVariant(_ context.Context, sku string) (*ports.VariantI
 		SKU:          sku,
 		ProductID:    "BOT-001",
 		Color:        "Black",
-		UnitPriceKRW: 125000,
+		UnitPriceWon: 125000,
 		ImageURL:     "https://example.com/img.jpg",
 	}, nil
 }
@@ -38,7 +38,7 @@ func (f *fakeProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports
 		SKU:          skuID,
 		ProductID:    "BOT-001",
 		Color:        "Black",
-		UnitPriceKRW: 125000,
+		UnitPriceWon: 125000,
 		ImageURL:     "https://example.com/img.jpg",
 	}, nil
 }
@@ -117,7 +117,7 @@ func TestCartCRUD(t *testing.T) {
 
 	var cart struct {
 		CustomerID  string `json:"customer_id"`
-		SubtotalKRW int64  `json:"subtotal_krw"`
+		SubtotalWon int64  `json:"subtotal_won"`
 		Items       []struct {
 			SKU string `json:"sku"`
 		} `json:"items"`
@@ -128,8 +128,8 @@ func TestCartCRUD(t *testing.T) {
 	if cart.CustomerID != userID {
 		t.Fatalf("customer_id = %q, want %q", cart.CustomerID, userID)
 	}
-	if cart.SubtotalKRW != 250000 {
-		t.Fatalf("subtotal = %d, want 250000", cart.SubtotalKRW)
+	if cart.SubtotalWon != 250000 {
+		t.Fatalf("subtotal = %d, want 250000", cart.SubtotalWon)
 	}
 	if len(cart.Items) != 1 || cart.Items[0].SKU != "BOT-001-BLK" {
 		t.Fatalf("unexpected items: %+v", cart.Items)

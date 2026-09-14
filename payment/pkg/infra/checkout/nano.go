@@ -98,7 +98,7 @@ func (p *NanoProvider) CreateSession(_ context.Context, input ports.CheckoutSess
 	if name == "" || tel == "" {
 		return nil, fmt.Errorf("%w: order recipient name and phone are required for card payment", domain.ErrInvalidPayment)
 	}
-	if input.PaymentID == "" || input.AmountKRW <= 0 {
+	if input.PaymentID == "" || input.AmountWon <= 0 {
 		return nil, domain.ErrInvalidPayment
 	}
 
@@ -439,7 +439,7 @@ func (p *NanoProvider) BuildCancelRequest(tranNo, paymentID string, amountKRW in
 // parsed resultCode of 0000 returns an error and leaves the caller's state
 // untouched, so a payment is never recorded as refunded on an unconfirmed call.
 func (p *NanoProvider) CancelPayment(ctx context.Context, input ports.CancelPaymentInput) (*ports.CancelPaymentResult, error) {
-	reqURL, body, err := p.BuildCancelRequest(input.ProviderRef, input.PaymentID, input.AmountKRW)
+	reqURL, body, err := p.BuildCancelRequest(input.ProviderRef, input.PaymentID, input.AmountWon)
 	if err != nil {
 		return nil, err
 	}
@@ -487,17 +487,17 @@ func (p *NanoProvider) CancelPayment(ctx context.Context, input ports.CancelPaym
 
 	// NANO echoes the amount it actually canceled; trust it over the request
 	// when both are present so a provider-side adjustment is not lost.
-	canceled := input.AmountKRW
+	canceled := input.AmountWon
 	if v, ok := parseNanoAmount(parsed.CancelAmt); ok {
 		canceled = v
 	}
 	result := &ports.CancelPaymentResult{
-		CanceledAmountKRW: canceled,
+		CanceledAmountWon: canceled,
 		ProviderRef:       strings.TrimSpace(parsed.ApprTranNo),
 		CanceledAt:        strings.TrimSpace(parsed.CancelDate + parsed.CancelTime),
 	}
 	if v, ok := parseNanoAmount(parsed.RemainAmt); ok {
-		result.RemainingKRW = v
+		result.RemainingWon = v
 		result.RemainingKnown = true
 	}
 	return result, nil

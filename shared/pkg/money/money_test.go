@@ -32,14 +32,14 @@ func TestNormalizeCurrency(t *testing.T) {
 	}
 }
 
-func TestFormatKRW(t *testing.T) {
-	if got := money.FormatKRW(2890000); got != "₩2,890,000" {
-		t.Fatalf("FormatKRW(2890000)=%q", got)
+func TestFormatWon(t *testing.T) {
+	if got := money.FormatWon(2890000); got != "₩2,890,000" {
+		t.Fatalf("FormatWon(2890000)=%q", got)
 	}
-	if got := money.FormatKRW(0); got != "₩0" {
-		t.Fatalf("FormatKRW(0)=%q", got)
+	if got := money.FormatWon(0); got != "₩0" {
+		t.Fatalf("FormatWon(0)=%q", got)
 	}
-	if got := money.FormatKRW(-1500); got != "-₩1,500" {
-		t.Fatalf("FormatKRW(-1500)=%q", got)
+	if got := money.FormatWon(-1500); got != "-₩1,500" {
+		t.Fatalf("FormatWon(-1500)=%q", got)
 	}
 }

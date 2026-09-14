@@ -43,8 +43,8 @@ func TestClientGetVariantMapsProductNameAndImageURL(t *testing.T) {
 	if info.ImageURL != "https://cdn.example/a.jpg" {
 		t.Fatalf("ImageURL = %q, want first image URL", info.ImageURL)
 	}
-	if info.UnitPriceKRW != 250000 {
-		t.Fatalf("UnitPriceKRW = %d, want 250000", info.UnitPriceKRW)
+	if info.UnitPriceWon != 250000 {
+		t.Fatalf("UnitPriceWon = %d, want 250000", info.UnitPriceWon)
 	}
 }
 

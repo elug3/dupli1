@@ -34,11 +34,11 @@ func TestDispatcherOrderCreated(t *testing.T) {
 		"order_id":     "ORD-001",
 		"customer_id":  "cust-1",
 		"status":       "pending",
-		"total_krw":    25000,
-		"subtotal_krw": 25000,
-		"discount_krw": 0,
+		"total_won":    25000,
+		"subtotal_won": 25000,
+		"discount_won": 0,
 		"items": []map[string]any{
-			{"sku": "BAG-001", "quantity": 1, "unit_price_krw": 25000},
+			{"sku": "BAG-001", "quantity": 1, "unit_price_won": 25000},
 		},
 		"created_at":  createdAt,
 		"occurred_at": createdAt,
@@ -77,9 +77,9 @@ func TestDispatcherOrderPaid(t *testing.T) {
 		"order_id":    "ORD-PAID",
 		"customer_id": "cust-2",
 		"status":      "paid",
-		"total_krw":   50000,
+		"total_won":   50000,
 		"items": []map[string]any{
-			{"sku": "BAG-002", "quantity": 2, "unit_price_krw": 25000},
+			{"sku": "BAG-002", "quantity": 2, "unit_price_won": 25000},
 		},
 		"created_at":  createdAt,
 		"occurred_at": createdAt,
@@ -116,7 +116,7 @@ func TestDispatcherUsesDynamicRouting(t *testing.T) {
 		"order_id":    "ORD-DYN",
 		"customer_id": "cust-1",
 		"status":      "pending",
-		"total_krw":   1000,
+		"total_won":   1000,
 		"occurred_at": time.Now().UTC(),
 	})
 	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderCreated, orderPayload); err != nil {
@@ -153,9 +153,9 @@ func TestDispatcherEscapesHTMLInOrderFields(t *testing.T) {
 		"order_id":    "ORD-<script>",
 		"customer_id": "cust&1",
 		"status":      "pending",
-		"total_krw":   1000,
+		"total_won":   1000,
 		"items": []map[string]any{
-			{"sku": "SKU<1>", "quantity": 1, "unit_price_krw": 1000},
+			{"sku": "SKU<1>", "quantity": 1, "unit_price_won": 1000},
 		},
 		"occurred_at": time.Now().UTC(),
 	})
@@ -187,7 +187,7 @@ func TestDispatcherFallsBackToOccurredAt(t *testing.T) {
 		"order_id":    "ORD-FALLBACK",
 		"customer_id": "cust-1",
 		"status":      "shipped",
-		"total_krw":   1000,
+		"total_won":   1000,
 		"occurred_at": occurredAt,
 	})
 	if err != nil {

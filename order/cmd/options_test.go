@@ -19,47 +19,59 @@ func configureForTest(t *testing.T) order.ServerOptions {
 	return opts
 }
 
-func TestApplyEnvShippingFeeKRW(t *testing.T) {
-	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_KRW", "15000")
+func TestApplyEnvShippingFeeWon(t *testing.T) {
+	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_WON", "15000")
 	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_CENTS", "0")
 	opts := configureForTest(t)
-	if opts.ShippingFeeKRW != 15000 {
-		t.Fatalf("ShippingFeeKRW = %d, want 15000 from KRW env", opts.ShippingFeeKRW)
+	if opts.ShippingFeeWon != 15000 {
+		t.Fatalf("ShippingFeeWon = %d, want 15000 from WON env", opts.ShippingFeeWon)
+	}
+}
+
+func TestApplyEnvShippingFeeKrwAlias(t *testing.T) {
+	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_WON", "")
+	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_KRW", "12000")
+	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_CENTS", "0")
+	opts := configureForTest(t)
+	if opts.ShippingFeeWon != 12000 {
+		t.Fatalf("ShippingFeeWon = %d, want 12000 from leftover KRW env", opts.ShippingFeeWon)
 	}
 }
 
 func TestApplyEnvShippingFeeCentsAlias(t *testing.T) {
+	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_WON", "")
 	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_KRW", "")
 	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_CENTS", "0")
 	opts := configureForTest(t)
-	if opts.ShippingFeeKRW != 0 {
-		t.Fatalf("ShippingFeeKRW = %d, want 0 from CENTS alias (free)", opts.ShippingFeeKRW)
+	if opts.ShippingFeeWon != 0 {
+		t.Fatalf("ShippingFeeWon = %d, want 0 from CENTS alias (free)", opts.ShippingFeeWon)
 	}
 }
 
-func TestApplyEnvShippingFeeKRWWinsOverCents(t *testing.T) {
-	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_KRW", "18000")
+func TestApplyEnvShippingFeeWonWinsOverCents(t *testing.T) {
+	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_WON", "18000")
 	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_CENTS", "0")
 	opts := configureForTest(t)
-	if opts.ShippingFeeKRW != 18000 {
-		t.Fatalf("ShippingFeeKRW = %d, want KRW to win over CENTS", opts.ShippingFeeKRW)
+	if opts.ShippingFeeWon != 18000 {
+		t.Fatalf("ShippingFeeWon = %d, want WON to win over CENTS", opts.ShippingFeeWon)
 	}
 }
 
 func TestApplyEnvShippingFeeInvalidKeepsDefault(t *testing.T) {
-	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_KRW", "-1")
+	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_WON", "-1")
 	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_CENTS", "")
 	opts := configureForTest(t)
-	if opts.ShippingFeeKRW != order.DefaultShippingFeeKRW {
-		t.Fatalf("ShippingFeeKRW = %d, want default %d for invalid KRW", opts.ShippingFeeKRW, order.DefaultShippingFeeKRW)
+	if opts.ShippingFeeWon != order.DefaultShippingFeeWon {
+		t.Fatalf("ShippingFeeWon = %d, want default %d for invalid WON", opts.ShippingFeeWon, order.DefaultShippingFeeWon)
 	}
 }
 
 func TestApplyEnvShippingFeeUnsetUsesDefault(t *testing.T) {
+	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_WON", "")
 	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_KRW", "")
 	t.Setenv("DUPLI1_ORDER_SHIPPING_FEE_CENTS", "")
 	opts := configureForTest(t)
-	if opts.ShippingFeeKRW != order.DefaultShippingFeeKRW {
-		t.Fatalf("ShippingFeeKRW = %d, want default %d when unset", opts.ShippingFeeKRW, order.DefaultShippingFeeKRW)
+	if opts.ShippingFeeWon != order.DefaultShippingFeeWon {
+		t.Fatalf("ShippingFeeWon = %d, want default %d when unset", opts.ShippingFeeWon, order.DefaultShippingFeeWon)
 	}
 }

@@ -143,18 +143,18 @@ func formatPaymentCanceledMessage(event events.PaymentCanceledEvent, manageWebUR
 		byLine = fmt.Sprintf("By: %s\n", escapeHTML(by))
 	}
 
-	if event.RemainingKRW > 0 {
+	if event.RemainingWon > 0 {
 		return fmt.Sprintf(
 			"↩️ <b>Partial refund</b> %s\n%sRefunded: <b>%s</b>\nStill captured: <b>%s</b>\n%s%sOrder is unchanged — review whether it should still ship.",
 			escapeHTML(event.OrderID), manageLink,
-			formatMoney(event.AmountKRW), formatMoney(event.RemainingKRW),
+			formatMoney(event.AmountWon), formatMoney(event.RemainingWon),
 			reasonLine, byLine,
 		)
 	}
 	return fmt.Sprintf(
 		"↩️ <b>Refunded in full</b> %s\n%sRefunded: <b>%s</b>\n%s%sOrder has been canceled and its stock released.",
 		escapeHTML(event.OrderID), manageLink,
-		formatMoney(event.AmountKRW), reasonLine, byLine,
+		formatMoney(event.AmountWon), reasonLine, byLine,
 	)
 }
 
@@ -201,8 +201,8 @@ func formatPaymentCallbackRejectedMessage(event events.PaymentCallbackRejectedEv
 	} else {
 		b.WriteString(fmt.Sprintf("Cause: %s\n", escapeHTML(event.Reason)))
 	}
-	if event.ExpectedKRW > 0 {
-		b.WriteString(fmt.Sprintf("Expected: <b>%s</b>\n", formatMoney(event.ExpectedKRW)))
+	if event.ExpectedWon > 0 {
+		b.WriteString(fmt.Sprintf("Expected: <b>%s</b>\n", formatMoney(event.ExpectedWon)))
 	}
 	// Reported verbatim: a malformed amount is itself the clue.
 	if reported := strings.TrimSpace(event.ReportedAmount); reported != "" {
@@ -267,7 +267,7 @@ func formatOrderMessage(subject string, event events.Order, manageWebURL string)
 		itemsLine = "no items"
 	}
 
-	total := formatMoney(event.TotalKRW)
+	total := formatMoney(event.TotalWon)
 	createdLine := formatOrderCreatedAt(event.CreatedAt, event.Occurred)
 	manageLink := formatManageOrderLink(manageWebURL, event.OrderID)
 
@@ -332,7 +332,7 @@ func formatManageOrderLink(manageWebURL, orderID string) string {
 }
 
 func formatProductMessage(subject string, event events.Product) string {
-	price := money.FormatKRW(money.FromProductPrice(event.Price))
+	price := money.FormatWon(money.FromProductPrice(event.Price))
 	name := escapeHTML(event.Name)
 	brand := escapeHTML(event.Brand)
 	id := escapeHTML(event.ProductID)
@@ -355,7 +355,7 @@ func formatProductMessage(subject string, event events.Product) string {
 }
 
 func formatMoney(won int64) string {
-	return money.FormatKRW(won)
+	return money.FormatWon(won)
 }
 
 func escapeHTML(value string) string {
