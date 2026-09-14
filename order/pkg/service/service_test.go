@@ -1505,3 +1505,62 @@ func TestApproveCancelRequestFailsClosedWhenRefundRejected(t *testing.T) {
 		t.Fatalf("must not mark refunded when PG rejects, got %v", pay.canceled)
 	}
 }
+
+func TestEnforceDeliveryPolicyAutoFulfills(t *testing.T) {
+	ctx := t.Context()
+	start := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
+	clock := start
+	svc := newSvc(&fakeStock{reservationID: "res-1"}, &fakeProduct{defaultKRW: 5000}).
+		WithClock(func() time.Time { return clock })
+
+	deliverOrder := func(customerID, sku string) string {
+		t.Helper()
+		order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+			CustomerID: customerID,
+			Items:      []domain.OrderItem{{SKU: sku, Quantity: 1}},
+		})
+		if err != nil {
+			t.Fatalf("CreateOrder: %v", err)
+		}
+		if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-"+order.ID, order.TotalKRW); err != nil {
+			t.Fatalf("MarkOrderPaid: %v", err)
+		}
+		if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+			t.Fatalf("ConfirmOrder: %v", err)
+		}
+		if _, err := svc.ShipOrder(ctx, order.ID, "mgr-1", testShipTracking()); err != nil {
+			t.Fatalf("ShipOrder: %v", err)
+		}
+		if _, err := svc.DeliverOrder(ctx, order.ID, "driver-1"); err != nil {
+			t.Fatalf("DeliverOrder: %v", err)
+		}
+		return order.ID
+	}
+
+	overdueID := deliverOrder("customer-1", "bag-overdue")
+
+	// Delivered one day before the 14-day window closes — must survive the sweep.
+	clock = start.Add(domain.DeliveryAutoFulfillWindow - 24*time.Hour)
+	recentID := deliverOrder("customer-2", "bag-recent")
+
+	clock = start.Add(domain.DeliveryAutoFulfillWindow)
+	if err := svc.EnforceDeliveryPolicy(ctx); err != nil {
+		t.Fatalf("EnforceDeliveryPolicy: %v", err)
+	}
+
+	gotOverdue, err := svc.GetOrder(ctx, overdueID)
+	if err != nil {
+		t.Fatalf("GetOrder overdue: %v", err)
+	}
+	if gotOverdue.Status != domain.StatusFulfilled {
+		t.Fatalf("overdue = %+v, want auto-fulfilled after 14 days", gotOverdue)
+	}
+
+	gotRecent, err := svc.GetOrder(ctx, recentID)
+	if err != nil {
+		t.Fatalf("GetOrder recent: %v", err)
+	}
+	if gotRecent.Status != domain.StatusDelivered {
+		t.Fatalf("recent = %+v, want still delivered inside the window", gotRecent)
+	}
+}

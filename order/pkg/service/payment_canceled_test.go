@@ -45,6 +45,19 @@ func paidOrderForRefund(t *testing.T, repo *memory.Repository, id string) *domai
 	return order
 }
 
+func confirmedOrderForRefund(t *testing.T, repo *memory.Repository, id string) *domain.Order {
+	t.Helper()
+	order := paidOrderForRefund(t, repo, id)
+	now := time.Now().UTC()
+	if err := order.Confirm(now); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	if err := repo.Save(t.Context(), order); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	return order
+}
+
 // A full refund must take the order out of the fulfilment queue. Left paid, it
 // still passes Ship's status check and the goods go out for money already
 // returned.
@@ -94,10 +107,38 @@ func TestPaymentCanceled_PartialRefundLeavesOrderAlone(t *testing.T) {
 	}
 }
 
+// Manager-confirmed but not yet shipped orders still cancel on a full refund.
+func TestPaymentCanceled_ConfirmedOrderCancelsOnFullRefund(t *testing.T) {
+	repo := memory.NewRepository()
+	stock := &fakeStock{}
+	svc := service.New(repo, stock)
+	order := confirmedOrderForRefund(t, repo, "ord_confirmed_refund")
+
+	if err := svc.CancelOrderForRefund(t.Context(), order.ID, "pay-ord_confirmed_refund", 0); err != nil {
+		t.Fatalf("CancelOrderForRefund: %v", err)
+	}
+
+	got, err := repo.Get(t.Context(), order.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", got.Status)
+	}
+	if stock.released != order.ReservationID {
+		t.Fatalf("released = %q, want reservation %q", stock.released, order.ReservationID)
+	}
+}
+
 // Once goods have shipped a refund is a return, which the system cannot model;
 // flipping the status would misreport where the goods are.
 func TestPaymentCanceled_ShippedOrderIsLeftForReturnHandling(t *testing.T) {
-	for _, status := range []domain.OrderStatus{domain.StatusInTransit, domain.StatusFulfilled} {
+	for _, status := range []domain.OrderStatus{
+		domain.StatusInTransit,
+		domain.StatusDelivered,
+		domain.StatusDisputed,
+		domain.StatusFulfilled,
+	} {
 		repo := memory.NewRepository()
 		stock := &fakeStock{}
 		svc := service.New(repo, stock)
