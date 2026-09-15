@@ -80,3 +80,48 @@ func TestGetOrderForbidden(t *testing.T) {
 		t.Fatalf("error = %v, want ErrOrderForbidden", err)
 	}
 }
+
+// In-flight order rows and older gateways may still emit total_krw. Payment
+// checkout must not treat a missing total_won as a zero-won order.
+func TestGetOrderFallsBackToLegacyTotalKRW(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":          "ord-legacy",
+			"customer_id": "cust-1",
+			"status":      "pending",
+			"total_krw":   99000,
+		})
+	}))
+	defer srv.Close()
+
+	client := httporder.NewClient(srv.URL, srv.Client())
+	got, err := client.GetOrder(t.Context(), "token", "ord-legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalWon != 99000 {
+		t.Fatalf("TotalWon = %d, want 99000 from legacy total_krw", got.TotalWon)
+	}
+}
+
+func TestGetOrderTotalWonWinsOverLegacyTotalKRW(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":          "ord-both",
+			"customer_id": "cust-1",
+			"status":      "pending",
+			"total_won":   120000,
+			"total_krw":   99000,
+		})
+	}))
+	defer srv.Close()
+
+	client := httporder.NewClient(srv.URL, srv.Client())
+	got, err := client.GetOrder(t.Context(), "token", "ord-both")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalWon != 120000 {
+		t.Fatalf("TotalWon = %d, want canonical total_won to win", got.TotalWon)
+	}
+}
