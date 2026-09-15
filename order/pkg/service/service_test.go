@@ -634,6 +634,67 @@ func (p *slowRefundPayment) CancelPayment(_ context.Context, paymentID, idempote
 	return nil
 }
 
+// ConfirmOrder must not last-write-wins over a concurrent refund cancel.
+func TestConfirmOrderDoesNotOverwriteRefundCancel(t *testing.T) {
+	ctx := t.Context()
+	stock := &fakeStock{reservationID: "res-confirm-race"}
+	pay := &fakePayment{}
+	repo := memory.NewRepository()
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultKRW: 5000}).WithPayment(pay)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-confirm-race", order.TotalWon); err != nil {
+		t.Fatalf("MarkOrderPaid returned error: %v", err)
+	}
+
+	racePay := &refundDuringConfirmPayment{
+		fakePayment: pay,
+		onAfterCancel: func() {
+			if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
+				t.Fatalf("ConfirmOrder during refund cancel: %v", err)
+			}
+		},
+	}
+	svc = service.New(repo, stock).WithProduct(&fakeProduct{defaultKRW: 5000}).WithPayment(racePay)
+
+	if _, err := svc.CancelOrder(ctx, order.ID); err != nil {
+		t.Fatalf("CancelOrder returned error: %v", err)
+	}
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled (must not overwrite refund cancel with confirmed)", got.Status)
+	}
+	if len(pay.canceled) != 1 || pay.canceled[0] != "pay-confirm-race" {
+		t.Fatalf("canceled payments = %v, want [pay-confirm-race]", pay.canceled)
+	}
+}
+
+type refundDuringConfirmPayment struct {
+	*fakePayment
+	onAfterCancel func()
+}
+
+func (p *refundDuringConfirmPayment) CancelPayment(_ context.Context, paymentID, idempotencyKey string) error {
+	if p.fakePayment.err != nil {
+		return p.fakePayment.err
+	}
+	p.fakePayment.canceled = append(p.fakePayment.canceled, paymentID)
+	p.fakePayment.keys = append(p.fakePayment.keys, idempotencyKey)
+	if p.onAfterCancel != nil {
+		p.onAfterCancel()
+	}
+	return nil
+}
+
 // CancelOrder must atomically mark paid orders canceled after refund so a
 // concurrent ship cannot reach in_transit once money is already back.
 func TestCancelOrderAtomicGuardBeatsConcurrentShip(t *testing.T) {

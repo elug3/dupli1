@@ -525,10 +525,34 @@ func (s *Service) ConfirmOrder(ctx context.Context, id string) (*domain.Order, e
 	if err != nil {
 		return nil, err
 	}
-	if err := order.Confirm(s.now()); err != nil {
+	if order.Status == domain.StatusConfirmed {
+		return s.present(order), nil
+	}
+	now := s.now()
+	confirmed := cloneOrder(order)
+	if err := confirmed.Confirm(now); err != nil {
 		return nil, err
 	}
-	return s.saveStatusChange(ctx, order)
+	events, err := s.outboxEvents(confirmed, orderUpdatedSubject)
+	if err != nil {
+		return nil, err
+	}
+	ok, err := s.repo.ConfirmIfPaid(ctx, confirmed, events)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		s.tryDrainOutbox(ctx)
+		return s.present(confirmed), nil
+	}
+	fresh, err := s.repo.Get(ctx, order.ID)
+	if err != nil {
+		return nil, err
+	}
+	if fresh.Status == domain.StatusConfirmed {
+		return s.present(fresh), nil
+	}
+	return nil, domain.ErrInvalidTransition
 }
 
 // DeliverOrder records the carrier (or a manager) handing the parcel to the
