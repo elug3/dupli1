@@ -1214,6 +1214,46 @@ func (r *Repository) SavePaidIfCanceled(ctx context.Context, order *domain.Order
 	return true, nil
 }
 
+func (r *Repository) ConfirmIfPaid(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE orders SET
+			status = $2,
+			confirmed_at = $3,
+			updated_at = $4
+		WHERE id = $1 AND status = $5
+	`, order.ID, domain.StatusConfirmed, order.ConfirmedAt, order.UpdatedAt, domain.StatusPaid)
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+
+	for _, ev := range events {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO order_outbox (aggregate_id, subject, payload)
+			VALUES ($1, $2, $3)
+		`, ev.AggregateID, ev.Subject, ev.Payload); err != nil {
+			return false, fmt.Errorf("enqueue outbox: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *Repository) ShipIfConfirmed(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
