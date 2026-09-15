@@ -1,9 +1,20 @@
 // Package money defines Dupli1's single storefront currency (KRW) and amount helpers.
 //
 // Catalog prices (product.price) and cart/order/payment integer fields use the same
-// unit: whole Korean won. JSON fields are named *_won (historically *_krw, then *_cents, a
-// Stripe "minor units" leftover). For KRW (a zero-decimal currency) that is whole
-// won — not won×100.
+// unit: whole Korean won. For KRW (a zero-decimal currency) that is whole won —
+// not won×100.
+//
+// Money fields are named *_won everywhere: JSON, Go identifiers, and Postgres
+// columns. Two dead names come before it — *_cents (a Stripe "minor units"
+// leftover, renamed 2026-09-09) and *_krw (canonical for the five days between,
+// renamed to *_won on 2026-09-14). Nothing emits either one.
+//
+// They survive only as read-side aliases, and that is the trap: a producer that
+// sends an old name is accepted on the few paths that decode it (the
+// UnmarshalJSON shims in shared/pkg/events, payment's cancel body and its order
+// client, shipping_fee in the storefront checkout) and reads as zero everywhere
+// else. Existing databases rename leftover *_krw / *_cents columns on migrate.
+// Write *_won.
 package money
 
 import (
