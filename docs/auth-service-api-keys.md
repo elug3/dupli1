@@ -441,14 +441,53 @@ would otherwise be expected:
   password + session, so there is no long-lived bearer credential for an
   account that can manage other users.
 
-## Open deployment question
+## Where agents run
 
-The exchange endpoint sits behind the existing internal gateway, alongside the
-rest of `/api/v1/auth/`. That is correct for in-VPC callers — our services, and
-an agent running as an ECS task or on a bastion.
+**Resolved (2026-09-15).** Until the internal VPN is established, agents reach
+the platform by **SSH to an EC2 host inside the VPC** and run there.
 
-An agent running **outside** the VPC (an operator's laptop, a hosted agent
-runtime) could not reach it. Widening that is a deployment decision with real
-exposure consequences, not an implementation detail, so this design does not
-pre-judge it: if such a caller is needed, front it the way manage-web is
-fronted and treat it as a separate, explicitly-reviewed change.
+That keeps the exchange endpoint exactly where this design already puts it:
+behind the internal gateway with the rest of `/api/v1/auth/`, with **no ALB
+route and no public exposure**. An agent on an in-VPC host reaches it the same
+way `dupli1-order` does. No part of the design changes to accommodate this.
+
+The decision is also stable across the migration. When the VPN lands, an agent
+stops being a process on a shared host and becomes a client on the far side of
+the tunnel — still in-VPC, still reaching the same internal endpoint. Nothing
+here needs revisiting then; only the section below stops applying.
+
+### What SSH adds that the VPN will not
+
+SSH puts the key **at rest on a host several operators can reach**, so the
+blast radius of an agent key is bounded by SSH access control rather than by
+the key itself. Three rules follow, and they are requirements on how agent keys
+are issued, not advice:
+
+1. **Agent keys are `source='api'`, never `source='env'`.** Env-seeded keys are
+   inherit-scope and never expire — correct for a service that must survive a
+   restart unattended, exactly wrong for an agent on a shared box. An agent key
+   is minted in manage-web with a scope listing only what that agent does and a
+   real `expires_in_days`. This is the case the expiry field exists for.
+
+2. **One key per agent, never a shared host key.** `akid` in the JWT and
+   `last_used_at` on the row are only worth having if a key identifies a single
+   actor. A key that several operators share attributes nothing and cannot be
+   revoked without disrupting everyone.
+
+3. **An agent never reuses a service account's credential.** `dupli1-order`
+   holds `payment.cancel` so a paid-order cancel can refund through the
+   gateway; an agent that borrowed that account could issue refunds. The point
+   of the intersection scope is that an agent key can sit strictly below its
+   account — reusing the service credential throws that away and is
+   indistinguishable in the logs from the service itself.
+
+On the host, the key belongs in a per-operator file — `~/.dupli1/agent-key`,
+mode `600` — read into the environment at use. Not in
+`/opt/dupli1/app/.env.prod`, which is the services' file and is readable by
+anyone who can `sudo`. Never passed as a command-line argument, where it is
+visible in `ps` to every other user on the box, and kept out of shell history.
+Any key on a VPC host is `dk_live_`; `dk_test_` stays on local Compose.
+
+None of this is a reason to delay: an SSH-reachable agent with a
+tightly-scoped 90-day key is a strict improvement on the alternative available
+today, which is handing it a service account's password.
