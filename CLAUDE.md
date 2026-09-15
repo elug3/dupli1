@@ -142,6 +142,7 @@ Order, cart, and payment use PostgreSQL when their `DUPLI1_*_DB` env var is set;
 ## Key constraints
 
 - **Currency: KRW only.** All `*_won` fields are whole Korean won. No fractional amounts.
+- **Money fields are `*_won`** — in JSON, Go identifiers, and Postgres columns. Never `*_krw` (canonical only from 2026-09-09 to 09-14) or `*_cents`. Nothing emits the old names, but a few decoders still *accept* them, so writing one fails silently rather than loudly. Branches and docs cut in that window still say `*_krw`; treat them as stale. See `shared/pkg/money`.
 - **No `go.work`.** Run and test from each service module directory.
 - **nginx resolver:** `api/nginx.conf` must list only Docker's embedded DNS `127.0.0.11` in its `resolver` directive. Adding `10.0.0.2` (AWS VPC) causes ~50% of local requests to fail with `502`.
 - **Legacy API aliases.** Canonical paths are `/api/v1/{service}/…`; legacy top-level prefixes (`/api/v1/inventory/`, `/api/v1/checkout/`, `/api/v1/carts/`, etc.) are still registered. New code uses canonical paths only.
