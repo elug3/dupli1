@@ -40,7 +40,7 @@ SERVICES=(
   # Frontend / legacy (no-op if missing)
   dupli1-web
   dupli1-manage-web
-  dupli1-inventory
+  dupli1-profile
 )
 
 log() { echo "$*"; }

@@ -38,6 +38,7 @@ SERVICES=(
   dupli1-proxy
   dupli1-web
   dupli1-manage-web
+  dupli1-profile
 )
 
 log() { echo "$*"; }

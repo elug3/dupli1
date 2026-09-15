@@ -2,6 +2,12 @@
 # Opt-in cleanup of idle AWS spend found in the 2026-07-14 cost review.
 # See docs/aws-cost-optimization.md.
 #
+# Already removed (2026-09-15 live cleanup, do not recreate):
+#   empty Global Accelerators, Sydney schick-test/mweb-vpn, stopped dupli1-vpn,
+#   leftover VPC dupli1-ec2-vpc, ECR dupli1-inventory, IAM user github_actions,
+#   Cloud Map namespace dupli1.internal, unused ALB TG dupli1-web-tg.
+# Remaining optional action here is ASG shrink (still 5/6/6).
+#
 # Default: dry-run (print actions only).
 #   bash infra/scripts/cleanup-aws-orphans.sh
 #
