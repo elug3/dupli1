@@ -35,6 +35,7 @@ type ServerOptions struct {
 	S3AccessKey        string
 	S3SecretKey        string
 	S3Bucket           string
+	RedisURL           string
 }
 
 var DefaultServerOptions = ServerOptions{

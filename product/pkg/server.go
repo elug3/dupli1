@@ -123,6 +123,7 @@ func NewServer(opts ServerOptions) (*ProductServer, error) {
 		S3AccessKey:        opts.S3AccessKey,
 		S3SecretKey:        opts.S3SecretKey,
 		S3Bucket:           opts.S3Bucket,
+		RedisURL:           opts.RedisURL,
 	})
 	if err != nil {
 		return nil, err

@@ -10,23 +10,26 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
 type Handler struct {
-	svc            *service.ProductSearchService
-	promotionSvc      *service.PromotionService
-	inventorySvc   *service.InventoryService
-	catalogSvc     *service.CatalogService
-	viewStore      ports.ProductViewStore
-	wishlistStore  ports.ProductWishlistStore
-	guestCookie    GuestCookieConfig
-	settings       settings.Response
+	svc          *service.ProductSearchService
+	promotionSvc *service.PromotionService
+	// promotionThrottle rate-limits the public redeem route. Optional: unset
+	// means no limit, which is how the route behaved before Phase 2.
+	promotionThrottle func(http.Handler) http.Handler
+	inventorySvc      *service.InventoryService
+	catalogSvc        *service.CatalogService
+	viewStore         ports.ProductViewStore
+	wishlistStore     ports.ProductWishlistStore
+	guestCookie       GuestCookieConfig
+	settings          settings.Response
 }
 
 type SearchResponse struct {
@@ -65,12 +68,12 @@ var searchFilters = []string{
 
 func NewHandler(svc *service.ProductSearchService, promotionSvc *service.PromotionService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
 	return &Handler{
-		svc:         svc,
-		promotionSvc:   promotionSvc,
+		svc:          svc,
+		promotionSvc: promotionSvc,
 		inventorySvc: inventorySvc,
-		catalogSvc:  catalogSvc,
-		guestCookie: defaultGuestCookieConfig(),
-		settings:    settings.NewResponse("product"),
+		catalogSvc:   catalogSvc,
+		guestCookie:  defaultGuestCookieConfig(),
+		settings:     settings.NewResponse("product"),
 	}
 }
 
@@ -106,7 +109,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	MountFunc(mux, "GET", RoutePublicVariant, h.PublicGetVariant, LegacyRoutePublicVariant)
 	MountFunc(mux, "GET", RoutePublicVariantBySkuID, h.PublicGetVariantBySkuID, LegacyRoutePublicVariantBySkuID)
-	MountFunc(mux, "POST", RouteRedeemPromotion, h.RedeemPromotion, PreRenameRouteRedeemCoupon, LegacyRouteRedeemCoupon)
+	Mount(mux, "POST", RouteRedeemPromotion, h.throttled(http.HandlerFunc(h.RedeemPromotion)), PreRenameRouteRedeemCoupon, LegacyRouteRedeemCoupon)
 
 	MountFunc(mux, "GET", RouteInventoryHealth, h.Health, LegacyRouteInventoryHealth)
 	MountFunc(mux, "GET", RouteInventorySettings, h.Settings, LegacyRouteInventorySettings)
@@ -845,4 +848,17 @@ func (h *Handler) respondJSON(w http.ResponseWriter, status int, data interface{
 
 func (h *Handler) respondError(w http.ResponseWriter, status int, message string) {
 	h.respondJSON(w, status, ErrorResponse{Error: message, Code: status})
+}
+
+// WithPromotionThrottle rate-limits the public redeem route.
+func (h *Handler) WithPromotionThrottle(mw func(http.Handler) http.Handler) *Handler {
+	h.promotionThrottle = mw
+	return h
+}
+
+func (h *Handler) throttled(next http.Handler) http.Handler {
+	if h.promotionThrottle == nil {
+		return next
+	}
+	return h.promotionThrottle(next)
 }

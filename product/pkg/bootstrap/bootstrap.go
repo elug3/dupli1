@@ -3,16 +3,22 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"strings"
+	"time"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
+	"github.com/redis/go-redis/v9"
+
 	"github.com/elug3/dupli1/product/pkg/handler"
 	natsinfra "github.com/elug3/dupli1/product/pkg/infra/nats"
 	"github.com/elug3/dupli1/product/pkg/infra/pg"
+	"github.com/elug3/dupli1/product/pkg/infra/ratelimit"
 	s3store "github.com/elug3/dupli1/product/pkg/infra/s3"
 	"github.com/elug3/dupli1/product/pkg/middleware"
 	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
@@ -96,6 +102,13 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		WithWishlistStore(store).
 		WithGuestCookie(guestCookie)
 
+	// Redeem and evaluate are unauthenticated and will answer for any string,
+	// which is a free code-guessing oracle; before Phase 2 neither had any
+	// limit. The limiter fails open, because it is not what makes a code safe:
+	// checkout complete re-evaluates and the ledger caps actual use.
+	throttle := newPromotionRateLimiter(cfg).Middleware(customerIDFromRequest)
+	h = h.WithPromotionThrottle(throttle)
+
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
@@ -167,9 +180,13 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		requireAnyPerm(http.HandlerFunc(h.DeletePromotion), permissions.PromotionDelete, permissions.CouponDelete),
 		handler.PreRenameRouteCouponByCode, handler.LegacyRouteCouponByCode)
 
+	// Redeem and evaluate are unauthenticated and will answer for any string,
+	// which is a free code-guessing oracle; before Phase 2 neither had any
+	// limit. The limiter fails open, because it is not what makes a code safe:
+	// complete re-evaluates and the ledger caps actual use.
 	// Evaluating a code is public: a storefront previews the discount before
 	// the customer commits, exactly as redeem already was.
-	mux.Handle("POST "+handler.RouteEvaluatePromotion, http.HandlerFunc(h.EvaluatePromotion))
+	mux.Handle("POST "+handler.RouteEvaluatePromotion, throttle(http.HandlerFunc(h.EvaluatePromotion)))
 	// Reserving, consuming and releasing move the usage ledger, so they are
 	// service-to-service. Order holds promotion.redeem via its service account.
 	mux.Handle("POST "+handler.RouteReservePromotion, requirePerm(permissions.PromotionRedeem, http.HandlerFunc(h.ReservePromotion)))
@@ -195,4 +212,38 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 			return nil
 		},
 	}, nil
+}
+
+// newPromotionRateLimiter budgets the public promotional-code endpoints.
+//
+// Redis when REDIS_URL is set, so the window is shared across tasks and the
+// configured budget is the real one; otherwise a per-process window, which
+// keeps local dev free of infrastructure at the cost of a budget multiplied by
+// the task count. See pkg/infra/ratelimit for why failing open is the right
+// default here.
+func newPromotionRateLimiter(cfg Config) *ratelimit.Limiter {
+	const (
+		maxAttempts = 20
+		window      = time.Minute
+	)
+	url := strings.TrimSpace(cfg.RedisURL)
+	if url == "" {
+		return ratelimit.New(ratelimit.NewMemoryCounter(), maxAttempts, window)
+	}
+	opts, err := redis.ParseURL(url)
+	if err != nil {
+		log.Printf("promotion rate limit: bad REDIS_URL, falling back to per-process window: %v", err)
+		return ratelimit.New(ratelimit.NewMemoryCounter(), maxAttempts, window)
+	}
+	return ratelimit.New(ratelimit.NewRedisCounter(redis.NewClient(opts), "promo"), maxAttempts, window)
+}
+
+// customerIDFromRequest reads the caller's identity when the request happens to
+// carry a token. These routes are public, so this is often empty and only the
+// IP budget applies.
+func customerIDFromRequest(r *http.Request) string {
+	if claims, ok := authjwt.FromContext(r.Context()); ok {
+		return claims.UserID
+	}
+	return ""
 }
