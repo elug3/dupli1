@@ -144,6 +144,42 @@ func TestCancelPayment_EmptyBodyIsFullCancel(t *testing.T) {
 	}
 }
 
+// Ops scripts and older clients may still POST amount_krw. Without this alias
+// a partial cancel decodes as 0 and refunds the full balance.
+func TestCancelPayment_LegacyAmountKRWPartial(t *testing.T) {
+	mux, payment := newCancelFixture(t, 70000)
+	token := makeToken(t, cancelTestSecret, "mgr-1", []string{permissions.PaymentCancel})
+
+	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_krw":20000}`))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var got domain.Payment
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.CanceledAmountWon != 20000 {
+		t.Fatalf("canceled = %d, want 20000 from legacy amount_krw", got.CanceledAmountWon)
+	}
+}
+
+func TestCancelPayment_AmountWonWinsOverLegacyAmountKRW(t *testing.T) {
+	mux, payment := newCancelFixture(t, 70000)
+	token := makeToken(t, cancelTestSecret, "mgr-1", []string{permissions.PaymentCancel})
+
+	rec := cancelRequest(t, mux, payment.ID, token, []byte(`{"amount_won":15000,"amount_krw":20000}`))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var got domain.Payment
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.CanceledAmountWon != 15000 {
+		t.Fatalf("canceled = %d, want canonical amount_won to win", got.CanceledAmountWon)
+	}
+}
+
 func TestCancelPayment_PartialAmount(t *testing.T) {
 	mux, payment := newCancelFixture(t, 70000)
 	token := makeToken(t, cancelTestSecret, "mgr-1", []string{permissions.PaymentCancel})
