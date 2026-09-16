@@ -57,6 +57,7 @@ func (s *PromotionStore) migrate() error {
 		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS terms TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS redemption_count INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS entitlement_ttl_days INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.pool.Exec(context.Background(), stmt); err != nil {
 			return fmt.Errorf("migrate promotions columns: %w", err)
@@ -64,6 +65,9 @@ func (s *PromotionStore) migrate() error {
 	}
 
 	if err := s.migrateRedemptions(); err != nil {
+		return err
+	}
+	if err := s.migrateEntitlements(); err != nil {
 		return err
 	}
 	return s.backfillLegacyBenefit()
@@ -101,6 +105,36 @@ func (s *PromotionStore) migrateRedemptions() error {
 	} {
 		if _, err := s.pool.Exec(context.Background(), stmt); err != nil {
 			return fmt.Errorf("migrate promotion_redemptions: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateEntitlements creates the single-user access table.
+//
+// The unique index on (code, customer_id, trigger_key) is the idempotency
+// guarantee for auto-issue: a redelivered registration event conflicts instead
+// of minting a second entitlement.
+func (s *PromotionStore) migrateEntitlements() error {
+	for _, stmt := range []string{
+		`CREATE TABLE IF NOT EXISTS customer_promotions (
+			id          TEXT PRIMARY KEY,
+			customer_id TEXT NOT NULL,
+			code        TEXT NOT NULL,
+			source      TEXT NOT NULL DEFAULT '',
+			trigger_key TEXT NOT NULL DEFAULT '',
+			issued_by   TEXT NOT NULL DEFAULT '',
+			expires_at  TIMESTAMPTZ,
+			revoked_at  TIMESTAMPTZ,
+			created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS customer_promotions_trigger_uniq
+			ON customer_promotions (code, customer_id, trigger_key)`,
+		`CREATE INDEX IF NOT EXISTS customer_promotions_customer_idx
+			ON customer_promotions (customer_id)`,
+	} {
+		if _, err := s.pool.Exec(context.Background(), stmt); err != nil {
+			return fmt.Errorf("migrate customer_promotions: %w", err)
 		}
 	}
 	return nil
@@ -192,10 +226,12 @@ func (s *PromotionStore) Create(ctx context.Context, c domain.Promotion) error {
 	}
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO promotions (code, scope, discount, description, expires, active,
-			conditions, benefit, expires_at, max_redemptions, max_per_customer, terms, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+			conditions, benefit, expires_at, max_redemptions, max_per_customer, terms,
+			entitlement_ttl_days, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
 	`, c.Code, string(c.EffectiveScope()), c.Discount, c.Description, c.Expires, c.Active,
-		conditions, benefit, c.ExpiresAt, c.MaxRedemptions, c.EffectiveMaxPerCustomer(), c.Terms)
+		conditions, benefit, c.ExpiresAt, c.MaxRedemptions, c.EffectiveMaxPerCustomer(), c.Terms,
+		c.EntitlementTTLDays)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ports.Conflict("promotion already exists")
@@ -220,11 +256,12 @@ func (s *PromotionStore) Update(ctx context.Context, code string, patch ports.Pr
 	_, err = s.pool.Exec(ctx, `
 		UPDATE promotions SET scope = $2, discount = $3, description = $4, expires = $5,
 			active = $6, conditions = $7, benefit = $8, expires_at = $9, max_redemptions = $10,
-			max_per_customer = $11, terms = $12, updated_at = now()
+			max_per_customer = $11, terms = $12, entitlement_ttl_days = $13, updated_at = now()
 		WHERE code = $1
 	`, current.Code, string(current.EffectiveScope()), current.Discount, current.Description,
 		current.Expires, current.Active, conditions, benefit, current.ExpiresAt,
-		current.MaxRedemptions, current.EffectiveMaxPerCustomer(), current.Terms)
+		current.MaxRedemptions, current.EffectiveMaxPerCustomer(), current.Terms,
+		current.EntitlementTTLDays)
 	if err != nil {
 		return nil, wrapDB("update promotion", err)
 	}

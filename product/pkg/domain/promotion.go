@@ -44,6 +44,13 @@ type Promotion struct {
 	// the campaign cap check.
 	RedemptionCount int `json:"redemption_count"`
 
+	// EntitlementTTLDays is how long an issued entitlement lasts, in days.
+	// Only meaningful for single_user codes. Per entitlement rather than per
+	// campaign, so an account issued late in a campaign gets the same window
+	// as one issued at launch. 0 means the entitlement does not expire on its
+	// own (the definition's ExpiresAt, if any, still applies).
+	EntitlementTTLDays int `json:"entitlement_ttl_days,omitempty"`
+
 	// Terms is customer-facing copy stating what the code requires, shown at
 	// redeem, in the wallet and in the checkout summary. A campaign with a
 	// minimum spend or an expiry should say so here.

@@ -42,6 +42,11 @@ const (
 	RouteReservePromotion  = "/api/v1/products/promotions/reserve"
 	RouteConsumePromotion  = "/api/v1/products/promotions/consume"
 	RouteReleasePromotion  = "/api/v1/products/promotions/release"
+	// Single-user entitlements: the customer's own wallet (ABAC), and manager
+	// issue / revoke.
+	RoutePromotionWallet      = "/api/v1/products/promotions/me"
+	RoutePromotionIssue       = "/api/v1/products/promotions/by-code/{code}/issue"
+	RoutePromotionEntitlement = "/api/v1/products/promotions/entitlements/{id}"
 
 	// Inventory under products (merged former inventory service).
 	RouteInventoryHealth             = "/api/v1/products/inventory/health"

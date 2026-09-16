@@ -152,6 +152,9 @@ func applyPromotionPatch(p *domain.Promotion, patch ports.PromotionPatch) {
 	if patch.MaxPerCustomer != nil {
 		p.MaxPerCustomer = *patch.MaxPerCustomer
 	}
+	if patch.EntitlementTTLDays != nil {
+		p.EntitlementTTLDays = *patch.EntitlementTTLDays
+	}
 	if patch.ClearExpiresAt {
 		p.ExpiresAt = nil
 	} else if patch.ExpiresAt != nil {

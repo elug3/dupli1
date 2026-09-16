@@ -22,20 +22,21 @@ var DefaultSearchServerOptions = SearchServerOptions{
 
 // ServerOptions configures the full product server (admin/manager)
 type ServerOptions struct {
-	Host               string
-	Port               int
-	DatabaseConnString string
-	NATSURL            string
-	JWTSecret          string
-	JWKSURL            string
-	ReadTimeout        int // in seconds
-	WriteTimeout       int // in seconds
-	S3Endpoint         string
-	S3PublicEndpoint   string
-	S3AccessKey        string
-	S3SecretKey        string
-	S3Bucket           string
-	RedisURL           string
+	Host                 string
+	Port                 int
+	DatabaseConnString   string
+	NATSURL              string
+	JWTSecret            string
+	JWKSURL              string
+	ReadTimeout          int // in seconds
+	WriteTimeout         int // in seconds
+	S3Endpoint           string
+	S3PublicEndpoint     string
+	S3AccessKey          string
+	S3SecretKey          string
+	S3Bucket             string
+	RedisURL             string
+	WelcomePromotionCode string
 }
 
 var DefaultServerOptions = ServerOptions{

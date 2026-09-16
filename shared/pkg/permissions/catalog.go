@@ -50,6 +50,9 @@ const (
 	// service-to-service: order holds it, managers do not need it, and the
 	// public redeem/evaluate endpoints require no permission at all.
 	PromotionRedeem = "promotion.redeem"
+	// PromotionIssue grants and revokes a single-user entitlement. Reading
+	// one's own wallet needs no permission — that is ABAC on the token subject.
+	PromotionIssue = "promotion.issue"
 )
 
 // Deprecated: the coupon.* set is superseded by the promotion.* set above.
@@ -120,6 +123,7 @@ var Catalog = []string{
 	PromotionUpdate,
 	PromotionDelete,
 	PromotionRedeem,
+	PromotionIssue,
 	CouponRead,
 	CouponCreate,
 	CouponUpdate,

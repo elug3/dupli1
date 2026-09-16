@@ -29,6 +29,7 @@ const (
 	ProductUpdated          = "product.updated"
 	ProductDeleted          = "product.deleted"
 	ProductImage            = "product.image_uploaded"
+	UserRegistered          = "user.registered"
 	UserDeleted             = "user.deleted"
 )
 
@@ -273,6 +274,21 @@ type PaymentCallbackRejectedEvent struct {
 	// Detail is a short human-readable note for the alert (never a secret).
 	Detail   string    `json:"detail,omitempty"`
 	Occurred time.Time `json:"occurred_at"`
+}
+
+// UserRegisteredEvent is the payload for UserRegistered — published by auth,
+// consumed by product, which issues a welcome promotional code to new customer
+// accounts.
+//
+// AccountType matters to the subscriber: only "customer" accounts get one.
+// Issuing to a manager or a service account would put a discount in a wallet
+// nobody shops from.
+type UserRegisteredEvent struct {
+	EventType   string    `json:"event_type"`
+	UserID      string    `json:"user_id"`
+	Email       string    `json:"email"`
+	AccountType string    `json:"account_type"`
+	Occurred    time.Time `json:"occurred_at"`
 }
 
 // UserDeletedEvent is the payload for UserDeleted — published by auth,

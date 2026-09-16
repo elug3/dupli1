@@ -38,7 +38,7 @@ func (a *App) Close() error {
 }
 
 // Bootstrap wires infrastructure, service, handler, and HTTP routes.
-func Bootstrap(_ context.Context, cfg Config) (*App, error) {
+func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	store, err := pg.NewProductStore(cfg.DatabaseConnString)
 	if err != nil {
 		return nil, err
@@ -61,6 +61,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 
 	var eventPublisher ports.EventPublisher
 	var natsPublisher *natsinfra.Publisher
+	var natsSubscriber *natsinfra.Subscriber
 	if cfg.NATSURL != "" {
 		natsPublisher, err = natsinfra.NewPublisher(cfg.NATSURL)
 		if err != nil {
@@ -68,6 +69,13 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 			return nil, err
 		}
 		eventPublisher = natsPublisher
+
+		natsSubscriber, err = natsinfra.NewSubscriber(cfg.NATSURL)
+		if err != nil {
+			natsPublisher.Close()
+			store.Close()
+			return nil, err
+		}
 	}
 
 	svc := service.NewProductSearchService(store, imgStore, eventPublisher)
@@ -78,7 +86,8 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 	promotionSvc := service.NewPromotionService(promotionStore).
-		WithLedger(pg.NewPromotionRedemptionStore(store.Pool()))
+		WithLedger(pg.NewPromotionRedemptionStore(store.Pool())).
+		WithEntitlements(pg.NewPromotionEntitlementStore(store.Pool()))
 
 	inventoryStore, err := pg.NewInventoryStore(store.Pool())
 	if err != nil {
@@ -101,6 +110,20 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		WithViewStore(store).
 		WithWishlistStore(store).
 		WithGuestCookie(guestCookie)
+
+	// New customers get their welcome promotional code from auth's
+	// user.registered event. Issuing is keyed on the event's user id, so a
+	// redelivery mints nothing. An unset code disables the subscriber, which
+	// is what an environment without the campaign wants.
+	welcomeIssuer := service.NewWelcomePromotionIssuer(promotionSvc, cfg.WelcomePromotionCode)
+	if natsSubscriber != nil && welcomeIssuer.Enabled() {
+		if err := welcomeIssuer.Register(ctx, natsSubscriber); err != nil {
+			natsSubscriber.Close()
+			natsPublisher.Close()
+			store.Close()
+			return nil, fmt.Errorf("subscribe welcome promotion issuer: %w", err)
+		}
+	}
 
 	// Redeem and evaluate are unauthenticated and will answer for any string,
 	// which is a free code-guessing oracle; before Phase 2 neither had any
@@ -193,6 +216,14 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	mux.Handle("POST "+handler.RouteConsumePromotion, requirePerm(permissions.PromotionRedeem, http.HandlerFunc(h.ConsumePromotion)))
 	mux.Handle("POST "+handler.RouteReleasePromotion, requirePerm(permissions.PromotionRedeem, http.HandlerFunc(h.ReleasePromotion)))
 
+	// The wallet is ABAC: any signed-in customer reads their own, and the
+	// customer id comes from the token rather than the request. POST because
+	// the cart travels in the body to be judged against.
+	mux.Handle("POST "+handler.RoutePromotionWallet, middleware.RequireAuth(validator, http.HandlerFunc(h.PromotionWallet)))
+	mux.Handle("GET "+handler.RoutePromotionWallet, middleware.RequireAuth(validator, http.HandlerFunc(h.PromotionWallet)))
+	mux.Handle("POST "+handler.RoutePromotionIssue, requirePerm(permissions.PromotionIssue, http.HandlerFunc(h.IssuePromotion)))
+	mux.Handle("DELETE "+handler.RoutePromotionEntitlement, requirePerm(permissions.PromotionIssue, http.HandlerFunc(h.RevokePromotionEntitlement)))
+
 	handler.Mount(mux, "PUT", handler.RouteInventoryItem, requirePerm(permissions.InventoryStockWrite, h.UpsertInventoryItemHandler()), handler.LegacyRouteInventoryItem)
 	handler.Mount(mux, "POST", handler.RouteInventoryAdjust, requirePerm(permissions.InventoryStockWrite, h.AdjustInventoryItemHandler()), handler.LegacyRouteInventoryAdjust)
 	handler.Mount(mux, "PUT", handler.RouteInventoryItemBySkuID, requirePerm(permissions.InventoryStockWrite, h.UpsertInventoryItemBySkuIDHandler()), handler.LegacyRouteInventoryItemBySkuID)
@@ -205,6 +236,9 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		Handler:       mux,
 		natsPublisher: natsPublisher,
 		close: func() error {
+			if natsSubscriber != nil {
+				natsSubscriber.Close()
+			}
 			if natsPublisher != nil {
 				natsPublisher.Close()
 			}

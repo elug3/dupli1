@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
@@ -11,9 +12,10 @@ import (
 )
 
 type PromotionService struct {
-	store  ports.PromotionStore
-	ledger ports.PromotionRedemptionStore
-	now    func() time.Time
+	store        ports.PromotionStore
+	ledger       ports.PromotionRedemptionStore
+	entitlements ports.PromotionEntitlementStore
+	now          func() time.Time
 }
 
 func NewPromotionService(store ports.PromotionStore) *PromotionService {
@@ -25,6 +27,13 @@ func NewPromotionService(store ports.PromotionStore) *PromotionService {
 // Phase 2, and is why bootstrap always wires one.
 func (s *PromotionService) WithLedger(ledger ports.PromotionRedemptionStore) *PromotionService {
 	s.ledger = ledger
+	return s
+}
+
+// WithEntitlements attaches the single-user access store. Without it a
+// single_user code cannot be used at all, because nothing can say who holds it.
+func (s *PromotionService) WithEntitlements(store ports.PromotionEntitlementStore) *PromotionService {
+	s.entitlements = store
 	return s
 }
 
@@ -123,10 +132,26 @@ func (s *PromotionService) evaluate(ctx context.Context, code string, evalCtx do
 		evalCtx.Now = s.now()
 	}
 
-	// A single-user code needs an entitlement, which is Phase 3. Until then it
-	// is refused rather than silently treated as a public code.
+	// A single-user code is unusable without an entitlement.
 	if promotion.EffectiveScope() == domain.ScopeSingleUser {
-		return domain.EvaluationResult{Reason: domain.ReasonLoginRequired}
+		if evalCtx.CustomerID == "" {
+			return domain.EvaluationResult{Reason: domain.ReasonLoginRequired}
+		}
+		if s.entitlements == nil {
+			return domain.EvaluationResult{Reason: domain.ReasonInvalidCode}
+		}
+		entitlement, err := s.entitlements.Find(ctx, promotion.Code, evalCtx.CustomerID)
+		if err != nil {
+			// Not holding the entitlement is reported the same as the code not
+			// existing, so guessing a campaign's code tells you nothing.
+			return domain.EvaluationResult{Reason: domain.ReasonInvalidCode}
+		}
+		if entitlement.RevokedAt != nil {
+			return domain.EvaluationResult{Reason: domain.ReasonInvalidCode}
+		}
+		if !entitlement.Usable(evalCtx.Now) {
+			return domain.EvaluationResult{Reason: domain.ReasonExpired}
+		}
 	}
 
 	result := promotion.Evaluate(evalCtx)
@@ -252,4 +277,94 @@ func applyPatchForValidation(p *domain.Promotion, patch ports.PromotionPatch) {
 	if patch.Discount != nil {
 		p.Discount = *patch.Discount
 	}
+}
+
+// ── Entitlements ─────────────────────────────────────────────────────────────
+
+// Issue grants one account the right to use a single-user code.
+//
+// Idempotent on (code, customer_id, trigger_key): the registration subscriber
+// and the backfill both pass a stable key, so a redelivered event or a re-run
+// mints nothing. The entitlement's expiry is computed from the definition at
+// issue time, so an account issued today gets the same window as one issued at
+// launch.
+func (s *PromotionService) Issue(ctx context.Context, code, customerID, source, triggerKey, issuedBy string) (*domain.CustomerPromotion, error) {
+	if s.entitlements == nil {
+		return nil, ports.Invalid("entitlements are not configured")
+	}
+	customerID = strings.TrimSpace(customerID)
+	if customerID == "" {
+		return nil, ports.Invalid("customer_id is required")
+	}
+	promotion, err := s.store.Get(ctx, domain.NormalizedCode(code))
+	if err != nil {
+		return nil, err
+	}
+	if promotion.EffectiveScope() != domain.ScopeSingleUser {
+		return nil, ports.Invalid("only single_user promotional codes are issued to an account")
+	}
+	return s.entitlements.Issue(ctx, ports.IssueEntitlementInput{
+		Code:       promotion.Code,
+		CustomerID: customerID,
+		Source:     source,
+		TriggerKey: triggerKey,
+		IssuedBy:   issuedBy,
+		ExpiresAt:  promotion.EntitlementExpiry(s.now()),
+	})
+}
+
+// Revoke withdraws an entitlement. It never rewrites an order that already
+// used the code.
+func (s *PromotionService) Revoke(ctx context.Context, id string) error {
+	if s.entitlements == nil {
+		return ports.Invalid("entitlements are not configured")
+	}
+	return s.entitlements.Revoke(ctx, id, s.now())
+}
+
+// WalletEntry is one entitlement as the storefront shows it: the definition it
+// grants, and whether it can be used against the cart the customer has now.
+type WalletEntry struct {
+	Entitlement domain.CustomerPromotion `json:"entitlement"`
+	Promotion   *domain.Promotion        `json:"promotion,omitempty"`
+	Eligible    bool                     `json:"eligible"`
+	DiscountWon int64                    `json:"discount_won"`
+	Reason      domain.Reason            `json:"reason,omitempty"`
+	SubReason   string                   `json:"sub_reason,omitempty"`
+}
+
+// Wallet lists a customer's entitlements, each judged against the cart they
+// are looking at.
+//
+// Ineligible entries are returned rather than hidden, with the reason, so the
+// storefront can say "spend 100,000원" instead of silently dropping a code the
+// customer knows they have.
+func (s *PromotionService) Wallet(ctx context.Context, customerID string, evalCtx domain.EvaluationContext) ([]WalletEntry, error) {
+	if s.entitlements == nil {
+		return nil, nil
+	}
+	rows, err := s.entitlements.ListForCustomer(ctx, customerID)
+	if err != nil {
+		return nil, err
+	}
+	evalCtx.CustomerID = customerID
+	if evalCtx.Now.IsZero() {
+		evalCtx.Now = s.now()
+	}
+
+	out := make([]WalletEntry, 0, len(rows))
+	for _, row := range rows {
+		entry := WalletEntry{Entitlement: row}
+		promotion, err := s.store.Get(ctx, row.Code)
+		if err == nil {
+			entry.Promotion = promotion
+		}
+		result := s.evaluate(ctx, row.Code, evalCtx, true)
+		entry.Eligible = result.OK
+		entry.DiscountWon = result.DiscountWon
+		entry.Reason = result.Reason
+		entry.SubReason = result.SubReason
+		out = append(out, entry)
+	}
+	return out, nil
 }

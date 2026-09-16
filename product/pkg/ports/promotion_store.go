@@ -22,6 +22,8 @@ type PromotionPatch struct {
 	Conditions     *domain.Conditions
 	Benefit        *domain.Benefit
 	MaxPerCustomer *int
+	// EntitlementTTLDays is how long an issued single-user entitlement lasts.
+	EntitlementTTLDays *int
 
 	ExpiresAt      *time.Time
 	ClearExpiresAt bool
@@ -75,4 +77,34 @@ type PromotionRedemptionStore interface {
 	// CountsByCode returns reserved+consumed and consumed-only totals, for the
 	// campaign cap and for reporting respectively.
 	CountsByCode(ctx context.Context, code string) (active int, consumed int, err error)
+}
+
+
+// IssueEntitlementInput grants one account the right to use a single-user code.
+type IssueEntitlementInput struct {
+	Code       string
+	CustomerID string
+	Source     string
+	TriggerKey string
+	IssuedBy   string
+	ExpiresAt  *time.Time
+}
+
+// PromotionEntitlementStore holds who may use which single-user code.
+//
+// It answers access only. Whether a code has been spent is the redemption
+// ledger's job, so there is one writer for that fact rather than two that can
+// drift.
+type PromotionEntitlementStore interface {
+	// Issue grants an entitlement. It is idempotent on
+	// (code, customer_id, trigger_key): a redelivered registration event
+	// returns the existing row rather than minting a second.
+	Issue(ctx context.Context, in IssueEntitlementInput) (*domain.CustomerPromotion, error)
+	// Find returns this customer's entitlement for a code, if any.
+	Find(ctx context.Context, code, customerID string) (*domain.CustomerPromotion, error)
+	// ListForCustomer returns every entitlement an account holds, newest first.
+	ListForCustomer(ctx context.Context, customerID string) ([]domain.CustomerPromotion, error)
+	// Revoke withdraws an entitlement. It never rewrites an order that already
+	// used it.
+	Revoke(ctx context.Context, id string, at time.Time) error
 }

@@ -15,4 +15,8 @@ type Config struct {
 	// Unset falls back to a per-process window, so local dev needs no
 	// infrastructure — see pkg/infra/ratelimit.
 	RedisURL string
+	// WelcomePromotionCode is the single-user code issued to each new customer
+	// account on user.registered. Empty disables the issuer, so an environment
+	// without the campaign simply does nothing.
+	WelcomePromotionCode string
 }

@@ -27,7 +27,7 @@ func newID() string {
 }
 
 const (
-	userRegisteredSubject = "user.registered"
+	userRegisteredSubject = events.UserRegistered
 	maxFailedAttempts     = 5
 )
 
@@ -106,14 +106,6 @@ func (s *Service) StartOutboxWorker(ctx context.Context, interval time.Duration)
 
 type userDeletedOutbox interface {
 	DeleteAndEnqueue(ctx context.Context, userID, subject string, payload []byte) error
-}
-
-type userRegisteredEvent struct {
-	EventType   string    `json:"event_type"`
-	UserID      string    `json:"user_id"`
-	Email       string    `json:"email"`
-	AccountType string    `json:"account_type"`
-	Occurred    time.Time `json:"occurred_at"`
 }
 
 // Register creates a new user. Permissions default to empty for storefront customers.
@@ -456,7 +448,7 @@ func (s *Service) publishUserRegistered(ctx context.Context, u *domain.User) err
 		return nil
 	}
 
-	return s.eventPublisher.Publish(ctx, userRegisteredSubject, userRegisteredEvent{
+	return s.eventPublisher.Publish(ctx, userRegisteredSubject, events.UserRegisteredEvent{
 		EventType:   userRegisteredSubject,
 		UserID:      u.ID,
 		Email:       u.Email,
