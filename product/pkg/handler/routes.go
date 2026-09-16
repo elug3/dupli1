@@ -36,6 +36,12 @@ const (
 	RouteRedeemPromotion = "/api/v1/products/promotions/redeem"
 	RoutePromotions      = "/api/v1/products/promotions"
 	RoutePromotionByCode = "/api/v1/products/promotions/by-code/{code}"
+	// Cart-aware evaluation and the usage ledger. Order calls these; they are
+	// service-to-service, not public.
+	RouteEvaluatePromotion = "/api/v1/products/promotions/evaluate"
+	RouteReservePromotion  = "/api/v1/products/promotions/reserve"
+	RouteConsumePromotion  = "/api/v1/products/promotions/consume"
+	RouteReleasePromotion  = "/api/v1/products/promotions/release"
 
 	// Inventory under products (merged former inventory service).
 	RouteInventoryHealth             = "/api/v1/products/inventory/health"

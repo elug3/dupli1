@@ -3,7 +3,6 @@ package pg
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
@@ -42,6 +41,87 @@ func (s *PromotionStore) migrate() error {
 	`)
 	if err != nil {
 		return fmt.Errorf("migrate promotions: %w", err)
+	}
+
+	// Phase 2 columns are added one at a time with IF NOT EXISTS, the additive
+	// pattern this repo uses in place of a migration tool. Existing rows keep
+	// their discount/expires values; the backfills below give them a scope and
+	// a benefit document.
+	for _, stmt := range []string{
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'global'`,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS max_redemptions INTEGER`,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS max_per_customer INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS conditions JSONB NOT NULL DEFAULT '{}'::jsonb`,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS benefit JSONB NOT NULL DEFAULT '{}'::jsonb`,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS terms TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS redemption_count INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+	} {
+		if _, err := s.pool.Exec(context.Background(), stmt); err != nil {
+			return fmt.Errorf("migrate promotions columns: %w", err)
+		}
+	}
+
+	if err := s.migrateRedemptions(); err != nil {
+		return err
+	}
+	return s.backfillLegacyBenefit()
+}
+
+// migrateRedemptions creates the usage ledger.
+//
+// The partial unique index is the once-per-customer guarantee, and it lives in
+// the database rather than in a read-then-write in Go: two checkouts
+// completing at the same moment would both pass an application-level check.
+// Released rows are excluded so a cancelled order hands the use back.
+func (s *PromotionStore) migrateRedemptions() error {
+	for _, stmt := range []string{
+		`CREATE TABLE IF NOT EXISTS promotion_redemptions (
+			id                    TEXT PRIMARY KEY,
+			code                  TEXT NOT NULL,
+			order_id              TEXT NOT NULL,
+			customer_id           TEXT NOT NULL,
+			status                TEXT NOT NULL,
+			discount_won          BIGINT NOT NULL DEFAULT 0,
+			shipping_discount_won BIGINT NOT NULL DEFAULT 0,
+			order_subtotal_won    BIGINT NOT NULL DEFAULT 0,
+			eligible_subtotal_won BIGINT NOT NULL DEFAULT 0,
+			applied_benefit       JSONB,
+			created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+			paid_at               TIMESTAMPTZ,
+			released_at           TIMESTAMPTZ
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS promotion_redemptions_order_uniq
+			ON promotion_redemptions (order_id)`,
+		`CREATE INDEX IF NOT EXISTS promotion_redemptions_code_idx
+			ON promotion_redemptions (code, status)`,
+		`CREATE INDEX IF NOT EXISTS promotion_redemptions_customer_idx
+			ON promotion_redemptions (code, customer_id, status)`,
+	} {
+		if _, err := s.pool.Exec(context.Background(), stmt); err != nil {
+			return fmt.Errorf("migrate promotion_redemptions: %w", err)
+		}
+	}
+	return nil
+}
+
+// backfillLegacyBenefit gives pre-Phase-2 rows a benefit document built from
+// the discount column they already carry, so they price identically through
+// the new engine instead of relying on the read-time fallback forever.
+func (s *PromotionStore) backfillLegacyBenefit() error {
+	_, err := s.pool.Exec(context.Background(), `
+		UPDATE promotions
+		SET benefit = jsonb_build_object(
+			'target', 'goods',
+			'discount_type', 'percent',
+			'discount_fraction', discount,
+			'apply_to', 'entire_subtotal'
+		)
+		WHERE benefit = '{}'::jsonb AND discount > 0 AND discount < 1
+	`)
+	if err != nil {
+		return fmt.Errorf("backfill promotion benefit: %w", err)
 	}
 	return nil
 }
@@ -83,9 +163,7 @@ func (s *PromotionStore) seedDefaults() error {
 }
 
 func (s *PromotionStore) List(ctx context.Context) ([]domain.Promotion, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT code, discount, description, expires, active FROM promotions ORDER BY code
-	`)
+	rows, err := s.pool.Query(ctx, `SELECT `+promotionColumns+` FROM promotions ORDER BY code`)
 	if err != nil {
 		return nil, wrapDB("list promotions", err)
 	}
@@ -93,25 +171,31 @@ func (s *PromotionStore) List(ctx context.Context) ([]domain.Promotion, error) {
 
 	var promotions []domain.Promotion
 	for rows.Next() {
-		var c domain.Promotion
-		if err := rows.Scan(&c.Code, &c.Discount, &c.Description, &c.Expires, &c.Active); err != nil {
+		p, err := scanPromotion(rows)
+		if err != nil {
 			return nil, wrapDB("list promotions", err)
 		}
-		promotions = append(promotions, c)
+		promotions = append(promotions, *p)
 	}
 	return promotions, wrapDB("list promotions", rows.Err())
 }
 
 func (s *PromotionStore) Create(ctx context.Context, c domain.Promotion) error {
-	code := strings.ToUpper(strings.TrimSpace(c.Code))
+	code := domain.NormalizedCode(c.Code)
 	if code == "" {
 		return ports.Invalid("code is required")
 	}
 	c.Code = code
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO promotions (code, discount, description, expires, active)
-		VALUES ($1, $2, $3, $4, $5)
-	`, c.Code, c.Discount, c.Description, c.Expires, c.Active)
+	conditions, benefit, err := marshalPromotionDocs(c)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO promotions (code, scope, discount, description, expires, active,
+			conditions, benefit, expires_at, max_redemptions, max_per_customer, terms, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+	`, c.Code, string(c.EffectiveScope()), c.Discount, c.Description, c.Expires, c.Active,
+		conditions, benefit, c.ExpiresAt, c.MaxRedemptions, c.EffectiveMaxPerCustomer(), c.Terms)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ports.Conflict("promotion already exists")
@@ -121,35 +205,40 @@ func (s *PromotionStore) Create(ctx context.Context, c domain.Promotion) error {
 	return nil
 }
 
-func (s *PromotionStore) Update(ctx context.Context, code string, discount *float64, description, expires *string, active *bool) (*domain.Promotion, error) {
-	code = strings.ToUpper(strings.TrimSpace(code))
+func (s *PromotionStore) Update(ctx context.Context, code string, patch ports.PromotionPatch) (*domain.Promotion, error) {
+	code = domain.NormalizedCode(code)
 	current, err := s.getPromotion(ctx, code)
 	if err != nil {
 		return nil, err
 	}
-	if discount != nil {
-		current.Discount = *discount
-	}
-	if description != nil {
-		current.Description = *description
-	}
-	if expires != nil {
-		current.Expires = *expires
-	}
-	if active != nil {
-		current.Active = *active
+	applyPromotionPatch(current, patch)
+
+	conditions, benefit, err := marshalPromotionDocs(*current)
+	if err != nil {
+		return nil, err
 	}
 	_, err = s.pool.Exec(ctx, `
-		UPDATE promotions SET discount = $2, description = $3, expires = $4, active = $5 WHERE code = $1
-	`, current.Code, current.Discount, current.Description, current.Expires, current.Active)
+		UPDATE promotions SET scope = $2, discount = $3, description = $4, expires = $5,
+			active = $6, conditions = $7, benefit = $8, expires_at = $9, max_redemptions = $10,
+			max_per_customer = $11, terms = $12, updated_at = now()
+		WHERE code = $1
+	`, current.Code, string(current.EffectiveScope()), current.Discount, current.Description,
+		current.Expires, current.Active, conditions, benefit, current.ExpiresAt,
+		current.MaxRedemptions, current.EffectiveMaxPerCustomer(), current.Terms)
 	if err != nil {
 		return nil, wrapDB("update promotion", err)
 	}
 	return current, nil
 }
 
+// Get returns a definition whatever its state, so a caller can tell an expired
+// or exhausted code from one that does not exist.
+func (s *PromotionStore) Get(ctx context.Context, code string) (*domain.Promotion, error) {
+	return s.getPromotion(ctx, domain.NormalizedCode(code))
+}
+
 func (s *PromotionStore) Delete(ctx context.Context, code string) error {
-	code = strings.ToUpper(strings.TrimSpace(code))
+	code = domain.NormalizedCode(code)
 	tag, err := s.pool.Exec(ctx, `DELETE FROM promotions WHERE code = $1`, code)
 	if err != nil {
 		return wrapDB("delete promotion", err)
@@ -161,8 +250,7 @@ func (s *PromotionStore) Delete(ctx context.Context, code string) error {
 }
 
 func (s *PromotionStore) GetActive(ctx context.Context, code string) (*domain.Promotion, bool) {
-	code = strings.ToUpper(strings.TrimSpace(code))
-	promotion, err := s.getPromotion(ctx, code)
+	promotion, err := s.getPromotion(ctx, domain.NormalizedCode(code))
 	if err != nil || !promotion.Active {
 		return nil, false
 	}
@@ -170,12 +258,10 @@ func (s *PromotionStore) GetActive(ctx context.Context, code string) (*domain.Pr
 }
 
 func (s *PromotionStore) getPromotion(ctx context.Context, code string) (*domain.Promotion, error) {
-	var c domain.Promotion
-	err := s.pool.QueryRow(ctx, `
-		SELECT code, discount, description, expires, active FROM promotions WHERE code = $1
-	`, code).Scan(&c.Code, &c.Discount, &c.Description, &c.Expires, &c.Active)
+	row := s.pool.QueryRow(ctx, `SELECT `+promotionColumns+` FROM promotions WHERE code = $1`, code)
+	p, err := scanPromotion(row)
 	if err != nil {
 		return nil, wrapDB("get promotion", err)
 	}
-	return &c, nil
+	return p, nil
 }

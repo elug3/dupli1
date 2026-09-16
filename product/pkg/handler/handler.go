@@ -486,34 +486,109 @@ func (h *Handler) ListPromotions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) CreatePromotion(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Code        string  `json:"code"`
-		Discount    float64 `json:"discount"`
-		Description string  `json:"description"`
-		Expires     string  `json:"expires"`
-		Active      *bool   `json:"active"`
+// promotionBody is the wire shape for creating or updating a promotional code.
+// Every field is a pointer so an update can tell "not supplied" from "set to
+// the zero value" — PUT merges, so a partial body must not blank out data.
+type promotionBody struct {
+	Code        *string `json:"code"`
+	Scope       *string `json:"scope"`
+	Description *string `json:"description"`
+	Active      *bool   `json:"active"`
+	Terms       *string `json:"terms"`
+
+	Conditions *domain.Conditions `json:"conditions"`
+	Benefit    *domain.Benefit    `json:"benefit"`
+
+	// ExpiresOn is a date the manager picked; it means the end of that day in
+	// Seoul. ExpiresAt is the exact instant, for callers that have one.
+	// Sending either as "" or null clears the expiry.
+	ExpiresOn *string    `json:"expires_on"`
+	ExpiresAt *time.Time `json:"expires_at"`
+
+	MaxRedemptions *int `json:"max_redemptions"`
+	MaxPerCustomer *int `json:"max_per_customer"`
+
+	// Legacy fields, still accepted while clients migrate.
+	Discount *float64 `json:"discount"`
+	Expires  *string  `json:"expires"`
+}
+
+// resolveExpiry turns whichever expiry field was supplied into an instant.
+// The second return says the caller explicitly asked to clear it.
+func (b promotionBody) resolveExpiry() (*time.Time, bool, error) {
+	if b.ExpiresOn != nil {
+		if strings.TrimSpace(*b.ExpiresOn) == "" {
+			return nil, true, nil
+		}
+		at, err := domain.EndOfDayKST(*b.ExpiresOn)
+		if err != nil {
+			return nil, false, fmt.Errorf("expires_on must be a date like 2026-08-31: %w", err)
+		}
+		return &at, false, nil
 	}
+	if b.ExpiresAt != nil {
+		at := b.ExpiresAt.UTC()
+		return &at, false, nil
+	}
+	return nil, false, nil
+}
+
+func (h *Handler) CreatePromotion(w http.ResponseWriter, r *http.Request) {
+	var body promotionBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	active := true
-	if body.Active != nil {
-		active = *body.Active
+	expiresAt, _, err := body.resolveExpiry()
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
 	}
-	created, err := h.promotionSvc.Create(r.Context(), domain.Promotion{
-		Code:        body.Code,
-		Discount:    body.Discount,
-		Description: body.Description,
-		Expires:     body.Expires,
-		Active:      active,
-	})
+
+	promotion := domain.Promotion{
+		Code:           strValue(body.Code),
+		Scope:          domain.Scope(strValue(body.Scope)),
+		Description:    strValue(body.Description),
+		Terms:          strValue(body.Terms),
+		Active:         true,
+		ExpiresAt:      expiresAt,
+		MaxRedemptions: body.MaxRedemptions,
+		Discount:       floatValue(body.Discount),
+		Expires:        strValue(body.Expires),
+	}
+	if body.Active != nil {
+		promotion.Active = *body.Active
+	}
+	if body.Conditions != nil {
+		promotion.Conditions = *body.Conditions
+	}
+	if body.Benefit != nil {
+		promotion.Benefit = *body.Benefit
+	}
+	if body.MaxPerCustomer != nil {
+		promotion.MaxPerCustomer = *body.MaxPerCustomer
+	}
+
+	created, err := h.promotionSvc.Create(r.Context(), promotion)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
 	h.respondJSON(w, http.StatusCreated, created)
+}
+
+func strValue(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func floatValue(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 func (h *Handler) UpdatePromotion(w http.ResponseWriter, r *http.Request) {
@@ -522,17 +597,35 @@ func (h *Handler) UpdatePromotion(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "missing promotion code")
 		return
 	}
-	var body struct {
-		Discount    *float64 `json:"discount"`
-		Description *string  `json:"description"`
-		Expires     *string  `json:"expires"`
-		Active      *bool    `json:"active"`
-	}
+	var body promotionBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	updated, err := h.promotionSvc.Update(r.Context(), code, body.Discount, body.Description, body.Expires, body.Active)
+	expiresAt, clearExpiry, err := body.resolveExpiry()
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	patch := ports.PromotionPatch{
+		Description:    body.Description,
+		Active:         body.Active,
+		Terms:          body.Terms,
+		Conditions:     body.Conditions,
+		Benefit:        body.Benefit,
+		MaxPerCustomer: body.MaxPerCustomer,
+		ExpiresAt:      expiresAt,
+		ClearExpiresAt: clearExpiry,
+		MaxRedemptions: body.MaxRedemptions,
+		Discount:       body.Discount,
+		Expires:        body.Expires,
+	}
+	if body.Scope != nil {
+		scope := domain.Scope(*body.Scope)
+		patch.Scope = &scope
+	}
+	updated, err := h.promotionSvc.Update(r.Context(), code, patch)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

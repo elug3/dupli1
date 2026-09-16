@@ -46,6 +46,10 @@ const (
 	PromotionCreate = "promotion.create"
 	PromotionUpdate = "promotion.update"
 	PromotionDelete = "promotion.delete"
+	// PromotionRedeem moves the usage ledger (reserve, consume, release). It is
+	// service-to-service: order holds it, managers do not need it, and the
+	// public redeem/evaluate endpoints require no permission at all.
+	PromotionRedeem = "promotion.redeem"
 )
 
 // Deprecated: the coupon.* set is superseded by the promotion.* set above.
@@ -115,6 +119,7 @@ var Catalog = []string{
 	PromotionCreate,
 	PromotionUpdate,
 	PromotionDelete,
+	PromotionRedeem,
 	CouponRead,
 	CouponCreate,
 	CouponUpdate,

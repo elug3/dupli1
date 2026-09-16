@@ -71,7 +71,8 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 		store.Close()
 		return nil, err
 	}
-	promotionSvc := service.NewPromotionService(promotionStore)
+	promotionSvc := service.NewPromotionService(promotionStore).
+		WithLedger(pg.NewPromotionRedemptionStore(store.Pool()))
 
 	inventoryStore, err := pg.NewInventoryStore(store.Pool())
 	if err != nil {
@@ -165,6 +166,15 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	handler.Mount(mux, "DELETE", handler.RoutePromotionByCode,
 		requireAnyPerm(http.HandlerFunc(h.DeletePromotion), permissions.PromotionDelete, permissions.CouponDelete),
 		handler.PreRenameRouteCouponByCode, handler.LegacyRouteCouponByCode)
+
+	// Evaluating a code is public: a storefront previews the discount before
+	// the customer commits, exactly as redeem already was.
+	mux.Handle("POST "+handler.RouteEvaluatePromotion, http.HandlerFunc(h.EvaluatePromotion))
+	// Reserving, consuming and releasing move the usage ledger, so they are
+	// service-to-service. Order holds promotion.redeem via its service account.
+	mux.Handle("POST "+handler.RouteReservePromotion, requirePerm(permissions.PromotionRedeem, http.HandlerFunc(h.ReservePromotion)))
+	mux.Handle("POST "+handler.RouteConsumePromotion, requirePerm(permissions.PromotionRedeem, http.HandlerFunc(h.ConsumePromotion)))
+	mux.Handle("POST "+handler.RouteReleasePromotion, requirePerm(permissions.PromotionRedeem, http.HandlerFunc(h.ReleasePromotion)))
 
 	handler.Mount(mux, "PUT", handler.RouteInventoryItem, requirePerm(permissions.InventoryStockWrite, h.UpsertInventoryItemHandler()), handler.LegacyRouteInventoryItem)
 	handler.Mount(mux, "POST", handler.RouteInventoryAdjust, requirePerm(permissions.InventoryStockWrite, h.AdjustInventoryItemHandler()), handler.LegacyRouteInventoryAdjust)
