@@ -533,21 +533,39 @@ List/search/home clients should prefer `defaultListingImageUrl` (≈600px JPEG s
 
 ---
 
-### `POST /api/v1/coupons/redeem`
+### `POST /api/v1/products/coupons/redeem`
 
-Redeem a coupon code. No authentication required.
+> **Renaming.** The product term is **promotional code**. These routes move to `/api/v1/products/promotions…` and `coupon_code` becomes `promotion_code` — see [product-promotion-rename.md](product-promotion-rename.md). The `coupons` paths stay registered as aliases through the cutover. Legacy top-level alias: `/api/v1/coupons/redeem`.
+
+Look up a promotional code. No authentication required.
 
 **Request body**
 ```json
-{ "code": "SUMMER20" }
+{ "code": "SUMMER30" }
 ```
 
-**Response `200`** — coupon object
+**Response `200`** — the definition object (`code`, `discount`, `description`, `expires`, `active`)
 
 **Errors**
 | Status | Meaning |
 |--------|---------|
-| `404` | Invalid coupon code |
+| `404` | Invalid code, or the code exists but is inactive |
+
+**Today this is a lookup only.** It does not check expiry (`expires` is free text and is never compared), does not count uses, is not rate limited, and is not cart-aware. A code can be redeemed without limit by anyone.
+
+#### Target surface (planned)
+
+Being replaced by a cart-aware evaluation call as part of [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md). Planned, **not implemented**:
+
+| Method | Path | Purpose | Phase |
+|--------|------|---------|-------|
+| `POST` | `/api/v1/products/promotions/redeem` | Renamed lookup; adds rate limiting and real `expires_at` | 1–2 |
+| `POST` | `/api/v1/products/promotions/evaluate` | Evaluate a code or entitlement against a checkout context → `{ ok, discount_won, shipping_discount_won, eligible_sku_ids, reason }`. Called by order at apply **and** complete | 2 |
+| `GET` | `/api/v1/products/promotions/me` | Current customer's wallet entitlements, with eligible/ineligible against a cart | 3 |
+| `POST` | `/api/v1/products/promotions/{code}/issue` | Manager issues a single-user entitlement to a customer (`promotion.issue`) | 3 |
+| `GET` | `/api/v1/products/promotions/{code}/stats` | Campaign stats from the paid redemption ledger (`promotion.read`) | 4 |
+
+Failures carry machine-readable reason codes (`invalid_code`, `expired`, `already_used`, `not_eligible` + sub-reason, `campaign_exhausted`, `login_required`) so customer copy stays in the frontends.
 
 ---
 
@@ -612,6 +630,8 @@ Routes below require `Authorization: Bearer <access_token>`. Product validates R
 | POST | `/api/v1/products/coupons` | `coupon.create` |
 | PUT | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` |
 | DELETE | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` |
+
+These paths and the `coupon.*` permission set are being renamed to `/api/v1/products/promotions…` and `promotion.*`; both are accepted during the cutover window ([product-promotion-rename.md](product-promotion-rename.md)).
 
 `PUT /api/v1/products/{id}` and variant updates **merge**: omitted JSON fields keep their current value, so a partial body cannot blank out data. The trade-off is that a zero value is indistinguishable from an omitted one — sending `price: 0` or `officialPrice: 0` is ignored rather than clearing the price. See [product-price-on-parent.md](product-price-on-parent.md).
 
@@ -807,7 +827,9 @@ See [checkout-session.md](checkout-session.md) for the full checkout flow.
 | POST | `/api/v1/orders/checkout/sessions/{id}/items` | Add or update one item |
 | DELETE | `/api/v1/orders/checkout/sessions/{id}/items/{sku}` | Remove item by human `sku` |
 | DELETE | `/api/v1/orders/checkout/sessions/{id}/items/by-sku-id/{skuId}` | Remove item by canonical `skuId` |
-| POST | `/api/v1/orders/checkout/sessions/{id}/coupon` | Apply coupon |
+| POST | `/api/v1/orders/checkout/sessions/{id}/coupon` | Apply promotional code (renaming to `…/promotion` — [product-promotion-rename.md](product-promotion-rename.md)) |
+| POST | `/api/v1/orders/checkout/sessions/{id}/promotion` | *(planned)* Renamed apply route |
+| DELETE | `/api/v1/orders/checkout/sessions/{id}/promotion` | *(planned)* Remove the applied code — wires the existing but unrouted `ClearCoupon` |
 | POST | `/api/v1/orders/checkout/sessions/{id}/complete` | Complete checkout → order |
 
 The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias for every route above and will be removed once the storefront and admin clients migrate.

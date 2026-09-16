@@ -47,7 +47,8 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | Doc | Topic |
 |-----|-------|
 | [product-stock-tracking-plan.md](product-stock-tracking-plan.md) | Always-tracked SKUs, PDP `inStock`, cart stock-on-add (implemented) |
-| [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md) | Coupons: single-user / global once-each + flexible conditions (planning) |
+| [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md) | Promotional codes: single-user / global once-each + flexible conditions (**approved, implementing**; sign-up campaign) |
+| [product-promotion-rename.md](product-promotion-rename.md) | `coupon` → `promotion` rename across wire, DB, permissions and both frontends (planned, Phase 1) |
 
 ## Release / ops
 

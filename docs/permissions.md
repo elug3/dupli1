@@ -142,16 +142,31 @@ Manager-tier and `customer` / `service` accounts still use the normal lockout.
 
 Public `GET /api/v1/products` and `GET /api/v1/products/{id}` stay **unauthenticated**. `product.read` only widens manager view when a valid token is present (same as today's `product_manager` optional-auth behaviour).
 
-### Coupon (product service)
+### Promotional codes (product service)
+
+**Implemented today** as `coupon.*`:
 
 | Permission | Description |
 |------------|-------------|
-| `coupon.read` | List coupons |
-| `coupon.create` | Create coupon |
-| `coupon.update` | Update coupon |
-| `coupon.delete` | Delete coupon |
+| `coupon.read` | List promotional codes |
+| `coupon.create` | Create promotional code |
+| `coupon.update` | Update promotional code |
+| `coupon.delete` | Delete promotional code |
 
-`coupon.redeem` is **public** (checkout flow) — no permission.
+Redeem is **public** (checkout flow) — no permission.
+
+**Renaming to `promotion.*`** ([product-promotion-rename.md](product-promotion-rename.md)). During the cutover window each route accepts **either** name, so tokens minted before the rollout keep working; `coupon.*` is dropped one release later.
+
+| Planned | Replaces | Description | Phase |
+|---------|----------|-------------|-------|
+| `promotion.read` | `coupon.read` | List definitions; read campaign stats | 1 |
+| `promotion.create` | `coupon.create` | Create a definition | 1 |
+| `promotion.update` | `coupon.update` | Update a definition (never retroactive) | 1 |
+| `promotion.delete` | `coupon.delete` | Soft-delete / deactivate | 1 |
+| `promotion.issue` | — (new) | Issue a single-user entitlement to a customer, and revoke one | 3 |
+| `promotion.*` | `coupon.*` | Wildcard, in the `catalog_editor` / `catalog_admin` bundles | 1 |
+
+Wallet reads are **ABAC**, not permissioned: a customer reads their own entitlements when JWT `sub` matches the owner. Auto-issue on `user.registered` runs inside product as a NATS subscriber and needs no permission.
 
 ### Inventory
 
@@ -274,6 +289,8 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `POST` | `/api/v1/products/coupons/redeem` | — (public) |
 
 Legacy top-level aliases (`/api/v1/variants/…`, `/api/v1/catalog/…`, `/api/v1/coupons/…`) are still registered with the same permissions; see [TODO.md](TODO.md) for the migration table.
+
+The coupon rows above are renaming to `/api/v1/products/promotions…` with `promotion.*`; see [product-promotion-rename.md](product-promotion-rename.md).
 
 ### Inventory (served by the product service)
 

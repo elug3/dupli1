@@ -1,6 +1,6 @@
 # Dupli1 v1.0 release plan
 
-**Status:** Target **2026-08-30** (was postponed 2026-07-27) — v1.0 will not ship until every open item in [v1.0-release-spec.md](v1.0-release-spec.md) sections A–F is resolved (ops, smoke, frontends, sign-off — not only backend hardening).  
+**Status:** **2026-08-30 target missed — not released** (previously postponed 2026-07-27); no replacement date set. v1.0 will not ship until every open item in [v1.0-release-spec.md](v1.0-release-spec.md) sections A–F is resolved (ops, smoke, frontends, sign-off — not only backend hardening).  
 **Closeout checklist:** [v1.0-release-spec.md](v1.0-release-spec.md) — authoritative spec + ship checklist.  
 **Scope:** Backend repo `dupli1` + production ops needed for a KRW fashion-bag marketplace launch.  
 **Sibling frontends:** `dupli1-web`, `dupli1-manage-web` (called out where they block launch).
@@ -25,7 +25,7 @@ v1.1 platform work starts only after the v1.0 tag — see [v1.1-release-plan.md]
 
 The **money path is implemented**: cart → checkout/order → NANO card / Bypass → `payment.succeeded` → `paid` → ship → stock commit. Critical money/auth bugs from the Jul review (server-side pricing, JWT fail-closed, outboxes) are done. Backend hardening (section C) is **done in the repo**.
 
-**v1.0 target is 2026-08-30** — ship only when all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed. Product images CDN, persistent JWT, Telegram wiring, and gateway ECS conf are done; **external card PG beyond NANO is waived for launch** when NANO is unset (pay path = Bypass). Dev simulate has been removed from the codebase (A5 is moot — merged into Bypass). Remaining: catalog prices (A9), prod smoke (Bypass path), and `dupli1-web` / `dupli1-manage-web` alignment. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, Bypass (or NANO) pay, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
+**v1.0's 2026-08-30 target was missed and the release did not go out** — ship only when all launch-blockers and checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are closed. Product images CDN, persistent JWT, Telegram wiring, and gateway ECS conf are done; **external card PG beyond NANO is waived for launch** when NANO is unset (pay path = Bypass). Dev simulate has been removed from the codebase (A5 is moot — merged into Bypass). Remaining: catalog prices (A9), prod smoke (Bypass path), and `dupli1-web` / `dupli1-manage-web` alignment. **v1.0 is a launch cut**, not feature-complete: when unblocked, ship a reliable KRW checkout loop with catalog, inventory, Bypass (or NANO) pay, and ops alerts. Defer guest commerce, refunds, co-view recs, and deep product cleanup to **v1.2**. **Exception (2026-09-16):** promotional codes were pulled out of that deferral and onto the critical path for a sign-up marketing campaign; they run in parallel with v1.0 closeout and add no launch-blocker — [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md). **v1.1** (logging, deployment, automation) starts only after v1.0 tags — see [v1.1-release-plan.md](v1.1-release-plan.md).
 
 ---
 
