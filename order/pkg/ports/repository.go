@@ -33,6 +33,10 @@ type Repository interface {
 	// matches. Returns false when skipped (already canceled, shipped, wrong
 	// payment, or missing).
 	CancelIfPaidForRefund(ctx context.Context, orderID, paymentID string, now time.Time, events []OutboxEvent) (*domain.Order, bool, error)
+	// ConfirmIfPaid atomically marks a paid order confirmed only when it is
+	// still paid. Returns true when confirmed; false when skipped (concurrent
+	// cancel/refund or already confirmed).
+	ConfirmIfPaid(ctx context.Context, order *domain.Order, events []OutboxEvent) (bool, error)
 	// ShipIfConfirmed atomically marks a confirmed order in_transit only when
 	// it is still confirmed. Returns true when shipped; false when skipped
 	// (concurrent cancel/refund or already shipped).
