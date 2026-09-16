@@ -29,7 +29,7 @@ type CheckoutSession struct {
 	Items            []OrderItem           `json:"items"`
 	UnavailableItems []UnavailableItem     `json:"unavailable_items,omitempty"`
 	Status           CheckoutSessionStatus `json:"status"`
-	CouponCode       string                `json:"coupon_code,omitempty"`
+	PromotionCode       string                `json:"promotion_code,omitempty"`
 	SubtotalWon      int64                 `json:"subtotal_won"`
 	DiscountWon      int64                 `json:"discount_won"`
 	// ShippingFeeWon is the delivery charge quoted for this session, in whole
@@ -185,28 +185,38 @@ func sameItem(a, b OrderItem) bool {
 	return a.SKU == b.SKU
 }
 
-func (s *CheckoutSession) ApplyCoupon(code string, discountFraction float64, now time.Time) error {
+// ApplyPromotion records a promotional code and the discount it earned.
+//
+// The amount is absolute won, computed by product's evaluator against this
+// session's priced lines — not a fraction applied here. A code may now be a
+// flat won amount, be capped, or draw on only some lines, none of which a
+// fraction can express.
+//
+// Editing the cart afterwards zeroes the amount while keeping the code, so a
+// stale discount cannot survive a change to what is being bought; checkout
+// complete re-evaluates and is the authority on what is finally charged.
+func (s *CheckoutSession) ApplyPromotion(code string, discountWon int64, now time.Time) error {
 	if err := s.EnsureOpen(now); err != nil {
 		return err
 	}
 
 	code = strings.ToUpper(strings.TrimSpace(code))
-	if code == "" || discountFraction <= 0 || discountFraction >= 1 {
+	if code == "" || discountWon < 0 {
 		return ErrInvalidCheckoutSession
 	}
 
-	s.CouponCode = code
-	s.recalculateTotalsWithDiscount(discountFraction)
+	s.PromotionCode = code
+	s.recalculateTotalsWithDiscount(discountWon)
 	s.UpdatedAt = now
 	return nil
 }
 
-func (s *CheckoutSession) ClearCoupon(now time.Time) error {
+func (s *CheckoutSession) ClearPromotion(now time.Time) error {
 	if err := s.EnsureOpen(now); err != nil {
 		return err
 	}
 
-	s.CouponCode = ""
+	s.PromotionCode = ""
 	s.recalculateTotals()
 	s.UpdatedAt = now
 	return nil
@@ -235,15 +245,21 @@ func (s *CheckoutSession) recalculateTotals() {
 	s.recalculateTotalsWithDiscount(0)
 }
 
-func (s *CheckoutSession) recalculateTotalsWithDiscount(discountFraction float64) {
+func (s *CheckoutSession) recalculateTotalsWithDiscount(discountWon int64) {
 	var subtotal int64
 	for _, item := range s.Items {
 		subtotal += int64(item.Quantity) * item.UnitPriceWon
 	}
 
 	s.SubtotalWon = subtotal
-	if discountFraction > 0 && s.CouponCode != "" {
-		s.DiscountWon = int64(float64(subtotal) * discountFraction)
+	if discountWon > 0 && s.PromotionCode != "" {
+		// Never discount more than the goods are worth: the total must stay at
+		// or above the shipping fee, so delivery is still paid for even by a
+		// code worth more than the cart.
+		if discountWon > subtotal {
+			discountWon = subtotal
+		}
+		s.DiscountWon = discountWon
 	} else {
 		s.DiscountWon = 0
 	}

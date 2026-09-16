@@ -177,9 +177,7 @@ func (s *Service) cancelExpiredPendingOrder(ctx context.Context, orderID string)
 		return err
 	}
 	s.tryDrainOutbox(ctx)
-	if err := s.releaseReservationForCancel(ctx, canceledOrder.ReservationID); err != nil {
-		log.Printf("cancel expired order %s: release reservation %s: %v", orderID, canceledOrder.ReservationID, err)
-	}
+	s.releaseHoldsForCancel(ctx, canceledOrder)
 	return nil
 }
 
@@ -294,9 +292,7 @@ func (s *Service) CancelOrderForRefund(ctx context.Context, orderID, paymentID s
 		return nil
 	}
 	s.tryDrainOutbox(ctx)
-	if err := s.releaseReservationForCancel(ctx, canceledOrder.ReservationID); err != nil {
-		log.Printf("payment.canceled: order %s release reservation %s: %v", canceledOrder.ID, canceledOrder.ReservationID, err)
-	}
+	s.releaseHoldsForCancel(ctx, canceledOrder)
 	log.Printf("payment.canceled: order %s canceled after full refund (payment %s)", canceledOrder.ID, paymentID)
 	return nil
 }

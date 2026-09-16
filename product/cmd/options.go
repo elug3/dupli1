@@ -65,6 +65,16 @@ func applyEnv(opts *product.ServerOptions) {
 	if v := os.Getenv("S3_BUCKET"); v != "" {
 		opts.S3Bucket = v
 	}
+	// Shares the promotional-code rate-limit window across tasks. Optional:
+	// unset falls back to a per-process window, so local dev needs no Redis.
+	if v := os.Getenv("REDIS_URL"); v != "" {
+		opts.RedisURL = v
+	}
+	// The single-user code issued to each new customer account. Unset disables
+	// the registration issuer entirely.
+	if v := os.Getenv("DUPLI1_WELCOME_PROMOTION_CODE"); v != "" {
+		opts.WelcomePromotionCode = v
+	}
 	if v := os.Getenv("DUPLI1_PRODUCT_NATS_URL"); v != "" {
 		opts.NATSURL = v
 	} else if v := os.Getenv("NATS_URL"); v != "" {

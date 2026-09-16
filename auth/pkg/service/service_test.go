@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/elug3/dupli1/shared/pkg/events"
 	"sync"
 	"testing"
 	"time"
@@ -116,9 +117,9 @@ func TestRegisterPublishesUserRegisteredEvent(t *testing.T) {
 		t.Fatalf("published subject = %q, want %q", publisher.subject, userRegisteredSubject)
 	}
 
-	event, ok := publisher.event.(userRegisteredEvent)
+	event, ok := publisher.event.(events.UserRegisteredEvent)
 	if !ok {
-		t.Fatalf("published event type = %T, want userRegisteredEvent", publisher.event)
+		t.Fatalf("published event type = %T, want events.UserRegisteredEvent", publisher.event)
 	}
 	if event.UserID != "user-123" {
 		t.Fatalf("event.UserID = %q, want user-123", event.UserID)

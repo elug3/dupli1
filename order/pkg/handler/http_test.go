@@ -1290,3 +1290,84 @@ func TestCancelDisputedOrderRefundsHTTP(t *testing.T) {
 		t.Fatalf("status = %q, want canceled", order.Status)
 	}
 }
+
+// ── Promotional code rename window ────────────────────────────────────────────
+
+// The apply sub-route answers to both spellings for one release so a storefront
+// deployed either side of this service still applies codes, and the response
+// carries the code under both JSON keys for the same reason.
+// See docs/product-promotion-rename.md.
+
+type renameWindowPromotionClient struct{}
+
+func (renameWindowPromotionClient) evaluate(promoCtx ports.PromotionContext) *ports.PromotionEvaluation {
+	var subtotal int64
+	for _, line := range promoCtx.Lines {
+		subtotal += int64(line.Quantity) * line.UnitPriceWon
+	}
+	return &ports.PromotionEvaluation{OK: true, DiscountWon: subtotal * 30 / 100, EligibleSubtotalWon: subtotal}
+}
+
+func (c renameWindowPromotionClient) Evaluate(_ context.Context, _ string, promoCtx ports.PromotionContext) (*ports.PromotionEvaluation, error) {
+	return c.evaluate(promoCtx), nil
+}
+
+func (c renameWindowPromotionClient) Reserve(_ context.Context, _, _ string, promoCtx ports.PromotionContext) (*ports.PromotionEvaluation, error) {
+	return c.evaluate(promoCtx), nil
+}
+
+func (renameWindowPromotionClient) Consume(context.Context, string) error { return nil }
+func (renameWindowPromotionClient) Release(context.Context, string) error { return nil }
+
+func newPromotionTestMux(t *testing.T) (*http.ServeMux, *service.Service) {
+	t.Helper()
+	repo := memory.NewRepository()
+	svc := service.NewWithCheckout(repo, &fakeStock{}, renameWindowPromotionClient{}, 0).
+		WithProduct(&fakeProduct{price: 10000})
+	validator := authjwt.NewHMACValidator(testSecret)
+	return newMux(handler.New(svc, validator)), svc
+}
+
+func TestApplyPromotionAcceptsBothRouteSpellings(t *testing.T) {
+	for _, segment := range []string{"promotion", "coupon"} {
+		t.Run(segment, func(t *testing.T) {
+			mux, svc := newPromotionTestMux(t)
+			token := makeToken(t, "u-1", nil)
+
+			w := do(t, mux, http.MethodPost, "/api/v1/orders/checkout/sessions", token,
+				map[string]any{"customer_id": "u-1"})
+			if w.Code != http.StatusCreated {
+				t.Fatalf("create session: status=%d body=%s", w.Code, w.Body.String())
+			}
+			var session domain.CheckoutSession
+			if err := json.NewDecoder(w.Body).Decode(&session); err != nil {
+				t.Fatalf("decode session: %v", err)
+			}
+
+			item := domain.OrderItem{SkuID: "sku-abc", SKU: "ITEM-1", Quantity: 1, UnitPriceWon: 10000}
+			if _, err := svc.UpsertCheckoutItem(t.Context(), session.ID, item); err != nil {
+				t.Fatalf("seed checkout item: %v", err)
+			}
+
+			path := fmt.Sprintf("/api/v1/orders/checkout/sessions/%s/%s", session.ID, segment)
+			w = do(t, mux, http.MethodPost, path, token, map[string]any{"code": "SUMMER30"})
+			if w.Code != http.StatusOK {
+				t.Fatalf("apply via %q: status=%d body=%s", segment, w.Code, w.Body.String())
+			}
+
+			var body map[string]any
+			if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+				t.Fatalf("decode applied session: %v", err)
+			}
+			if body["promotion_code"] != "SUMMER30" {
+				t.Fatalf("promotion_code = %v, want SUMMER30", body["promotion_code"])
+			}
+			if body["coupon_code"] != "SUMMER30" {
+				t.Fatalf("coupon_code = %v, want SUMMER30 (pre-rename readers)", body["coupon_code"])
+			}
+			if body["discount_won"] != float64(3000) {
+				t.Fatalf("discount_won = %v, want 3000", body["discount_won"])
+			}
+		})
+	}
+}

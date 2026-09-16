@@ -37,7 +37,7 @@ func ConfigureOptions(fs *flag.FlagSet, args []string) (Options, error) {
 	fs.StringVar(&host, "host", host, "Server host address")
 	fs.IntVar(&port, "port", port, "Server port number")
 	fs.StringVar(&addr, "addr", "", "Server listen address (overrides host/port)")
-	fs.StringVar(&gatewayURL, "gateway-url", gatewayURL, "Internal API gateway base URL (stock + coupons)")
+	fs.StringVar(&gatewayURL, "gateway-url", gatewayURL, "Internal API gateway base URL (stock + promotions)")
 	fs.StringVar(&productURL, "product-url", productURL, "Deprecated direct product URL; prefer -gateway-url")
 	fs.StringVar(&inventoryURL, "inventory-url", inventoryURL, "Deprecated alias for -product-url")
 	fs.StringVar(&natsURL, "nats-url", natsURL, "NATS server URL for order events")

@@ -42,7 +42,7 @@ func TestNewOrder_ShippingAppliesAfterDiscount(t *testing.T) {
 	}
 }
 
-// A coupon discounts goods, never delivery: a 100%-off order still owes the
+// A promotion discounts goods, never delivery: a 100%-off order still owes the
 // shipping fee.
 func TestNewOrder_FullDiscountStillPaysShipping(t *testing.T) {
 	now := time.Now().UTC()

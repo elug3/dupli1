@@ -83,7 +83,7 @@ type Order struct {
 	ReservationID string      `json:"reservation_id"`
 	Items         []OrderItem `json:"items"`
 	Status        OrderStatus `json:"status"`
-	CouponCode    string      `json:"coupon_code,omitempty"`
+	PromotionCode    string      `json:"promotion_code,omitempty"`
 	SubtotalWon   int64       `json:"subtotal_won"`
 	DiscountWon   int64       `json:"discount_won"`
 	// ShippingFeeWon is the delivery charge in whole KRW, captured at order
@@ -142,8 +142,8 @@ type Order struct {
 // already-placed order costs.
 //
 // The discount applies to goods only and is capped at the subtotal, so the total
-// can never fall below the shipping fee — a 100%-off coupon still pays delivery.
-func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCode string, discountKRW, shippingFeeKRW int64, now time.Time) (*Order, error) {
+// can never fall below the shipping fee — a 100%-off promotion still pays delivery.
+func NewOrder(id, customerID, reservationID string, items []OrderItem, promotionCode string, discountKRW, shippingFeeKRW int64, now time.Time) (*Order, error) {
 	id = strings.TrimSpace(id)
 	customerID = strings.TrimSpace(customerID)
 	reservationID = strings.TrimSpace(reservationID)
@@ -178,7 +178,7 @@ func NewOrder(id, customerID, reservationID string, items []OrderItem, couponCod
 		ReservationID:  reservationID,
 		Items:          copiedItems,
 		Status:         StatusPending,
-		CouponCode:     strings.ToUpper(strings.TrimSpace(couponCode)),
+		PromotionCode:     strings.ToUpper(strings.TrimSpace(promotionCode)),
 		SubtotalWon:    subtotal,
 		DiscountWon:    discountKRW,
 		ShippingFeeWon: shippingFeeKRW,

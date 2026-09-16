@@ -36,9 +36,9 @@ func TestRespondServiceErrorMapping(t *testing.T) {
 		},
 		{
 			name:       "conflict",
-			err:        ports.Conflict("coupon already exists"),
+			err:        ports.Conflict("promotion already exists"),
 			wantStatus: http.StatusConflict,
-			wantBody:   "coupon already exists",
+			wantBody:   "promotion already exists",
 		},
 		{
 			name:       "invalid",

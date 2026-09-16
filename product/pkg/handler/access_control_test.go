@@ -44,8 +44,8 @@ func newAccessControlMux(store *memory.ProductStore) *http.ServeMux {
 	}
 	validator := authjwt.NewHMACValidator(accessControlSecret)
 	svc := service.NewProductSearchService(store, nil)
-	couponSvc := service.NewCouponService(memory.NewCouponStore())
-	h := handler.NewHandler(svc, couponSvc, nil, service.NewCatalogService(store.Catalog)).WithViewStore(store)
+	promotionSvc := service.NewPromotionService(memory.NewPromotionStore())
+	h := handler.NewHandler(svc, promotionSvc, nil, service.NewCatalogService(store.Catalog)).WithViewStore(store)
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -60,10 +60,23 @@ func newAccessControlMux(store *memory.ProductStore) *http.ServeMux {
 	mux.Handle("PUT "+handler.RouteProductByID, requirePerm(permissions.ProductUpdate, h.SingleProductHandler()))
 	mux.Handle("DELETE "+handler.RouteProductByID, requirePerm(permissions.ProductDelete, h.SingleProductHandler()))
 	mux.Handle("POST "+handler.RouteProductImages, requirePerm(permissions.ProductImageUpload, h.UploadImageHandler()))
-	handler.Mount(mux, "GET", handler.RouteCoupons, requirePerm(permissions.CouponRead, http.HandlerFunc(h.ListCoupons)), handler.LegacyRouteCoupons)
-	handler.Mount(mux, "POST", handler.RouteCoupons, requirePerm(permissions.CouponCreate, http.HandlerFunc(h.CreateCoupon)), handler.LegacyRouteCoupons)
-	handler.Mount(mux, "PUT", handler.RouteCouponByCode, requirePerm(permissions.CouponUpdate, http.HandlerFunc(h.UpdateCoupon)), handler.LegacyRouteCouponByCode)
-	handler.Mount(mux, "DELETE", handler.RouteCouponByCode, requirePerm(permissions.CouponDelete, http.HandlerFunc(h.DeleteCoupon)), handler.LegacyRouteCouponByCode)
+	// Mirrors bootstrap: promotion routes accept the pre-rename coupon.* name
+	// too, and answer on both path spellings.
+	requireAnyPerm := func(next http.Handler, perms ...string) http.Handler {
+		return middleware.RequireAuth(validator, middleware.RequireAnyPermission(perms...)(next))
+	}
+	handler.Mount(mux, "GET", handler.RoutePromotions,
+		requireAnyPerm(http.HandlerFunc(h.ListPromotions), permissions.PromotionRead, permissions.CouponRead),
+		handler.PreRenameRouteCoupons, handler.LegacyRouteCoupons)
+	handler.Mount(mux, "POST", handler.RoutePromotions,
+		requireAnyPerm(http.HandlerFunc(h.CreatePromotion), permissions.PromotionCreate, permissions.CouponCreate),
+		handler.PreRenameRouteCoupons, handler.LegacyRouteCoupons)
+	handler.Mount(mux, "PUT", handler.RoutePromotionByCode,
+		requireAnyPerm(http.HandlerFunc(h.UpdatePromotion), permissions.PromotionUpdate, permissions.CouponUpdate),
+		handler.PreRenameRouteCouponByCode, handler.LegacyRouteCouponByCode)
+	handler.Mount(mux, "DELETE", handler.RoutePromotionByCode,
+		requireAnyPerm(http.HandlerFunc(h.DeletePromotion), permissions.PromotionDelete, permissions.CouponDelete),
+		handler.PreRenameRouteCouponByCode, handler.LegacyRouteCouponByCode)
 
 	return mux
 }
@@ -104,13 +117,13 @@ func TestPublicRoutesDoNotRequireAuth(t *testing.T) {
 		{http.MethodGet, handler.RouteProducts},
 		{http.MethodGet, handler.RoutePublicVariants + "?sku_ids=missing"},
 		{http.MethodGet, "/api/v1/products/BOT-001"},
-		{http.MethodPost, handler.RouteRedeemCoupon},
+		{http.MethodPost, handler.RouteRedeemPromotion},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			var body any
-			if tc.path == handler.RouteRedeemCoupon {
+			if tc.path == handler.RouteRedeemPromotion {
 				body = map[string]string{"code": "SUMMER30"}
 			}
 			w := serve(t, mux, tc.method, tc.path, "", body)
@@ -129,7 +142,7 @@ func TestProtectedRoutesRejectMissingToken(t *testing.T) {
 		path   string
 	}{
 		{http.MethodPost, handler.RouteProducts},
-		{http.MethodGet, handler.RouteCoupons},
+		{http.MethodGet, handler.RoutePromotions},
 	}
 
 	for _, tc := range tests {
@@ -170,9 +183,9 @@ func TestCustomerCannotManageProducts(t *testing.T) {
 		t.Fatalf("list products: status = %d, want 200 (public search)", w.Code)
 	}
 
-	w = serve(t, mux, http.MethodGet, handler.RouteCoupons, token, nil)
+	w = serve(t, mux, http.MethodGet, handler.RoutePromotions, token, nil)
 	if w.Code != http.StatusForbidden {
-		t.Fatalf("list coupons: status = %d, want 403", w.Code)
+		t.Fatalf("list promotions: status = %d, want 403", w.Code)
 	}
 }
 
@@ -202,9 +215,9 @@ func TestProductManagerCanManageProducts(t *testing.T) {
 		t.Fatalf("list products: status = %d, want 200", w.Code)
 	}
 
-	w = serve(t, mux, http.MethodGet, handler.RouteCoupons, token, nil)
+	w = serve(t, mux, http.MethodGet, handler.RoutePromotions, token, nil)
 	if w.Code != http.StatusOK {
-		t.Fatalf("list coupons: status = %d, want 200", w.Code)
+		t.Fatalf("list promotions: status = %d, want 200", w.Code)
 	}
 }
 
@@ -273,5 +286,47 @@ func TestOwnerCanManageProducts(t *testing.T) {
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// The rename keeps both path spellings and both permission names alive for one
+// release, so clients and already-minted tokens are not broken by the deploy.
+// See docs/product-promotion-rename.md.
+
+func TestPreRenameCouponPathsStillServePromotions(t *testing.T) {
+	mux := newAccessControlMux(memory.NewProductStore())
+	token := makeAccessToken(t, "mgr-1", []string{permissions.PromotionRead})
+
+	for _, path := range []string{
+		handler.RoutePromotions,
+		handler.PreRenameRouteCoupons,
+		handler.LegacyRouteCoupons,
+	} {
+		w := serve(t, mux, http.MethodGet, path, token, nil)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s: status = %d, want 200", path, w.Code)
+		}
+	}
+}
+
+func TestPreRenameCouponPermissionStillAuthorizes(t *testing.T) {
+	mux := newAccessControlMux(memory.NewProductStore())
+	// A token minted before the rename carries only coupon.read.
+	token := makeAccessToken(t, "mgr-1", []string{permissions.CouponRead})
+
+	w := serve(t, mux, http.MethodGet, handler.RoutePromotions, token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list promotions with legacy coupon.read: status = %d, want 200", w.Code)
+	}
+}
+
+func TestPromotionPermissionDoesNotLeakToOtherResources(t *testing.T) {
+	mux := newAccessControlMux(memory.NewProductStore())
+	token := makeAccessToken(t, "mgr-1", []string{permissions.PromotionAll})
+
+	body := domain.Product{Name: "Mini Bag", Brand: "Gucci", Price: 100}
+	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("create product with promotion.*: status = %d, want 403", w.Code)
 	}
 }

@@ -16,7 +16,7 @@ var legacyRolePermissions = map[string][]string{
 	RoleAdmin:             adminPermissions(),
 	RoleUserManager:       {UserPasswordUpdate, UserStatusUpdate},
 	RoleCustomerRegistrar: {UserCreate},
-	RoleProductManager:    {ProductAll, CouponAll},
+	RoleProductManager:    {ProductAll, PromotionAll, CouponAll},
 	RoleOrderManager:      orderManagerPermissions(),
 	RoleCustomer:          nil,
 }
@@ -30,6 +30,7 @@ func adminPermissions() []string {
 		UserPasswordUpdate,
 		UserStatusUpdate,
 		ProductAll,
+		PromotionAll,
 		CouponAll,
 		InventoryStockWrite,
 		InventoryReservationManage,

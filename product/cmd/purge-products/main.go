@@ -9,7 +9,7 @@
 // transaction, so the operation is all-or-nothing.
 //
 // It defaults to a dry run that only reports current row counts; pass -confirm
-// to actually delete. Coupons are left untouched.
+// to actually delete. Promotions are left untouched.
 //
 // Usage:
 //
@@ -45,7 +45,7 @@ func main() {
 		fmt.Fprint(os.Stderr, `Usage: purge-products [OPTIONS]
 
 Removes every product, variant, stock row, and reservation from the product
-catalog so it can be re-seeded. Coupons are not touched.
+catalog so it can be re-seeded. Promotions are not touched.
 
 Options:
   -product-db string

@@ -10,23 +10,26 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
 type Handler struct {
-	svc            *service.ProductSearchService
-	couponSvc      *service.CouponService
-	inventorySvc   *service.InventoryService
-	catalogSvc     *service.CatalogService
-	viewStore      ports.ProductViewStore
-	wishlistStore  ports.ProductWishlistStore
-	guestCookie    GuestCookieConfig
-	settings       settings.Response
+	svc          *service.ProductSearchService
+	promotionSvc *service.PromotionService
+	// promotionThrottle rate-limits the public redeem route. Optional: unset
+	// means no limit, which is how the route behaved before Phase 2.
+	promotionThrottle func(http.Handler) http.Handler
+	inventorySvc      *service.InventoryService
+	catalogSvc        *service.CatalogService
+	viewStore         ports.ProductViewStore
+	wishlistStore     ports.ProductWishlistStore
+	guestCookie       GuestCookieConfig
+	settings          settings.Response
 }
 
 type SearchResponse struct {
@@ -63,14 +66,14 @@ var searchFilters = []string{
 	"brand", "color", "size", "material", "status", "q",
 }
 
-func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
+func NewHandler(svc *service.ProductSearchService, promotionSvc *service.PromotionService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
 	return &Handler{
-		svc:         svc,
-		couponSvc:   couponSvc,
+		svc:          svc,
+		promotionSvc: promotionSvc,
 		inventorySvc: inventorySvc,
-		catalogSvc:  catalogSvc,
-		guestCookie: defaultGuestCookieConfig(),
-		settings:    settings.NewResponse("product"),
+		catalogSvc:   catalogSvc,
+		guestCookie:  defaultGuestCookieConfig(),
+		settings:     settings.NewResponse("product"),
 	}
 }
 
@@ -106,7 +109,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	MountFunc(mux, "GET", RoutePublicVariant, h.PublicGetVariant, LegacyRoutePublicVariant)
 	MountFunc(mux, "GET", RoutePublicVariantBySkuID, h.PublicGetVariantBySkuID, LegacyRoutePublicVariantBySkuID)
-	MountFunc(mux, "POST", RouteRedeemCoupon, h.RedeemCoupon, LegacyRouteRedeemCoupon)
+	Mount(mux, "POST", RouteRedeemPromotion, h.throttled(http.HandlerFunc(h.RedeemPromotion)), PreRenameRouteRedeemCoupon, LegacyRouteRedeemCoupon)
 
 	MountFunc(mux, "GET", RouteInventoryHealth, h.Health, LegacyRouteInventoryHealth)
 	MountFunc(mux, "GET", RouteInventorySettings, h.Settings, LegacyRouteInventorySettings)
@@ -478,37 +481,98 @@ func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) ListCoupons(w http.ResponseWriter, r *http.Request) {
-	coupons := h.couponSvc.List(r.Context())
+func (h *Handler) ListPromotions(w http.ResponseWriter, r *http.Request) {
+	promotions := h.promotionSvc.List(r.Context())
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"total":   len(coupons),
-		"results": coupons,
+		"total":   len(promotions),
+		"results": promotions,
 	})
 }
 
-func (h *Handler) CreateCoupon(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Code        string  `json:"code"`
-		Discount    float64 `json:"discount"`
-		Description string  `json:"description"`
-		Expires     string  `json:"expires"`
-		Active      *bool   `json:"active"`
+// promotionBody is the wire shape for creating or updating a promotional code.
+// Every field is a pointer so an update can tell "not supplied" from "set to
+// the zero value" — PUT merges, so a partial body must not blank out data.
+type promotionBody struct {
+	Code        *string `json:"code"`
+	Scope       *string `json:"scope"`
+	Description *string `json:"description"`
+	Active      *bool   `json:"active"`
+	Terms       *string `json:"terms"`
+
+	Conditions *domain.Conditions `json:"conditions"`
+	Benefit    *domain.Benefit    `json:"benefit"`
+
+	// ExpiresOn is a date the manager picked; it means the end of that day in
+	// Seoul. ExpiresAt is the exact instant, for callers that have one.
+	// Sending either as "" or null clears the expiry.
+	ExpiresOn *string    `json:"expires_on"`
+	ExpiresAt *time.Time `json:"expires_at"`
+
+	MaxRedemptions *int `json:"max_redemptions"`
+	MaxPerCustomer *int `json:"max_per_customer"`
+
+	// Legacy fields, still accepted while clients migrate.
+	Discount *float64 `json:"discount"`
+	Expires  *string  `json:"expires"`
+}
+
+// resolveExpiry turns whichever expiry field was supplied into an instant.
+// The second return says the caller explicitly asked to clear it.
+func (b promotionBody) resolveExpiry() (*time.Time, bool, error) {
+	if b.ExpiresOn != nil {
+		if strings.TrimSpace(*b.ExpiresOn) == "" {
+			return nil, true, nil
+		}
+		at, err := domain.EndOfDayKST(*b.ExpiresOn)
+		if err != nil {
+			return nil, false, fmt.Errorf("expires_on must be a date like 2026-08-31: %w", err)
+		}
+		return &at, false, nil
 	}
+	if b.ExpiresAt != nil {
+		at := b.ExpiresAt.UTC()
+		return &at, false, nil
+	}
+	return nil, false, nil
+}
+
+func (h *Handler) CreatePromotion(w http.ResponseWriter, r *http.Request) {
+	var body promotionBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	active := true
-	if body.Active != nil {
-		active = *body.Active
+	expiresAt, _, err := body.resolveExpiry()
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
 	}
-	created, err := h.couponSvc.Create(r.Context(), domain.Coupon{
-		Code:        body.Code,
-		Discount:    body.Discount,
-		Description: body.Description,
-		Expires:     body.Expires,
-		Active:      active,
-	})
+
+	promotion := domain.Promotion{
+		Code:           strValue(body.Code),
+		Scope:          domain.Scope(strValue(body.Scope)),
+		Description:    strValue(body.Description),
+		Terms:          strValue(body.Terms),
+		Active:         true,
+		ExpiresAt:      expiresAt,
+		MaxRedemptions: body.MaxRedemptions,
+		Discount:       floatValue(body.Discount),
+		Expires:        strValue(body.Expires),
+	}
+	if body.Active != nil {
+		promotion.Active = *body.Active
+	}
+	if body.Conditions != nil {
+		promotion.Conditions = *body.Conditions
+	}
+	if body.Benefit != nil {
+		promotion.Benefit = *body.Benefit
+	}
+	if body.MaxPerCustomer != nil {
+		promotion.MaxPerCustomer = *body.MaxPerCustomer
+	}
+
+	created, err := h.promotionSvc.Create(r.Context(), promotion)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -516,23 +580,55 @@ func (h *Handler) CreateCoupon(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusCreated, created)
 }
 
-func (h *Handler) UpdateCoupon(w http.ResponseWriter, r *http.Request) {
+func strValue(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func floatValue(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+func (h *Handler) UpdatePromotion(w http.ResponseWriter, r *http.Request) {
 	code := r.PathValue("code")
 	if code == "" {
-		h.respondError(w, http.StatusBadRequest, "missing coupon code")
+		h.respondError(w, http.StatusBadRequest, "missing promotion code")
 		return
 	}
-	var body struct {
-		Discount    *float64 `json:"discount"`
-		Description *string  `json:"description"`
-		Expires     *string  `json:"expires"`
-		Active      *bool    `json:"active"`
-	}
+	var body promotionBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	updated, err := h.couponSvc.Update(r.Context(), code, body.Discount, body.Description, body.Expires, body.Active)
+	expiresAt, clearExpiry, err := body.resolveExpiry()
+	if err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	patch := ports.PromotionPatch{
+		Description:    body.Description,
+		Active:         body.Active,
+		Terms:          body.Terms,
+		Conditions:     body.Conditions,
+		Benefit:        body.Benefit,
+		MaxPerCustomer: body.MaxPerCustomer,
+		ExpiresAt:      expiresAt,
+		ClearExpiresAt: clearExpiry,
+		MaxRedemptions: body.MaxRedemptions,
+		Discount:       body.Discount,
+		Expires:        body.Expires,
+	}
+	if body.Scope != nil {
+		scope := domain.Scope(*body.Scope)
+		patch.Scope = &scope
+	}
+	updated, err := h.promotionSvc.Update(r.Context(), code, patch)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -540,13 +636,13 @@ func (h *Handler) UpdateCoupon(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, updated)
 }
 
-func (h *Handler) DeleteCoupon(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeletePromotion(w http.ResponseWriter, r *http.Request) {
 	code := r.PathValue("code")
 	if code == "" {
-		h.respondError(w, http.StatusBadRequest, "missing coupon code")
+		h.respondError(w, http.StatusBadRequest, "missing promotion code")
 		return
 	}
-	if err := h.couponSvc.Delete(r.Context(), code); err != nil {
+	if err := h.promotionSvc.Delete(r.Context(), code); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -668,7 +764,7 @@ func (h *Handler) parseImageForm(r *http.Request) (multipart.File, *multipart.Fi
 	return file, header, nil
 }
 
-func (h *Handler) RedeemCoupon(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RedeemPromotion(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Code string `json:"code"`
 	}
@@ -680,12 +776,12 @@ func (h *Handler) RedeemCoupon(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "code is required")
 		return
 	}
-	coupon, ok := h.couponSvc.Redeem(r.Context(), body.Code)
+	promotion, ok := h.promotionSvc.Redeem(r.Context(), body.Code)
 	if !ok {
-		h.respondError(w, http.StatusNotFound, "invalid coupon code")
+		h.respondError(w, http.StatusNotFound, "invalid promotion code")
 		return
 	}
-	h.respondJSON(w, http.StatusOK, coupon)
+	h.respondJSON(w, http.StatusOK, promotion)
 }
 
 func (h *Handler) extractFilters(r *http.Request) map[string]string {
@@ -752,4 +848,17 @@ func (h *Handler) respondJSON(w http.ResponseWriter, status int, data interface{
 
 func (h *Handler) respondError(w http.ResponseWriter, status int, message string) {
 	h.respondJSON(w, status, ErrorResponse{Error: message, Code: status})
+}
+
+// WithPromotionThrottle rate-limits the public redeem route.
+func (h *Handler) WithPromotionThrottle(mw func(http.Handler) http.Handler) *Handler {
+	h.promotionThrottle = mw
+	return h
+}
+
+func (h *Handler) throttled(next http.Handler) http.Handler {
+	if h.promotionThrottle == nil {
+		return next
+	}
+	return h.promotionThrottle(next)
 }

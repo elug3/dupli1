@@ -114,15 +114,17 @@ type ProductServer struct {
 func NewServer(opts ServerOptions) (*ProductServer, error) {
 	// Process bootstrap wiring runs before any HTTP request exists.
 	app, err := bootstrap.Bootstrap(context.Background(), bootstrap.Config{
-		DatabaseConnString: opts.DatabaseConnString,
-		JWTSecret:          opts.JWTSecret,
-		JWKSURL:            opts.JWKSURL,
-		NATSURL:            opts.NATSURL,
-		S3Endpoint:         opts.S3Endpoint,
-		S3PublicEndpoint:   opts.S3PublicEndpoint,
-		S3AccessKey:        opts.S3AccessKey,
-		S3SecretKey:        opts.S3SecretKey,
-		S3Bucket:           opts.S3Bucket,
+		DatabaseConnString:   opts.DatabaseConnString,
+		JWTSecret:            opts.JWTSecret,
+		JWKSURL:              opts.JWKSURL,
+		NATSURL:              opts.NATSURL,
+		S3Endpoint:           opts.S3Endpoint,
+		S3PublicEndpoint:     opts.S3PublicEndpoint,
+		S3AccessKey:          opts.S3AccessKey,
+		S3SecretKey:          opts.S3SecretKey,
+		S3Bucket:             opts.S3Bucket,
+		RedisURL:             opts.RedisURL,
+		WelcomePromotionCode: opts.WelcomePromotionCode,
 	})
 	if err != nil {
 		return nil, err

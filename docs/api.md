@@ -533,9 +533,9 @@ List/search/home clients should prefer `defaultListingImageUrl` (≈600px JPEG s
 
 ---
 
-### `POST /api/v1/products/coupons/redeem`
+### `POST /api/v1/products/promotions/redeem`
 
-> **Renaming.** The product term is **promotional code**. These routes move to `/api/v1/products/promotions…` and `coupon_code` becomes `promotion_code` — see [product-promotion-rename.md](product-promotion-rename.md). The `coupons` paths stay registered as aliases through the cutover. Legacy top-level alias: `/api/v1/coupons/redeem`.
+> **Renamed.** The product term is **promotional code**. These are the canonical paths; `coupon_code` is now `promotion_code`. The pre-rename spellings `/api/v1/products/coupons…` and the older top-level `/api/v1/coupons…` stay registered as aliases for one release, and the `coupon.*` permission set is still accepted alongside `promotion.*`. See [product-promotion-rename.md](product-promotion-rename.md).
 
 Look up a promotional code. No authentication required.
 
@@ -551,19 +551,50 @@ Look up a promotional code. No authentication required.
 |--------|---------|
 | `404` | Invalid code, or the code exists but is inactive |
 
-**Today this is a lookup only.** It does not check expiry (`expires` is free text and is never compared), does not count uses, is not rate limited, and is not cart-aware. A code can be redeemed without limit by anyone.
+This is a **lookup**: it answers whether a code is live, honouring `active`, `expires_at` and the campaign cap, and is rate-limited per IP and per customer. It is **not** cart-aware and returns no discount amount — use `evaluate` for that. Usage limits are enforced by the ledger at `reserve`, not here.
 
 #### Target surface (planned)
 
 Being replaced by a cart-aware evaluation call as part of [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md). Planned, **not implemented**:
 
-| Method | Path | Purpose | Phase |
-|--------|------|---------|-------|
-| `POST` | `/api/v1/products/promotions/redeem` | Renamed lookup; adds rate limiting and real `expires_at` | 1–2 |
-| `POST` | `/api/v1/products/promotions/evaluate` | Evaluate a code or entitlement against a checkout context → `{ ok, discount_won, shipping_discount_won, eligible_sku_ids, reason }`. Called by order at apply **and** complete | 2 |
-| `GET` | `/api/v1/products/promotions/me` | Current customer's wallet entitlements, with eligible/ineligible against a cart | 3 |
-| `POST` | `/api/v1/products/promotions/{code}/issue` | Manager issues a single-user entitlement to a customer (`promotion.issue`) | 3 |
-| `GET` | `/api/v1/products/promotions/{code}/stats` | Campaign stats from the paid redemption ledger (`promotion.read`) | 4 |
+| Method | Path | Permission | Purpose | Status |
+|--------|------|------------|---------|--------|
+| `POST` | `/api/v1/products/promotions/evaluate` | — (public, rate-limited) | Price a code against a checkout context → `{ ok, discount_won, eligible_sku_ids, eligible_subtotal_won, reason, sub_reason }`. Order calls it at apply and again at complete; the storefront uses it to preview | **live** |
+| `POST` | `/api/v1/products/promotions/reserve` | `promotion.redeem` | Re-evaluate and record a pending use against an order. Idempotent per order | **live** |
+| `POST` | `/api/v1/products/promotions/consume` | `promotion.redeem` | Mark an order's reservation paid. Idempotent | **live** |
+| `POST` | `/api/v1/products/promotions/release` | `promotion.redeem` | Hand a use back, for a cancel before shipment | **live** |
+| `GET`/`POST` | `/api/v1/products/promotions/me` | Bearer (ABAC) | Current customer's wallet. POST a cart to have each entitlement judged against it; the customer id comes from the token, never the body | **live** |
+| `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` | Issue a single-user entitlement, idempotent on `trigger_key` | **live** |
+| `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` | Revoke an entitlement; never rewrites an order that used it | **live** |
+| `GET` | `/api/v1/products/promotions/{code}/stats` | `promotion.read` | Campaign stats from the paid ledger | Phase 4 |
+
+A rejection is a `200` with `ok: false` — the request succeeded, the cart just
+did not earn the discount. `reason` is one of `invalid_code`, `expired`,
+`already_used`, `not_eligible`, `campaign_exhausted`, `login_required`;
+`not_eligible` adds a `sub_reason` (`min_spend`, `category`, `brand`,
+`on_sale_excluded`, `no_line_match`, `condition`). An unknown code and an
+inactive one both return `invalid_code`, so probing cannot enumerate live
+campaigns.
+
+**Single-user codes.** A `single_user` definition is unusable without an
+entitlement in `customer_promotions`. Entitlements are issued automatically to
+new customer accounts when auth publishes `user.registered`, by a manager, or
+in bulk by `product/cmd/backfill-welcome-promotion`. Each carries its own
+`expires_at`, computed from the definition's `entitlement_ttl_days` at issue
+time, so an account issued late in a campaign gets the same window as one
+issued at launch. An account that holds no entitlement is refused with
+`invalid_code` — the same answer as an unknown code, so guessing a campaign's
+code reveals nothing. Whether the code has been *spent* is the redemption
+ledger's answer, not the entitlement's.
+
+**Definition fields.** `scope` (`global` | `single_user`), `benefit`
+(`{target, discount_type, discount_fraction | discount_fixed_won,
+max_discount_won, apply_to}`), `conditions` (versioned predicate document over
+an allowlist of attributes), `expires_at`, `max_redemptions`,
+`max_per_customer`, `entitlement_ttl_days`, `terms`, `redemption_count`. On create/update, send
+`expires_on` as a date (`2026-08-31`) to mean the end of that day in Seoul.
+The legacy `discount` fraction and free-text `expires` are still accepted and
+read, but are not enforced — a definition needs a real `expires_at` to expire.
 
 Failures carry machine-readable reason codes (`invalid_code`, `expired`, `already_used`, `not_eligible` + sub-reason, `campaign_exhausted`, `login_required`) so customer copy stays in the frontends.
 
@@ -626,12 +657,12 @@ Routes below require `Authorization: Bearer <access_token>`. Product validates R
 | PUT | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` |
 | DELETE | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` |
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` |
-| GET | `/api/v1/products/coupons` | `coupon.read` |
-| POST | `/api/v1/products/coupons` | `coupon.create` |
-| PUT | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` |
-| DELETE | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` |
+| GET | `/api/v1/products/promotions` | `promotion.read` |
+| POST | `/api/v1/products/promotions` | `promotion.create` |
+| PUT | `/api/v1/products/promotions/by-code/{code}` | `promotion.update` |
+| DELETE | `/api/v1/products/promotions/by-code/{code}` | `promotion.delete` |
 
-These paths and the `coupon.*` permission set are being renamed to `/api/v1/products/promotions…` and `promotion.*`; both are accepted during the cutover window ([product-promotion-rename.md](product-promotion-rename.md)).
+Each route also accepts the pre-rename `coupon.*` permission and answers on `/api/v1/products/coupons…` and `/api/v1/coupons…`, for one release ([product-promotion-rename.md](product-promotion-rename.md)).
 
 `PUT /api/v1/products/{id}` and variant updates **merge**: omitted JSON fields keep their current value, so a partial body cannot blank out data. The trade-off is that a zero value is indistinguishable from an omitted one — sending `price: 0` or `officialPrice: 0` is ignored rather than clearing the price. See [product-price-on-parent.md](product-price-on-parent.md).
 
@@ -827,9 +858,8 @@ See [checkout-session.md](checkout-session.md) for the full checkout flow.
 | POST | `/api/v1/orders/checkout/sessions/{id}/items` | Add or update one item |
 | DELETE | `/api/v1/orders/checkout/sessions/{id}/items/{sku}` | Remove item by human `sku` |
 | DELETE | `/api/v1/orders/checkout/sessions/{id}/items/by-sku-id/{skuId}` | Remove item by canonical `skuId` |
-| POST | `/api/v1/orders/checkout/sessions/{id}/coupon` | Apply promotional code (renaming to `…/promotion` — [product-promotion-rename.md](product-promotion-rename.md)) |
-| POST | `/api/v1/orders/checkout/sessions/{id}/promotion` | *(planned)* Renamed apply route |
-| DELETE | `/api/v1/orders/checkout/sessions/{id}/promotion` | *(planned)* Remove the applied code — wires the existing but unrouted `ClearCoupon` |
+| POST | `/api/v1/orders/checkout/sessions/{id}/promotion` | Apply promotional code; `422` with `reason` / `sub_reason` when the cart does not earn it (pre-rename alias `…/coupon` still answers) |
+| DELETE | `/api/v1/orders/checkout/sessions/{id}/promotion` | Remove the applied code |
 | POST | `/api/v1/orders/checkout/sessions/{id}/complete` | Complete checkout → order |
 
 The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias for every route above and will be removed once the storefront and admin clients migrate.
@@ -987,15 +1017,15 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | GET | `/api/v1/products/settings` | — | product |
 | GET | `/api/v1/products` | optional `product.read` | product |
 | GET | `/api/v1/products/{id}` | — | product |
-| POST | `/api/v1/products/coupons/redeem` | — | product |
+| POST | `/api/v1/products/promotions/redeem` | — | product |
 | POST | `/api/v1/products` | `product.create` | product |
 | PUT/DELETE | `/api/v1/products/{id}` | `product.update` / `product.delete` | product |
 | POST | `/api/v1/products/{id}/images` | `product.image.upload` | product |
 | POST | `/api/v1/products/{id}/variants` | `product.variant.create` | product |
 | PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` / `product.variant.delete` | product |
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | product |
-| GET/POST | `/api/v1/products/coupons` | `coupon.read` / `coupon.create` | product |
-| PUT/DELETE | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` / `coupon.delete` | product |
+| GET/POST | `/api/v1/products/promotions` | `promotion.read` / `promotion.create` | product |
+| PUT/DELETE | `/api/v1/products/promotions/by-code/{code}` | `promotion.update` / `promotion.delete` | product |
 | GET | `/api/v1/products/inventory/health` | — | product |
 | GET | `/api/v1/products/inventory/settings` | — | product |
 | GET | `/api/v1/products/inventory/items/{sku}` | — | product |

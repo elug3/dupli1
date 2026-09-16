@@ -9,8 +9,11 @@ const (
 	All        = "*"
 	AdminAll   = "admin.*"
 	ProductAll = "product.*"
-	CouponAll  = "coupon.*"
-	UserAll    = "user.*"
+	// PromotionAll supersedes CouponAll; both are accepted during the rename
+	// window (docs/product-promotion-rename.md).
+	PromotionAll = "promotion.*"
+	CouponAll    = "coupon.*"
+	UserAll      = "user.*"
 )
 
 // User administration permissions (auth service).
@@ -37,7 +40,25 @@ const (
 	ProductMasterWrite    = "product.master.write"
 )
 
-// Coupon permissions (product service).
+// Promotional code permissions (product service).
+const (
+	PromotionRead   = "promotion.read"
+	PromotionCreate = "promotion.create"
+	PromotionUpdate = "promotion.update"
+	PromotionDelete = "promotion.delete"
+	// PromotionRedeem moves the usage ledger (reserve, consume, release). It is
+	// service-to-service: order holds it, managers do not need it, and the
+	// public redeem/evaluate endpoints require no permission at all.
+	PromotionRedeem = "promotion.redeem"
+	// PromotionIssue grants and revokes a single-user entitlement. Reading
+	// one's own wallet needs no permission — that is ABAC on the token subject.
+	PromotionIssue = "promotion.issue"
+)
+
+// Deprecated: the coupon.* set is superseded by the promotion.* set above.
+// Both are accepted on every promotion route for one release so access tokens
+// minted before the rename keep authorizing; drop these once that window
+// closes. See docs/product-promotion-rename.md.
 const (
 	CouponRead   = "coupon.read"
 	CouponCreate = "coupon.create"
@@ -97,6 +118,12 @@ var Catalog = []string{
 	ProductImageUpload,
 	ProductMasterRead,
 	ProductMasterWrite,
+	PromotionRead,
+	PromotionCreate,
+	PromotionUpdate,
+	PromotionDelete,
+	PromotionRedeem,
+	PromotionIssue,
 	CouponRead,
 	CouponCreate,
 	CouponUpdate,

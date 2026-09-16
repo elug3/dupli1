@@ -9,7 +9,7 @@ import (
 // Infra wraps driver/SQL failures with these so handlers can map status codes
 // without inspecting pgx/pgconn types or leaking raw database messages.
 var (
-	// ErrNotFound is a missing product, variant, coupon, or other resource.
+	// ErrNotFound is a missing product, variant, promotion, or other resource.
 	ErrNotFound = errors.New("not found")
 	// ErrConflict is a uniqueness or in-use conflict (duplicate key, etc.).
 	ErrConflict = errors.New("conflict")

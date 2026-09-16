@@ -119,7 +119,7 @@ func TestPublicGetProductViewFailureStillOK(t *testing.T) {
 		{SKU: "BOT-001", ProductID: "BOT-001", Status: "active"},
 	}
 	svc := service.NewProductSearchService(store, nil)
-	h := handler.NewHandler(svc, service.NewCouponService(memory.NewCouponStore()), nil, service.NewCatalogService(store.Catalog)).
+	h := handler.NewHandler(svc, service.NewPromotionService(memory.NewPromotionStore()), nil, service.NewCatalogService(store.Catalog)).
 		WithViewStore(failingViewStore{})
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)

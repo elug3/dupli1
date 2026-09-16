@@ -21,7 +21,7 @@ func TestWrapDBNoRows(t *testing.T) {
 }
 
 func TestWrapDBUniqueViolation(t *testing.T) {
-	err := wrapDB("create coupon", &pgconn.PgError{Code: "23505", Message: "duplicate key"})
+	err := wrapDB("create promotion", &pgconn.PgError{Code: "23505", Message: "duplicate key"})
 	if !errors.Is(err, ports.ErrConflict) {
 		t.Fatalf("want ErrConflict, got %v", err)
 	}

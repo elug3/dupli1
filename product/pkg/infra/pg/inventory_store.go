@@ -15,7 +15,7 @@ import (
 
 // InventoryStore is the product service's own stock/reservation store
 // (merged in from the standalone inventory service). It shares the same
-// connection pool as ProductSearchStore, the same way CouponStore does.
+// connection pool as ProductSearchStore, the same way PromotionStore does.
 type InventoryStore struct {
 	pool *pgxpool.Pool
 }

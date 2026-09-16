@@ -14,7 +14,7 @@ func TestExpandLegacyRoles_owner(t *testing.T) {
 
 func TestExpandLegacyRoles_productManager(t *testing.T) {
 	got := ExpandLegacyRoles([]string{RoleProductManager})
-	want := []string{ProductAll, CouponAll}
+	want := []string{ProductAll, PromotionAll, CouponAll}
 	if !slices.Equal(got, want) {
 		t.Fatalf("product_manager = %v, want %v", got, want)
 	}
@@ -31,7 +31,7 @@ func TestExpandLegacyRoles_orderManager(t *testing.T) {
 
 func TestExpandLegacyRoles_admin(t *testing.T) {
 	got := ExpandLegacyRoles([]string{RoleAdmin})
-	for _, p := range []string{AdminAll, ProductAll, CouponAll, OrderShip, CartRead} {
+	for _, p := range []string{AdminAll, ProductAll, PromotionAll, CouponAll, OrderShip, CartRead} {
 		if !slices.Contains(got, p) {
 			t.Fatalf("admin missing %s in %v", p, got)
 		}

@@ -55,7 +55,7 @@ func (r *Repository) migrate() error {
 			customer_id TEXT NOT NULL,
 			reservation_id TEXT NOT NULL,
 			status TEXT NOT NULL,
-			coupon_code TEXT NOT NULL DEFAULT '',
+			promotion_code TEXT NOT NULL DEFAULT '',
 			subtotal_won BIGINT NOT NULL,
 			discount_won BIGINT NOT NULL,
 			shipping_fee_won BIGINT NOT NULL DEFAULT 0,
@@ -75,7 +75,7 @@ func (r *Repository) migrate() error {
 			id TEXT PRIMARY KEY,
 			customer_id TEXT NOT NULL,
 			status TEXT NOT NULL,
-			coupon_code TEXT NOT NULL DEFAULT '',
+			promotion_code TEXT NOT NULL DEFAULT '',
 			subtotal_won BIGINT NOT NULL DEFAULT 0,
 			discount_won BIGINT NOT NULL DEFAULT 0,
 			shipping_fee_won BIGINT NOT NULL DEFAULT 0,
@@ -144,7 +144,7 @@ func (r *Repository) migrate() error {
 	}
 	// Rename before ADD COLUMN so existing *_cents money columns keep their
 	// snapshotted values instead of a second column appearing at default 0.
-	if err := r.renameMoneyCentsColumns(ctx); err != nil {
+	if err := r.renameLegacyColumns(ctx); err != nil {
 		return fmt.Errorf("migrate order schema: %w", err)
 	}
 	alterStmts := []string{
@@ -301,8 +301,15 @@ func (r *Repository) replaceCheckConstraint(ctx context.Context, table, name, sq
 	return nil
 }
 
-func (r *Repository) renameMoneyCentsColumns(ctx context.Context) error {
+// renameLegacyColumns brings columns written under an older vocabulary up to
+// the current one. Each entry is applied by renameColumnIfNeeded, which no-ops
+// unless the old column is present and the new one is not, so a fresh database
+// and a redeploy both skip it.
+func (r *Repository) renameLegacyColumns(ctx context.Context) error {
 	renames := []struct{ table, from, to string }{
+		// coupon_code → promotion_code (docs/product-promotion-rename.md).
+		{"orders", "coupon_code", "promotion_code"},
+		{"checkout_sessions", "coupon_code", "promotion_code"},
 		{"orders", "shipping_fee_cents", "shipping_fee_won"},
 		{"checkout_sessions", "shipping_fee_cents", "shipping_fee_won"},
 		{"orders", "shipping_fee_krw", "shipping_fee_won"},
@@ -415,7 +422,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO orders (
-			id, customer_id, reservation_id, status, coupon_code,
+			id, customer_id, reservation_id, status, promotion_code,
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
@@ -427,7 +434,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			customer_id = EXCLUDED.customer_id,
 			reservation_id = EXCLUDED.reservation_id,
 			status = EXCLUDED.status,
-			coupon_code = EXCLUDED.coupon_code,
+			promotion_code = EXCLUDED.promotion_code,
 			subtotal_won = EXCLUDED.subtotal_won,
 			discount_won = EXCLUDED.discount_won,
 			shipping_fee_won = EXCLUDED.shipping_fee_won,
@@ -453,7 +460,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			cancel_requested_at = EXCLUDED.cancel_requested_at,
 			cancel_request_reason = EXCLUDED.cancel_request_reason,
 			updated_at = EXCLUDED.updated_at
-	`, order.ID, order.CustomerID, order.ReservationID, order.Status, order.CouponCode,
+	`, order.ID, order.CustomerID, order.ReservationID, order.Status, order.PromotionCode,
 		order.SubtotalWon, order.DiscountWon, order.ShippingFeeWon, order.TotalWon,
 		order.RecipientName, order.RecipientPhone, shippingJSON, order.SourceAddressID,
 		order.PaymentID, order.PaidAt, order.PaymentDueAt, order.ShippedBy, order.ShippedAt,
@@ -590,7 +597,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 	var shippingJSON []byte
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, customer_id, reservation_id, status, coupon_code,
+		SELECT id, customer_id, reservation_id, status, promotion_code,
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
@@ -599,7 +606,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id).Scan(
-		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
+		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.PromotionCode,
 		&order.SubtotalWon, &order.DiscountWon, &order.ShippingFeeWon, &order.TotalWon,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
@@ -690,7 +697,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, customer_id, reservation_id, status, coupon_code,
+		SELECT id, customer_id, reservation_id, status, promotion_code,
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
@@ -711,7 +718,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
-			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
+			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.PromotionCode,
 			&order.SubtotalWon, &order.DiscountWon, &order.ShippingFeeWon, &order.TotalWon,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
@@ -754,7 +761,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, customer_id, reservation_id, status, coupon_code,
+		SELECT id, customer_id, reservation_id, status, promotion_code,
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
@@ -775,7 +782,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
-			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
+			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.PromotionCode,
 			&order.SubtotalWon, &order.DiscountWon, &order.ShippingFeeWon, &order.TotalWon,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
@@ -818,7 +825,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, customer_id, reservation_id, status, coupon_code,
+		SELECT id, customer_id, reservation_id, status, promotion_code,
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
@@ -840,7 +847,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
-			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
+			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.PromotionCode,
 			&order.SubtotalWon, &order.DiscountWon, &order.ShippingFeeWon, &order.TotalWon,
 			&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
@@ -890,13 +897,13 @@ func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.Ch
 
 	_, err = tx.Exec(ctx, `
 		INSERT INTO checkout_sessions (
-			id, customer_id, status, coupon_code, subtotal_won, discount_won, shipping_fee_won, total_won,
+			id, customer_id, status, promotion_code, subtotal_won, discount_won, shipping_fee_won, total_won,
 			order_id, expires_at, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			status = EXCLUDED.status,
-			coupon_code = EXCLUDED.coupon_code,
+			promotion_code = EXCLUDED.promotion_code,
 			subtotal_won = EXCLUDED.subtotal_won,
 			discount_won = EXCLUDED.discount_won,
 			shipping_fee_won = EXCLUDED.shipping_fee_won,
@@ -904,7 +911,7 @@ func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.Ch
 			order_id = EXCLUDED.order_id,
 			expires_at = EXCLUDED.expires_at,
 			updated_at = EXCLUDED.updated_at
-	`, session.ID, session.CustomerID, session.Status, session.CouponCode,
+	`, session.ID, session.CustomerID, session.Status, session.PromotionCode,
 		session.SubtotalWon, session.DiscountWon, session.ShippingFeeWon, session.TotalWon,
 		session.OrderID, session.ExpiresAt, session.CreatedAt, session.UpdatedAt)
 	if err != nil {
@@ -968,7 +975,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
-		SELECT id, customer_id, reservation_id, status, coupon_code,
+		SELECT id, customer_id, reservation_id, status, promotion_code,
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
@@ -977,7 +984,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
-		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
+		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.PromotionCode,
 		&order.SubtotalWon, &order.DiscountWon, &order.ShippingFeeWon, &order.TotalWon,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
@@ -1063,7 +1070,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
-		SELECT id, customer_id, reservation_id, status, coupon_code,
+		SELECT id, customer_id, reservation_id, status, promotion_code,
 			subtotal_won, discount_won, shipping_fee_won, total_won,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
@@ -1072,7 +1079,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
-		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.CouponCode,
+		&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.PromotionCode,
 		&order.SubtotalWon, &order.DiscountWon, &order.ShippingFeeWon, &order.TotalWon,
 		&order.RecipientName, &order.RecipientPhone, &shippingJSON, &order.SourceAddressID,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
@@ -1307,11 +1314,11 @@ func (r *Repository) GetCheckoutSession(ctx context.Context, id string) (*domain
 
 	var session domain.CheckoutSession
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, customer_id, status, coupon_code, subtotal_won, discount_won, shipping_fee_won, total_won,
+		SELECT id, customer_id, status, promotion_code, subtotal_won, discount_won, shipping_fee_won, total_won,
 			order_id, expires_at, created_at, updated_at
 		FROM checkout_sessions WHERE id = $1
 	`, id).Scan(
-		&session.ID, &session.CustomerID, &session.Status, &session.CouponCode,
+		&session.ID, &session.CustomerID, &session.Status, &session.PromotionCode,
 		&session.SubtotalWon, &session.DiscountWon, &session.ShippingFeeWon, &session.TotalWon,
 		&session.OrderID, &session.ExpiresAt, &session.CreatedAt, &session.UpdatedAt,
 	)

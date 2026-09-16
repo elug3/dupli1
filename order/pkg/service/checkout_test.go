@@ -12,27 +12,78 @@ import (
 	"github.com/elug3/dupli1/order/pkg/service"
 )
 
-type fakeCouponClient struct {
+// fakePromotionClient stands in for product. It applies `discount` as a
+// fraction of the cart it is handed, which is what the real evaluator does for
+// a percentage benefit — the point being that the amount is computed from the
+// priced lines, not taken from the caller.
+type fakePromotionClient struct {
 	code     string
 	discount float64
 	err      error
+
+	reserved map[string]string // orderID -> code
+	released map[string]int
+	consumed map[string]int
+
+	// refuse, when set, is returned instead of a successful evaluation.
+	refuse *ports.PromotionEvaluation
 }
 
-func (f *fakeCouponClient) Redeem(ctx context.Context, code string) (*ports.Coupon, error) {
+func (f *fakePromotionClient) evaluate(promoCtx ports.PromotionContext) *ports.PromotionEvaluation {
+	if f.refuse != nil {
+		return f.refuse
+	}
+	var subtotal int64
+	for _, line := range promoCtx.Lines {
+		subtotal += int64(line.Quantity) * line.UnitPriceWon
+	}
+	return &ports.PromotionEvaluation{
+		OK:                  true,
+		Code:                f.code,
+		DiscountWon:         int64(float64(subtotal) * f.discount),
+		EligibleSubtotalWon: subtotal,
+	}
+}
+
+func (f *fakePromotionClient) Evaluate(_ context.Context, _ string, promoCtx ports.PromotionContext) (*ports.PromotionEvaluation, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &ports.Coupon{
-		Code:             f.code,
-		DiscountFraction: f.discount,
-	}, nil
+	return f.evaluate(promoCtx), nil
+}
+
+func (f *fakePromotionClient) Reserve(_ context.Context, code, orderID string, promoCtx ports.PromotionContext) (*ports.PromotionEvaluation, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.reserved == nil {
+		f.reserved = map[string]string{}
+	}
+	f.reserved[orderID] = code
+	return f.evaluate(promoCtx), nil
+}
+
+func (f *fakePromotionClient) Consume(_ context.Context, orderID string) error {
+	if f.consumed == nil {
+		f.consumed = map[string]int{}
+	}
+	f.consumed[orderID]++
+	return nil
+}
+
+func (f *fakePromotionClient) Release(_ context.Context, orderID string) error {
+	if f.released == nil {
+		f.released = map[string]int{}
+	}
+	f.released[orderID]++
+	return nil
 }
 
 func TestCheckoutSessionLifecycle(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
 	stock := &fakeStock{reservationID: "res-checkout"}
-	svc := service.NewWithCheckout(repo, stock, &fakeCouponClient{
+	svc := service.NewWithCheckout(repo, stock, &fakePromotionClient{
 		code:     "SUMMER30",
 		discount: 0.30,
 	}, 0).WithProduct(&fakeProduct{defaultKRW: 5000})
@@ -57,9 +108,9 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 		t.Fatalf("session totals = %d/%d, want 10000/10000", session.SubtotalWon, session.TotalWon)
 	}
 
-	session, err = svc.ApplyCheckoutCoupon(ctx, session.ID, "SUMMER30")
+	session, err = svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30")
 	if err != nil {
-		t.Fatalf("ApplyCheckoutCoupon returned error: %v", err)
+		t.Fatalf("ApplyCheckoutPromotion returned error: %v", err)
 	}
 	if session.DiscountWon != 3000 || session.TotalWon != 7000 {
 		t.Fatalf("discounted totals = %d/%d, want 3000/7000", session.DiscountWon, session.TotalWon)
@@ -78,8 +129,8 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	if result.Order.TotalWon != 7000 {
 		t.Fatalf("order total = %d, want 7000", result.Order.TotalWon)
 	}
-	if result.Order.CouponCode != "SUMMER30" {
-		t.Fatalf("order coupon = %q, want SUMMER30", result.Order.CouponCode)
+	if result.Order.PromotionCode != "SUMMER30" {
+		t.Fatalf("order promotion = %q, want SUMMER30", result.Order.PromotionCode)
 	}
 	if result.Order.RecipientName != "Test User" || result.Order.RecipientPhone != "01012345678" {
 		t.Fatalf("order fulfillment: %+v", result.Order)
@@ -201,7 +252,7 @@ func TestCompleteCheckoutRequiresItems(t *testing.T) {
 	}
 }
 
-func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
+func TestApplyPromotionWithoutClientReturnsUnavailable(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
 	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultKRW: 1000})
@@ -218,9 +269,9 @@ func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
 
-	_, err = svc.ApplyCheckoutCoupon(ctx, session.ID, "SUMMER30")
-	if !errors.Is(err, ports.ErrCouponUnavailable) {
-		t.Fatalf("ApplyCheckoutCoupon error = %v, want ErrCouponUnavailable", err)
+	_, err = svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30")
+	if !errors.Is(err, ports.ErrPromotionUnavailable) {
+		t.Fatalf("ApplyCheckoutPromotion error = %v, want ErrPromotionUnavailable", err)
 	}
 }
 
@@ -237,12 +288,12 @@ func testCompleteCheckoutInput() service.CompleteCheckoutInput {
 	}
 }
 
-func TestCompleteCheckoutRecomputesCouponDiscountAfterRepricing(t *testing.T) {
+func TestCompleteCheckoutRecomputesPromotionDiscountAfterRepricing(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
 	stock := &fakeStock{reservationID: "res-checkout"}
 	product := &mutableProduct{price: 10000}
-	svc := service.NewWithCheckout(repo, stock, &fakeCouponClient{
+	svc := service.NewWithCheckout(repo, stock, &fakePromotionClient{
 		code:     "SUMMER30",
 		discount: 0.30,
 	}, 0).WithProduct(product)
@@ -258,9 +309,9 @@ func TestCompleteCheckoutRecomputesCouponDiscountAfterRepricing(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
-	session, err = svc.ApplyCheckoutCoupon(ctx, session.ID, "SUMMER30")
+	session, err = svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30")
 	if err != nil {
-		t.Fatalf("ApplyCheckoutCoupon returned error: %v", err)
+		t.Fatalf("ApplyCheckoutPromotion returned error: %v", err)
 	}
 	if session.DiscountWon != 3000 || session.TotalWon != 7000 {
 		t.Fatalf("session discounted totals = %d/%d, want 3000/7000", session.DiscountWon, session.TotalWon)
@@ -449,5 +500,155 @@ func TestCompleteCheckout_UnavailableVariants(t *testing.T) {
 	}
 	if unavailable.Items[0].SkuID != "ID-BAG-1" {
 		t.Fatalf("unexpected unavailable: %+v", unavailable.Items[0])
+	}
+}
+
+// ── Promotional code lifecycle (Phase 2) ─────────────────────────────────────
+
+// newPromoSvc wires a checkout service with a promotion client that records
+// what order asked of it.
+func newPromoSvc(t *testing.T) (*service.Service, *fakePromotionClient) {
+	t.Helper()
+	promo := &fakePromotionClient{code: "SUMMER30", discount: 0.30}
+	svc := service.NewWithCheckout(memory.NewRepository(), &fakeStock{reservationID: "res-1"}, promo, 0).
+		WithProduct(&fakeProduct{defaultKRW: 10000})
+	return svc, promo
+}
+
+func openSessionWithItem(t *testing.T, svc *service.Service) *domain.CheckoutSession {
+	t.Helper()
+	ctx := t.Context()
+	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{CustomerID: "customer-1"})
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession: %v", err)
+	}
+	if _, err := svc.UpsertCheckoutItem(ctx, session.ID, domain.OrderItem{
+		SkuID: "sku-1", SKU: "BAG-1", Quantity: 1, UnitPriceWon: 10000,
+	}); err != nil {
+		t.Fatalf("UpsertCheckoutItem: %v", err)
+	}
+	return session
+}
+
+// Completing a checkout claims the customer's use against the order's own id,
+// so the ledger can key it and a retry cannot burn a second use.
+func TestCompleteCheckoutReservesThePromotionAgainstTheOrder(t *testing.T) {
+	ctx := t.Context()
+	svc, promo := newPromoSvc(t)
+	session := openSessionWithItem(t, svc)
+
+	if _, err := svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30"); err != nil {
+		t.Fatalf("ApplyCheckoutPromotion: %v", err)
+	}
+	result, err := svc.CompleteCheckout(ctx, session.ID, service.CompleteCheckoutInput{
+		RecipientName: "Kim", RecipientPhone: "010-0000-0000",
+		ShippingAddress: domain.ShippingAddress{PostalCode: "06236", AddressLine1: "1 Test", City: "Seoul", Province: "Seoul"},
+	})
+	if err != nil {
+		t.Fatalf("CompleteCheckout: %v", err)
+	}
+	if got := promo.reserved[result.Order.ID]; got != "SUMMER30" {
+		t.Fatalf("reserved[%s] = %q, want SUMMER30", result.Order.ID, got)
+	}
+}
+
+// Paying an order spends the use.
+func TestMarkOrderPaidConsumesThePromotion(t *testing.T) {
+	ctx := t.Context()
+	svc, promo := newPromoSvc(t)
+	session := openSessionWithItem(t, svc)
+	if _, err := svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	result, err := svc.CompleteCheckout(ctx, session.ID, service.CompleteCheckoutInput{
+		RecipientName: "Kim", RecipientPhone: "010-0000-0000",
+		ShippingAddress: domain.ShippingAddress{PostalCode: "06236", AddressLine1: "1 Test", City: "Seoul", Province: "Seoul"},
+	})
+	if err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, result.Order.ID, "pay-1", result.Order.TotalWon); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	if promo.consumed[result.Order.ID] != 1 {
+		t.Fatalf("consumed = %d, want 1", promo.consumed[result.Order.ID])
+	}
+}
+
+// Cancelling before shipment hands the use back, exactly as it hands stock
+// back. This is the rule the plan pins: nothing is really spent until the
+// goods have gone.
+func TestCancelBeforeShipmentReleasesThePromotion(t *testing.T) {
+	ctx := t.Context()
+	svc, promo := newPromoSvc(t)
+	session := openSessionWithItem(t, svc)
+	if _, err := svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	result, err := svc.CompleteCheckout(ctx, session.ID, service.CompleteCheckoutInput{
+		RecipientName: "Kim", RecipientPhone: "010-0000-0000",
+		ShippingAddress: domain.ShippingAddress{PostalCode: "06236", AddressLine1: "1 Test", City: "Seoul", Province: "Seoul"},
+	})
+	if err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	if _, err := svc.CancelOrder(ctx, result.Order.ID); err != nil {
+		t.Fatalf("CancelOrder: %v", err)
+	}
+	if promo.released[result.Order.ID] != 1 {
+		t.Fatalf("released = %d, want 1 for a pre-shipment cancel", promo.released[result.Order.ID])
+	}
+}
+
+// Applying then removing a code leaves the session at full price, and does not
+// leave a stale code behind for complete to re-apply.
+func TestClearCheckoutPromotionRemovesTheDiscount(t *testing.T) {
+	ctx := t.Context()
+	svc, _ := newPromoSvc(t)
+	session := openSessionWithItem(t, svc)
+
+	applied, err := svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30")
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if applied.DiscountWon != 3000 {
+		t.Fatalf("discount = %d, want 3000", applied.DiscountWon)
+	}
+
+	cleared, err := svc.ClearCheckoutPromotion(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("ClearCheckoutPromotion: %v", err)
+	}
+	if cleared.PromotionCode != "" {
+		t.Fatalf("promotion_code = %q, want empty", cleared.PromotionCode)
+	}
+	if cleared.DiscountWon != 0 {
+		t.Fatalf("discount = %d, want 0 after removing the code", cleared.DiscountWon)
+	}
+	if cleared.TotalWon != cleared.SubtotalWon+cleared.ShippingFeeWon {
+		t.Fatalf("total = %d, want subtotal+shipping = %d", cleared.TotalWon, cleared.SubtotalWon+cleared.ShippingFeeWon)
+	}
+}
+
+// A code refused for this cart must not be applied, and the refusal must carry
+// its reason rather than surfacing as a generic failure.
+func TestApplyRefusedPromotionSurfacesTheReason(t *testing.T) {
+	ctx := t.Context()
+	promo := &fakePromotionClient{code: "SPEND100K", refuse: &ports.PromotionEvaluation{
+		Reason: "not_eligible", SubReason: "min_spend",
+	}}
+	svc := service.NewWithCheckout(memory.NewRepository(), &fakeStock{reservationID: "res-1"}, promo, 0).
+		WithProduct(&fakeProduct{defaultKRW: 10000})
+	session := openSessionWithItem(t, svc)
+
+	_, err := svc.ApplyCheckoutPromotion(ctx, session.ID, "SPEND100K")
+	if err == nil {
+		t.Fatal("an ineligible cart must not get the discount")
+	}
+	if !errors.Is(err, ports.ErrPromotionNotEligible) {
+		t.Fatalf("err = %v, want ErrPromotionNotEligible", err)
+	}
+	if !strings.Contains(err.Error(), "min_spend") {
+		t.Fatalf("err = %v, want the sub-reason to travel with it", err)
 	}
 }

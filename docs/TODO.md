@@ -175,14 +175,19 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
 ### Still open (priority)
 
 - [ ] **Promotional codes — sign-up campaign** (marketing-driven; **on the critical path**, no longer deferred behind v1.0/v1.1). Plan: [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md). Campaign: single-user code **auto-issued on `user.registered`**, **fixed ₩ off**, **minimum spend**, real expiry.
-  - [ ] **Phase 1 — rename `coupon` → `promotion`** across wire, Postgres, permissions, Go and both frontends ([product-promotion-rename.md](product-promotion-rename.md)). No behavior change; lands before any new field
-  - [ ] **Phase 2 — harden**: enforce `expires_at` (KST end-of-day), redemption ledger (reserve → consume → release), once-per-customer, `conditions`/`benefit` JSONB (`subtotal_won` predicate; `percent` **and** `fixed` benefit with clamp-to-eligible-base), validate `benefit` on write, `Evaluate` replaces `Redeem` at apply + complete, rate-limit redeem, route the orphaned `ClearCoupon`
-  - [ ] **Phase 3 — wallet + auto-issue** (campaign go-live): `customer_promotions`, issue/list APIs, move `user.registered` into `shared/pkg/events`, idempotent issuer on `(code, customer_id, trigger_key)`, replace the storefront profile stub
+  - [x] **Phase 1 — rename `coupon` → `promotion`** across wire, Postgres, permissions, Go and both frontends ([product-promotion-rename.md](product-promotion-rename.md)). No behavior change. Pre-rename paths, the `coupon.*` permissions and the `coupon_code` JSON key stay accepted for one release
+  - [x] **Phase 2 — harden**: enforce `expires_at` (KST end-of-day), redemption ledger (reserve → consume → release), once-per-customer, `conditions`/`benefit` JSONB (`subtotal_won` predicate; `percent` **and** `fixed` benefit with clamp-to-eligible-base), validate `benefit` on write, `Evaluate` replaces `Redeem` at apply + complete, rate-limit redeem, route the orphaned `ClearCoupon`
+  - [x] **Phase 3 — wallet + auto-issue** (campaign go-live): `customer_promotions`, issue/list APIs, move `user.registered` into `shared/pkg/events`, idempotent issuer on `(code, customer_id, trigger_key)`, replace the storefront profile stub
   - [ ] **Phase 4** — richer condition attrs, shipping benefit + `shipping_discount_won`, referral attribution, campaign stats endpoint
-  - [ ] Campaign parameters from marketing (won amount, min spend, expiry window, `max_redemptions`) — needed before the Phase 3 dry run
-  - [ ] Decide whether existing accounts get a one-off backfill issue, or only registrations after go-live
+  - [x] Campaign parameters from marketing — `WELCOME50`, 50,000원 off, 100,000원 minimum, 30-day entitlement window, no budget cap
+  - [x] Existing accounts are backfilled — `product/cmd/backfill-welcome-promotion`
+  - [ ] **Enable `WELCOME50` in the admin** when marketing is ready; it is seeded inactive on purpose
+  - [ ] **Run the backfill in production** — `backfill-welcome-promotion -code WELCOME50 -confirm` (dry-runs without `-confirm`)
+  - [ ] Set `DUPLI1_WELCOME_PROMOTION_CODE=WELCOME50` on the product ECS task, or new signups get nothing
+  - [ ] Set `REDIS_URL` on the product ECS task so the promotional-code rate limit is shared across tasks
+  - [ ] **Close the rename window** one release after Phase 1 — drop the `coupon.*` permissions, the pre-rename routes, the dual JSON key and the nginx `/api/v1/coupons` locations ([product-promotion-rename.md](product-promotion-rename.md) § Closing the window)
 
-Known defects in the shipped coupon code, all folded into the phases above: expiry never compared; unlimited reuse; `discount` unvalidated on write (a value outside `(0,1)` saves, then fails at apply); `ClearCoupon` unreachable; redeem public and unthrottled; storefront wallet is an empty stub.
+Defects found in the review and closed by Phase 2: expiry never compared; unlimited reuse; `discount` unvalidated on write; `ClearPromotion` unreachable; redeem public and unthrottled. All closed: the storefront wallet now reads real entitlements.
 
 Implement remaining open items in [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md). Money-path Criticals (**C1** pricing, **H7** JWT fail-closed) and Highs (**H1**/**H3**/**H4**/**H5**/**H6**/**H8**/**H9**) are **done**; still open: Redis catalog cache, frontend legacy-path/`skuId` migration.
 
@@ -196,7 +201,7 @@ Implement remaining open items in [quality-bugs-fix-plan.md](quality-bugs-fix-pl
     |--------|-----------|
     | `/api/v1/variants/{sku}` | `/api/v1/products/variants/by-sku/{sku}` |
     | `/api/v1/variants/by-sku-id/{skuId}` | `/api/v1/products/variants/by-sku-id/{skuId}` |
-    | `/api/v1/coupons` | `/api/v1/products/promotions` (via `/api/v1/products/coupons` — [rename](product-promotion-rename.md)) |
+    | `/api/v1/coupons` | `/api/v1/products/promotions` ([renamed](product-promotion-rename.md); `/api/v1/products/coupons` also still answers) |
     | `/api/v1/coupons/{code}` | `/api/v1/products/promotions/by-code/{code}` |
     | `/api/v1/catalog/*` | `/api/v1/products/catalog/*` |
     | `/api/v1/inventory/{sku}` | `/api/v1/products/inventory/items/{sku}` |

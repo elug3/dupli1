@@ -7,7 +7,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/domain"
 )
 
-func TestCheckoutSessionTotalsWithCoupon(t *testing.T) {
+func TestCheckoutSessionTotalsWithPromotion(t *testing.T) {
 	now := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
 	session, err := domain.NewCheckoutSession("cs_000001", "customer-1", now, time.Hour, 0)
 	if err != nil {
@@ -19,8 +19,10 @@ func TestCheckoutSessionTotalsWithCoupon(t *testing.T) {
 	}, now); err != nil {
 		t.Fatalf("UpsertItem returned error: %v", err)
 	}
-	if err := session.ApplyCoupon("SUMMER30", 0.30, now); err != nil {
-		t.Fatalf("ApplyCoupon returned error: %v", err)
+	// The session now records an absolute amount that product computed,
+	// not a fraction it applies itself.
+	if err := session.ApplyPromotion("SUMMER30", 3000, now); err != nil {
+		t.Fatalf("ApplyPromotion returned error: %v", err)
 	}
 
 	if session.SubtotalWon != 10000 || session.DiscountWon != 3000 || session.TotalWon != 7000 {
