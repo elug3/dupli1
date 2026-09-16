@@ -3,6 +3,7 @@ package ports
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Sentinel errors for the product service boundary.
@@ -30,4 +31,10 @@ func NotFound(msg string) error {
 // Conflict wraps a conflict message with ErrConflict.
 func Conflict(msg string) error {
 	return fmt.Errorf("%w: %s", ErrConflict, msg)
+}
+
+// IsCampaignExhaustedConflict reports a ledger refusal because the
+// campaign-wide redemption cap is spent.
+func IsCampaignExhaustedConflict(err error) bool {
+	return errors.Is(err, ErrConflict) && strings.Contains(err.Error(), "campaign exhausted")
 }

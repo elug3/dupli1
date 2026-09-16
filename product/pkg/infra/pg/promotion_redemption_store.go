@@ -54,6 +54,17 @@ func (s *PromotionRedemptionStore) Reserve(ctx context.Context, in ports.Reserve
 		return nil, wrapDB("reserve redemption", err)
 	}
 
+	var redemptionCount int
+	var maxRedemptions *int
+	if err := tx.QueryRow(ctx, `
+		SELECT redemption_count, max_redemptions FROM promotions WHERE code = $1 FOR UPDATE
+	`, code).Scan(&redemptionCount, &maxRedemptions); err != nil {
+		return nil, wrapDB("reserve redemption", err)
+	}
+	if maxRedemptions != nil && redemptionCount >= *maxRedemptions {
+		return nil, ports.Conflict("promotion campaign exhausted")
+	}
+
 	var used int
 	if err := tx.QueryRow(ctx, `
 		SELECT count(*) FROM promotion_redemptions

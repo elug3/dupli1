@@ -194,6 +194,35 @@ func TestReleaseRestoresTheCustomersUse(t *testing.T) {
 	}
 }
 
+// Reserve must enforce max_redemptions inside the ledger, not only in Evaluate.
+// Evaluate reads a stale count; two checkouts completing together otherwise
+// both pass the pre-check and increment past the cap.
+func TestLedgerReserveEnforcesCampaignWideCap(t *testing.T) {
+	ctx := context.Background()
+	store := memory.NewPromotionStore()
+	ledger := memory.NewPromotionRedemptionStore(store)
+	p := fixedPromotion("ONE_SLOT", 5000)
+	max := 1
+	p.MaxRedemptions = &max
+	if err := store.Create(ctx, p); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	in1 := ports.ReserveRedemptionInput{
+		Code: "ONE_SLOT", OrderID: "ord-1", CustomerID: "cust-1", DiscountWon: 5000,
+	}
+	in2 := ports.ReserveRedemptionInput{
+		Code: "ONE_SLOT", OrderID: "ord-2", CustomerID: "cust-2", DiscountWon: 5000,
+	}
+	if _, err := ledger.Reserve(ctx, in1, 1); err != nil {
+		t.Fatalf("first reserve: %v", err)
+	}
+	if _, err := ledger.Reserve(ctx, in2, 1); err == nil {
+		t.Fatal("second reserve should refuse when campaign cap is 1")
+	} else if !ports.IsCampaignExhaustedConflict(err) {
+		t.Fatalf("second reserve err = %v, want campaign exhausted conflict", err)
+	}
+}
+
 func TestReleaseAlsoFreesACampaignSlot(t *testing.T) {
 	ctx := context.Background()
 	svc, store := newPromotionSvc(t)
