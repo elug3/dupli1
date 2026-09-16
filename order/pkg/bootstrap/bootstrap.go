@@ -101,7 +101,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 	stock := httpstock.NewClient(apiBase, cfg.HTTPClient, stockTokenSource)
 	product := httpproduct.NewClient(apiBase, cfg.HTTPClient)
-	promotionClient := httppromotion.NewClient(apiBase, cfg.HTTPClient)
+	promotionClient := httppromotion.NewClient(apiBase, cfg.HTTPClient, stockTokenSource)
 	payment := httppayment.NewClient(apiBase, httppaymentHTTPClient(cfg.HTTPClient), stockTokenSource)
 
 	var eventPublisher ports.EventPublisher

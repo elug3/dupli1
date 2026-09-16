@@ -99,24 +99,41 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 	// "coupon" is the pre-rename spelling of this sub-route, kept for one
 	// release so a storefront deployed either side of this one still applies
 	// codes. See docs/product-promotion-rename.md.
-	if len(parts) == 2 && (parts[1] == "promotion" || parts[1] == "coupon") && r.Method == http.MethodPost {
+	if len(parts) == 2 && (parts[1] == "promotion" || parts[1] == "coupon") {
 		if err := h.withCheckoutSessionAccess(w, r, claims, sessionID, true); err != nil {
 			return
 		}
-		var req struct {
-			Code string `json:"code"`
-		}
-		if err := decodeJSON(r, &req); err != nil {
-			respondError(w, http.StatusBadRequest, err.Error())
+		switch r.Method {
+		case http.MethodPost:
+			var req struct {
+				Code string `json:"code"`
+			}
+			if err := decodeJSON(r, &req); err != nil {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			session, err := h.svc.ApplyCheckoutPromotion(r.Context(), sessionID, req.Code)
+			if err != nil {
+				respondServiceError(w, err)
+				return
+			}
+			respondJSON(w, http.StatusOK, session)
+			return
+		case http.MethodDelete:
+			// Removing an applied code. The domain could always do this but
+			// nothing routed to it, so a customer who applied a code had no
+			// way to take it back off.
+			session, err := h.svc.ClearCheckoutPromotion(r.Context(), sessionID)
+			if err != nil {
+				respondServiceError(w, err)
+				return
+			}
+			respondJSON(w, http.StatusOK, session)
+			return
+		default:
+			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		session, err := h.svc.ApplyCheckoutPromotion(r.Context(), sessionID, req.Code)
-		if err != nil {
-			respondServiceError(w, err)
-			return
-		}
-		respondJSON(w, http.StatusOK, session)
-		return
 	}
 
 	if len(parts) == 2 && parts[1] == "items" {

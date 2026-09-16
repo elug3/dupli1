@@ -486,6 +486,23 @@ func respondServiceError(w http.ResponseWriter, err error) {
 		})
 		return
 	}
+	// A refused promotional code carries a machine-readable reason so the
+	// storefront can say which rule bit — "spend 100,000원" rather than a bare
+	// "invalid code". The reason rides in the error string as
+	// "reason" or "reason:sub_reason"; split it back out here.
+	if errors.Is(err, ports.ErrPromotionInvalid) || errors.Is(err, ports.ErrPromotionNotEligible) {
+		reason, subReason := splitPromotionReason(err)
+		body := map[string]any{
+			"error":  err.Error(),
+			"code":   http.StatusUnprocessableEntity,
+			"reason": reason,
+		}
+		if subReason != "" {
+			body["sub_reason"] = subReason
+		}
+		respondJSON(w, http.StatusUnprocessableEntity, body)
+		return
+	}
 	switch {
 	case errors.Is(err, ports.ErrNotFound):
 		respondError(w, http.StatusNotFound, err.Error())
@@ -535,4 +552,20 @@ func respondError(w http.ResponseWriter, status int, message string) {
 		"error": message,
 		"code":  status,
 	})
+}
+
+// splitPromotionReason pulls the reason codes back out of a promotion
+// rejection. The service encodes them as a suffix so the error stays a plain
+// wrapped sentinel that errors.Is still matches.
+func splitPromotionReason(err error) (reason, subReason string) {
+	msg := err.Error()
+	idx := strings.LastIndex(msg, ": ")
+	if idx < 0 {
+		return "not_eligible", ""
+	}
+	reason = msg[idx+2:]
+	if sub := strings.SplitN(reason, ":", 2); len(sub) == 2 {
+		return sub[0], sub[1]
+	}
+	return reason, ""
 }

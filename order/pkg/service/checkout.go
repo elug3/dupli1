@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
@@ -98,6 +99,12 @@ func (s *Service) RemoveCheckoutItemBySkuID(ctx context.Context, sessionID, skuI
 	return s.saveCheckoutSession(ctx, session)
 }
 
+// ApplyCheckoutPromotion asks product whether a code applies to this cart and
+// records the discount it earns.
+//
+// The cart goes with the request because eligibility and amount both depend on
+// it — minimum spend, which lines qualify, a cap. Product does the arithmetic;
+// order stores the answer and re-asks at complete.
 func (s *Service) ApplyCheckoutPromotion(ctx context.Context, sessionID, code string) (*domain.CheckoutSession, error) {
 	if s.promotionClient == nil {
 		return nil, ports.ErrPromotionUnavailable
@@ -111,14 +118,73 @@ func (s *Service) ApplyCheckoutPromotion(ctx context.Context, sessionID, code st
 		return nil, domain.ErrEmptyCheckout
 	}
 
-	promotion, err := s.promotionClient.Redeem(ctx, code)
+	// Price the lines first: the evaluator must judge the cart against
+	// server-resolved prices, never numbers a client supplied.
+	priced, err := s.priceItems(ctx, session.Items)
 	if err != nil {
 		return nil, err
 	}
-	if err := session.ApplyPromotion(promotion.Code, promotion.DiscountFraction, s.now()); err != nil {
+
+	verdict, err := s.promotionClient.Evaluate(ctx, code, promotionContextFor(session, priced))
+	if err != nil {
+		return nil, err
+	}
+	if !verdict.OK {
+		return nil, promotionRejection(verdict)
+	}
+	if err := session.ApplyPromotion(code, verdict.DiscountWon, s.now()); err != nil {
 		return nil, err
 	}
 	return s.saveCheckoutSession(ctx, session)
+}
+
+// ClearCheckoutPromotion removes an applied code. Until Phase 2 the domain
+// could do this but nothing was routed to it, so a customer who applied a code
+// had no way to take it off again.
+func (s *Service) ClearCheckoutPromotion(ctx context.Context, sessionID string) (*domain.CheckoutSession, error) {
+	session, err := s.getOpenCheckoutSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if err := session.ClearPromotion(s.now()); err != nil {
+		return nil, err
+	}
+	return s.saveCheckoutSession(ctx, session)
+}
+
+// promotionContextFor builds the evaluator's view of a session from its priced
+// lines.
+func promotionContextFor(session *domain.CheckoutSession, priced []domain.OrderItem) ports.PromotionContext {
+	lines := make([]ports.PromotionLine, 0, len(priced))
+	for _, item := range priced {
+		lines = append(lines, ports.PromotionLine{
+			SkuID:        item.SkuID,
+			SKU:          item.SKU,
+			Quantity:     item.Quantity,
+			UnitPriceWon: item.UnitPriceWon,
+		})
+	}
+	return ports.PromotionContext{
+		CustomerID:     session.CustomerID,
+		ShippingFeeWon: session.ShippingFeeWon,
+		Lines:          lines,
+	}
+}
+
+// promotionRejection turns a verdict into an error carrying its reason, so the
+// handler can surface a machine-readable code rather than a bare 400.
+func promotionRejection(verdict *ports.PromotionEvaluation) error {
+	reason := verdict.Reason
+	if reason == "" {
+		reason = "not_eligible"
+	}
+	if verdict.SubReason != "" {
+		reason += ":" + verdict.SubReason
+	}
+	if verdict.Reason == "invalid_code" {
+		return fmt.Errorf("%w: %s", ports.ErrPromotionInvalid, reason)
+	}
+	return fmt.Errorf("%w: %s", ports.ErrPromotionNotEligible, reason)
 }
 
 func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input CompleteCheckoutInput) (*CompleteCheckoutResult, error) {
@@ -140,22 +206,29 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 		return nil, err
 	}
 
+	// Re-evaluate against the final priced cart and reserve the use in the
+	// same call, so a cart edited after the code was applied cannot carry a
+	// discount it no longer earns, and the customer's one use is claimed
+	// exactly once. The reservation is keyed by order id and is idempotent, so
+	// a retried complete does not burn a second use.
+	// Re-evaluate against the final priced cart, so a cart edited after the
+	// code was applied cannot carry a discount it no longer earns. The use is
+	// claimed further down, once the order exists and has an id to key it to.
 	discountKRW := int64(0)
 	promotionCode := session.PromotionCode
+	promoCtx := promotionContextFor(session, pricedItems)
 	if promotionCode != "" {
 		if s.promotionClient == nil {
 			return nil, ports.ErrPromotionUnavailable
 		}
-		promotion, err := s.promotionClient.Redeem(ctx, promotionCode)
+		verdict, err := s.promotionClient.Evaluate(ctx, promotionCode, promoCtx)
 		if err != nil {
 			return nil, err
 		}
-		promotionCode = promotion.Code
-		var subtotal int64
-		for _, item := range pricedItems {
-			subtotal += int64(item.Quantity) * item.UnitPriceWon
+		if !verdict.OK {
+			return nil, promotionRejection(verdict)
 		}
-		discountKRW = int64(float64(subtotal) * promotion.DiscountFraction)
+		discountKRW = verdict.DiscountWon
 	}
 
 	shippingFee := session.ShippingFeeWon
@@ -173,6 +246,24 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 	if err != nil {
 		return nil, err
 	}
+
+	// Claim the customer's use now that the order has an id to key it to. The
+	// reservation re-evaluates server-side and is idempotent per order, so a
+	// retried complete cannot burn a second use. A refusal here — the code was
+	// spent between evaluating and now — rolls the order back rather than
+	// shipping an unearned discount.
+	if promotionCode != "" {
+		verdict, reserveErr := s.promotionClient.Reserve(ctx, promotionCode, order.ID, promoCtx)
+		if reserveErr != nil {
+			_, _ = s.CancelOrder(ctx, order.ID)
+			return nil, reserveErr
+		}
+		if !verdict.OK {
+			_, _ = s.CancelOrder(ctx, order.ID)
+			return nil, promotionRejection(verdict)
+		}
+	}
+
 	now := s.now()
 	claimed, err := s.repo.CompleteCheckoutSessionIfOpen(ctx, session.ID, order.ID, now)
 	if err != nil {

@@ -1300,9 +1300,24 @@ func TestCancelDisputedOrderRefundsHTTP(t *testing.T) {
 
 type renameWindowPromotionClient struct{}
 
-func (renameWindowPromotionClient) Redeem(_ context.Context, code string) (*ports.Promotion, error) {
-	return &ports.Promotion{Code: code, DiscountFraction: 0.30}, nil
+func (renameWindowPromotionClient) evaluate(promoCtx ports.PromotionContext) *ports.PromotionEvaluation {
+	var subtotal int64
+	for _, line := range promoCtx.Lines {
+		subtotal += int64(line.Quantity) * line.UnitPriceWon
+	}
+	return &ports.PromotionEvaluation{OK: true, DiscountWon: subtotal * 30 / 100, EligibleSubtotalWon: subtotal}
 }
+
+func (c renameWindowPromotionClient) Evaluate(_ context.Context, _ string, promoCtx ports.PromotionContext) (*ports.PromotionEvaluation, error) {
+	return c.evaluate(promoCtx), nil
+}
+
+func (c renameWindowPromotionClient) Reserve(_ context.Context, _, _ string, promoCtx ports.PromotionContext) (*ports.PromotionEvaluation, error) {
+	return c.evaluate(promoCtx), nil
+}
+
+func (renameWindowPromotionClient) Consume(context.Context, string) error { return nil }
+func (renameWindowPromotionClient) Release(context.Context, string) error { return nil }
 
 func newPromotionTestMux(t *testing.T) (*http.ServeMux, *service.Service) {
 	t.Helper()

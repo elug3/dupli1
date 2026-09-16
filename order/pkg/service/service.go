@@ -380,11 +380,22 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 	return nil, fmt.Errorf("mark order paid order_id=%s: order not pending (status=%s)", order.ID, fresh.Status)
 }
 
+// persistPaid is the single funnel every path to paid goes through, which is
+// why the promotional code is consumed here rather than at each caller.
 func (s *Service) persistPaid(ctx context.Context, order *domain.Order, events []ports.OutboxEvent, fromCanceled bool) (bool, error) {
+	var (
+		saved bool
+		err   error
+	)
 	if fromCanceled {
-		return s.repo.SavePaidIfCanceled(ctx, order, events)
+		saved, err = s.repo.SavePaidIfCanceled(ctx, order, events)
+	} else {
+		saved, err = s.repo.SavePaidIfPending(ctx, order, events)
 	}
-	return s.repo.SavePaidIfPending(ctx, order, events)
+	if err == nil && saved {
+		s.consumePromotionForPaid(ctx, order)
+	}
+	return saved, err
 }
 
 func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string, tracking domain.ShipmentTracking) (*domain.Order, error) {
@@ -490,9 +501,7 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 		}
 		if didCancel {
 			s.tryDrainOutbox(ctx)
-			if err := s.releaseReservationForCancel(ctx, canceledOrder.ReservationID); err != nil {
-				log.Printf("cancel order %s: release reservation %s: %v", canceledOrder.ID, canceledOrder.ReservationID, err)
-			}
+			s.releaseHoldsForCancel(ctx, canceledOrder)
 			return s.present(canceledOrder), nil
 		}
 		reconciled, err := s.repo.Get(ctx, order.ID)
@@ -514,11 +523,10 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if err != nil {
 		return nil, err
 	}
-	// Once stock is committed (shipped) a refund here does not restock.
+	// Once stock is committed (shipped) a refund here does not restock, and by
+	// the same rule the promotional code stays spent.
 	if !stockCommitted {
-		if err := s.releaseReservationForCancel(ctx, saved.ReservationID); err != nil {
-			log.Printf("cancel order %s: release reservation %s: %v", saved.ID, saved.ReservationID, err)
-		}
+		s.releaseHoldsForCancel(ctx, saved)
 	}
 	return saved, nil
 }
@@ -886,6 +894,45 @@ func (s *Service) reinstateCanceledOrder(ctx context.Context, order *domain.Orde
 		return "", err
 	}
 	return reservationID, nil
+}
+
+// releaseHoldsForCancel gives back everything a cancelled order was holding:
+// its stock reservation and its promotional-code use.
+//
+// The two travel together deliberately. A promotional code follows the same
+// rule as stock — nothing was really spent before shipment, so it is handed
+// back; once the goods have gone it stays spent. Releasing stock is therefore
+// exactly the condition for releasing the code, and pairing them in one helper
+// keeps a future cancel path from remembering one and forgetting the other.
+//
+// Neither failure blocks the cancel: the order is already cancelled and the
+// customer already refunded, so a stuck hold is logged rather than surfaced.
+func (s *Service) releaseHoldsForCancel(ctx context.Context, order *domain.Order) {
+	if order == nil {
+		return
+	}
+	if err := s.releaseReservationForCancel(ctx, order.ReservationID); err != nil {
+		log.Printf("cancel order %s: release reservation %s: %v", order.ID, order.ReservationID, err)
+	}
+	if order.PromotionCode == "" || s.promotionClient == nil {
+		return
+	}
+	if err := s.promotionClient.Release(ctx, order.ID); err != nil {
+		log.Printf("cancel order %s: release promotion %s: %v", order.ID, order.PromotionCode, err)
+	}
+}
+
+// consumePromotionForPaid marks the order's promotional-code use spent once
+// the money is in. Failing here must not undo a successful payment, so it is
+// logged: the reservation already holds the customer's use, and a missed
+// consume leaves the ledger conservative rather than over-generous.
+func (s *Service) consumePromotionForPaid(ctx context.Context, order *domain.Order) {
+	if order == nil || order.PromotionCode == "" || s.promotionClient == nil {
+		return
+	}
+	if err := s.promotionClient.Consume(ctx, order.ID); err != nil {
+		log.Printf("order %s: consume promotion %s: %v", order.ID, order.PromotionCode, err)
+	}
 }
 
 // releaseReservationForCancel releases reserved stock after cancel is persisted.

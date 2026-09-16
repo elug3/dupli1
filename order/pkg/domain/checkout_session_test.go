@@ -19,7 +19,9 @@ func TestCheckoutSessionTotalsWithPromotion(t *testing.T) {
 	}, now); err != nil {
 		t.Fatalf("UpsertItem returned error: %v", err)
 	}
-	if err := session.ApplyPromotion("SUMMER30", 0.30, now); err != nil {
+	// The session now records an absolute amount that product computed,
+	// not a fraction it applies itself.
+	if err := session.ApplyPromotion("SUMMER30", 3000, now); err != nil {
 		t.Fatalf("ApplyPromotion returned error: %v", err)
 	}
 
