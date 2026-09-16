@@ -34,7 +34,7 @@ type Service struct {
 	payment        ports.PaymentClient
 	eventPublisher ports.EventPublisher
 	outboxDrainer  *outbox.Drainer
-	couponClient   ports.CouponClient
+	promotionClient   ports.PromotionClient
 	checkoutTTL    time.Duration
 	// shippingFeeKRW is the flat delivery charge applied to every order, in
 	// whole KRW. Zero (the default) means delivery is free, which keeps the
@@ -46,7 +46,7 @@ type Service struct {
 type CreateOrderInput struct {
 	CustomerID      string
 	Items           []domain.OrderItem
-	CouponCode      string
+	PromotionCode      string
 	DiscountWon     int64
 	IdempotencyKey  string
 	RecipientName   string
@@ -68,8 +68,13 @@ type CompleteCheckoutInput struct {
 }
 
 type idempotencyFingerprint struct {
-	CustomerID      string                 `json:"customer_id"`
-	CouponCode      string                 `json:"coupon_code,omitempty"`
+	CustomerID string `json:"customer_id"`
+	// The tag stays "coupon_code" deliberately. This struct is never on the
+	// wire — it is marshalled only to hash a create-order request for
+	// idempotency — so renaming the tag would change the hash of an otherwise
+	// identical request and let a retry spanning the deploy slip past the
+	// duplicate guard. See docs/product-promotion-rename.md.
+	PromotionCode   string                 `json:"coupon_code,omitempty"`
 	DiscountWon     int64                  `json:"discount_won,omitempty"`
 	RecipientName   string                 `json:"recipient_name,omitempty"`
 	RecipientPhone  string                 `json:"recipient_phone,omitempty"`
@@ -89,14 +94,14 @@ func New(repo ports.Repository, stock ports.StockClient, eventPublisher ...ports
 func NewWithCheckout(
 	repo ports.Repository,
 	stock ports.StockClient,
-	couponClient ports.CouponClient,
+	promotionClient ports.PromotionClient,
 	checkoutTTL time.Duration,
 	eventPublisher ...ports.EventPublisher,
 ) *Service {
 	s := &Service{
 		repo:         repo,
 		stock:        stock,
-		couponClient: couponClient,
+		promotionClient: promotionClient,
 		checkoutTTL:  checkoutTTL,
 		now: func() time.Time {
 			return time.Now().UTC()
@@ -187,7 +192,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		shippingFee = *input.ShippingFeeWon
 	}
 
-	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.CouponCode, input.DiscountWon, shippingFee, s.now())
+	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.PromotionCode, input.DiscountWon, shippingFee, s.now())
 	if err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
@@ -707,7 +712,7 @@ func (s *Service) loadIdempotentOrder(ctx context.Context, customerID, key, reqH
 func hashCreateOrderInput(input CreateOrderInput) string {
 	fp := idempotencyFingerprint{
 		CustomerID:      strings.TrimSpace(input.CustomerID),
-		CouponCode:      strings.TrimSpace(input.CouponCode),
+		PromotionCode:      strings.TrimSpace(input.PromotionCode),
 		DiscountWon:     input.DiscountWon,
 		RecipientName:   strings.TrimSpace(input.RecipientName),
 		RecipientPhone:  strings.TrimSpace(input.RecipientPhone),

@@ -1,4 +1,4 @@
-package httpcoupon
+package httppromotion
 
 import (
 	"context"
@@ -25,7 +25,7 @@ func NewClient(baseURL string, httpClient *http.Client) *Client {
 	}
 }
 
-func (c *Client) Redeem(ctx context.Context, code string) (*ports.Coupon, error) {
+func (c *Client) Redeem(ctx context.Context, code string) (*ports.Promotion, error) {
 	var response struct {
 		Code     string  `json:"code"`
 		Discount float64 `json:"discount"`
@@ -38,7 +38,7 @@ func (c *Client) Redeem(ctx context.Context, code string) (*ports.Coupon, error)
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/products/coupons/redeem", strings.NewReader(string(body)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/products/promotions/redeem", strings.NewReader(string(body)))
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (c *Client) Redeem(ctx context.Context, code string) (*ports.Coupon, error)
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, ports.ErrCouponInvalid
+		return nil, ports.ErrPromotionInvalid
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var errBody struct {
@@ -61,17 +61,17 @@ func (c *Client) Redeem(ctx context.Context, code string) (*ports.Coupon, error)
 		if errBody.Error == "" {
 			errBody.Error = resp.Status
 		}
-		return nil, fmt.Errorf("coupon request failed: %s", errBody.Error)
+		return nil, fmt.Errorf("promotion request failed: %s", errBody.Error)
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, err
 	}
 	if !response.Active || response.Discount <= 0 {
-		return nil, ports.ErrCouponInvalid
+		return nil, ports.ErrPromotionInvalid
 	}
 
-	return &ports.Coupon{
+	return &ports.Promotion{
 		Code:             response.Code,
 		DiscountFraction: response.Discount,
 	}, nil

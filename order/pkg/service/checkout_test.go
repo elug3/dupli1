@@ -12,17 +12,17 @@ import (
 	"github.com/elug3/dupli1/order/pkg/service"
 )
 
-type fakeCouponClient struct {
+type fakePromotionClient struct {
 	code     string
 	discount float64
 	err      error
 }
 
-func (f *fakeCouponClient) Redeem(ctx context.Context, code string) (*ports.Coupon, error) {
+func (f *fakePromotionClient) Redeem(ctx context.Context, code string) (*ports.Promotion, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &ports.Coupon{
+	return &ports.Promotion{
 		Code:             f.code,
 		DiscountFraction: f.discount,
 	}, nil
@@ -32,7 +32,7 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
 	stock := &fakeStock{reservationID: "res-checkout"}
-	svc := service.NewWithCheckout(repo, stock, &fakeCouponClient{
+	svc := service.NewWithCheckout(repo, stock, &fakePromotionClient{
 		code:     "SUMMER30",
 		discount: 0.30,
 	}, 0).WithProduct(&fakeProduct{defaultKRW: 5000})
@@ -57,9 +57,9 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 		t.Fatalf("session totals = %d/%d, want 10000/10000", session.SubtotalWon, session.TotalWon)
 	}
 
-	session, err = svc.ApplyCheckoutCoupon(ctx, session.ID, "SUMMER30")
+	session, err = svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30")
 	if err != nil {
-		t.Fatalf("ApplyCheckoutCoupon returned error: %v", err)
+		t.Fatalf("ApplyCheckoutPromotion returned error: %v", err)
 	}
 	if session.DiscountWon != 3000 || session.TotalWon != 7000 {
 		t.Fatalf("discounted totals = %d/%d, want 3000/7000", session.DiscountWon, session.TotalWon)
@@ -78,8 +78,8 @@ func TestCheckoutSessionLifecycle(t *testing.T) {
 	if result.Order.TotalWon != 7000 {
 		t.Fatalf("order total = %d, want 7000", result.Order.TotalWon)
 	}
-	if result.Order.CouponCode != "SUMMER30" {
-		t.Fatalf("order coupon = %q, want SUMMER30", result.Order.CouponCode)
+	if result.Order.PromotionCode != "SUMMER30" {
+		t.Fatalf("order promotion = %q, want SUMMER30", result.Order.PromotionCode)
 	}
 	if result.Order.RecipientName != "Test User" || result.Order.RecipientPhone != "01012345678" {
 		t.Fatalf("order fulfillment: %+v", result.Order)
@@ -201,7 +201,7 @@ func TestCompleteCheckoutRequiresItems(t *testing.T) {
 	}
 }
 
-func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
+func TestApplyPromotionWithoutClientReturnsUnavailable(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
 	svc := service.NewWithCheckout(repo, &fakeStock{}, nil, 0).WithProduct(&fakeProduct{defaultKRW: 1000})
@@ -218,9 +218,9 @@ func TestApplyCouponWithoutClientReturnsUnavailable(t *testing.T) {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
 
-	_, err = svc.ApplyCheckoutCoupon(ctx, session.ID, "SUMMER30")
-	if !errors.Is(err, ports.ErrCouponUnavailable) {
-		t.Fatalf("ApplyCheckoutCoupon error = %v, want ErrCouponUnavailable", err)
+	_, err = svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30")
+	if !errors.Is(err, ports.ErrPromotionUnavailable) {
+		t.Fatalf("ApplyCheckoutPromotion error = %v, want ErrPromotionUnavailable", err)
 	}
 }
 
@@ -237,12 +237,12 @@ func testCompleteCheckoutInput() service.CompleteCheckoutInput {
 	}
 }
 
-func TestCompleteCheckoutRecomputesCouponDiscountAfterRepricing(t *testing.T) {
+func TestCompleteCheckoutRecomputesPromotionDiscountAfterRepricing(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
 	stock := &fakeStock{reservationID: "res-checkout"}
 	product := &mutableProduct{price: 10000}
-	svc := service.NewWithCheckout(repo, stock, &fakeCouponClient{
+	svc := service.NewWithCheckout(repo, stock, &fakePromotionClient{
 		code:     "SUMMER30",
 		discount: 0.30,
 	}, 0).WithProduct(product)
@@ -258,9 +258,9 @@ func TestCompleteCheckoutRecomputesCouponDiscountAfterRepricing(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertCheckoutItem returned error: %v", err)
 	}
-	session, err = svc.ApplyCheckoutCoupon(ctx, session.ID, "SUMMER30")
+	session, err = svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30")
 	if err != nil {
-		t.Fatalf("ApplyCheckoutCoupon returned error: %v", err)
+		t.Fatalf("ApplyCheckoutPromotion returned error: %v", err)
 	}
 	if session.DiscountWon != 3000 || session.TotalWon != 7000 {
 		t.Fatalf("session discounted totals = %d/%d, want 3000/7000", session.DiscountWon, session.TotalWon)

@@ -98,9 +98,9 @@ func (s *Service) RemoveCheckoutItemBySkuID(ctx context.Context, sessionID, skuI
 	return s.saveCheckoutSession(ctx, session)
 }
 
-func (s *Service) ApplyCheckoutCoupon(ctx context.Context, sessionID, code string) (*domain.CheckoutSession, error) {
-	if s.couponClient == nil {
-		return nil, ports.ErrCouponUnavailable
+func (s *Service) ApplyCheckoutPromotion(ctx context.Context, sessionID, code string) (*domain.CheckoutSession, error) {
+	if s.promotionClient == nil {
+		return nil, ports.ErrPromotionUnavailable
 	}
 
 	session, err := s.getOpenCheckoutSession(ctx, sessionID)
@@ -111,11 +111,11 @@ func (s *Service) ApplyCheckoutCoupon(ctx context.Context, sessionID, code strin
 		return nil, domain.ErrEmptyCheckout
 	}
 
-	coupon, err := s.couponClient.Redeem(ctx, code)
+	promotion, err := s.promotionClient.Redeem(ctx, code)
 	if err != nil {
 		return nil, err
 	}
-	if err := session.ApplyCoupon(coupon.Code, coupon.DiscountFraction, s.now()); err != nil {
+	if err := session.ApplyPromotion(promotion.Code, promotion.DiscountFraction, s.now()); err != nil {
 		return nil, err
 	}
 	return s.saveCheckoutSession(ctx, session)
@@ -141,28 +141,28 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 	}
 
 	discountKRW := int64(0)
-	couponCode := session.CouponCode
-	if couponCode != "" {
-		if s.couponClient == nil {
-			return nil, ports.ErrCouponUnavailable
+	promotionCode := session.PromotionCode
+	if promotionCode != "" {
+		if s.promotionClient == nil {
+			return nil, ports.ErrPromotionUnavailable
 		}
-		coupon, err := s.couponClient.Redeem(ctx, couponCode)
+		promotion, err := s.promotionClient.Redeem(ctx, promotionCode)
 		if err != nil {
 			return nil, err
 		}
-		couponCode = coupon.Code
+		promotionCode = promotion.Code
 		var subtotal int64
 		for _, item := range pricedItems {
 			subtotal += int64(item.Quantity) * item.UnitPriceWon
 		}
-		discountKRW = int64(float64(subtotal) * coupon.DiscountFraction)
+		discountKRW = int64(float64(subtotal) * promotion.DiscountFraction)
 	}
 
 	shippingFee := session.ShippingFeeWon
 	order, err := s.CreateOrder(ctx, CreateOrderInput{
 		CustomerID:      session.CustomerID,
 		Items:           pricedItems,
-		CouponCode:      couponCode,
+		PromotionCode:      promotionCode,
 		DiscountWon:     discountKRW,
 		RecipientName:   snapshot.RecipientName,
 		RecipientPhone:  snapshot.RecipientPhone,

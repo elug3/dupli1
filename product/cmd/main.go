@@ -13,7 +13,7 @@ import (
 var usageStr = `
 Usage: dupli1-product [OPTIONS]
 
-Product catalog server for bags, coupons, and image uploads.
+Product catalog server for bags, promotions, and image uploads.
 
 Options:
   -host string

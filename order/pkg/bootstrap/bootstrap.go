@@ -10,7 +10,7 @@ import (
 
 	"github.com/elug3/dupli1/order/pkg/handler"
 	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
-	"github.com/elug3/dupli1/order/pkg/infra/httpcoupon"
+	"github.com/elug3/dupli1/order/pkg/infra/httppromotion"
 	"github.com/elug3/dupli1/order/pkg/infra/httppayment"
 	"github.com/elug3/dupli1/order/pkg/infra/httpproduct"
 	"github.com/elug3/dupli1/order/pkg/infra/httpstock"
@@ -24,7 +24,7 @@ import (
 
 type Config struct {
 	// GatewayURL is the internal API gateway (nginx). Preferred base for product
-	// stock/coupon HTTP calls so order does not hard-code product service DNS.
+	// stock/promotion HTTP calls so order does not hard-code product service DNS.
 	GatewayURL string
 
 	// ProductURL / InventoryURL are deprecated direct overrides.
@@ -101,7 +101,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 	stock := httpstock.NewClient(apiBase, cfg.HTTPClient, stockTokenSource)
 	product := httpproduct.NewClient(apiBase, cfg.HTTPClient)
-	couponClient := httpcoupon.NewClient(apiBase, cfg.HTTPClient)
+	promotionClient := httppromotion.NewClient(apiBase, cfg.HTTPClient)
 	payment := httppayment.NewClient(apiBase, httppaymentHTTPClient(cfg.HTTPClient), stockTokenSource)
 
 	var eventPublisher ports.EventPublisher
@@ -122,7 +122,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		}
 	}
 
-	svc := service.NewWithCheckout(repo, stock, couponClient, 0, eventPublisher).
+	svc := service.NewWithCheckout(repo, stock, promotionClient, 0, eventPublisher).
 		WithProduct(product).
 		WithShippingFee(cfg.ShippingFeeWon).
 		WithPayment(payment)
@@ -194,8 +194,8 @@ func openRepository(connString string) (ports.Repository, func() error, error) {
 	}, nil
 }
 
-// resolveAPIBaseURL prefers the internal gateway so stock/coupon calls use the
-// same path routing as external clients (/api/v1/inventory, /api/v1/coupons).
+// resolveAPIBaseURL prefers the internal gateway so stock/promotion calls use the
+// same path routing as external clients (/api/v1/inventory, /api/v1/promotions).
 // Direct ProductURL / InventoryURL remain as escape hatches.
 func resolveAPIBaseURL(cfg Config) (string, error) {
 	if u := strings.TrimSpace(cfg.GatewayURL); u != "" {

@@ -24,6 +24,9 @@ var bundles = map[string][]string{
 	},
 	BundleCatalogAdmin: {
 		ProductAll,
+		// Both promotion wildcards are granted for the rename window so a
+		// freshly-assigned bundle keeps working after coupon.* is dropped.
+		PromotionAll,
 		CouponAll,
 	},
 	BundleFulfillment: {

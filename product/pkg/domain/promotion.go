@@ -1,6 +1,6 @@
 package domain
 
-type Coupon struct {
+type Promotion struct {
 	Code        string  `json:"code"`
 	Discount    float64 `json:"discount"` // fraction, e.g. 0.30 for 30 %
 	Description string  `json:"description"`

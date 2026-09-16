@@ -29,7 +29,7 @@ type CheckoutSession struct {
 	Items            []OrderItem           `json:"items"`
 	UnavailableItems []UnavailableItem     `json:"unavailable_items,omitempty"`
 	Status           CheckoutSessionStatus `json:"status"`
-	CouponCode       string                `json:"coupon_code,omitempty"`
+	PromotionCode       string                `json:"promotion_code,omitempty"`
 	SubtotalWon      int64                 `json:"subtotal_won"`
 	DiscountWon      int64                 `json:"discount_won"`
 	// ShippingFeeWon is the delivery charge quoted for this session, in whole
@@ -185,7 +185,7 @@ func sameItem(a, b OrderItem) bool {
 	return a.SKU == b.SKU
 }
 
-func (s *CheckoutSession) ApplyCoupon(code string, discountFraction float64, now time.Time) error {
+func (s *CheckoutSession) ApplyPromotion(code string, discountFraction float64, now time.Time) error {
 	if err := s.EnsureOpen(now); err != nil {
 		return err
 	}
@@ -195,18 +195,18 @@ func (s *CheckoutSession) ApplyCoupon(code string, discountFraction float64, now
 		return ErrInvalidCheckoutSession
 	}
 
-	s.CouponCode = code
+	s.PromotionCode = code
 	s.recalculateTotalsWithDiscount(discountFraction)
 	s.UpdatedAt = now
 	return nil
 }
 
-func (s *CheckoutSession) ClearCoupon(now time.Time) error {
+func (s *CheckoutSession) ClearPromotion(now time.Time) error {
 	if err := s.EnsureOpen(now); err != nil {
 		return err
 	}
 
-	s.CouponCode = ""
+	s.PromotionCode = ""
 	s.recalculateTotals()
 	s.UpdatedAt = now
 	return nil
@@ -242,7 +242,7 @@ func (s *CheckoutSession) recalculateTotalsWithDiscount(discountFraction float64
 	}
 
 	s.SubtotalWon = subtotal
-	if discountFraction > 0 && s.CouponCode != "" {
+	if discountFraction > 0 && s.PromotionCode != "" {
 		s.DiscountWon = int64(float64(subtotal) * discountFraction)
 	} else {
 		s.DiscountWon = 0

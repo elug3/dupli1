@@ -1,6 +1,6 @@
 # `coupon` → `promotion` rename
 
-**Status:** Planned — **Phase 1** of [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md). Not started (2026-09-16).
+**Status:** **Implemented 2026-09-16** — **Phase 1** of [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md). Behaviour unchanged; the compatibility window described below is now live and closes one release from now.
 **Repos:** `dupli1` (product, order, shared, api), `dupli1-web`, `dupli1-manage-web`.
 **Related:** [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md), [api.md](api.md), [permissions.md](permissions.md), [TODO.md](TODO.md), [current-state.md](current-state.md).
 
@@ -129,13 +129,40 @@ One release, in this order, so nothing is ever broken between steps:
 
 ## Definition of done
 
-- [ ] `promotion.*` permissions exist, bundles updated, `coupon.*` still accepted
-- [ ] Product serves `/api/v1/products/promotions…`; `coupons` paths still answer
-- [ ] `coupons` table renamed to `promotions` with a guarded inline migration
-- [ ] `orders.promotion_code` and `checkout_sessions.promotion_code` renamed via the existing helper
-- [ ] Order emits `promotion_code`; `coupon_code` still decodes
-- [ ] `/api/v1/promotions` nginx locations in `nginx.conf`, `nginx.prod.conf`, `nginx.ecs.conf`
-- [ ] Both frontends call the canonical promotion paths and say "promotional code" / "프로모션 코드" on every surface
-- [ ] No `Coupon` identifier left in `product/` or `order/` outside compatibility shims
-- [ ] Existing tests renamed and passing; no behavior change in the rename commit
-- [ ] [api.md](api.md), [permissions.md](permissions.md), [current-state.md](current-state.md) updated
+- [x] `promotion.*` permissions exist, bundles updated, `coupon.*` still accepted
+- [x] Product serves `/api/v1/products/promotions…`; both `coupons` paths still answer
+- [x] `coupons` table renamed to `promotions` with a guarded inline migration
+- [x] `orders.promotion_code` and `checkout_sessions.promotion_code` renamed via the existing helper
+- [x] Order emits `promotion_code` **and** `coupon_code`; the storefront reads either
+- [x] `/api/v1/promotions` nginx locations in `nginx.conf`, `nginx.prod.conf`, `nginx.ecs.conf`
+- [x] Both frontends call the canonical promotion paths and say "promotional code" / 프로모션 코드 on every surface
+- [x] No `Coupon` identifier left in `product/` or `order/` outside compatibility shims
+- [x] Existing tests renamed and passing; no behaviour change in the rename commit
+- [x] [api.md](api.md), [permissions.md](permissions.md), [current-state.md](current-state.md) updated
+
+## What shipped, beyond the plan above
+
+Three things the plan did not anticipate, each decided while implementing:
+
+- **Order emits both JSON keys**, rather than only accepting the old one on the
+  way in. `coupon_code` was output-only — the code arrives as `{"code": …}` on
+  the apply route — so a read-side alias was the only thing that could keep a
+  storefront working across the deploy. `Order` and `CheckoutSession` carry a
+  small `MarshalJSON` for this; it goes away with the window.
+- **The idempotency fingerprint keeps its `coupon_code` tag.** That struct is
+  hashed to dedupe create-order requests and never reaches the wire, so
+  renaming the tag would have changed the hash of an otherwise identical
+  request and let a retry spanning the deploy slip past the duplicate guard.
+- **`renameMoneyCentsColumns` became `renameLegacyColumns`.** The column rename
+  rides the existing guarded helper rather than a new one, and the old name no
+  longer described what it does.
+
+## Closing the window
+
+One release from now, in a single change: drop the `coupon.*` constants and the
+`requireAnyPerm` second argument, the `PreRenameRoute*` / `LegacyRoute*Coupon*`
+registrations, the `MarshalJSON` pair in `order/pkg/domain`, the `coupon_code`
+fallback in the storefront's `mapOrder` / `mapSession`, the nginx
+`/api/v1/coupons` locations, and the pre-rename entries in both frontends'
+permission catalogs. The `renameLegacyColumns` and `renameCouponsTableIfNeeded`
+migrations stay — they are what carries an old database forward.

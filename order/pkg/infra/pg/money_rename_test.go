@@ -99,6 +99,11 @@ func TestMigrateRenamesMoneyCentsColumns(t *testing.T) {
 	}
 
 	pairs := []struct{ table, krw, legacy string }{
+		// coupon_code → promotion_code rides the same guarded helper
+		// (docs/product-promotion-rename.md); the fixtures above create the
+		// pre-rename column, so this asserts it moved and left nothing behind.
+		{"orders", "promotion_code", "coupon_code"},
+		{"checkout_sessions", "promotion_code", "coupon_code"},
 		{"orders", "subtotal_won", "subtotal_cents"},
 		{"orders", "discount_won", "discount_cents"},
 		{"orders", "shipping_fee_won", "shipping_fee_cents"},

@@ -12,7 +12,7 @@ Authoritative specification for migrating Dupli1 from coarse service-manager **r
 
 | Today | Target |
 |-------|--------|
-| `product_manager` grants all product + coupon actions | `product.create`, `product.update`, … assigned independently |
+| `product_manager` grants all product + promotional code actions | `product.create`, `product.update`, … assigned independently |
 | `order_manager` grants ship, status, inventory writes, admin cart | `order.ship`, `inventory.stock.write`, … per action |
 | `user_manager` / `customer_registrar` gate user admin | `user.create`, `user.password.update`, … per action |
 | `admin` / `owner` implicit super-access everywhere | `admin.*` and `*` wildcards with explicit evaluation rules |
@@ -28,7 +28,7 @@ Storefront **customers** are not permissions. Customer self-service stays **auth
 - Pattern: `{resource}.{action}` (lowercase, dot-separated).
 - Valid characters: `[a-z0-9._*]`.
 - Actions are verbs (`create`, `update`, `delete`, `read`, `ship`, …).
-- Resources match service domains (`product`, `coupon`, `order`, `user`, `inventory`, `cart`, `payment`).
+- Resources match service domains (`product`, `promotion`, `order`, `user`, `inventory`, `cart`, `payment`).
 
 ### 2. JWT access-token claim
 
@@ -144,27 +144,21 @@ Public `GET /api/v1/products` and `GET /api/v1/products/{id}` stay **unauthentic
 
 ### Promotional codes (product service)
 
-**Implemented today** as `coupon.*`:
-
 | Permission | Description |
 |------------|-------------|
-| `coupon.read` | List promotional codes |
-| `coupon.create` | Create promotional code |
-| `coupon.update` | Update promotional code |
-| `coupon.delete` | Delete promotional code |
+| `promotion.read` | List promotional codes |
+| `promotion.create` | Create promotional code |
+| `promotion.update` | Update promotional code (never retroactive) |
+| `promotion.delete` | Delete / deactivate promotional code |
+| `promotion.*` | Wildcard, in the `catalog_admin` bundle |
 
 Redeem is **public** (checkout flow) — no permission.
 
-**Renaming to `promotion.*`** ([product-promotion-rename.md](product-promotion-rename.md)). During the cutover window each route accepts **either** name, so tokens minted before the rollout keep working; `coupon.*` is dropped one release later.
+**`coupon.read|create|update|delete` and `coupon.*` are deprecated but still accepted.** Every promotion route asks for either name, so an access token minted before the rename keeps authorizing; the bundles and legacy role expansions grant both. The `coupon.*` set is dropped one release later. See [product-promotion-rename.md](product-promotion-rename.md).
 
-| Planned | Replaces | Description | Phase |
-|---------|----------|-------------|-------|
-| `promotion.read` | `coupon.read` | List definitions; read campaign stats | 1 |
-| `promotion.create` | `coupon.create` | Create a definition | 1 |
-| `promotion.update` | `coupon.update` | Update a definition (never retroactive) | 1 |
-| `promotion.delete` | `coupon.delete` | Soft-delete / deactivate | 1 |
-| `promotion.issue` | — (new) | Issue a single-user entitlement to a customer, and revoke one | 3 |
-| `promotion.*` | `coupon.*` | Wildcard, in the `catalog_editor` / `catalog_admin` bundles | 1 |
+| Planned | Description | Phase |
+|---------|-------------|-------|
+| `promotion.issue` | Issue a single-user entitlement to a customer, and revoke one | 3 |
 
 Wallet reads are **ABAC**, not permissioned: a customer reads their own entitlements when JWT `sub` matches the owner. Auto-issue on `user.registered` runs inside product as a NATS subscriber and needs no permission.
 
@@ -282,15 +276,13 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `POST` | `/api/v1/products/catalog/editions` | `product.master.write` |
 | `PATCH` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` |
 | `DELETE` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` |
-| `GET` | `/api/v1/products/coupons` | `coupon.read` |
-| `POST` | `/api/v1/products/coupons` | `coupon.create` |
-| `PUT` | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` |
-| `DELETE` | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` |
-| `POST` | `/api/v1/products/coupons/redeem` | — (public) |
+| `GET` | `/api/v1/products/promotions` | `promotion.read` (or `coupon.read`) |
+| `POST` | `/api/v1/products/promotions` | `promotion.create` (or `coupon.create`) |
+| `PUT` | `/api/v1/products/promotions/by-code/{code}` | `promotion.update` (or `coupon.update`) |
+| `DELETE` | `/api/v1/products/promotions/by-code/{code}` | `promotion.delete` (or `coupon.delete`) |
+| `POST` | `/api/v1/products/promotions/redeem` | — (public) |
 
-Legacy top-level aliases (`/api/v1/variants/…`, `/api/v1/catalog/…`, `/api/v1/coupons/…`) are still registered with the same permissions; see [TODO.md](TODO.md) for the migration table.
-
-The coupon rows above are renaming to `/api/v1/products/promotions…` with `promotion.*`; see [product-promotion-rename.md](product-promotion-rename.md).
+Legacy top-level aliases (`/api/v1/variants/…`, `/api/v1/catalog/…`, `/api/v1/coupons/…`) are still registered with the same permissions; see [TODO.md](TODO.md) for the migration table. The promotion routes additionally answer on the pre-rename `/api/v1/products/coupons…` spelling ([product-promotion-rename.md](product-promotion-rename.md)).
 
 ### Inventory (served by the product service)
 
@@ -363,7 +355,7 @@ Code-defined sets for common job functions. Assigning a bundle expands to explic
 | Bundle | Permissions |
 |--------|-------------|
 | `catalog_editor` | `product.create`, `product.update`, `product.read`, `product.variant.create`, `product.variant.update`, `product.image.upload`, `product.master.read`, `product.master.write` |
-| `catalog_admin` | `product.*`, `coupon.*` |
+| `catalog_admin` | `product.*`, `promotion.*`, `coupon.*` |
 | `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass`, `payment.cancel` |
 | `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update`, `user.delete` |
 | `customer_registrar` | `user.create` |
@@ -379,10 +371,10 @@ One-time mapping applied to `users.permissions` during database migration (`auth
 | Legacy role | Expanded permissions |
 |-------------|---------------------|
 | `owner` | `*` |
-| `admin` | `admin.*`, `user.*`, `product.*`, `coupon.*`, `inventory.stock.write`, `inventory.reservation.manage`, `order.ship`, `order.status.update`, `order.read.all`, `cart.read`, `payment.bypass` |
+| `admin` | `admin.*`, `user.*`, `product.*`, `promotion.*`, `coupon.*`, `inventory.stock.write`, `inventory.reservation.manage`, `order.ship`, `order.status.update`, `order.read.all`, `cart.read`, `payment.bypass` |
 | `user_manager` | `user.password.update`, `user.status.update` |
 | `customer_registrar` | `user.create` |
-| `product_manager` | `product.*`, `coupon.*` |
+| `product_manager` | `product.*`, `promotion.*`, `coupon.*` |
 | `order_manager` | `order.ship`, `order.status.update`, `order.read.all`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass` |
 | `customer` | _(empty — storefront ABAC only)_ |
 
@@ -413,7 +405,7 @@ UPDATE users SET permissions = ARRAY['*']
 UPDATE users SET permissions = ARRAY[
   'admin.*','user.create','user.read','user.permissions.update',
   'user.password.update','user.status.update',
-  'product.*','coupon.*',
+  'product.*','promotion.*','coupon.*',
   'inventory.stock.write','inventory.reservation.manage',
   'order.ship','order.status.update','order.read.all',
   'cart.read'

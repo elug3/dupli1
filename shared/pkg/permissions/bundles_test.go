@@ -22,8 +22,11 @@ func TestExpandBundle_catalogAdminWildcards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(got, []string{ProductAll, CouponAll}) {
+	if !slices.Equal(got, []string{ProductAll, PromotionAll, CouponAll}) {
 		t.Fatalf("catalog_admin = %v", got)
+	}
+	if !Has(got, PromotionRead) {
+		t.Fatal("catalog_admin wildcards should grant promotion.read")
 	}
 	if !Has(got, ProductCreate) {
 		t.Fatal("catalog_admin wildcards should grant product.create")

@@ -9,8 +9,11 @@ const (
 	All        = "*"
 	AdminAll   = "admin.*"
 	ProductAll = "product.*"
-	CouponAll  = "coupon.*"
-	UserAll    = "user.*"
+	// PromotionAll supersedes CouponAll; both are accepted during the rename
+	// window (docs/product-promotion-rename.md).
+	PromotionAll = "promotion.*"
+	CouponAll    = "coupon.*"
+	UserAll      = "user.*"
 )
 
 // User administration permissions (auth service).
@@ -37,7 +40,18 @@ const (
 	ProductMasterWrite    = "product.master.write"
 )
 
-// Coupon permissions (product service).
+// Promotional code permissions (product service).
+const (
+	PromotionRead   = "promotion.read"
+	PromotionCreate = "promotion.create"
+	PromotionUpdate = "promotion.update"
+	PromotionDelete = "promotion.delete"
+)
+
+// Deprecated: the coupon.* set is superseded by the promotion.* set above.
+// Both are accepted on every promotion route for one release so access tokens
+// minted before the rename keep authorizing; drop these once that window
+// closes. See docs/product-promotion-rename.md.
 const (
 	CouponRead   = "coupon.read"
 	CouponCreate = "coupon.create"
@@ -97,6 +111,10 @@ var Catalog = []string{
 	ProductImageUpload,
 	ProductMasterRead,
 	ProductMasterWrite,
+	PromotionRead,
+	PromotionCreate,
+	PromotionUpdate,
+	PromotionDelete,
 	CouponRead,
 	CouponCreate,
 	CouponUpdate,

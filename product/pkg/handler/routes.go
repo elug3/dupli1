@@ -32,10 +32,10 @@ const (
 	RoutePublicVariant        = "/api/v1/products/variants/by-sku/{sku}"
 	RoutePublicVariantBySkuID = "/api/v1/products/variants/by-sku-id/{skuId}"
 
-	// Coupons under products.
-	RouteRedeemCoupon = "/api/v1/products/coupons/redeem"
-	RouteCoupons      = "/api/v1/products/coupons"
-	RouteCouponByCode = "/api/v1/products/coupons/by-code/{code}"
+	// Promotional codes under products.
+	RouteRedeemPromotion = "/api/v1/products/promotions/redeem"
+	RoutePromotions      = "/api/v1/products/promotions"
+	RoutePromotionByCode = "/api/v1/products/promotions/by-code/{code}"
 
 	// Inventory under products (merged former inventory service).
 	RouteInventoryHealth             = "/api/v1/products/inventory/health"
@@ -65,6 +65,13 @@ const (
 	RouteCatalogSubCategories = "/api/v1/products/catalog/subcategories"
 	RouteCatalogBagStyles     = "/api/v1/products/catalog/bag-styles"
 	RouteCatalogTargets       = "/api/v1/products/catalog/targets"
+
+	// Pre-rename coupon spellings under /products — same handlers, kept for one
+	// release so clients can move at their own pace. Retired together with the
+	// top-level LegacyRoute* aliases below. See docs/product-promotion-rename.md.
+	PreRenameRouteRedeemCoupon = "/api/v1/products/coupons/redeem"
+	PreRenameRouteCoupons      = "/api/v1/products/coupons"
+	PreRenameRouteCouponByCode = "/api/v1/products/coupons/by-code/{code}"
 
 	// Legacy aliases — same handlers; remove after clients migrate.
 	LegacyRoutePublicVariant               = "/api/v1/variants/{sku}"

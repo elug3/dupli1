@@ -20,7 +20,7 @@ import (
 
 type Handler struct {
 	svc            *service.ProductSearchService
-	couponSvc      *service.CouponService
+	promotionSvc      *service.PromotionService
 	inventorySvc   *service.InventoryService
 	catalogSvc     *service.CatalogService
 	viewStore      ports.ProductViewStore
@@ -63,10 +63,10 @@ var searchFilters = []string{
 	"brand", "color", "size", "material", "status", "q",
 }
 
-func NewHandler(svc *service.ProductSearchService, couponSvc *service.CouponService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
+func NewHandler(svc *service.ProductSearchService, promotionSvc *service.PromotionService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
 	return &Handler{
 		svc:         svc,
-		couponSvc:   couponSvc,
+		promotionSvc:   promotionSvc,
 		inventorySvc: inventorySvc,
 		catalogSvc:  catalogSvc,
 		guestCookie: defaultGuestCookieConfig(),
@@ -106,7 +106,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	MountFunc(mux, "GET", RoutePublicVariant, h.PublicGetVariant, LegacyRoutePublicVariant)
 	MountFunc(mux, "GET", RoutePublicVariantBySkuID, h.PublicGetVariantBySkuID, LegacyRoutePublicVariantBySkuID)
-	MountFunc(mux, "POST", RouteRedeemCoupon, h.RedeemCoupon, LegacyRouteRedeemCoupon)
+	MountFunc(mux, "POST", RouteRedeemPromotion, h.RedeemPromotion, PreRenameRouteRedeemCoupon, LegacyRouteRedeemCoupon)
 
 	MountFunc(mux, "GET", RouteInventoryHealth, h.Health, LegacyRouteInventoryHealth)
 	MountFunc(mux, "GET", RouteInventorySettings, h.Settings, LegacyRouteInventorySettings)
@@ -478,15 +478,15 @@ func (h *Handler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) ListCoupons(w http.ResponseWriter, r *http.Request) {
-	coupons := h.couponSvc.List(r.Context())
+func (h *Handler) ListPromotions(w http.ResponseWriter, r *http.Request) {
+	promotions := h.promotionSvc.List(r.Context())
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"total":   len(coupons),
-		"results": coupons,
+		"total":   len(promotions),
+		"results": promotions,
 	})
 }
 
-func (h *Handler) CreateCoupon(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreatePromotion(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Code        string  `json:"code"`
 		Discount    float64 `json:"discount"`
@@ -502,7 +502,7 @@ func (h *Handler) CreateCoupon(w http.ResponseWriter, r *http.Request) {
 	if body.Active != nil {
 		active = *body.Active
 	}
-	created, err := h.couponSvc.Create(r.Context(), domain.Coupon{
+	created, err := h.promotionSvc.Create(r.Context(), domain.Promotion{
 		Code:        body.Code,
 		Discount:    body.Discount,
 		Description: body.Description,
@@ -516,10 +516,10 @@ func (h *Handler) CreateCoupon(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusCreated, created)
 }
 
-func (h *Handler) UpdateCoupon(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdatePromotion(w http.ResponseWriter, r *http.Request) {
 	code := r.PathValue("code")
 	if code == "" {
-		h.respondError(w, http.StatusBadRequest, "missing coupon code")
+		h.respondError(w, http.StatusBadRequest, "missing promotion code")
 		return
 	}
 	var body struct {
@@ -532,7 +532,7 @@ func (h *Handler) UpdateCoupon(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	updated, err := h.couponSvc.Update(r.Context(), code, body.Discount, body.Description, body.Expires, body.Active)
+	updated, err := h.promotionSvc.Update(r.Context(), code, body.Discount, body.Description, body.Expires, body.Active)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -540,13 +540,13 @@ func (h *Handler) UpdateCoupon(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, updated)
 }
 
-func (h *Handler) DeleteCoupon(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeletePromotion(w http.ResponseWriter, r *http.Request) {
 	code := r.PathValue("code")
 	if code == "" {
-		h.respondError(w, http.StatusBadRequest, "missing coupon code")
+		h.respondError(w, http.StatusBadRequest, "missing promotion code")
 		return
 	}
-	if err := h.couponSvc.Delete(r.Context(), code); err != nil {
+	if err := h.promotionSvc.Delete(r.Context(), code); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
@@ -668,7 +668,7 @@ func (h *Handler) parseImageForm(r *http.Request) (multipart.File, *multipart.Fi
 	return file, header, nil
 }
 
-func (h *Handler) RedeemCoupon(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RedeemPromotion(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Code string `json:"code"`
 	}
@@ -680,12 +680,12 @@ func (h *Handler) RedeemCoupon(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "code is required")
 		return
 	}
-	coupon, ok := h.couponSvc.Redeem(r.Context(), body.Code)
+	promotion, ok := h.promotionSvc.Redeem(r.Context(), body.Code)
 	if !ok {
-		h.respondError(w, http.StatusNotFound, "invalid coupon code")
+		h.respondError(w, http.StatusNotFound, "invalid promotion code")
 		return
 	}
-	h.respondJSON(w, http.StatusOK, coupon)
+	h.respondJSON(w, http.StatusOK, promotion)
 }
 
 func (h *Handler) extractFilters(r *http.Request) map[string]string {

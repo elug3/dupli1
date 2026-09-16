@@ -10,7 +10,7 @@ const DefaultShippingFeeWon int64 = 30000
 type ServerOptions struct {
 	Addr string
 
-	// GatewayURL is the internal nginx gateway base (preferred for product stock/coupons).
+	// GatewayURL is the internal nginx gateway base (preferred for product stock/promotions).
 	// Example Compose: http://dupli1-proxy  Example ECS: http://proxy.dupli1.local
 	GatewayURL string
 

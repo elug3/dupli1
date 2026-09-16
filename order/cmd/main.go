@@ -23,7 +23,7 @@ Options:
   -addr string
       Server listen address (overrides host/port)
   -gateway-url string
-      Internal API gateway base URL (stock + coupons via /api/v1/...)
+      Internal API gateway base URL (stock + promotions via /api/v1/...)
   -product-url string
       Deprecated direct product URL; prefer -gateway-url
   -inventory-url string

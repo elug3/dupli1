@@ -66,12 +66,12 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 
 	svc := service.NewProductSearchService(store, imgStore, eventPublisher)
 
-	couponStore, err := pg.NewCouponStore(store.Pool())
+	promotionStore, err := pg.NewPromotionStore(store.Pool())
 	if err != nil {
 		store.Close()
 		return nil, err
 	}
-	couponSvc := service.NewCouponService(couponStore)
+	promotionSvc := service.NewPromotionService(promotionStore)
 
 	inventoryStore, err := pg.NewInventoryStore(store.Pool())
 	if err != nil {
@@ -89,7 +89,7 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	catalogSvc := service.NewCatalogService(catalogStore)
 
 	guestCookie := handler.GuestCookieConfigFromEnv()
-	h := handler.NewHandler(svc, couponSvc, inventorySvc, catalogSvc).
+	h := handler.NewHandler(svc, promotionSvc, inventorySvc, catalogSvc).
 		WithSettings(BuildSettings(cfg, guestCookie.Enabled)).
 		WithViewStore(store).
 		WithWishlistStore(store).
@@ -100,6 +100,14 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 
 	requirePerm := func(perm string, next http.Handler) http.Handler {
 		return middleware.RequireAuth(validator, middleware.RequireAnyPermission(perm)(next))
+	}
+
+	// requireAnyPerm accepts more than one permission name for the same route.
+	// The promotion routes use it to also honour the pre-rename coupon.* set,
+	// so an access token minted before the rename keeps working until that
+	// window closes. See docs/product-promotion-rename.md.
+	requireAnyPerm := func(next http.Handler, perms ...string) http.Handler {
+		return middleware.RequireAuth(validator, middleware.RequireAnyPermission(perms...)(next))
 	}
 
 	mux.Handle("GET "+handler.RouteProducts, middleware.OptionalAuth(validator, h.SearchProductsHandler()))
@@ -145,10 +153,18 @@ func Bootstrap(_ context.Context, cfg Config) (*App, error) {
 	handler.Mount(mux, "GET", handler.RouteCatalogBagStyles, http.HandlerFunc(h.ListBagStyles), handler.LegacyRouteCatalogBagStyles)
 	handler.Mount(mux, "GET", handler.RouteCatalogTargets, http.HandlerFunc(h.ListTargets), handler.LegacyRouteCatalogTargets)
 
-	handler.Mount(mux, "GET", handler.RouteCoupons, requirePerm(permissions.CouponRead, http.HandlerFunc(h.ListCoupons)), handler.LegacyRouteCoupons)
-	handler.Mount(mux, "POST", handler.RouteCoupons, requirePerm(permissions.CouponCreate, http.HandlerFunc(h.CreateCoupon)), handler.LegacyRouteCoupons)
-	handler.Mount(mux, "PUT", handler.RouteCouponByCode, requirePerm(permissions.CouponUpdate, http.HandlerFunc(h.UpdateCoupon)), handler.LegacyRouteCouponByCode)
-	handler.Mount(mux, "DELETE", handler.RouteCouponByCode, requirePerm(permissions.CouponDelete, http.HandlerFunc(h.DeleteCoupon)), handler.LegacyRouteCouponByCode)
+	handler.Mount(mux, "GET", handler.RoutePromotions,
+		requireAnyPerm(http.HandlerFunc(h.ListPromotions), permissions.PromotionRead, permissions.CouponRead),
+		handler.PreRenameRouteCoupons, handler.LegacyRouteCoupons)
+	handler.Mount(mux, "POST", handler.RoutePromotions,
+		requireAnyPerm(http.HandlerFunc(h.CreatePromotion), permissions.PromotionCreate, permissions.CouponCreate),
+		handler.PreRenameRouteCoupons, handler.LegacyRouteCoupons)
+	handler.Mount(mux, "PUT", handler.RoutePromotionByCode,
+		requireAnyPerm(http.HandlerFunc(h.UpdatePromotion), permissions.PromotionUpdate, permissions.CouponUpdate),
+		handler.PreRenameRouteCouponByCode, handler.LegacyRouteCouponByCode)
+	handler.Mount(mux, "DELETE", handler.RoutePromotionByCode,
+		requireAnyPerm(http.HandlerFunc(h.DeletePromotion), permissions.PromotionDelete, permissions.CouponDelete),
+		handler.PreRenameRouteCouponByCode, handler.LegacyRouteCouponByCode)
 
 	handler.Mount(mux, "PUT", handler.RouteInventoryItem, requirePerm(permissions.InventoryStockWrite, h.UpsertInventoryItemHandler()), handler.LegacyRouteInventoryItem)
 	handler.Mount(mux, "POST", handler.RouteInventoryAdjust, requirePerm(permissions.InventoryStockWrite, h.AdjustInventoryItemHandler()), handler.LegacyRouteInventoryAdjust)

@@ -96,7 +96,10 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(parts) == 2 && parts[1] == "coupon" && r.Method == http.MethodPost {
+	// "coupon" is the pre-rename spelling of this sub-route, kept for one
+	// release so a storefront deployed either side of this one still applies
+	// codes. See docs/product-promotion-rename.md.
+	if len(parts) == 2 && (parts[1] == "promotion" || parts[1] == "coupon") && r.Method == http.MethodPost {
 		if err := h.withCheckoutSessionAccess(w, r, claims, sessionID, true); err != nil {
 			return
 		}
@@ -107,7 +110,7 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		session, err := h.svc.ApplyCheckoutCoupon(r.Context(), sessionID, req.Code)
+		session, err := h.svc.ApplyCheckoutPromotion(r.Context(), sessionID, req.Code)
 		if err != nil {
 			respondServiceError(w, err)
 			return

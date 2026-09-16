@@ -493,7 +493,7 @@ func respondServiceError(w http.ResponseWriter, err error) {
 		respondError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ports.ErrVariantNotFound):
 		respondError(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, ports.ErrProductUnavailable), errors.Is(err, ports.ErrCouponUnavailable),
+	case errors.Is(err, ports.ErrProductUnavailable), errors.Is(err, ports.ErrPromotionUnavailable),
 		errors.Is(err, ports.ErrPaymentUnavailable), errors.Is(err, ports.ErrPaymentRefundRejected):
 		respondError(w, http.StatusBadGateway, err.Error())
 	case errors.Is(err, ports.ErrPaymentForbidden):

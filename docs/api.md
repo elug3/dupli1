@@ -533,9 +533,9 @@ List/search/home clients should prefer `defaultListingImageUrl` (≈600px JPEG s
 
 ---
 
-### `POST /api/v1/products/coupons/redeem`
+### `POST /api/v1/products/promotions/redeem`
 
-> **Renaming.** The product term is **promotional code**. These routes move to `/api/v1/products/promotions…` and `coupon_code` becomes `promotion_code` — see [product-promotion-rename.md](product-promotion-rename.md). The `coupons` paths stay registered as aliases through the cutover. Legacy top-level alias: `/api/v1/coupons/redeem`.
+> **Renamed.** The product term is **promotional code**. These are the canonical paths; `coupon_code` is now `promotion_code`. The pre-rename spellings `/api/v1/products/coupons…` and the older top-level `/api/v1/coupons…` stay registered as aliases for one release, and the `coupon.*` permission set is still accepted alongside `promotion.*`. See [product-promotion-rename.md](product-promotion-rename.md).
 
 Look up a promotional code. No authentication required.
 
@@ -559,7 +559,7 @@ Being replaced by a cart-aware evaluation call as part of [product-promo-referra
 
 | Method | Path | Purpose | Phase |
 |--------|------|---------|-------|
-| `POST` | `/api/v1/products/promotions/redeem` | Renamed lookup; adds rate limiting and real `expires_at` | 1–2 |
+| `POST` | `/api/v1/products/promotions/redeem` | Rate limiting and real `expires_at` on top of today's lookup | 2 |
 | `POST` | `/api/v1/products/promotions/evaluate` | Evaluate a code or entitlement against a checkout context → `{ ok, discount_won, shipping_discount_won, eligible_sku_ids, reason }`. Called by order at apply **and** complete | 2 |
 | `GET` | `/api/v1/products/promotions/me` | Current customer's wallet entitlements, with eligible/ineligible against a cart | 3 |
 | `POST` | `/api/v1/products/promotions/{code}/issue` | Manager issues a single-user entitlement to a customer (`promotion.issue`) | 3 |
@@ -626,12 +626,12 @@ Routes below require `Authorization: Bearer <access_token>`. Product validates R
 | PUT | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` |
 | DELETE | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` |
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` |
-| GET | `/api/v1/products/coupons` | `coupon.read` |
-| POST | `/api/v1/products/coupons` | `coupon.create` |
-| PUT | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` |
-| DELETE | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` |
+| GET | `/api/v1/products/promotions` | `promotion.read` |
+| POST | `/api/v1/products/promotions` | `promotion.create` |
+| PUT | `/api/v1/products/promotions/by-code/{code}` | `promotion.update` |
+| DELETE | `/api/v1/products/promotions/by-code/{code}` | `promotion.delete` |
 
-These paths and the `coupon.*` permission set are being renamed to `/api/v1/products/promotions…` and `promotion.*`; both are accepted during the cutover window ([product-promotion-rename.md](product-promotion-rename.md)).
+Each route also accepts the pre-rename `coupon.*` permission and answers on `/api/v1/products/coupons…` and `/api/v1/coupons…`, for one release ([product-promotion-rename.md](product-promotion-rename.md)).
 
 `PUT /api/v1/products/{id}` and variant updates **merge**: omitted JSON fields keep their current value, so a partial body cannot blank out data. The trade-off is that a zero value is indistinguishable from an omitted one — sending `price: 0` or `officialPrice: 0` is ignored rather than clearing the price. See [product-price-on-parent.md](product-price-on-parent.md).
 
@@ -827,9 +827,8 @@ See [checkout-session.md](checkout-session.md) for the full checkout flow.
 | POST | `/api/v1/orders/checkout/sessions/{id}/items` | Add or update one item |
 | DELETE | `/api/v1/orders/checkout/sessions/{id}/items/{sku}` | Remove item by human `sku` |
 | DELETE | `/api/v1/orders/checkout/sessions/{id}/items/by-sku-id/{skuId}` | Remove item by canonical `skuId` |
-| POST | `/api/v1/orders/checkout/sessions/{id}/coupon` | Apply promotional code (renaming to `…/promotion` — [product-promotion-rename.md](product-promotion-rename.md)) |
-| POST | `/api/v1/orders/checkout/sessions/{id}/promotion` | *(planned)* Renamed apply route |
-| DELETE | `/api/v1/orders/checkout/sessions/{id}/promotion` | *(planned)* Remove the applied code — wires the existing but unrouted `ClearCoupon` |
+| POST | `/api/v1/orders/checkout/sessions/{id}/promotion` | Apply promotional code (pre-rename alias `…/coupon` still answers) |
+| DELETE | `/api/v1/orders/checkout/sessions/{id}/promotion` | *(planned, Phase 2)* Remove the applied code — wires the existing but unrouted `ClearPromotion` |
 | POST | `/api/v1/orders/checkout/sessions/{id}/complete` | Complete checkout → order |
 
 The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias for every route above and will be removed once the storefront and admin clients migrate.
@@ -987,15 +986,15 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | GET | `/api/v1/products/settings` | — | product |
 | GET | `/api/v1/products` | optional `product.read` | product |
 | GET | `/api/v1/products/{id}` | — | product |
-| POST | `/api/v1/products/coupons/redeem` | — | product |
+| POST | `/api/v1/products/promotions/redeem` | — | product |
 | POST | `/api/v1/products` | `product.create` | product |
 | PUT/DELETE | `/api/v1/products/{id}` | `product.update` / `product.delete` | product |
 | POST | `/api/v1/products/{id}/images` | `product.image.upload` | product |
 | POST | `/api/v1/products/{id}/variants` | `product.variant.create` | product |
 | PUT/DELETE | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` / `product.variant.delete` | product |
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | product |
-| GET/POST | `/api/v1/products/coupons` | `coupon.read` / `coupon.create` | product |
-| PUT/DELETE | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` / `coupon.delete` | product |
+| GET/POST | `/api/v1/products/promotions` | `promotion.read` / `promotion.create` | product |
+| PUT/DELETE | `/api/v1/products/promotions/by-code/{code}` | `promotion.update` / `promotion.delete` | product |
 | GET | `/api/v1/products/inventory/health` | — | product |
 | GET | `/api/v1/products/inventory/settings` | — | product |
 | GET | `/api/v1/products/inventory/items/{sku}` | — | product |

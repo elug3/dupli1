@@ -128,3 +128,30 @@ func TestCanBypassPayment(t *testing.T) {
 		t.Fatal("admin.* should allow method bypass")
 	}
 }
+
+// The promotion.* set replaces coupon.*; both are accepted on promotion routes
+// for one release so tokens minted before the rename keep working.
+// See docs/product-promotion-rename.md.
+func TestPromotionWildcardGrantsPromotionActions(t *testing.T) {
+	held := []string{PromotionAll}
+	for _, want := range []string{PromotionRead, PromotionCreate, PromotionUpdate, PromotionDelete} {
+		if !Has(held, want) {
+			t.Fatalf("promotion.* should grant %s", want)
+		}
+	}
+	if Has(held, CouponRead) {
+		t.Fatal("promotion.* must not grant coupon.read; routes accept both explicitly instead")
+	}
+}
+
+func TestCouponPermissionsStillGrantedDuringRenameWindow(t *testing.T) {
+	// A token minted before the rename holds only coupon.*. Routes ask for
+	// either name, so HasAny is what keeps such a token authorized.
+	legacy := []string{CouponAll}
+	if !HasAny(legacy, PromotionRead, CouponRead) {
+		t.Fatal("a pre-rename coupon.* token must still pass a promotion route")
+	}
+	if Has(legacy, PromotionRead) {
+		t.Fatal("coupon.* must not grant promotion.read on its own")
+	}
+}

@@ -24,7 +24,7 @@ func newInventoryMux(t *testing.T) (*http.ServeMux, *service.InventoryService) {
 	invSvc := service.NewInventoryService(invStore, products)
 
 	svc := service.NewProductSearchService(products, nil)
-	h := handler.NewHandler(svc, service.NewCouponService(memory.NewCouponStore()), invSvc, service.NewCatalogService(memory.NewCatalogStore()))
+	h := handler.NewHandler(svc, service.NewPromotionService(memory.NewPromotionStore()), invSvc, service.NewCatalogService(memory.NewCatalogStore()))
 
 	mux := http.NewServeMux()
 	mux.Handle("POST "+handler.RouteInventoryReservationCommit, h.CommitReservationHandler())

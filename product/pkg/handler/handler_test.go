@@ -21,9 +21,9 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 		store.Catalog = memory.NewCatalogStore()
 	}
 	svc := service.NewProductSearchService(store, nil)
-	couponSvc := service.NewCouponService(memory.NewCouponStore())
+	promotionSvc := service.NewPromotionService(memory.NewPromotionStore())
 	catalogSvc := service.NewCatalogService(store.Catalog)
-	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc).
+	h := handler.NewHandler(svc, promotionSvc, nil, catalogSvc).
 		WithViewStore(store).
 		WithWishlistStore(store)
 	mux := http.NewServeMux()
@@ -42,9 +42,9 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 		store.Catalog = memory.NewCatalogStore()
 	}
 	svc := service.NewProductSearchService(store, nil)
-	couponSvc := service.NewCouponService(memory.NewCouponStore())
+	promotionSvc := service.NewPromotionService(memory.NewPromotionStore())
 	catalogSvc := service.NewCatalogService(store.Catalog)
-	h := handler.NewHandler(svc, couponSvc, nil, catalogSvc).
+	h := handler.NewHandler(svc, promotionSvc, nil, catalogSvc).
 		WithViewStore(store).
 		WithWishlistStore(store)
 	mux := http.NewServeMux()
@@ -539,22 +539,22 @@ func TestUploadImageNoStore(t *testing.T) {
 	}
 }
 
-func TestRedeemCoupon(t *testing.T) {
+func TestRedeemPromotion(t *testing.T) {
 	mux := newMux(memory.NewProductStore())
 
 	body, _ := json.Marshal(map[string]string{"code": "SUMMER30"})
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteRedeemCoupon, bytes.NewReader(body)))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteRedeemPromotion, bytes.NewReader(body)))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var coupon domain.Coupon
-	if err := json.NewDecoder(rec.Body).Decode(&coupon); err != nil {
+	var promotion domain.Promotion
+	if err := json.NewDecoder(rec.Body).Decode(&promotion); err != nil {
 		t.Fatal(err)
 	}
-	if coupon.Code != "SUMMER30" {
-		t.Errorf("want SUMMER30, got %q", coupon.Code)
+	if promotion.Code != "SUMMER30" {
+		t.Errorf("want SUMMER30, got %q", promotion.Code)
 	}
 }
 
