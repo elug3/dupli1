@@ -1,6 +1,6 @@
 # Promotional code plan (discount + sales-trackable referral)
 
-**Status:** **Phases 1–2 implemented (2026-09-16); Phase 3 next.** Supersedes the earlier "Planning / not started, target v1.2+" status.
+**Status:** **Phases 1–3 implemented (2026-09-16). The sign-up campaign is built and seeded inactive — enable `WELCOME50` in the admin to go live.** Supersedes the earlier "Planning / not started, target v1.2+" status.
 Plan 2026-08-31; types + flexible conditions + policy decisions 2026-09-13; **terminology, sign-up campaign scope and resequencing 2026-09-16.**
 **Repos:** `dupli1` (product, order, auth), `dupli1-web`, `dupli1-manage-web`.
 **Related:** [product-promotion-rename.md](product-promotion-rename.md) (the `coupon` → `promotion` cutover), [checkout-session.md](checkout-session.md), [api.md](api.md), [payment-service.md](payment-service.md) (refund policy), [permissions.md](permissions.md), [product-multi-category-design.md](product-multi-category-design.md), [product-attributes.md](product-attributes.md), [product-guest-views-plan.md](product-guest-views-plan.md), [TODO.md](TODO.md).
@@ -44,6 +44,21 @@ Delivery (typed code vs wallet) is a possession path, not a third type. All path
 ## Campaign: sign-up promotional code
 
 The first production campaign, and the reason Phases 1–3 are sequenced as they are.
+
+**Agreed parameters (2026-09-16):** code `WELCOME50`, named "First-purchase
+discount", **50,000원 off**, **minimum spend 100,000원**, **30-day window per
+entitlement**, **no campaign budget cap**, and **existing accounts are
+backfilled**.
+
+Two clarifications settled at the same time:
+
+- **No first-order condition**, despite the name. The name is marketing copy;
+  the backfill hands the code to accounts that have already bought, and gating
+  on purchase history would have given every existing buyer a code that always
+  failed at checkout.
+- **Expiry is per entitlement, not per campaign.** An account backfilled today
+  and one registering next month each get a full 30 days, so the offer is worth
+  the same to everyone and the campaign can run open-endedly.
 
 | Aspect | Decision (2026-09-16) |
 |--------|------------------------|
@@ -514,15 +529,15 @@ The functional core. Everything the campaign needs except the wallet.
 9. [x] Tests: expiry boundary in KST, once-per-customer, **fixed ₩ clamped to a smaller cart**, **min spend just under / just over**, category miss, on-sale exclusion, cancel releases, in-transit cancel does not, remove-applied-code.
 10. [x] manage-web: condition form + fixed-₩ benefit + live-code edit warning + pause/soft-delete; storefront: reason-coded errors.
 
-### Phase 3 — Wallet + issue + sign-up auto-issue → **campaign go-live** (next)
+### Phase 3 — Wallet + issue + sign-up auto-issue → **campaign go-live** — **done (2026-09-16)**
 
-1. `customer_promotions` + manager issue / list APIs (ABAC `sub` == owner); checkout by `customer_promotion_id`.
-2. **Promote `user.registered` into `shared/pkg/events`** (subject + payload struct), keeping auth's publish behavior; subscribe product.
-3. **Auto-issue subscriber**: on `user.registered` with a customer `account_type`, mint the welcome entitlement idempotently on `(code, customer_id, trigger_key)`.
-4. Replace the storefront profile stub with the real wallet; show eligible vs ineligible against the current cart with reasons.
-5. Entitlement `revoked` support for issued-by-mistake cases.
-6. Tests: register → one entitlement; **redelivered event mints nothing**; manager/service accounts get none; eligible apply → paid → no reuse; cancel restores; cannot apply another customer's entitlement; min-spend still blocks.
-7. Campaign dry run against the dev stack before the marketing date.
+1. [x] `customer_promotions` + manager issue / list APIs (ABAC `sub` == owner); checkout by `customer_promotion_id`.
+2. [x] **Promote `user.registered` into `shared/pkg/events`** (subject + payload struct), keeping auth's publish behavior; subscribe product.
+3. [x] **Auto-issue subscriber**: on `user.registered` with a customer `account_type`, mint the welcome entitlement idempotently on `(code, customer_id, trigger_key)`.
+4. [x] Replace the storefront profile stub with the real wallet; show eligible vs ineligible against the current cart with reasons.
+5. [x] Entitlement `revoked` support for issued-by-mistake cases.
+6. [x] Tests: register → one entitlement; **redelivered event mints nothing**; manager/service accounts get none; eligible apply → paid → no reuse; cancel restores; cannot apply another customer's entitlement; min-spend still blocks.
+7. [x] Campaign dry run against the dev stack before the marketing date.
 
 ### Phase 4 — Richer attributes + shipping benefit + attribution + reporting
 

@@ -158,11 +158,9 @@ Redeem is **public** (checkout flow) — no permission.
 
 | `promotion.redeem` | Move the usage ledger — reserve, consume, release. **Service-to-service**: order's service account holds it; managers do not need it, and the public redeem/evaluate endpoints require no permission |
 
-| Planned | Description | Phase |
-|---------|-------------|-------|
-| `promotion.issue` | Issue a single-user entitlement to a customer, and revoke one | 3 |
+| `promotion.issue` | Issue a single-user entitlement to a customer, and revoke one |
 
-Wallet reads are **ABAC**, not permissioned: a customer reads their own entitlements when JWT `sub` matches the owner. Auto-issue on `user.registered` runs inside product as a NATS subscriber and needs no permission.
+Wallet reads are **ABAC**, not permissioned: a customer reads their own entitlements, and the customer id is taken from the token rather than the request, so one account cannot read another's. Auto-issue on `user.registered` runs inside product as a NATS subscriber and needs no permission.
 
 ### Inventory
 

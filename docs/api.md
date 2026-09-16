@@ -563,8 +563,9 @@ Being replaced by a cart-aware evaluation call as part of [product-promo-referra
 | `POST` | `/api/v1/products/promotions/reserve` | `promotion.redeem` | Re-evaluate and record a pending use against an order. Idempotent per order | **live** |
 | `POST` | `/api/v1/products/promotions/consume` | `promotion.redeem` | Mark an order's reservation paid. Idempotent | **live** |
 | `POST` | `/api/v1/products/promotions/release` | `promotion.redeem` | Hand a use back, for a cancel before shipment | **live** |
-| `GET` | `/api/v1/products/promotions/me` | Bearer (ABAC) | Current customer's wallet entitlements | Phase 3 |
-| `POST` | `/api/v1/products/promotions/{code}/issue` | `promotion.issue` | Manager issues a single-user entitlement | Phase 3 |
+| `GET`/`POST` | `/api/v1/products/promotions/me` | Bearer (ABAC) | Current customer's wallet. POST a cart to have each entitlement judged against it; the customer id comes from the token, never the body | **live** |
+| `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` | Issue a single-user entitlement, idempotent on `trigger_key` | **live** |
+| `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` | Revoke an entitlement; never rewrites an order that used it | **live** |
 | `GET` | `/api/v1/products/promotions/{code}/stats` | `promotion.read` | Campaign stats from the paid ledger | Phase 4 |
 
 A rejection is a `200` with `ok: false` — the request succeeded, the cart just
@@ -575,11 +576,22 @@ did not earn the discount. `reason` is one of `invalid_code`, `expired`,
 inactive one both return `invalid_code`, so probing cannot enumerate live
 campaigns.
 
+**Single-user codes.** A `single_user` definition is unusable without an
+entitlement in `customer_promotions`. Entitlements are issued automatically to
+new customer accounts when auth publishes `user.registered`, by a manager, or
+in bulk by `product/cmd/backfill-welcome-promotion`. Each carries its own
+`expires_at`, computed from the definition's `entitlement_ttl_days` at issue
+time, so an account issued late in a campaign gets the same window as one
+issued at launch. An account that holds no entitlement is refused with
+`invalid_code` — the same answer as an unknown code, so guessing a campaign's
+code reveals nothing. Whether the code has been *spent* is the redemption
+ledger's answer, not the entitlement's.
+
 **Definition fields.** `scope` (`global` | `single_user`), `benefit`
 (`{target, discount_type, discount_fraction | discount_fixed_won,
 max_discount_won, apply_to}`), `conditions` (versioned predicate document over
 an allowlist of attributes), `expires_at`, `max_redemptions`,
-`max_per_customer`, `terms`, `redemption_count`. On create/update, send
+`max_per_customer`, `entitlement_ttl_days`, `terms`, `redemption_count`. On create/update, send
 `expires_on` as a date (`2026-08-31`) to mean the end of that day in Seoul.
 The legacy `discount` fraction and free-text `expires` are still accepted and
 read, but are not enforced — a definition needs a real `expires_at` to expire.

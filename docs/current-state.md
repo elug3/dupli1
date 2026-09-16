@@ -10,7 +10,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 |------|--------|
 | Auth (login, JWT, fine-grained permissions) | Implemented |
 | Product catalog (bags, images, PDP) | Implemented |
-| Promotional codes | **Implemented** — percent **and fixed-₩** benefits, enforced `expires_at` (KST end-of-day), conditions JSONB (min spend, category, brand, price band, on-sale exclusion), redemption ledger with reserve → consume → release, once-per-customer, campaign caps, write-time validation, rate-limited public endpoints. **No wallet or auto-issue yet** — that is Phase 3 of [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md) and gates the sign-up campaign |
+| Promotional codes | **Implemented** — percent **and fixed-₩** benefits, enforced `expires_at` (KST end-of-day), conditions JSONB (min spend, category, brand, price band, on-sale exclusion), redemption ledger with reserve → consume → release, once-per-customer, campaign caps, write-time validation, rate-limited public endpoints. single-user entitlements with a per-entitlement expiry, a customer wallet, manager issue/revoke, and automatic issue to new customers on `user.registered`. The sign-up campaign `WELCOME50` is **seeded inactive** — enable it in the admin to go live ([product-promo-referral-code-plan.md](product-promo-referral-code-plan.md)) |
 | Currency | **KRW only** — product prices and `*_won` amounts are whole won ([payment-service.md](payment-service.md)) |
 | Inventory (stock, reservations) | Implemented (PostgreSQL, owned by product) |
 | Orders + checkout sessions | Implemented (PostgreSQL) |
