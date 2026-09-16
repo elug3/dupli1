@@ -311,15 +311,21 @@ func TestUnknownAndInactiveCodesReportIdentically(t *testing.T) {
 
 // ── Single-user entitlements ─────────────────────────────────────────────────
 
-func welcomePromotion() domain.Promotion {
-	p := fixedPromotion("WELCOME50", 50000)
-	p.Scope = domain.ScopeSingleUser
-	p.EntitlementTTLDays = 30
-	p.Conditions = domain.Conditions{
-		Version: domain.ConditionsVersion,
-		All:     []domain.Predicate{{Attr: domain.AttrSubtotalWon, Op: domain.OpGte, Value: 100000.0}},
+// enableWelcomePromotion activates the seeded sign-up campaign.
+//
+// The definition is seeded inactive in both stores so that deploying does not
+// silently switch on a 50,000원 discount; a manager enables it. Tests go
+// through that same step rather than creating their own definition, so the
+// seeded parameters — 50,000원 off, 100,000원 minimum, 30-day window — are
+// what is actually under test.
+func enableWelcomePromotion(t *testing.T, svc *service.PromotionService) *domain.Promotion {
+	t.Helper()
+	active := true
+	promotion, err := svc.Update(context.Background(), "WELCOME50", ports.PromotionPatch{Active: &active})
+	if err != nil {
+		t.Fatalf("enable WELCOME50: %v", err)
 	}
-	return p
+	return promotion
 }
 
 // A single-user code does nothing for an account that was never issued it, and
@@ -328,9 +334,7 @@ func welcomePromotion() domain.Promotion {
 func TestSingleUserCodeNeedsAnEntitlement(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newPromotionSvc(t)
-	if _, err := svc.Create(ctx, welcomePromotion()); err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	enableWelcomePromotion(t, svc)
 	got := svc.Evaluate(ctx, "WELCOME50", cartFor("cust-1", 150000))
 	if got.OK {
 		t.Fatal("an account with no entitlement must not get the discount")
@@ -344,9 +348,7 @@ func TestSingleUserCodeNeedsAnEntitlement(t *testing.T) {
 func TestIssuedEntitlementUnlocksTheCode(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newPromotionSvc(t)
-	if _, err := svc.Create(ctx, welcomePromotion()); err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	enableWelcomePromotion(t, svc)
 	if _, err := svc.Issue(ctx, "WELCOME50", "cust-1", "system", "user.registered:cust-1", ""); err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -369,9 +371,7 @@ func TestIssuedEntitlementUnlocksTheCode(t *testing.T) {
 func TestIssueIsIdempotentOnTheTriggerKey(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newPromotionSvc(t)
-	if _, err := svc.Create(ctx, welcomePromotion()); err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	enableWelcomePromotion(t, svc)
 	first, err := svc.Issue(ctx, "WELCOME50", "cust-1", "system", "user.registered:cust-1", "")
 	if err != nil {
 		t.Fatalf("first issue: %v", err)
@@ -403,9 +403,7 @@ func TestEntitlementExpiresAMonthAfterIssue(t *testing.T) {
 		WithEntitlements(memory.NewPromotionEntitlementStore()).
 		WithClock(func() time.Time { return issuedAt })
 
-	if _, err := svc.Create(ctx, welcomePromotion()); err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	enableWelcomePromotion(t, svc)
 	entitlement, err := svc.Issue(ctx, "WELCOME50", "cust-1", "system", "k1", "")
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
@@ -436,9 +434,7 @@ func TestEntitlementExpiresAMonthAfterIssue(t *testing.T) {
 func TestRevokedEntitlementStopsWorking(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newPromotionSvc(t)
-	if _, err := svc.Create(ctx, welcomePromotion()); err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	enableWelcomePromotion(t, svc)
 	entitlement, err := svc.Issue(ctx, "WELCOME50", "cust-1", "issue", "manual-1", "mgr-1")
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
@@ -456,9 +452,7 @@ func TestRevokedEntitlementStopsWorking(t *testing.T) {
 func TestWalletExplainsAnIneligibleCode(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newPromotionSvc(t)
-	if _, err := svc.Create(ctx, welcomePromotion()); err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	enableWelcomePromotion(t, svc)
 	if _, err := svc.Issue(ctx, "WELCOME50", "cust-1", "system", "k1", ""); err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -495,3 +489,85 @@ func TestIssuingAGlobalCodeIsRefused(t *testing.T) {
 }
 
 var _ = errors.Is
+
+// ── The seeded campaign ──────────────────────────────────────────────────────
+
+// The seed is what production will actually run, so its parameters are pinned
+// here rather than left to be discovered when the campaign goes live.
+func TestSeededWelcomeCampaignMatchesTheAgreedParameters(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newPromotionSvc(t)
+
+	promotion, err := svc.Get(ctx, "WELCOME50")
+	if err != nil {
+		t.Fatalf("the sign-up campaign should be seeded: %v", err)
+	}
+	// Seeded inactive: deploying must not switch on a 50,000원 discount.
+	if promotion.Active {
+		t.Fatal("WELCOME50 should be seeded inactive, for a manager to enable")
+	}
+	if promotion.EffectiveScope() != domain.ScopeSingleUser {
+		t.Fatalf("scope = %s, want single_user", promotion.EffectiveScope())
+	}
+	benefit := promotion.EffectiveBenefit()
+	if benefit.DiscountType != domain.DiscountTypeFixed || benefit.DiscountFixedWon != 50000 {
+		t.Fatalf("benefit = %+v, want a fixed 50000 won", benefit)
+	}
+	if promotion.EntitlementTTLDays != 30 {
+		t.Fatalf("entitlement window = %d days, want 30", promotion.EntitlementTTLDays)
+	}
+	// No budget cap: the campaign is uncapped by agreement.
+	if promotion.MaxRedemptions != nil {
+		t.Fatalf("max_redemptions = %v, want unlimited", *promotion.MaxRedemptions)
+	}
+	if promotion.EffectiveMaxPerCustomer() != 1 {
+		t.Fatalf("max_per_customer = %d, want 1", promotion.EffectiveMaxPerCustomer())
+	}
+	if err := promotion.Conditions.Validate(); err != nil {
+		t.Fatalf("seeded conditions do not validate: %v", err)
+	}
+}
+
+// While the campaign is off, an entitlement is still worth issuing: enabling
+// the definition later makes every one of them work.
+func TestEntitlementsIssuedWhileInactiveWorkOnceEnabled(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newPromotionSvc(t)
+
+	if _, err := svc.Issue(ctx, "WELCOME50", "cust-1", "system", "k1", ""); err != nil {
+		t.Fatalf("Issue while inactive: %v", err)
+	}
+	if got := svc.Evaluate(ctx, "WELCOME50", cartFor("cust-1", 150000)); got.OK {
+		t.Fatal("an inactive campaign must not discount anything yet")
+	}
+
+	enableWelcomePromotion(t, svc)
+	if got := svc.Evaluate(ctx, "WELCOME50", cartFor("cust-1", 150000)); !got.OK {
+		t.Fatalf("enabling the campaign should make the entitlement work, got %s", got.Reason)
+	} else if got.DiscountWon != 50000 {
+		t.Fatalf("discount = %d, want 50000", got.DiscountWon)
+	}
+}
+
+// The campaign's discount is half the minimum spend, so the boundary order is
+// where it is most expensive. It must still leave the shipping fee payable.
+func TestWelcomeCodeAtTheMinimumSpendLeavesShippingPayable(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newPromotionSvc(t)
+	enableWelcomePromotion(t, svc)
+	if _, err := svc.Issue(ctx, "WELCOME50", "cust-1", "system", "k1", ""); err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+
+	got := svc.Evaluate(ctx, "WELCOME50", cartFor("cust-1", 100000))
+	if !got.OK {
+		t.Fatalf("a cart exactly at the minimum should qualify, got %s/%s", got.Reason, got.SubReason)
+	}
+	if got.DiscountWon != 50000 {
+		t.Fatalf("discount = %d, want 50000", got.DiscountWon)
+	}
+	// subtotal - discount + shipping: the customer still pays delivery.
+	if remaining := int64(100000) - got.DiscountWon; remaining != 50000 {
+		t.Fatalf("goods after discount = %d, want 50000", remaining)
+	}
+}

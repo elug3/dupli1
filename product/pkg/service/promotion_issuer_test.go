@@ -30,9 +30,7 @@ func registrationPayload(t *testing.T, userID, accountType string) []byte {
 func newIssuer(t *testing.T) (*service.WelcomePromotionIssuer, *service.PromotionService) {
 	t.Helper()
 	svc, _ := newPromotionSvc(t)
-	if _, err := svc.Create(context.Background(), welcomePromotion()); err != nil {
-		t.Fatalf("create welcome promotion: %v", err)
-	}
+	enableWelcomePromotion(t, svc)
 	return service.NewWelcomePromotionIssuer(svc, "WELCOME50"), svc
 }
 

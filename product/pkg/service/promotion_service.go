@@ -86,6 +86,13 @@ func (s *PromotionService) Update(ctx context.Context, code string, patch ports.
 	return s.store.Update(ctx, code, patch)
 }
 
+// Get returns a definition whatever its state, for callers that need to
+// inspect one before acting — an ops command checking a campaign exists and is
+// the right scope before it starts issuing, say.
+func (s *PromotionService) Get(ctx context.Context, code string) (*domain.Promotion, error) {
+	return s.store.Get(ctx, domain.NormalizedCode(code))
+}
+
 func (s *PromotionService) Delete(ctx context.Context, code string) error {
 	return s.store.Delete(ctx, code)
 }

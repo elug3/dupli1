@@ -188,13 +188,45 @@ func (s *PromotionStore) renameCouponsTableIfNeeded() error {
 
 func (s *PromotionStore) seedDefaults() error {
 	// Bootstrap seed data at process start; no request context available.
-	_, err := s.pool.Exec(context.Background(), `
+	if _, err := s.pool.Exec(context.Background(), `
 		INSERT INTO promotions (code, discount, description, expires, active)
 		VALUES ('SUMMER30', 0.30, 'Summer sale — all items', 'Aug 31, 2026', TRUE)
 		ON CONFLICT (code) DO NOTHING
-	`)
+	`); err != nil {
+		return err
+	}
+
+	// The sign-up campaign's definition, seeded so the registration issuer and
+	// the backfill have something to issue against in every environment.
+	//
+	// It is seeded INACTIVE on purpose. Creating a live 50,000원 discount on
+	// every environment the moment this deploys is not a decision a migration
+	// should make — a manager enables it when marketing is ready. Entitlements
+	// issued while it is inactive are not wasted: flipping active makes every
+	// one of them work, and each keeps the expiry it was issued with.
+	//
+	// ON CONFLICT DO NOTHING, so enabling it (or editing it) is never undone
+	// by the next deploy.
+	_, err := s.pool.Exec(context.Background(), `
+		INSERT INTO promotions (
+			code, scope, discount, description, expires, active,
+			conditions, benefit, max_per_customer, entitlement_ttl_days, terms
+		)
+		VALUES (
+			'WELCOME50', 'single_user', 0, 'First-purchase discount', '', FALSE,
+			$1::jsonb, $2::jsonb, 1, 30, '100,000원 이상 구매 시 50,000원 할인'
+		)
+		ON CONFLICT (code) DO NOTHING
+	`, welcome50Conditions, welcome50Benefit)
 	return err
 }
+
+// The sign-up campaign's rules, written once here so the seed and the docs
+// cannot disagree: 50,000원 off goods, on orders of 100,000원 or more.
+const (
+	welcome50Conditions = `{"version":1,"all":[{"attr":"subtotal_won","op":"gte","value":100000}]}`
+	welcome50Benefit    = `{"target":"goods","discount_type":"fixed","discount_fixed_won":50000,"apply_to":"entire_subtotal"}`
+)
 
 func (s *PromotionStore) List(ctx context.Context) ([]domain.Promotion, error) {
 	rows, err := s.pool.Query(ctx, `SELECT `+promotionColumns+` FROM promotions ORDER BY code`)
