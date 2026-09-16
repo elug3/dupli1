@@ -551,19 +551,38 @@ Look up a promotional code. No authentication required.
 |--------|---------|
 | `404` | Invalid code, or the code exists but is inactive |
 
-**Today this is a lookup only.** It does not check expiry (`expires` is free text and is never compared), does not count uses, is not rate limited, and is not cart-aware. A code can be redeemed without limit by anyone.
+This is a **lookup**: it answers whether a code is live, honouring `active`, `expires_at` and the campaign cap, and is rate-limited per IP and per customer. It is **not** cart-aware and returns no discount amount — use `evaluate` for that. Usage limits are enforced by the ledger at `reserve`, not here.
 
 #### Target surface (planned)
 
 Being replaced by a cart-aware evaluation call as part of [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md). Planned, **not implemented**:
 
-| Method | Path | Purpose | Phase |
-|--------|------|---------|-------|
-| `POST` | `/api/v1/products/promotions/redeem` | Rate limiting and real `expires_at` on top of today's lookup | 2 |
-| `POST` | `/api/v1/products/promotions/evaluate` | Evaluate a code or entitlement against a checkout context → `{ ok, discount_won, shipping_discount_won, eligible_sku_ids, reason }`. Called by order at apply **and** complete | 2 |
-| `GET` | `/api/v1/products/promotions/me` | Current customer's wallet entitlements, with eligible/ineligible against a cart | 3 |
-| `POST` | `/api/v1/products/promotions/{code}/issue` | Manager issues a single-user entitlement to a customer (`promotion.issue`) | 3 |
-| `GET` | `/api/v1/products/promotions/{code}/stats` | Campaign stats from the paid redemption ledger (`promotion.read`) | 4 |
+| Method | Path | Permission | Purpose | Status |
+|--------|------|------------|---------|--------|
+| `POST` | `/api/v1/products/promotions/evaluate` | — (public, rate-limited) | Price a code against a checkout context → `{ ok, discount_won, eligible_sku_ids, eligible_subtotal_won, reason, sub_reason }`. Order calls it at apply and again at complete; the storefront uses it to preview | **live** |
+| `POST` | `/api/v1/products/promotions/reserve` | `promotion.redeem` | Re-evaluate and record a pending use against an order. Idempotent per order | **live** |
+| `POST` | `/api/v1/products/promotions/consume` | `promotion.redeem` | Mark an order's reservation paid. Idempotent | **live** |
+| `POST` | `/api/v1/products/promotions/release` | `promotion.redeem` | Hand a use back, for a cancel before shipment | **live** |
+| `GET` | `/api/v1/products/promotions/me` | Bearer (ABAC) | Current customer's wallet entitlements | Phase 3 |
+| `POST` | `/api/v1/products/promotions/{code}/issue` | `promotion.issue` | Manager issues a single-user entitlement | Phase 3 |
+| `GET` | `/api/v1/products/promotions/{code}/stats` | `promotion.read` | Campaign stats from the paid ledger | Phase 4 |
+
+A rejection is a `200` with `ok: false` — the request succeeded, the cart just
+did not earn the discount. `reason` is one of `invalid_code`, `expired`,
+`already_used`, `not_eligible`, `campaign_exhausted`, `login_required`;
+`not_eligible` adds a `sub_reason` (`min_spend`, `category`, `brand`,
+`on_sale_excluded`, `no_line_match`, `condition`). An unknown code and an
+inactive one both return `invalid_code`, so probing cannot enumerate live
+campaigns.
+
+**Definition fields.** `scope` (`global` | `single_user`), `benefit`
+(`{target, discount_type, discount_fraction | discount_fixed_won,
+max_discount_won, apply_to}`), `conditions` (versioned predicate document over
+an allowlist of attributes), `expires_at`, `max_redemptions`,
+`max_per_customer`, `terms`, `redemption_count`. On create/update, send
+`expires_on` as a date (`2026-08-31`) to mean the end of that day in Seoul.
+The legacy `discount` fraction and free-text `expires` are still accepted and
+read, but are not enforced — a definition needs a real `expires_at` to expire.
 
 Failures carry machine-readable reason codes (`invalid_code`, `expired`, `already_used`, `not_eligible` + sub-reason, `campaign_exhausted`, `login_required`) so customer copy stays in the frontends.
 
@@ -827,8 +846,8 @@ See [checkout-session.md](checkout-session.md) for the full checkout flow.
 | POST | `/api/v1/orders/checkout/sessions/{id}/items` | Add or update one item |
 | DELETE | `/api/v1/orders/checkout/sessions/{id}/items/{sku}` | Remove item by human `sku` |
 | DELETE | `/api/v1/orders/checkout/sessions/{id}/items/by-sku-id/{skuId}` | Remove item by canonical `skuId` |
-| POST | `/api/v1/orders/checkout/sessions/{id}/promotion` | Apply promotional code (pre-rename alias `…/coupon` still answers) |
-| DELETE | `/api/v1/orders/checkout/sessions/{id}/promotion` | *(planned, Phase 2)* Remove the applied code — wires the existing but unrouted `ClearPromotion` |
+| POST | `/api/v1/orders/checkout/sessions/{id}/promotion` | Apply promotional code; `422` with `reason` / `sub_reason` when the cart does not earn it (pre-rename alias `…/coupon` still answers) |
+| DELETE | `/api/v1/orders/checkout/sessions/{id}/promotion` | Remove the applied code |
 | POST | `/api/v1/orders/checkout/sessions/{id}/complete` | Complete checkout → order |
 
 The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias for every route above and will be removed once the storefront and admin clients migrate.

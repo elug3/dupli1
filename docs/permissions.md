@@ -156,6 +156,8 @@ Redeem is **public** (checkout flow) — no permission.
 
 **`coupon.read|create|update|delete` and `coupon.*` are deprecated but still accepted.** Every promotion route asks for either name, so an access token minted before the rename keeps authorizing; the bundles and legacy role expansions grant both. The `coupon.*` set is dropped one release later. See [product-promotion-rename.md](product-promotion-rename.md).
 
+| `promotion.redeem` | Move the usage ledger — reserve, consume, release. **Service-to-service**: order's service account holds it; managers do not need it, and the public redeem/evaluate endpoints require no permission |
+
 | Planned | Description | Phase |
 |---------|-------------|-------|
 | `promotion.issue` | Issue a single-user entitlement to a customer, and revoke one | 3 |
@@ -280,7 +282,9 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `POST` | `/api/v1/products/promotions` | `promotion.create` (or `coupon.create`) |
 | `PUT` | `/api/v1/products/promotions/by-code/{code}` | `promotion.update` (or `coupon.update`) |
 | `DELETE` | `/api/v1/products/promotions/by-code/{code}` | `promotion.delete` (or `coupon.delete`) |
-| `POST` | `/api/v1/products/promotions/redeem` | — (public) |
+| `POST` | `/api/v1/products/promotions/redeem` | — (public, rate-limited) |
+| `POST` | `/api/v1/products/promotions/evaluate` | — (public, rate-limited) |
+| `POST` | `/api/v1/products/promotions/reserve\|consume\|release` | `promotion.redeem` (service-to-service) |
 
 Legacy top-level aliases (`/api/v1/variants/…`, `/api/v1/catalog/…`, `/api/v1/coupons/…`) are still registered with the same permissions; see [TODO.md](TODO.md) for the migration table. The promotion routes additionally answer on the pre-rename `/api/v1/products/coupons…` spelling ([product-promotion-rename.md](product-promotion-rename.md)).
 

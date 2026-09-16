@@ -1,6 +1,6 @@
 # Promotional code plan (discount + sales-trackable referral)
 
-**Status:** **Approved — implementation starting (2026-09-16).** Supersedes the earlier "Planning / not started, target v1.2+" status.
+**Status:** **Phases 1–2 implemented (2026-09-16); Phase 3 next.** Supersedes the earlier "Planning / not started, target v1.2+" status.
 Plan 2026-08-31; types + flexible conditions + policy decisions 2026-09-13; **terminology, sign-up campaign scope and resequencing 2026-09-16.**
 **Repos:** `dupli1` (product, order, auth), `dupli1-web`, `dupli1-manage-web`.
 **Related:** [product-promotion-rename.md](product-promotion-rename.md) (the `coupon` → `promotion` cutover), [checkout-session.md](checkout-session.md), [api.md](api.md), [payment-service.md](payment-service.md) (refund policy), [permissions.md](permissions.md), [product-multi-category-design.md](product-multi-category-design.md), [product-attributes.md](product-attributes.md), [product-guest-views-plan.md](product-guest-views-plan.md), [TODO.md](TODO.md).
@@ -488,7 +488,7 @@ Ordered so the **sign-up campaign goes live at the end of Phase 3**.
 - [x] **Sign-up campaign scoped**: auto-issue on `user.registered`, fixed ₩ off, min spend (2026-09-16)
 - [x] **api.md / permissions.md / current-state.md stubs for the target surface** (2026-09-16)
 
-### Phase 1 — Rename `coupon` → `promotion`
+### Phase 1 — Rename `coupon` → `promotion` — **done (2026-09-16)**
 
 No behavior change. Lands first so Phase 2 never adds fields under the old vocabulary. Full checklist: **[product-promotion-rename.md](product-promotion-rename.md)**.
 
@@ -499,22 +499,22 @@ No behavior change. Lands first so Phase 2 never adds fields under the old vocab
 5. nginx locations, both frontends (routes, API helpers, i18n keys), docs.
 6. Old paths/JSON keys stay accepted as aliases for one release, then drop with the other legacy prefixes ([TODO.md](TODO.md)).
 
-### Phase 2 — Harden + accounting + condition/benefit engine v1
+### Phase 2 — Harden + accounting + condition/benefit engine v1 — **done (2026-09-16)**
 
 The functional core. Everything the campaign needs except the wallet.
 
-1. `scope`, **`expires_at` enforced** (KST end-of-day authoring), caps, `terms`, `updated_at`; existing rows → `scope=global`.
-2. **Redemption ledger** `promotion_redemptions` with `applied_benefit` snapshot; reserve → consume → release wiring (consume on `payment.succeeded`, release on cancel from `pending`/`paid`, keep consumed on `in_transit` cancel).
-3. Once-per-customer for `global` (ledger unique on `(code, customer_id)`).
-4. **`conditions` + `benefit` JSONB.** Allowlisted attrs for v1: **`subtotal_won`** (campaign), `shipping_fee_won`, `line.category`, `line.brandCode`, `line.unit_price_won`, `line.skuId` / parent id, `line.on_sale`; ops `eq|neq|in|nin|gte|lte|gt|lt`.
-5. **Benefit `percent` + `fixed`** against `target = goods`, with `max_discount_won` and the clamp-to-eligible-base floor. Migrate the legacy `discount` fraction into a default `benefit`.
-6. **Write-time validation** of `benefit` (reject fraction outside `(0,1)`, negative fixed won) so bad definitions cannot be saved.
-7. Order apply/complete call `Evaluate` instead of `Redeem`; add the **remove-applied-code route** wiring `ClearPromotion`.
-8. Redeem/validate rate limit (per IP + per customer) reusing the auth Redis limiter pattern.
-9. Tests: expiry boundary in KST, once-per-customer, **fixed ₩ clamped to a smaller cart**, **min spend just under / just over**, category miss, on-sale exclusion, cancel releases, in-transit cancel does not, remove-applied-code.
-10. manage-web: condition form + fixed-₩ benefit + live-code edit warning + pause/soft-delete; storefront: reason-coded errors.
+1. [x] `scope`, **`expires_at` enforced** (KST end-of-day authoring), caps, `terms`, `updated_at`; existing rows → `scope=global`.
+2. [x] **Redemption ledger** `promotion_redemptions` with `applied_benefit` snapshot; reserve → consume → release wiring (consume on `payment.succeeded`, release on cancel from `pending`/`paid`, keep consumed on `in_transit` cancel).
+3. [x] Once-per-customer for `global` (ledger unique on `(code, customer_id)`).
+4. [x] **`conditions` + `benefit` JSONB.** Allowlisted attrs for v1: **`subtotal_won`** (campaign), `shipping_fee_won`, `line.category`, `line.brandCode`, `line.unit_price_won`, `line.skuId` / parent id, `line.on_sale`; ops `eq|neq|in|nin|gte|lte|gt|lt`.
+5. [x] **Benefit `percent` + `fixed`** against `target = goods`, with `max_discount_won` and the clamp-to-eligible-base floor. Migrate the legacy `discount` fraction into a default `benefit`.
+6. [x] **Write-time validation** of `benefit` (reject fraction outside `(0,1)`, negative fixed won) so bad definitions cannot be saved.
+7. [x] Order apply/complete call `Evaluate` instead of `Redeem`; add the **remove-applied-code route** wiring `ClearPromotion`.
+8. [x] Redeem/validate rate limit (per IP + per customer) reusing the auth Redis limiter pattern.
+9. [x] Tests: expiry boundary in KST, once-per-customer, **fixed ₩ clamped to a smaller cart**, **min spend just under / just over**, category miss, on-sale exclusion, cancel releases, in-transit cancel does not, remove-applied-code.
+10. [x] manage-web: condition form + fixed-₩ benefit + live-code edit warning + pause/soft-delete; storefront: reason-coded errors.
 
-### Phase 3 — Wallet + issue + sign-up auto-issue → **campaign go-live**
+### Phase 3 — Wallet + issue + sign-up auto-issue → **campaign go-live** (next)
 
 1. `customer_promotions` + manager issue / list APIs (ABAC `sub` == owner); checkout by `customer_promotion_id`.
 2. **Promote `user.registered` into `shared/pkg/events`** (subject + payload struct), keeping auth's publish behavior; subscribe product.
@@ -537,6 +537,29 @@ The functional core. Everything the campaign needs except the wallet.
 2. Advanced builder / saved condition templates; "best code" hint.
 3. Guest usage of `allow_guest` global codes once guest checkout ships.
 4. (Defer) multi-code stacking, multi-use per customer.
+
+## What Phase 2 shipped differently from this plan
+
+- **Order calls `Evaluate`, then `Reserve` after the order exists.** The plan
+  had one call; the order id is needed to key a reservation, and minting an id
+  up front would have left a reservation behind whenever order creation failed.
+  Reserving after means a refusal rolls the order back instead.
+- **`Reserve` does not re-check the per-customer limit in the service.** The
+  ledger holds the limit and the order's own row in one transaction, so it can
+  tell "already used" from "retry of this order"; a check above it cannot, and
+  counting the order's own reservation against it made a retried complete look
+  like a second use. A test caught this.
+- **Rate limiting has a per-process fallback.** Product had no Redis dependency
+  and compose has no Redis service, so an unset `REDIS_URL` uses an in-process
+  window. That is per-task, so the effective budget is multiplied by the task
+  count until Redis is configured in ECS.
+- **The storefront previews through the public `evaluate` endpoint.** It cannot
+  compute a fixed-won or capped discount itself, and showing a client-side
+  fraction would have displayed the wrong number for exactly the campaign's
+  benefit shape.
+- **`benefit.target` other than `goods` is rejected on write.** Named in the
+  schema so Phase 4 is additive, but refused now rather than saving a
+  definition that silently discounts nothing.
 
 ## Non-goals (this plan)
 
