@@ -11,6 +11,7 @@ import (
 	"github.com/elug3/dupli1/notification/pkg/domain"
 	"github.com/elug3/dupli1/notification/pkg/infra/memory"
 	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
+	"github.com/elug3/dupli1/notification/pkg/ports"
 	"github.com/elug3/dupli1/notification/pkg/service"
 )
 
@@ -48,9 +49,9 @@ func TestIsStartCommand(t *testing.T) {
 
 func TestFormatStartReplyIncludesChatID(t *testing.T) {
 	reply := telegram.FormatStartReply(telegram.Chat{
-		ID:        -1001234567890,
-		Type:      "supergroup",
-		Title:     "Dupli1 Ops",
+		ID:    -1001234567890,
+		Type:  "supergroup",
+		Title: "Dupli1 Ops",
 	})
 	if !strings.Contains(reply, "<code>-1001234567890</code>") {
 		t.Fatalf("expected chat id in reply, got %q", reply)
@@ -112,67 +113,39 @@ func TestUpdateProcessorStartAccepted(t *testing.T) {
 	}
 }
 
-func TestUpdateProcessorStartPending(t *testing.T) {
-	var gotText string
+// A chat nobody has seen before registers on its first /start and is
+// acknowledged once. The second /start is silent: the row already exists, and
+// repeating "a manager must approve this" adds nothing.
+func TestUpdateProcessorStartRegistersOnceAndThenStaysQuiet(t *testing.T) {
+	var replies []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Text string `json:"text"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		gotText = body.Text
+		replies = append(replies, body.Text)
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 	t.Cleanup(srv.Close)
 
-	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
-	// Empty access policy: pending chat is not allowlisted for outbound Send.
-	access := service.NewTelegramAccess(service.NewTelegramSubscriptions(memory.NewTelegramRepository()), nil)
-	if err := access.Refresh(t.Context()); err != nil {
+	ctx := t.Context()
+	repo := memory.NewTelegramRepository()
+	subs := service.NewTelegramSubscriptions(repo)
+	access := service.NewTelegramAccess(subs, nil)
+	if err := access.Refresh(ctx); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
+
+	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
 	client.SetAccessPolicy(access)
-
 	processor := &telegram.UpdateProcessor{
 		Client: client,
 		Policy: access,
-		Lookup: &stubLookup{sub: &domain.TelegramSubscription{
-			ChatID: "42",
-			Status: domain.SubscriptionStatusPending,
-		}},
+		// The real lookup, not a stub: a stub that returns nothing from
+		// RegisterFromMessage does not model the repository at all.
+		Lookup: service.NewSubscriptionLookup(subs),
 	}
 
-	update := telegram.Update{
-		Message: &telegram.Message{
-			Text: "/start",
-			Chat: telegram.Chat{ID: 42, Type: "private"},
-		},
-	}
-	if err := processor.Handle(t.Context(), update); err != nil {
-		t.Fatalf("Handle: %v", err)
-	}
-	if !strings.Contains(gotText, "Registration received") {
-		t.Fatalf("expected pending reply, got %q", gotText)
-	}
-}
-
-func TestUpdateProcessorStartDeniedForUnknownUser(t *testing.T) {
-	called := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-	}))
-	t.Cleanup(srv.Close)
-
-	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
-	access := service.NewTelegramAccess(service.NewTelegramSubscriptions(memory.NewTelegramRepository()), nil)
-	if err := access.Refresh(t.Context()); err != nil {
-		t.Fatalf("refresh: %v", err)
-	}
-
-	processor := &telegram.UpdateProcessor{
-		Client: client,
-		Policy: access,
-		Lookup: &stubLookup{},
-	}
 	update := telegram.Update{
 		Message: &telegram.Message{
 			Text: "/start",
@@ -180,11 +153,127 @@ func TestUpdateProcessorStartDeniedForUnknownUser(t *testing.T) {
 			Chat: telegram.Chat{ID: 999, Type: "private", FirstName: "Stranger"},
 		},
 	}
-	if err := processor.Handle(t.Context(), update); err != nil {
+
+	if err := processor.Handle(ctx, update); err != nil {
+		t.Fatalf("first /start: %v", err)
+	}
+	if len(replies) != 1 || !strings.Contains(replies[0], "Registration received") {
+		t.Fatalf("first /start should be acknowledged once, got %q", replies)
+	}
+	pending, err := subs.List(ctx, domain.SubscriptionStatusPending)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("expected one pending row, got %d", len(pending))
+	}
+
+	if err := processor.Handle(ctx, update); err != nil {
+		t.Fatalf("second /start: %v", err)
+	}
+	if len(replies) != 1 {
+		t.Fatalf("second /start should be silent, got %q", replies)
+	}
+	if pending, err = subs.List(ctx, domain.SubscriptionStatusPending); err != nil || len(pending) != 1 {
+		t.Fatalf("second /start should not add a row (err=%v, rows=%d)", err, len(pending))
+	}
+}
+
+// Anything that is not /start leaves no trace: no row, no reply. A bot sitting
+// in a group used to collect a pending row from ordinary chatter.
+func TestUpdateProcessorDoesNotRegisterStrayMessages(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx := t.Context()
+	repo := memory.NewTelegramRepository()
+	subs := service.NewTelegramSubscriptions(repo)
+	access := service.NewTelegramAccess(subs, nil)
+	if err := access.Refresh(ctx); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	processor := &telegram.UpdateProcessor{
+		Client: telegram.NewTestClient("test-token", srv.Client(), srv.URL),
+		Policy: access,
+		Lookup: service.NewSubscriptionLookup(subs),
+	}
+
+	update := telegram.Update{
+		Message: &telegram.Message{
+			Text: "good morning everyone",
+			From: &telegram.User{ID: 555},
+			Chat: telegram.Chat{ID: -100555, Type: "group", Title: "Some group"},
+		},
+	}
+	if err := processor.Handle(ctx, update); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 	if called {
-		t.Fatal("expected no Telegram reply for unknown /start user")
+		t.Fatal("a stray message must not produce a reply")
+	}
+	rows, err := subs.List(ctx, "")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("a stray message must not register a chat, got %d rows", len(rows))
+	}
+}
+
+// A user on the env allowlist is already trusted, so /start welcomes them
+// without creating a pending row for a manager to approve.
+func TestUpdateProcessorEnvAllowlistedUserSkipsRegistration(t *testing.T) {
+	var replies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Text string `json:"text"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		replies = append(replies, body.Text)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx := t.Context()
+	repo := memory.NewTelegramRepository()
+	subs := service.NewTelegramSubscriptions(repo)
+	access := service.NewTelegramAccess(subs, &ports.TelegramEnvAllowlist{AllowedUserIDs: "777"})
+	if err := access.Refresh(ctx); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	client.SetAccessPolicy(access)
+	processor := &telegram.UpdateProcessor{
+		Client: client,
+		Policy: access,
+		Lookup: service.NewSubscriptionLookup(subs),
+	}
+
+	update := telegram.Update{
+		Message: &telegram.Message{
+			Text: "/start",
+			From: &telegram.User{ID: 777},
+			Chat: telegram.Chat{ID: 777, Type: "private", FirstName: "Ops"},
+		},
+	}
+	if err := processor.Handle(ctx, update); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if len(replies) != 1 || !strings.Contains(replies[0], "Welcome") {
+		t.Fatalf("expected the welcome reply, got %q", replies)
+	}
+	rows, err := subs.List(ctx, "")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("an allowlisted user needs no pending row, got %d", len(rows))
 	}
 }
 
