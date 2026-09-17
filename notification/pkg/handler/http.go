@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
@@ -85,7 +86,8 @@ func (h *Handler) telegramWebhook(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusServiceUnavailable, "webhook secret not configured")
 		return
 	}
-	if r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != h.webhookSecret {
+	presented := []byte(r.Header.Get("X-Telegram-Bot-Api-Secret-Token"))
+	if subtle.ConstantTimeCompare(presented, []byte(h.webhookSecret)) != 1 {
 		respondError(w, http.StatusForbidden, "invalid webhook secret")
 		return
 	}

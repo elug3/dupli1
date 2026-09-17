@@ -13,6 +13,35 @@ import (
 
 const apiBase = "https://api.telegram.org"
 
+// tokenPlaceholder stands in for the bot token in redacted error text.
+const tokenPlaceholder = "<redacted>"
+
+// redactedError hides the bot token in a wrapped error's message.
+//
+// Every Bot API URL carries the token in its path (/bot<TOKEN>/sendMessage),
+// and net/http reports transport failures as *url.Error, whose Error() embeds
+// the full request URL. Logging such an error verbatim — which is exactly what
+// the NATS dispatcher and the poller do — publishes the token to CloudWatch.
+type redactedError struct {
+	err   error
+	token string
+}
+
+func (e *redactedError) Error() string {
+	return strings.ReplaceAll(e.err.Error(), e.token, tokenPlaceholder)
+}
+
+func (e *redactedError) Unwrap() error { return e.err }
+
+// redact wraps err so the bot token never reaches a log line. Callers must pass
+// every error that may carry a Bot API URL through here before wrapping it.
+func (c *Client) redact(err error) error {
+	if err == nil || c == nil || c.token == "" {
+		return err
+	}
+	return &redactedError{err: err, token: c.token}
+}
+
 // Client sends messages via the Telegram Bot API.
 type Client struct {
 	token      string
@@ -105,13 +134,13 @@ func (c *Client) sendMessage(ctx context.Context, chatID string, message string,
 	url := fmt.Sprintf("%s/bot%s/sendMessage", c.baseURL(), c.token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("create telegram request: %w", err)
+		return fmt.Errorf("create telegram request: %w", c.redact(err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("send telegram message: %w", err)
+		return fmt.Errorf("send telegram message: %w", c.redact(err))
 	}
 	defer resp.Body.Close()
 

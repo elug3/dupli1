@@ -68,7 +68,7 @@ Production bot (2026-08): `@MHYM7_BOT` (`dupli1_notification`).
 
 ### Webhook authentication (fail closed)
 
-When `TELEGRAM_WEBHOOK_URL` is set, **`TELEGRAM_WEBHOOK_SECRET` is required**. Requests to `POST /api/v1/notification/telegram/webhook` without a matching `X-Telegram-Bot-Api-Secret-Token` header receive **`403`**; if the secret is unset, the handler returns **`503`** (`webhook secret not configured`). Invalid JSON bodies return **`400`**.
+When `TELEGRAM_WEBHOOK_URL` is set, **`TELEGRAM_WEBHOOK_SECRET` is required and enforced at startup** — the service refuses to boot without it, rather than registering a webhook whose every delivery it would then reject. Requests to `POST /api/v1/notification/telegram/webhook` without a matching `X-Telegram-Bot-Api-Secret-Token` header receive **`403`** (compared in constant time); if the secret is unset, the handler returns **`503`** (`webhook secret not configured`). Invalid JSON bodies return **`400`**.
 
 ### Manager API
 
@@ -100,7 +100,7 @@ Either `telegram_user_id` or `chat_id` is required (both may be set).
 
 | Mode | When | Behaviour |
 |------|------|-----------|
-| **Webhook** | `TELEGRAM_WEBHOOK_URL` set (production) | `setWebhook` on startup; Telegram POSTs updates; service drains `getUpdates` once to store backlog chat IDs |
+| **Webhook** | `TELEGRAM_WEBHOOK_URL` set (production) | On startup: `deleteWebhook` → drain `getUpdates` once (stores backlog chat IDs) → `setWebhook`; Telegram then POSTs updates. The drain runs first because Telegram answers `getUpdates` with `409 Conflict` while a webhook is active |
 | **Polling** | webhook URL empty (local dev) | `deleteWebhook` + long-poll `getUpdates` |
 
 Webhook URL (via gateway): `https://<host>/api/v1/notification/telegram/webhook`
@@ -122,7 +122,7 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 | `DUPLI1_NOTIFICATION_DB` | Recommended (prod) | PostgreSQL `notifications` database |
 | `TELEGRAM_BOT_TOKEN` | Yes (for Telegram) | Bot API token from [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_WEBHOOK_URL` | Production | Public HTTPS webhook URL |
-| `TELEGRAM_WEBHOOK_SECRET` | **Required** when webhook URL is set | Validates `X-Telegram-Bot-Api-Secret-Token`; handler is fail-closed without it |
+| `TELEGRAM_WEBHOOK_SECRET` | **Required** when webhook URL is set | Validates `X-Telegram-Bot-Api-Secret-Token`; startup fails without it, and the handler is fail-closed |
 | `AUTH_JWKS_URL` | **Required for manage-web** | Auth JWKS for RS256 manager tokens. Without it, Telegram manager routes return `503 auth not configured` and manage-web `/telegram` shows **Failed to load Telegram subscriptions**. |
 | `TELEGRAM_ALLOWED_USER_IDS` | Optional bootstrap | Comma-separated user IDs until DB entries exist |
 | `TELEGRAM_ORDER_CHAT_ID` | Fallback routing | Order alerts chat when no DB `alert_order` row |

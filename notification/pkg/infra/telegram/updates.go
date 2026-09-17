@@ -54,12 +54,12 @@ func (c *Client) DeleteWebhook(ctx context.Context) error {
 	url := fmt.Sprintf("%s/bot%s/deleteWebhook", c.baseURL(), c.token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil {
-		return fmt.Errorf("create deleteWebhook request: %w", err)
+		return fmt.Errorf("create deleteWebhook request: %w", c.redact(err))
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("delete telegram webhook: %w", err)
+		return fmt.Errorf("delete telegram webhook: %w", c.redact(err))
 	}
 	defer resp.Body.Close()
 
@@ -80,18 +80,18 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeout int) ([]U
 	url := fmt.Sprintf("%s/bot%s/getUpdates?offset=%d&timeout=%d", c.baseURL(), c.token, offset, timeout)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create getUpdates request: %w", err)
+		return nil, fmt.Errorf("create getUpdates request: %w", c.redact(err))
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("get telegram updates: %w", err)
+		return nil, fmt.Errorf("get telegram updates: %w", c.redact(err))
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 65536))
 	if err != nil {
-		return nil, fmt.Errorf("read telegram updates: %w", err)
+		return nil, fmt.Errorf("read telegram updates: %w", c.redact(err))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("telegram getUpdates status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
@@ -138,13 +138,13 @@ func (c *Client) SetWebhook(ctx context.Context, webhookURL, secretToken string)
 	url := fmt.Sprintf("%s/bot%s/setWebhook", c.baseURL(), c.token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("create setWebhook request: %w", err)
+		return fmt.Errorf("create setWebhook request: %w", c.redact(err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("set telegram webhook: %w", err)
+		return fmt.Errorf("set telegram webhook: %w", c.redact(err))
 	}
 	defer resp.Body.Close()
 
