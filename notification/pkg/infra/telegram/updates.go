@@ -78,13 +78,26 @@ func (c *Client) DeleteWebhook(ctx context.Context) error {
 	return nil
 }
 
+const (
+	// updateBatchLimit caps how many updates Telegram returns per call. The
+	// default of 100, each up to a 4096-character message, can exceed any
+	// sensible read budget in one response.
+	updateBatchLimit = 20
+	// maxUpdatesBody bounds the response read. It is generous next to
+	// updateBatchLimit: a body that reaches it is reported as an error rather
+	// than silently truncated, because truncated JSON fails to decode, the
+	// offset never advances, and the poller then retries the same window
+	// forever.
+	maxUpdatesBody = 4 << 20
+)
+
 // GetUpdates fetches pending updates. timeout is the long-poll seconds (0–50).
 func (c *Client) GetUpdates(ctx context.Context, offset int64, timeout int) ([]Update, error) {
 	if c == nil || c.token == "" {
 		return nil, nil
 	}
 
-	url := fmt.Sprintf("%s/bot%s/getUpdates?offset=%d&timeout=%d", c.baseURL(), c.token, offset, timeout)
+	url := fmt.Sprintf("%s/bot%s/getUpdates?offset=%d&timeout=%d&limit=%d", c.baseURL(), c.token, offset, timeout, updateBatchLimit)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create getUpdates request: %w", c.redact(err))
@@ -96,9 +109,12 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeout int) ([]U
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 65536))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxUpdatesBody+1))
 	if err != nil {
 		return nil, fmt.Errorf("read telegram updates: %w", c.redact(err))
+	}
+	if len(respBody) > maxUpdatesBody {
+		return nil, fmt.Errorf("telegram getUpdates response exceeds %d bytes", maxUpdatesBody)
 	}
 	if resp.StatusCode == http.StatusConflict {
 		return nil, fmt.Errorf("%w: %s", ErrUpdatesConflict, strings.TrimSpace(string(respBody)))
