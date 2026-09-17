@@ -11,6 +11,7 @@ import (
 	"github.com/elug3/dupli1/notification/pkg/domain"
 	"github.com/elug3/dupli1/notification/pkg/ports"
 	"github.com/elug3/dupli1/shared/pkg/pgsslmode"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/oklog/ulid/v2"
@@ -114,6 +115,10 @@ func (r *TelegramRepository) UpsertPending(ctx context.Context, in ports.Telegra
 		sub.ID, sub.TelegramUserID, sub.ChatID, sub.ChatType, sub.ChatLabel, sub.Username, sub.Status, sub.CreatedAt, sub.UpdatedAt,
 	)
 	if err != nil {
+		if isUniqueViolation(err) {
+			// Raced with a concurrent update from the same chat or user.
+			return nil, fmt.Errorf("%w: concurrent registration", ports.ErrDuplicateSubscription)
+		}
 		return nil, fmt.Errorf("insert telegram subscription: %w", err)
 	}
 	return &sub, nil
@@ -205,6 +210,12 @@ func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.Telegr
 		sub.CreatedAt, sub.UpdatedAt, sub.AcceptedAt, sub.AcceptedBy,
 	)
 	if err != nil {
+		if isUniqueViolation(err) {
+			// The chat_id conflict is handled by ON CONFLICT above, so this is
+			// the telegram_user_id index: that user is already registered
+			// under a different chat.
+			return nil, fmt.Errorf("%w: telegram user already registered to another chat", ports.ErrDuplicateSubscription)
+		}
 		return nil, fmt.Errorf("create accepted telegram subscription: %w", err)
 	}
 	return r.FindByChatID(ctx, chatID)
@@ -309,6 +320,13 @@ func scanSubscriptions(rows pgx.Rows) ([]domain.TelegramSubscription, error) {
 		out = append(out, sub)
 	}
 	return out, rows.Err()
+}
+
+// isUniqueViolation reports whether err is Postgres' unique_violation (23505),
+// which the caller answers with a conflict rather than a server error.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // withPostgresSSLMode picks a safe sslmode for connString — see shared/pkg/pgsslmode.

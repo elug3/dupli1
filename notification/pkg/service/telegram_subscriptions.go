@@ -11,6 +11,10 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
+// ErrIdentifierRequired reports a manual subscription with neither a Telegram
+// user ID nor a chat ID — a bad request, distinct from a failing store.
+var ErrIdentifierRequired = errors.New("telegram_user_id or chat_id is required")
+
 type TelegramSubscriptions struct {
 	repo ports.TelegramRepository
 }
@@ -42,7 +46,7 @@ func (s *TelegramSubscriptions) CreateManual(ctx context.Context, in ports.Teleg
 		return nil, fmt.Errorf("telegram repository not configured")
 	}
 	if in.TelegramUserID == nil && strings.TrimSpace(in.ChatID) == "" {
-		return nil, fmt.Errorf("telegram_user_id or chat_id is required")
+		return nil, ErrIdentifierRequired
 	}
 	return s.repo.CreateAccepted(ctx, in)
 }

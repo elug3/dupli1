@@ -2,9 +2,15 @@ package ports
 
 import (
 	"context"
+	"errors"
 
 	"github.com/elug3/dupli1/notification/pkg/domain"
 )
+
+// ErrDuplicateSubscription reports that another row already claims the chat ID
+// or Telegram user ID being written. It is a caller mistake, not a failure of
+// the store, and callers map it to a conflict rather than a server error.
+var ErrDuplicateSubscription = errors.New("telegram subscription already exists")
 
 // TelegramSubscriptionInput captures a registration from an inbound Telegram update.
 type TelegramSubscriptionInput struct {

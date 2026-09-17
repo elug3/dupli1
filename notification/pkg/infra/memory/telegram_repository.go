@@ -127,6 +127,15 @@ func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.Telegr
 	defer r.mu.Unlock()
 
 	now := time.Now().UTC()
+	// Mirrors telegram_subscriptions_user_id_idx in Postgres: one row per
+	// Telegram user.
+	if in.TelegramUserID != nil {
+		for _, existing := range r.byID {
+			if existing.ChatID != chatID && existing.TelegramUserID != nil && *existing.TelegramUserID == *in.TelegramUserID {
+				return nil, fmt.Errorf("%w: telegram user already registered to another chat", ports.ErrDuplicateSubscription)
+			}
+		}
+	}
 	for id, existing := range r.byID {
 		if existing.ChatID == chatID {
 			existing.Status = domain.SubscriptionStatusAccepted
