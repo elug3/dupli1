@@ -72,6 +72,13 @@ Self-service registration is deliberate — it is how a new operator onboards wi
 
 When `TELEGRAM_WEBHOOK_URL` is set, **`TELEGRAM_WEBHOOK_SECRET` is required and enforced at startup** — the service refuses to boot without it, rather than registering a webhook whose every delivery it would then reject. Requests to `POST /api/v1/notification/telegram/webhook` without a matching `X-Telegram-Bot-Api-Secret-Token` header receive **`403`** (compared in constant time); if the secret is unset, the handler returns **`503`** (`webhook secret not configured`). Invalid JSON bodies return **`400`**.
 
+The handler **acknowledges an authenticated update before processing it**: a
+registration writes to the database and replies over the Bot API, which can
+outlast the server's `WriteTimeout`, and a cut-off response makes Telegram
+redeliver an update already in flight. Processing continues under the service's
+own context (30s budget), so a failure after the `200` is a log line rather than
+a Telegram retry — the sender can always `/start` again.
+
 ### Manager API
 
 Requires Bearer JWT with `notification.telegram.read` (list) or `notification.telegram.manage` (create/accept/reject/delete).
@@ -103,7 +110,7 @@ Either `telegram_user_id` or `chat_id` is required (both may be set).
 | Mode | When | Behaviour |
 |------|------|-----------|
 | **Webhook** | `TELEGRAM_WEBHOOK_URL` set (production) | On startup: `deleteWebhook` → drain `getUpdates` once (stores backlog chat IDs) → `setWebhook`; Telegram then POSTs updates. The drain runs first because Telegram answers `getUpdates` with `409 Conflict` while a webhook is active |
-| **Polling** | webhook URL empty (local dev) | `deleteWebhook` + long-poll `getUpdates` |
+| **Polling** | webhook URL empty (local dev) | `deleteWebhook` + long-poll `getUpdates`, in batches of 20 |
 
 Webhook URL (via gateway): `https://<host>/api/v1/notification/telegram/webhook`
 
@@ -156,7 +163,14 @@ persistence:
 
 The service migrates its own schema on startup, so no migration step is needed.
 
-If an event has no destination at all — no env chat ID and no accepted subscription with the matching flag — it is **logged and skipped** (no Telegram send). When several chats are configured, each is attempted even if an earlier one fails; the failures are reported together. Core NATS does not redeliver — a missed alert is only visible in CloudWatch (`/ecs/dupli1-notification`).
+If an event has no destination at all — no env chat ID and no accepted subscription with the matching flag — it is **logged and skipped** (no Telegram send). When several chats are configured, each is attempted even if an earlier one fails; the failures are reported together.
+
+Outbound sends are **retried up to 3 times** with a doubling backoff on a
+timeout, a 5xx or a `429`; a 4xx (a chat that blocked the bot, a malformed
+message) is not retried, since it fails identically every time. Messages longer
+than Telegram's 4096-character limit are truncated at a tag and entity boundary,
+with the tags left open closed off — an order with enough line items used to
+exceed the limit and have its alert rejected outright. Core NATS does not redeliver — a missed alert is only visible in CloudWatch (`/ecs/dupli1-notification`).
 
 ### Running more than one task
 

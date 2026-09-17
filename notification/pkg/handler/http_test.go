@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -253,3 +254,134 @@ func TestTelegramSubscriptionRejectAndDelete(t *testing.T) {
 }
 
 func int64Ptr(v int64) *int64 { return &v }
+
+// A manual create with neither identifier is the caller's mistake, and the
+// message says which field is missing.
+func TestTelegramSubscriptionCreateRejectsMissingIdentifier(t *testing.T) {
+	h, _ := newTestHandler(t, "")
+	mux := newMux(h)
+	token := makeToken(t, "manager-1", []string{permissions.NotificationTelegramManage})
+
+	rec := doJSON(t, mux, http.MethodPost, "/api/v1/notification/telegram/subscriptions", bearer(token), map[string]any{
+		"chat_label": "No identifier",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "telegram_user_id or chat_id") {
+		t.Fatalf("error should name the missing fields, got %s", rec.Body.String())
+	}
+}
+
+// Reusing a Telegram user ID under a second chat violates the unique index.
+// That used to surface as a 400 carrying the driver's constraint text.
+func TestTelegramSubscriptionCreateReportsDuplicateAsConflict(t *testing.T) {
+	h, _ := newTestHandler(t, "")
+	mux := newMux(h)
+	token := makeToken(t, "manager-1", []string{permissions.NotificationTelegramManage})
+
+	first := doJSON(t, mux, http.MethodPost, "/api/v1/notification/telegram/subscriptions", bearer(token), map[string]any{
+		"telegram_user_id": 4242, "chat_id": "-100first", "alert_order": true,
+	})
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first create status = %d, want 201; body: %s", first.Code, first.Body.String())
+	}
+
+	second := doJSON(t, mux, http.MethodPost, "/api/v1/notification/telegram/subscriptions", bearer(token), map[string]any{
+		"telegram_user_id": 4242, "chat_id": "-100second", "alert_order": true,
+	})
+	if second.Code != http.StatusConflict {
+		t.Fatalf("second create status = %d, want 409; body: %s", second.Code, second.Body.String())
+	}
+	if strings.Contains(second.Body.String(), "idx") || strings.Contains(second.Body.String(), "SQLSTATE") {
+		t.Fatalf("response leaks store detail: %s", second.Body.String())
+	}
+}
+
+// The webhook acknowledges before it works. Processing means a database write
+// and a Bot API round trip, which can outlast the server's WriteTimeout — and a
+// cut-off response makes Telegram redeliver an update already in flight.
+func TestTelegramWebhookAcknowledgesBeforeProcessing(t *testing.T) {
+	release := make(chan struct{})
+	reached := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(reached)
+		<-release // hold the Bot API call open past the response
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+
+	repo := memory.NewTelegramRepository()
+	subs := service.NewTelegramSubscriptions(repo)
+	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	h := handler.New(handler.Options{
+		TelegramSubs: subs,
+		UpdateProcessor: &telegram.UpdateProcessor{
+			Client: client,
+			Lookup: service.NewSubscriptionLookup(subs),
+		},
+		WebhookSecret: "s3cret",
+	})
+	mux := newMux(h)
+
+	body, err := json.Marshal(map[string]any{
+		"update_id": 7,
+		"message": map[string]any{
+			"text": "/start",
+			"from": map[string]any{"id": 4242},
+			"chat": map[string]any{"id": 4242, "type": "private", "first_name": "Ops"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/notification/telegram/webhook", bytes.NewReader(body))
+	req.Header.Set("X-Telegram-Bot-Api-Secret-Token", "s3cret")
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		mux.ServeHTTP(rec, req)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("webhook did not respond while the Bot API call was still open")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	// The reply is still in flight; releasing it lets processing finish.
+	select {
+	case <-reached:
+	case <-time.After(2 * time.Second):
+		t.Fatal("processing never reached the Bot API")
+	}
+	close(release)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		rows, err := subs.List(t.Context(), "")
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(rows) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("update was acknowledged but never processed (%d rows)", len(rows))
+		}
+		time.Sleep(time.Millisecond)
+	}
+}

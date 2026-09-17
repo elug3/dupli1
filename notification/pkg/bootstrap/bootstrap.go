@@ -90,6 +90,14 @@ func Bootstrap(cfg Config) (*App, error) {
 		}
 	}
 
+	// Long-lived worker/subscriber root; cancelled on process shutdown. Created
+	// before the handler because acknowledged webhook updates are processed
+	// under it, past the lifetime of their request.
+	telegramCtx, cancelWorkers := context.WithCancel(context.Background())
+
+	// Keep this task's allowlist in step with accepts served by other tasks.
+	go telegramAccess.RunRefresher(telegramCtx, cfg.AccessRefreshInterval)
+
 	settingsResp := BuildSettings(cfg, cfg.DatabaseConnString != "")
 	h := handler.New(handler.Options{
 		TelegramSubs:           telegramSubs,
@@ -98,6 +106,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		JWTValidator:           jwtValidator,
 		Settings:               settingsResp,
 		OnSubscriptionsChanged: refreshAccess,
+		UpdateContext:          telegramCtx,
 	})
 
 	mux := http.NewServeMux()
@@ -112,12 +121,6 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 
 	var subscriber ports.EventSubscriber
-
-	// Long-lived worker/subscriber root; cancelled on process shutdown.
-	telegramCtx, cancelWorkers := context.WithCancel(context.Background())
-
-	// Keep this task's allowlist in step with accepts served by other tasks.
-	go telegramAccess.RunRefresher(telegramCtx, cfg.AccessRefreshInterval)
 
 	if notifier.Enabled() {
 		if cfg.TelegramWebhookURL != "" {

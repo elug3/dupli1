@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
 	"github.com/elug3/dupli1/notification/pkg/ports"
@@ -18,6 +21,10 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
+// webhookProcessTimeout bounds the work an acknowledged update may do. It
+// outlives the request deliberately — the HTTP response is already sent.
+const webhookProcessTimeout = 30 * time.Second
+
 type Handler struct {
 	telegramSubs           *service.TelegramSubscriptions
 	updateProcessor        *telegram.UpdateProcessor
@@ -25,6 +32,7 @@ type Handler struct {
 	jwtValidator           authjwt.AccessTokenValidator
 	settings               settings.Response
 	onSubscriptionsChanged func()
+	updateCtx              context.Context
 }
 
 type Options struct {
@@ -34,9 +42,17 @@ type Options struct {
 	JWTValidator           authjwt.AccessTokenValidator
 	Settings               settings.Response
 	OnSubscriptionsChanged func()
+	// UpdateContext is the root for work that continues after a webhook has
+	// been acknowledged; it is cancelled on shutdown. Defaults to
+	// context.Background().
+	UpdateContext context.Context
 }
 
 func New(opts Options) *Handler {
+	updateCtx := opts.UpdateContext
+	if updateCtx == nil {
+		updateCtx = context.Background()
+	}
 	return &Handler{
 		telegramSubs:           opts.TelegramSubs,
 		updateProcessor:        opts.UpdateProcessor,
@@ -44,6 +60,7 @@ func New(opts Options) *Handler {
 		jwtValidator:           opts.JWTValidator,
 		settings:               opts.Settings,
 		onSubscriptionsChanged: opts.OnSubscriptionsChanged,
+		updateCtx:              updateCtx,
 	}
 }
 
@@ -104,10 +121,12 @@ func (h *Handler) telegramWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.updateProcessor.Handle(r.Context(), update); err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to process update")
-		return
-	}
+	// Acknowledge first, then work. Processing an update means a database write
+	// and a Bot API round trip, which can outlast the server's WriteTimeout;
+	// the cut-off response then had Telegram redeliver an update already being
+	// handled. The trade-off is that a failure after this point is a log line
+	// rather than a Telegram retry — the sender can always /start again.
+	go h.processUpdate(update)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -155,8 +174,18 @@ func (h *Handler) telegramSubscriptions(w http.ResponseWriter, r *http.Request) 
 			AlertProduct:   req.AlertProduct,
 			AcceptedBy:     claims.UserID,
 		})
-		if err != nil {
+		switch {
+		case err == nil:
+		case errors.Is(err, service.ErrIdentifierRequired):
 			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		case errors.Is(err, ports.ErrDuplicateSubscription):
+			respondError(w, http.StatusConflict, "subscription already exists")
+			return
+		default:
+			// Never echo the driver's text: a constraint name is not something
+			// the caller can act on, and a store failure is not a bad request.
+			respondError(w, http.StatusInternalServerError, "failed to create subscription")
 			return
 		}
 		h.notifyChanged()
@@ -249,6 +278,17 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.NotFound(w, r)
+	}
+}
+
+// processUpdate handles an already-acknowledged webhook update. Its context is
+// the server's, not the request's: the request context is cancelled the moment
+// the response is written, which would abort the work this just promised to do.
+func (h *Handler) processUpdate(update telegram.Update) {
+	ctx, cancel := context.WithTimeout(h.updateCtx, webhookProcessTimeout)
+	defer cancel()
+	if err := h.updateProcessor.Handle(ctx, update); err != nil {
+		log.Printf("telegram webhook update %d: %v", update.UpdateID, err)
 	}
 }
 
