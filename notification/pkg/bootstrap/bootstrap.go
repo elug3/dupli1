@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/elug3/dupli1/notification/pkg/handler"
 	"github.com/elug3/dupli1/notification/pkg/infra/memory"
@@ -37,6 +38,14 @@ func (a *App) Close() error {
 func Bootstrap(cfg Config) (*App, error) {
 	if cfg.Addr == "" {
 		return nil, fmt.Errorf("listen address is required")
+	}
+
+	// Fail closed at boot rather than at delivery time: SetWebhook without a
+	// secret registers a webhook Telegram calls with no
+	// X-Telegram-Bot-Api-Secret-Token header, which the handler then answers
+	// with 503 for every update — a silently dead inbound path.
+	if strings.TrimSpace(cfg.TelegramWebhookURL) != "" && strings.TrimSpace(cfg.TelegramWebhookSecret) == "" {
+		return nil, fmt.Errorf("TELEGRAM_WEBHOOK_SECRET is required when TELEGRAM_WEBHOOK_URL is set")
 	}
 
 	envAllowlist := &ports.TelegramEnvAllowlist{
@@ -83,11 +92,11 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	settingsResp := BuildSettings(cfg, cfg.DatabaseConnString != "")
 	h := handler.New(handler.Options{
-		TelegramSubs:    telegramSubs,
-		UpdateProcessor: processor,
-		WebhookSecret:   cfg.TelegramWebhookSecret,
-		JWTValidator:    jwtValidator,
-		Settings:        settingsResp,
+		TelegramSubs:           telegramSubs,
+		UpdateProcessor:        processor,
+		WebhookSecret:          cfg.TelegramWebhookSecret,
+		JWTValidator:           jwtValidator,
+		Settings:               settingsResp,
 		OnSubscriptionsChanged: refreshAccess,
 	})
 
@@ -111,14 +120,22 @@ func Bootstrap(cfg Config) (*App, error) {
 		cancelTelegram = cancel
 
 		if cfg.TelegramWebhookURL != "" {
+			// Telegram answers getUpdates with 409 Conflict while a webhook is
+			// active, so the backlog has to be drained with no webhook
+			// registered — including one left over from a previous run.
+			// Updates sent during this window are queued by Telegram and
+			// arrive on the webhook once it is set.
+			if err := notifier.DeleteWebhook(telegramCtx); err != nil {
+				log.Printf("telegram deleteWebhook before drain: %v", err)
+			}
+			if err := telegraminfra.DrainUpdates(telegramCtx, notifier, processor); err != nil {
+				log.Printf("telegram drain updates: %v", err)
+			}
 			if err := notifier.SetWebhook(telegramCtx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {
 				cancel()
 				return nil, fmt.Errorf("set telegram webhook: %w", err)
 			}
 			log.Printf("telegram webhook registered at %s", cfg.TelegramWebhookURL)
-			if err := telegraminfra.DrainUpdates(telegramCtx, notifier, processor); err != nil {
-				log.Printf("telegram drain updates: %v", err)
-			}
 		} else {
 			go telegraminfra.RunPoller(telegramCtx, notifier, processor)
 		}
