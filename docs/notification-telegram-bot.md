@@ -119,7 +119,7 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `DUPLI1_NOTIFICATION_DB` | Recommended (prod) | PostgreSQL `notifications` database |
+| `DUPLI1_NOTIFICATION_DB` | Recommended (prod) | PostgreSQL `notifications` database. **Not yet wired in production** — see [Production database](#production-database-pending) |
 | `TELEGRAM_BOT_TOKEN` | Yes (for Telegram) | Bot API token from [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_WEBHOOK_URL` | Production | Public HTTPS webhook URL |
 | `TELEGRAM_WEBHOOK_SECRET` | **Required** when webhook URL is set | Validates `X-Telegram-Bot-Api-Secret-Token`; startup fails without it, and the handler is fail-closed |
@@ -132,6 +132,27 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 | `MANAGE_WEB_URL` | Recommended | Base URL for “View order in manage-web” links (default `https://manage.dupli1.com`) |
 
 Local DB: `postgres://dupli1:dupli1_dev@localhost:5438/notifications?sslmode=disable`
+
+### Production database (pending)
+
+The ECS task definition carries no `DUPLI1_NOTIFICATION_DB` secret yet, so
+production falls back to the in-memory subscription repository: manager
+accept/reject decisions are lost on every deploy or task replacement, and two
+tasks do not share an allowlist. The `/telegram` tab in manage-web still works,
+but nothing it records survives a restart.
+
+Terraform is already wired for the switch, mirroring how `profile` handles the
+same gap: `var.notification_db_url_secret_arn` defaults to `""` and the DB entry
+is omitted from the task's `secrets` block while it is empty. To enable
+persistence:
+
+1. Create the `notifications` database on the production Postgres instance.
+2. Store its connection string in Secrets Manager as
+   `dupli1/production/notification-db-url`.
+3. Set `notification_db_url_secret_arn` to that ARN (tfvars, or the variable
+   default in `infra/terraform/variables.tf`) and apply.
+
+The service migrates its own schema on startup, so no migration step is needed.
 
 If order/product chat IDs are empty, events are **logged and skipped** (no Telegram send). Core NATS does not redeliver — a missed alert is only visible in CloudWatch (`/ecs/dupli1-notification`).
 
