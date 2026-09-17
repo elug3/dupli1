@@ -207,6 +207,9 @@ func (s *PromotionService) Reserve(ctx context.Context, code, orderID string, ev
 	}, promotion.EffectiveMaxPerCustomer())
 	if err != nil {
 		if errors.Is(err, ports.ErrConflict) {
+			if ports.IsCampaignExhaustedConflict(err) {
+				return nil, domain.EvaluationResult{Reason: domain.ReasonCampaignExhausted}, nil
+			}
 			return nil, domain.EvaluationResult{Reason: domain.ReasonAlreadyUsed}, nil
 		}
 		return nil, domain.EvaluationResult{}, err

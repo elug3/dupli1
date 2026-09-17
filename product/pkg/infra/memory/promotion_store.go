@@ -153,6 +153,24 @@ func (s *PromotionStore) bumpRedemptionCount(code string, delta int) {
 	s.promotions[code] = p
 }
 
+// tryReserveCampaignSlot increments redemption_count when the campaign cap
+// allows. The ledger calls this under its own lock so a reserve and its cap
+// check cannot interleave with another checkout completing at the same instant.
+func (s *PromotionStore) tryReserveCampaignSlot(code string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.promotions[code]
+	if !ok {
+		return false
+	}
+	if p.IsExhausted() {
+		return false
+	}
+	p.RedemptionCount++
+	s.promotions[code] = p
+	return true
+}
+
 // applyPromotionPatch mirrors the Postgres store's patch folding.
 func applyPromotionPatch(p *domain.Promotion, patch ports.PromotionPatch) {
 	if patch.Description != nil {
@@ -239,6 +257,10 @@ func (s *PromotionRedemptionStore) Reserve(ctx context.Context, in ports.Reserve
 		return nil, ports.Conflict("promotion already used by this customer")
 	}
 
+	if s.definitions != nil && !s.definitions.tryReserveCampaignSlot(code) {
+		return nil, ports.Conflict("promotion campaign exhausted")
+	}
+
 	row := &domain.Redemption{
 		ID:                  ulid.Make().String(),
 		Code:                code,
@@ -253,9 +275,6 @@ func (s *PromotionRedemptionStore) Reserve(ctx context.Context, in ports.Reserve
 		CreatedAt:           time.Now().UTC(),
 	}
 	s.byOrder[in.OrderID] = row
-	if s.definitions != nil {
-		s.definitions.bumpRedemptionCount(code, 1)
-	}
 	return row, nil
 }
 
