@@ -20,10 +20,10 @@ import (
 
 // App holds wired notification dependencies.
 type App struct {
-	HTTP           *http.Server
-	subscriber     ports.EventSubscriber
-	cancelTelegram context.CancelFunc
-	close          func() error
+	HTTP          *http.Server
+	subscriber    ports.EventSubscriber
+	cancelWorkers context.CancelFunc
+	close         func() error
 }
 
 // Close releases infrastructure resources.
@@ -112,13 +112,14 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 
 	var subscriber ports.EventSubscriber
-	var cancelTelegram context.CancelFunc
+
+	// Long-lived worker/subscriber root; cancelled on process shutdown.
+	telegramCtx, cancelWorkers := context.WithCancel(context.Background())
+
+	// Keep this task's allowlist in step with accepts served by other tasks.
+	go telegramAccess.RunRefresher(telegramCtx, cfg.AccessRefreshInterval)
 
 	if notifier.Enabled() {
-		// Long-lived worker/subscriber root; cancelled on process shutdown.
-		telegramCtx, cancel := context.WithCancel(context.Background())
-		cancelTelegram = cancel
-
 		if cfg.TelegramWebhookURL != "" {
 			// Telegram answers getUpdates with 409 Conflict while a webhook is
 			// active, so the backlog has to be drained with no webhook
@@ -132,7 +133,7 @@ func Bootstrap(cfg Config) (*App, error) {
 				log.Printf("telegram drain updates: %v", err)
 			}
 			if err := notifier.SetWebhook(telegramCtx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {
-				cancel()
+				cancelWorkers()
 				return nil, fmt.Errorf("set telegram webhook: %w", err)
 			}
 			log.Printf("telegram webhook registered at %s", cfg.TelegramWebhookURL)
@@ -144,9 +145,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	if cfg.NATSURL != "" {
 		natsSubscriber, err := natsinfra.NewSubscriber(cfg.NATSURL)
 		if err != nil {
-			if cancelTelegram != nil {
-				cancelTelegram()
-			}
+			cancelWorkers()
 			return nil, err
 		}
 		subscriber = natsSubscriber
@@ -169,9 +168,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		// Long-lived worker/subscriber root; cancelled on process shutdown.
 		if err := dispatcher.Register(subscriber, context.Background()); err != nil {
 			natsSubscriber.Close()
-			if cancelTelegram != nil {
-				cancelTelegram()
-			}
+			cancelWorkers()
 			return nil, err
 		}
 		log.Println("notification dispatcher subscribed to order and product events")
@@ -180,13 +177,11 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 
 	return &App{
-		HTTP:           httpSrv,
-		subscriber:     subscriber,
-		cancelTelegram: cancelTelegram,
+		HTTP:          httpSrv,
+		subscriber:    subscriber,
+		cancelWorkers: cancelWorkers,
 		close: func() error {
-			if cancelTelegram != nil {
-				cancelTelegram()
-			}
+			cancelWorkers()
 			var errs []error
 			for _, fn := range closeFns {
 				errs = append(errs, fn())

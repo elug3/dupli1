@@ -4,12 +4,19 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 )
+
+// ErrUpdatesConflict reports that another consumer owns this bot's update
+// stream — a second polling task, or a webhook that is still registered.
+// Telegram answers getUpdates with 409 Conflict in both cases, and retrying
+// hard does not help: the other consumer has to go away first.
+var ErrUpdatesConflict = errors.New("telegram getUpdates conflict")
 
 // User is a Telegram user who sent a message.
 type User struct {
@@ -92,6 +99,9 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeout int) ([]U
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 65536))
 	if err != nil {
 		return nil, fmt.Errorf("read telegram updates: %w", c.redact(err))
+	}
+	if resp.StatusCode == http.StatusConflict {
+		return nil, fmt.Errorf("%w: %s", ErrUpdatesConflict, strings.TrimSpace(string(respBody)))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("telegram getUpdates status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))

@@ -156,6 +156,24 @@ The service migrates its own schema on startup, so no migration step is needed.
 
 If order/product chat IDs are empty, events are **logged and skipped** (no Telegram send). Core NATS does not redeliver — a missed alert is only visible in CloudWatch (`/ecs/dupli1-notification`).
 
+### Running more than one task
+
+NATS subscriptions use the queue group `dupli1-notification`, so each event is
+delivered to exactly one task — two tasks no longer both alert ops with the
+same order during the overlap of a rolling deploy.
+
+Inbound updates are not shared that way. Polling mode holds the bot's update
+stream exclusively: a second poller (or a leftover webhook) makes Telegram
+answer `getUpdates` with `409 Conflict`, and the losing poller backs off for 30s
+and retries until the other consumer is gone. That is enough for a deploy
+overlap, but it is **not** leader election — running several tasks in polling
+mode permanently means one of them is always locked out. Webhook mode has no
+such limit, since Telegram posts to the load balancer.
+
+The allowlist each task caches is rebuilt from the database every 30s
+(`service.DefaultAccessRefreshInterval`), so an accept served by one task takes
+effect on the others within that window rather than at their next restart.
+
 ### Target (follow-up — global Manager Settings)
 
 Host mutable notification config in **auth** (`dupli1_db`), consistent with [manager-settings-api.md](manager-settings-api.md):

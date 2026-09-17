@@ -12,6 +12,12 @@ import (
 	"github.com/elug3/dupli1/shared/pkg/natsauth"
 )
 
+// queueGroup makes every notification task a member of one logical consumer.
+// Core NATS delivers each message to a single member of a queue group, so the
+// two tasks that overlap during a rolling deploy no longer both alert ops with
+// the same order.
+const queueGroup = "dupli1-notification"
+
 // Subscriber listens to NATS subjects and dispatches messages to handlers.
 type Subscriber struct {
 	conn      *natsgo.Conn
@@ -39,7 +45,7 @@ func (s *Subscriber) Subscribe(ctx context.Context, subject string, handler port
 		return fmt.Errorf("nats subscriber not initialized")
 	}
 
-	sub, err := s.conn.Subscribe(subject, func(msg *natsgo.Msg) {
+	sub, err := s.conn.QueueSubscribe(subject, queueGroup, func(msg *natsgo.Msg) {
 		dispatch(ctx, handler, msg.Subject, msg.Data)
 	})
 	if err != nil {
