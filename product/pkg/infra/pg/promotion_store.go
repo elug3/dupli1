@@ -30,6 +30,10 @@ func (s *PromotionStore) migrate() error {
 	if err := s.renameCouponsTableIfNeeded(); err != nil {
 		return err
 	}
+	return s.migrateFreshSchema()
+}
+
+func (s *PromotionStore) migrateFreshSchema() error {
 	_, err := s.pool.Exec(context.Background(), `
 		CREATE TABLE IF NOT EXISTS promotions (
 			code        TEXT PRIMARY KEY,
