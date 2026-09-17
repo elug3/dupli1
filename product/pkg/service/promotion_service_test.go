@@ -267,6 +267,39 @@ func TestConsumeIsIdempotent(t *testing.T) {
 	}
 }
 
+// Cancel-before-pay releases the ledger row; a late payment.succeeded on the
+// same order must spend the use again and restore the campaign count.
+func TestConsumeAfterReleaseSpendsTheUseAgain(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newPromotionSvc(t)
+	p := fixedPromotion("LATEPAY", 5000)
+	max := 1
+	p.MaxRedemptions = &max
+	if _, err := svc.Create(ctx, p); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, _, err := svc.Reserve(ctx, "LATEPAY", "ord-1", cartFor("cust-1", 50000)); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if err := svc.Release(ctx, "ord-1"); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	def, _ := store.Get(ctx, "LATEPAY")
+	if def.RedemptionCount != 0 {
+		t.Fatalf("redemption_count = %d, want 0 after release", def.RedemptionCount)
+	}
+	if err := svc.Consume(ctx, "ord-1"); err != nil {
+		t.Fatalf("consume after release: %v", err)
+	}
+	if got := svc.Evaluate(ctx, "LATEPAY", cartFor("cust-2", 50000)); got.Reason != domain.ReasonCampaignExhausted {
+		t.Fatalf("late consume should occupy the slot again, got %s", got.Reason)
+	}
+	def, _ = store.Get(ctx, "LATEPAY")
+	if def.RedemptionCount != 1 {
+		t.Fatalf("redemption_count = %d, want 1 after late consume", def.RedemptionCount)
+	}
+}
+
 // ── Reserve refuses a cart that no longer earns the discount ─────────────────
 
 func TestReserveReEvaluatesAgainstTheFinalCart(t *testing.T) {

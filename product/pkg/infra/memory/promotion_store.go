@@ -242,8 +242,34 @@ func (s *PromotionRedemptionStore) Reserve(ctx context.Context, in ports.Reserve
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// A retried complete for the same order must not double-count.
+	// A retried complete for the same order must not double-count — unless a
+	// pre-payment cancel released the row and complete is being retried.
 	if existing, ok := s.byOrder[in.OrderID]; ok {
+		if existing.Status != domain.RedemptionReleased {
+			return existing, nil
+		}
+		if s.definitions != nil && !s.definitions.tryReserveCampaignSlot(code) {
+			return nil, ports.Conflict("promotion campaign exhausted")
+		}
+		used := 0
+		for _, r := range s.byOrder {
+			if r.Code == code && r.CustomerID == in.CustomerID && r.CountsAgainstCustomer() {
+				used++
+			}
+		}
+		if used >= maxPerCustomer {
+			return nil, ports.Conflict("promotion already used by this customer")
+		}
+		existing.Status = domain.RedemptionReserved
+		existing.DiscountWon = in.DiscountWon
+		existing.ShippingDiscountWon = in.ShippingDiscountWon
+		existing.OrderSubtotalWon = in.OrderSubtotalWon
+		existing.EligibleSubtotalWon = in.EligibleSubtotalWon
+		existing.AppliedBenefit = in.AppliedBenefit
+		existing.ReleasedAt = nil
+		if s.definitions != nil {
+			s.definitions.bumpRedemptionCount(code, 1)
+		}
 		return existing, nil
 	}
 
@@ -283,12 +309,22 @@ func (s *PromotionRedemptionStore) Consume(ctx context.Context, orderID string, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	row, ok := s.byOrder[orderID]
-	if !ok || row.Status != domain.RedemptionReserved {
+	if !ok || row.Status == domain.RedemptionConsumed {
 		return nil // idempotent: payment events can be redelivered
 	}
 	paid := at.UTC()
-	row.Status = domain.RedemptionConsumed
-	row.PaidAt = &paid
+	switch row.Status {
+	case domain.RedemptionReserved:
+		row.Status = domain.RedemptionConsumed
+		row.PaidAt = &paid
+	case domain.RedemptionReleased:
+		row.Status = domain.RedemptionConsumed
+		row.PaidAt = &paid
+		row.ReleasedAt = nil
+		if s.definitions != nil {
+			s.definitions.bumpRedemptionCount(row.Code, 1)
+		}
+	}
 	return nil
 }
 
