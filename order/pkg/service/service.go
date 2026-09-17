@@ -455,6 +455,7 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if !order.Cancelable() {
 		return nil, domain.ErrInvalidTransition
 	}
+	startedPending := order.Status == domain.StatusPending
 	stockCommitted := order.StockCommitted()
 	hasCapturedPayment := order.Status != domain.StatusPending
 	// Pre-ship statuses (paid, confirmed) get the atomic guard below because a
@@ -518,6 +519,25 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 		if err := cancelled.Cancel(now); err != nil {
 			return nil, err
 		}
+	}
+	if startedPending {
+		canceledOrder, didCancel, err := s.repo.CancelIfPending(ctx, order.ID, now, events)
+		if err != nil {
+			return nil, err
+		}
+		if didCancel {
+			s.tryDrainOutbox(ctx)
+			s.releaseHoldsForCancel(ctx, canceledOrder)
+			return s.present(canceledOrder), nil
+		}
+		reconciled, err := s.repo.Get(ctx, order.ID)
+		if err != nil {
+			return nil, err
+		}
+		if reconciled.Status == domain.StatusCanceled {
+			return s.present(reconciled), nil
+		}
+		return nil, domain.ErrInvalidTransition
 	}
 	saved, err := s.saveStatusChange(ctx, cancelled)
 	if err != nil {
