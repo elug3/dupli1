@@ -176,8 +176,8 @@ Wallet reads are **ABAC**, not permissioned: a customer reads their own entitlem
 |------------|-------------|
 | `order.create` | Create order for any `customer_id` (without ABAC self-check) |
 | `order.read.all` | List/get any customer's orders (bypass ABAC) |
-| `order.ship` | `POST /orders/{id}/ship` |
-| `order.status.update` | `PUT /orders/{id}/status` (cancel, fulfill); `POST /orders/{id}/confirm`; `POST /orders/{id}/cancel/approve|reject` |
+| `order.ship` | `POST /orders/{id}/ship`, `POST /orders/{id}/deliver` |
+| `order.status.update` | `PUT /orders/{id}/status` (cancel, fulfill); `POST /orders/{id}/confirm`; `POST /orders/{id}/cancel/approve|reject`; `POST /orders/{id}/dispute/resolve` |
 
 Checkout session routes (`/api/v1/orders/checkout/sessions/*`) follow the same rules as orders: authenticated customers use ABAC on `customer_id`; `order.create` / `order.read.all` bypass ABAC.
 
@@ -311,8 +311,12 @@ registered as an alias.
 | `GET` | `/api/v1/orders` | `order.read.all` |
 | `GET` | `/api/v1/orders?customer_id=` | ABAC or `order.read.all` |
 | `GET` | `/api/v1/orders/{id}` | ABAC or `order.read.all` |
-| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` |
 | `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` |
+| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` |
+| `POST` | `/api/v1/orders/{id}/deliver` | `order.ship` |
+| `POST` | `/api/v1/orders/{id}/receipt/confirm` | ABAC owner |
+| `POST` | `/api/v1/orders/{id}/receipt/dispute` | ABAC owner |
+| `POST` | `/api/v1/orders/{id}/dispute/resolve` | `order.status.update` |
 | `POST` | `/api/v1/orders/{id}/cancel` | ABAC owner |
 | `POST` | `/api/v1/orders/{id}/cancel/approve` | `order.status.update` |
 | `POST` | `/api/v1/orders/{id}/cancel/reject` | `order.status.update` |

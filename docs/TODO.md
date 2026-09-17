@@ -118,6 +118,8 @@ Completeness / code-quality follow-ups for `dupli1-notification`. Design: [notif
 
 ### Docs / API surface drift
 
+- [x] **Refresh order lifecycle docs** — `endpoints.md`, `api/specs/order-v1.yaml`, `docs/openapi.yaml`, [order-service.md](order-service.md) aligned with `confirmed` / `delivered` / `disputed` stages (2026-09-14).
+- [ ] **Implement order live-events SSE in dupli1-order** — manage-web client + [order-live-events.md](order-live-events.md) contract; route returns 404 today.
 - [ ] **Refresh stale notification docs** — keep `endpoints.md` / OpenAPI in sync with webhook + subscriptions; reconcile webhook vs polling notes in [notification-telegram-bot.md](notification-telegram-bot.md). (`service-layout.md` / `current-state.md` API table updated 2026-08-17.)
 - [ ] **OpenAPI: telegram manager + webhook** — extend `api/specs/notification-v1.yaml` (and `docs/openapi.yaml` if needed) beyond health/settings.
 - [ ] **Fix CLI usage blurb** — `notification/cmd/main.go` claims “customer and admin messaging APIs”; service is ops Telegram only.

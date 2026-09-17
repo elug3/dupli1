@@ -29,7 +29,7 @@ flowchart LR
 | Browse / save cart | `dupli1-cart` | Until cleared or checked out | None |
 | Checkout session | `dupli1-order` | 30 minutes (default) | Reserved on `complete` |
 | Payment | `dupli1-payment` | 5 minutes to pay | Reserved until ship or cancel |
-| Order | `dupli1-order` | Permanent | Committed on **ship** (`paid` → `in_transit`) |
+| Order | `dupli1-order` | Permanent | Committed on **ship** (`confirmed` → `in_transit`) |
 
 ---
 

@@ -119,6 +119,7 @@ See [service-layout.md](service-layout.md) for details.
   - 5-minute unpaid `pending` expiry worker (skips when payment wins the race)
   - **Shipping fee:** flat per-order delivery charge via `DUPLI1_ORDER_SHIPPING_FEE_WON` (deprecated alias `DUPLI1_ORDER_SHIPPING_FEE_CENTS`; whole KRW, default 30000 = 30,000 KRW; set 0 for free). JSON / DB / Go field is `shipping_fee_won`. `total = subtotal - discount + shipping`; no free-shipping threshold; promotional codes discount goods only (shipping benefits are Phase 4 of [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md)). Snapshotted on the checkout session when it opens; `complete` charges that quoted fee even if the configured amount changed mid-checkout. Direct `POST /orders` uses the current configured fee.
   - Publishes order events via transactional **outbox** (`order.created` / status updates); outbox drain worker
+  - Live admin SSE at `GET /api/v1/orders/events` is **planned** — manage-web client + mock gateway exist; route not registered in order handler yet ([order-live-events.md](order-live-events.md))
   - Optional `Idempotency-Key` on `POST /api/v1/orders` (replay-safe create)
   - Checkout `complete` snapshots recipient + shipping address (optional prefill from auth profile)
   - Checkout `complete` uses atomic session claim — concurrent completes cannot create duplicate orders

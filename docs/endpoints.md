@@ -517,12 +517,16 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | `GET` | `/api/v1/orders` | `order.read.all` | List all orders |
 | `GET` | `/api/v1/orders?customer_id={id}` | ABAC / `order.read.all` | List orders for a customer |
 | `GET` | `/api/v1/orders/{id}` | ABAC / `order.read.all` | Get a single order |
-| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | Ship order (`paid` → `in_transit`, commit stock); sets `confirmed_at` |
-| `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` | Confirm a paid order (`confirmed_at`, 2-hour SLA) |
-| `POST` | `/api/v1/orders/{id}/cancel` | ABAC owner | Immediate refund before confirm; cancel request after confirm / in transit |
+| `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` | Accept paid order (`paid` → `confirmed`; 2-hour SLA) |
+| `POST` | `/api/v1/orders/{id}/ship` | `order.ship` | Ship confirmed order (`confirmed` → `in_transit`, commit stock) |
+| `POST` | `/api/v1/orders/{id}/deliver` | `order.ship` | Mark delivered (`in_transit` → `delivered`) |
+| `POST` | `/api/v1/orders/{id}/receipt/confirm` | ABAC owner | Customer confirms receipt (`delivered` → `fulfilled`) |
+| `POST` | `/api/v1/orders/{id}/receipt/dispute` | ABAC owner | Customer reports non-receipt (`delivered` → `disputed`) |
+| `POST` | `/api/v1/orders/{id}/dispute/resolve` | `order.status.update` | Close dispute in delivery's favor (`disputed` → `fulfilled`, no refund) |
+| `POST` | `/api/v1/orders/{id}/cancel` | ABAC owner | Immediate refund before confirm; cancel request from `confirmed` through `delivered` |
 | `POST` | `/api/v1/orders/{id}/cancel/approve` | `order.status.update` | Approve a customer cancel request (refund) |
 | `POST` | `/api/v1/orders/{id}/cancel/reject` | `order.status.update` | Reject a customer cancel request |
-| `PUT` | `/api/v1/orders/{id}/status` | `order.status.update` | Cancel or fulfill |
+| `PUT` | `/api/v1/orders/{id}/status` | `order.status.update` | Cancel or fulfill (manager override / dispute refund) |
 
 ### GET /api/v1/orders/health
 
@@ -580,29 +584,47 @@ Request:
 { "status": "canceled" }
 ```
 
-Valid status transitions via this endpoint:
-- `pending` → `canceled`
-- `paid` → `canceled`
-- `in_transit` → `canceled`
-- `in_transit` → `fulfilled`
+Accepts only `{ "status": "canceled" }` or `{ "status": "fulfilled" }`. Use dedicated routes for `confirmed`, `in_transit`, and `delivered`.
 
-Paid and in-transit cancel refund the captured payment first. Customer-facing cancel uses `POST /api/v1/orders/{id}/cancel` instead (immediate before `confirmed_at`; request afterward).
+Valid transitions via this endpoint:
+- Any non-final status → `canceled` (refunds when `paid` or later; PG rejection leaves order unchanged)
+- `delivered` or `disputed` → `fulfilled` (manager override; also used to resolve disputes in the customer's favor via `canceled`)
+
+`pending` → `paid` is payment-driven only. `paid` → `confirmed` uses `POST …/confirm`. `confirmed` → `in_transit` uses `POST …/ship`. `in_transit` → `delivered` uses `POST …/deliver`.
+
+Customer-facing cancel uses `POST /api/v1/orders/{id}/cancel` instead (immediate refund before confirm; cancel request afterward).
 
 Response `200`: updated order object. Errors: `400` invalid transition, `404` not found, `502` when the PG rejects a refund.
 
 ### POST /api/v1/orders/{id}/confirm
 
-Requires `order.status.update`. Sets `confirmed_at` on a **`paid`** order. Managers must confirm within 2 hours of `paid_at`; a worker auto-confirms after that. Ship also sets `confirmed_at`.
+Requires `order.status.update`. Moves **`paid` → `confirmed`** and sets `confirmed_at`. Managers must confirm within 2 hours of `paid_at`; `EnforceRefundPolicy` auto-confirms after that.
 
 ### POST /api/v1/orders/{id}/cancel
 
-Owner ABAC. Before confirmation: same refund+cancel as manager status cancel. After confirmation or while `in_transit`: records `cancel_requested_at`. Manager `…/cancel/approve` or a 2-hour timeout completes the refund.
+Owner ABAC. Before confirmation (`paid`, not yet `confirmed`): immediate refund+cancel. From **`confirmed` through `delivered`**: records `cancel_requested_at`. Manager `…/cancel/approve` or a 2-hour timeout completes the refund.
 
-Optional body: `{ "reason": "…" }`.
+Optional body: `{ "reason": "…" }` (max 500 chars).
+
+### POST /api/v1/orders/{id}/deliver
+
+Requires `order.ship`. Moves **`in_transit` → `delivered`** and sets `delivered_at` / `delivered_by`.
+
+### POST /api/v1/orders/{id}/receipt/confirm
+
+Owner ABAC. Moves **`delivered` → `fulfilled`** and sets `receipt_confirmed_at`.
+
+### POST /api/v1/orders/{id}/receipt/dispute
+
+Owner ABAC. Moves **`delivered` → `disputed`**. Optional body: `{ "reason": "…" }` (max 500 chars).
+
+### POST /api/v1/orders/{id}/dispute/resolve
+
+Requires `order.status.update`. Moves **`disputed` → `fulfilled`** when the manager finds delivery was valid (no refund). To side with the customer, use `PUT …/status` → `canceled` instead.
 
 ### POST /api/v1/orders/{id}/ship
 
-Moves a **`paid`** order to **`in_transit`** and commits inventory reservations. Requires `order.ship`.
+Moves a **`confirmed`** order to **`in_transit`** and commits inventory reservations (atomic `ShipIfConfirmed`). Requires `order.ship`.
 
 Request body (required):
 ```json
@@ -627,13 +649,14 @@ Order object shape:
   "reservation_id": "res-xyz",
   "payment_id": "pay_000001",
   "items": [ { "sku": "SHOE-001", "quantity": 1, "unit_price_won": 9900 } ],
-  "status": "paid",
+  "status": "confirmed",
   "subtotal_won": 9900,
   "discount_won": 0,
-  "shipping_fee_won": 0,
-  "total_won": 9900,
+  "shipping_fee_won": 30000,
+  "total_won": 39900,
   "payment_due_at": "...",
   "paid_at": "...",
+  "confirmed_at": "...",
   "created_at": "...",
   "updated_at": "..."
 }
