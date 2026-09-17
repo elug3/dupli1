@@ -77,6 +77,7 @@ These retain design history. Prefer the living docs above for current behavior.
 | [product-sale-unit-reflection.md](product-sale-unit-reflection.md) | Decision background for flatten plan |
 | [product-multi-category-design.md](product-multi-category-design.md) | Wallets Sep / padded Oct schedule |
 | [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md) | Keep Product/Variant names |
+| [auth-service-api-keys.md](auth-service-api-keys.md) | API keys for `account_type: service` accounts — design, not implemented |
 | [auth-profile-extension-plan.md](auth-profile-extension-plan.md) | Phases A–B shipped; Phase D (`profile` service) live — data copy from auth's orphaned tables still open. See [profile-service.md](profile-service.md) |
 | [order-tracking-plan.md](order-tracking-plan.md) | Customer order history + required ship tracking |
 | [manager-settings-api.md](manager-settings-api.md) | Sketch only |
