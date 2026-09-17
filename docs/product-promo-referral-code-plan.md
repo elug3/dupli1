@@ -622,6 +622,12 @@ The functional core. Everything the campaign needs except the wallet.
 
 ### Campaign go-live (Phases 1–3)
 
+Phases 1–3 are implemented, but these boxes stay unticked until the gaps
+listed in [TODO.md](TODO.md) are closed — two behaviours are correct in code
+yet untested, the campaign has never been dry-run end to end, and `nginx -t`
+never ran against the Phase 1 gateway changes.
+
+
 - [ ] Every surface says "promotional code"; no `coupon` identifier left outside the compatibility aliases
 - [ ] Registering an account issues exactly one welcome entitlement; a redelivered `user.registered` issues none
 - [ ] Fixed ₩ benefit never exceeds the eligible subtotal, and the order total never drops below the shipping fee
