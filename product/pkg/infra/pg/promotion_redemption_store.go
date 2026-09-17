@@ -43,11 +43,18 @@ func (s *PromotionRedemptionStore) Reserve(ctx context.Context, in ports.Reserve
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	// An order may hold only one redemption. If this order already has one,
-	// hand it back rather than double-counting a retried complete.
+	// hand it back rather than double-counting a retried complete — unless a
+	// pre-payment cancel released it and complete is being retried.
 	existing, err := scanRedemption(tx.QueryRow(ctx, `
 		SELECT `+redemptionColumns+` FROM promotion_redemptions WHERE order_id = $1
 	`, in.OrderID))
 	if err == nil {
+		if existing.Status != domain.RedemptionReleased {
+			return existing, tx.Commit(ctx)
+		}
+		if err := s.reactivateReleased(ctx, tx, existing, in, code, maxPerCustomer); err != nil {
+			return nil, err
+		}
 		return existing, tx.Commit(ctx)
 	}
 	if err != pgx.ErrNoRows {
@@ -125,13 +132,57 @@ func (s *PromotionRedemptionStore) Reserve(ctx context.Context, in ports.Reserve
 
 // Consume marks an order's reservation paid. It is idempotent: payment events
 // can be redelivered, and a second call on an already-consumed row is a no-op.
+//
+// A row in released state is also consumable: cancel-before-pay hands the slot
+// back, but a late payment.succeeded still lands on the same order_id and must
+// spend the use again (mirroring stock reinstate on MarkOrderPaid).
 func (s *PromotionRedemptionStore) Consume(ctx context.Context, orderID string, at time.Time) error {
-	_, err := s.pool.Exec(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return wrapDB("consume redemption", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var code, status string
+	err = tx.QueryRow(ctx, `
+		SELECT code, status FROM promotion_redemptions WHERE order_id = $1 FOR UPDATE
+	`, orderID).Scan(&code, &status)
+	if err == pgx.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return wrapDB("consume redemption", err)
+	}
+	if status == string(domain.RedemptionConsumed) {
+		return wrapDB("consume redemption", tx.Commit(ctx))
+	}
+	if status == string(domain.RedemptionReserved) {
+		if _, err := tx.Exec(ctx, `
+			UPDATE promotion_redemptions
+			SET status = 'consumed', paid_at = $2
+			WHERE order_id = $1 AND status = 'reserved'
+		`, orderID, at.UTC()); err != nil {
+			return wrapDB("consume redemption", err)
+		}
+		return wrapDB("consume redemption", tx.Commit(ctx))
+	}
+	if status != string(domain.RedemptionReleased) {
+		return wrapDB("consume redemption", tx.Commit(ctx))
+	}
+
+	if _, err := tx.Exec(ctx, `
 		UPDATE promotion_redemptions
-		SET status = 'consumed', paid_at = $2
-		WHERE order_id = $1 AND status = 'reserved'
-	`, orderID, at.UTC())
-	return wrapDB("consume redemption", err)
+		SET status = 'consumed', paid_at = $2, released_at = NULL
+		WHERE order_id = $1 AND status = 'released'
+	`, orderID, at.UTC()); err != nil {
+		return wrapDB("consume redemption", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE promotions SET redemption_count = redemption_count + 1 WHERE code = $1
+	`, code); err != nil {
+		return wrapDB("consume redemption", err)
+	}
+	return wrapDB("consume redemption", tx.Commit(ctx))
 }
 
 // Release hands the use back to the customer, for a cancel before shipment.
@@ -187,6 +238,68 @@ func (s *PromotionRedemptionStore) CountsByCode(ctx context.Context, code string
 		FROM promotion_redemptions WHERE code = $1
 	`, domain.NormalizedCode(code)).Scan(&active, &consumed)
 	return active, consumed, wrapDB("count redemptions", err)
+}
+
+func (s *PromotionRedemptionStore) reactivateReleased(
+	ctx context.Context,
+	tx pgx.Tx,
+	row *domain.Redemption,
+	in ports.ReserveRedemptionInput,
+	code string,
+	maxPerCustomer int,
+) error {
+	var redemptionCount int
+	var maxRedemptions *int
+	if err := tx.QueryRow(ctx, `
+		SELECT redemption_count, max_redemptions FROM promotions WHERE code = $1 FOR UPDATE
+	`, code).Scan(&redemptionCount, &maxRedemptions); err != nil {
+		return wrapDB("reactivate released redemption", err)
+	}
+	if maxRedemptions != nil && redemptionCount >= *maxRedemptions {
+		return ports.Conflict("promotion campaign exhausted")
+	}
+
+	var used int
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*) FROM promotion_redemptions
+		WHERE code = $1 AND customer_id = $2 AND status IN ('reserved', 'consumed')
+		FOR UPDATE
+	`, code, in.CustomerID).Scan(&used); err != nil {
+		return wrapDB("reactivate released redemption", err)
+	}
+	if used >= maxPerCustomer {
+		return ports.Conflict("promotion already used by this customer")
+	}
+
+	benefit, err := json.Marshal(in.AppliedBenefit)
+	if err != nil {
+		return fmt.Errorf("encode applied benefit: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE promotion_redemptions
+		SET status = 'reserved', discount_won = $2, shipping_discount_won = $3,
+			order_subtotal_won = $4, eligible_subtotal_won = $5, applied_benefit = $6,
+			released_at = NULL
+		WHERE order_id = $1 AND status = 'released'
+	`, in.OrderID, in.DiscountWon, in.ShippingDiscountWon, in.OrderSubtotalWon,
+		in.EligibleSubtotalWon, benefit); err != nil {
+		return wrapDB("reactivate released redemption", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE promotions SET redemption_count = redemption_count + 1 WHERE code = $1
+	`, code); err != nil {
+		return wrapDB("reactivate released redemption", err)
+	}
+
+	row.Status = domain.RedemptionReserved
+	row.DiscountWon = in.DiscountWon
+	row.ShippingDiscountWon = in.ShippingDiscountWon
+	row.OrderSubtotalWon = in.OrderSubtotalWon
+	row.EligibleSubtotalWon = in.EligibleSubtotalWon
+	row.AppliedBenefit = in.AppliedBenefit
+	row.ReleasedAt = nil
+	return nil
 }
 
 const redemptionColumns = `id, code, order_id, customer_id, status, discount_won, ` +

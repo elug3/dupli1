@@ -575,6 +575,36 @@ func TestMarkOrderPaidConsumesThePromotion(t *testing.T) {
 	}
 }
 
+// A pending cancel releases the promotion; a late payment must consume it again
+// so the customer cannot checkout twice with the same single-use code.
+func TestMarkOrderPaidConsumesPromotionAfterPendingCancel(t *testing.T) {
+	ctx := t.Context()
+	svc, promo := newPromoSvc(t)
+	session := openSessionWithItem(t, svc)
+	if _, err := svc.ApplyCheckoutPromotion(ctx, session.ID, "SUMMER30"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	result, err := svc.CompleteCheckout(ctx, session.ID, service.CompleteCheckoutInput{
+		RecipientName: "Kim", RecipientPhone: "010-0000-0000",
+		ShippingAddress: domain.ShippingAddress{PostalCode: "06236", AddressLine1: "1 Test", City: "Seoul", Province: "Seoul"},
+	})
+	if err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	if _, err := svc.CancelOrder(ctx, result.Order.ID); err != nil {
+		t.Fatalf("CancelOrder: %v", err)
+	}
+	if promo.released[result.Order.ID] != 1 {
+		t.Fatalf("released = %d, want 1", promo.released[result.Order.ID])
+	}
+	if _, err := svc.MarkOrderPaid(ctx, result.Order.ID, "pay-late", result.Order.TotalWon); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	if promo.consumed[result.Order.ID] != 1 {
+		t.Fatalf("consumed = %d, want 1 after late payment", promo.consumed[result.Order.ID])
+	}
+}
+
 // Cancelling before shipment hands the use back, exactly as it hands stock
 // back. This is the rule the plan pins: nothing is really spent until the
 // goods have gone.

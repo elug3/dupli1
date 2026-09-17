@@ -695,6 +695,58 @@ func (p *refundDuringConfirmPayment) CancelPayment(_ context.Context, paymentID,
 	return nil
 }
 
+// paidDuringPendingCancelRepo simulates MarkOrderPaid completing while a
+// customer cancel tries to overwrite paid with canceled without refunding.
+type paidDuringPendingCancelRepo struct {
+	*memory.Repository
+}
+
+func (r *paidDuringPendingCancelRepo) CancelIfPending(ctx context.Context, orderID string, now time.Time, events []ports.OutboxEvent) (*domain.Order, bool, error) {
+	order, err := r.Get(ctx, orderID)
+	if err != nil {
+		return nil, false, err
+	}
+	if order.Status == domain.StatusPending {
+		if err := order.MarkPaid("pay-race", order.TotalWon, now); err != nil {
+			return nil, false, err
+		}
+		if err := r.Repository.Save(ctx, order); err != nil {
+			return nil, false, err
+		}
+	}
+	return r.Repository.CancelIfPending(ctx, orderID, now, events)
+}
+
+func TestCancelOrderPendingAtomicGuardBeatsConcurrentMarkOrderPaid(t *testing.T) {
+	ctx := t.Context()
+	stock := &fakeStock{reservationID: "res-pending-race"}
+	repo := &paidDuringPendingCancelRepo{Repository: memory.NewRepository()}
+	svc := service.New(repo, stock).WithProduct(&fakeProduct{defaultKRW: 5000})
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID: "customer-1",
+		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	_, err = svc.CancelOrder(ctx, order.ID)
+	if !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Fatalf("CancelOrder error = %v, want ErrInvalidTransition when payment wins race", err)
+	}
+	got, err := svc.GetOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if got.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid (must not overwrite with canceled)", got.Status)
+	}
+	if got.PaymentID != "pay-race" {
+		t.Fatalf("payment_id = %q, want pay-race", got.PaymentID)
+	}
+}
+
 // CancelOrder must atomically mark paid orders canceled after refund so a
 // concurrent ship cannot reach in_transit once money is already back.
 func TestCancelOrderAtomicGuardBeatsConcurrentShip(t *testing.T) {
@@ -1110,6 +1162,13 @@ func (r *saveFailOnCancelRepo) SaveWithOutbox(ctx context.Context, order *domain
 		return errors.New("simulated cancel persistence failure")
 	}
 	return r.Repository.SaveWithOutbox(ctx, order, idem, events)
+}
+
+func (r *saveFailOnCancelRepo) CancelIfPending(ctx context.Context, orderID string, now time.Time, events []ports.OutboxEvent) (*domain.Order, bool, error) {
+	if r.fail {
+		return nil, false, errors.New("simulated cancel persistence failure")
+	}
+	return r.Repository.CancelIfPending(ctx, orderID, now, events)
 }
 
 func TestCancelOrderDoesNotReleaseStockWhenSaveFails(t *testing.T) {
