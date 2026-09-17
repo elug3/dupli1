@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -27,8 +28,8 @@ const (
 )
 
 type ChatRouting interface {
-	OrderChatID(ctx context.Context) string
-	ProductChatID(ctx context.Context) string
+	OrderChatIDs(ctx context.Context) []string
+	ProductChatIDs(ctx context.Context) []string
 }
 
 type DispatcherConfig struct {
@@ -93,17 +94,14 @@ func (d *Dispatcher) handleOrder(ctx context.Context, subject string, payload []
 		return fmt.Errorf("decode order event: %w", err)
 	}
 
-	chatID := strings.TrimSpace(d.orderChatID(ctx))
-	if chatID == "" {
+	chatIDs := d.orderChatIDs(ctx)
+	if len(chatIDs) == 0 {
 		log.Printf("order event %s for %s skipped: order telegram chat not configured", subject, event.OrderID)
 		return nil
 	}
 
 	message := formatOrderMessage(subject, event, d.cfg.ManageWebURL)
-	if err := d.notifier.Send(ctx, chatID, message); err != nil {
-		return fmt.Errorf("notify order event: %w", err)
-	}
-	return nil
+	return d.sendAll(ctx, chatIDs, message, "order event")
 }
 
 // handlePaymentCanceled alerts ops that money went back to a customer. Refunds
@@ -116,16 +114,13 @@ func (d *Dispatcher) handlePaymentCanceled(ctx context.Context, payload []byte) 
 		return fmt.Errorf("decode payment.canceled event: %w", err)
 	}
 
-	chatID := strings.TrimSpace(d.orderChatID(ctx))
-	if chatID == "" {
+	chatIDs := d.orderChatIDs(ctx)
+	if len(chatIDs) == 0 {
 		log.Printf("payment.canceled for %s skipped: order telegram chat not configured", event.OrderID)
 		return nil
 	}
 
-	if err := d.notifier.Send(ctx, chatID, formatPaymentCanceledMessage(event, d.cfg.ManageWebURL)); err != nil {
-		return fmt.Errorf("notify payment.canceled: %w", err)
-	}
-	return nil
+	return d.sendAll(ctx, chatIDs, formatPaymentCanceledMessage(event, d.cfg.ManageWebURL), "payment.canceled")
 }
 
 // formatPaymentCanceledMessage distinguishes a full refund from a partial one:
@@ -169,16 +164,13 @@ func (d *Dispatcher) handlePaymentCallbackRejected(ctx context.Context, payload 
 		return fmt.Errorf("decode payment.callback_rejected event: %w", err)
 	}
 
-	chatID := strings.TrimSpace(d.orderChatID(ctx))
-	if chatID == "" {
+	chatIDs := d.orderChatIDs(ctx)
+	if len(chatIDs) == 0 {
 		log.Printf("payment.callback_rejected for %s skipped: order telegram chat not configured", event.PaymentID)
 		return nil
 	}
 
-	if err := d.notifier.Send(ctx, chatID, formatPaymentCallbackRejectedMessage(event, d.cfg.ManageWebURL)); err != nil {
-		return fmt.Errorf("notify payment.callback_rejected: %w", err)
-	}
-	return nil
+	return d.sendAll(ctx, chatIDs, formatPaymentCallbackRejectedMessage(event, d.cfg.ManageWebURL), "payment.callback_rejected")
 }
 
 // formatPaymentCallbackRejectedMessage leads with the action, because whoever
@@ -226,35 +218,54 @@ func (d *Dispatcher) handleProduct(ctx context.Context, subject string, payload 
 		return fmt.Errorf("decode product event: %w", err)
 	}
 
-	chatID := strings.TrimSpace(d.productChatID(ctx))
-	if chatID == "" {
+	chatIDs := d.productChatIDs(ctx)
+	if len(chatIDs) == 0 {
 		log.Printf("product event %s for %s skipped: product telegram chat not configured", subject, event.ProductID)
 		return nil
 	}
 
 	message := formatProductMessage(subject, event)
-	if err := d.notifier.Send(ctx, chatID, message); err != nil {
-		return fmt.Errorf("notify product event: %w", err)
-	}
-	return nil
+	return d.sendAll(ctx, chatIDs, message, "product event")
 }
 
-func (d *Dispatcher) orderChatID(ctx context.Context) string {
+func (d *Dispatcher) orderChatIDs(ctx context.Context) []string {
+	var routed []string
 	if d.cfg.Routing != nil {
-		if id := strings.TrimSpace(d.cfg.Routing.OrderChatID(ctx)); id != "" {
-			return id
-		}
+		routed = d.cfg.Routing.OrderChatIDs(ctx)
 	}
-	return strings.TrimSpace(d.cfg.OrderChatID)
+	return mergeChatIDs(routed, d.cfg.OrderChatID)
 }
 
-func (d *Dispatcher) productChatID(ctx context.Context) string {
+func (d *Dispatcher) productChatIDs(ctx context.Context) []string {
+	var routed []string
 	if d.cfg.Routing != nil {
-		if id := strings.TrimSpace(d.cfg.Routing.ProductChatID(ctx)); id != "" {
-			return id
+		routed = d.cfg.Routing.ProductChatIDs(ctx)
+	}
+	return mergeChatIDs(routed, d.cfg.ProductChatID)
+}
+
+// mergeChatIDs keeps the routed destinations and adds the static fallback for
+// the case where no routing is wired at all; routing already unions the env
+// chat IDs, so the fallback is normally a duplicate and drops out.
+func mergeChatIDs(routed []string, fallback string) []string {
+	var set chatSet
+	for _, id := range routed {
+		set.add(id)
+	}
+	set.add(fallback)
+	return set.list()
+}
+
+// sendAll delivers one message to every destination, reporting failures
+// together so that one unreachable chat cannot silence the rest.
+func (d *Dispatcher) sendAll(ctx context.Context, chatIDs []string, message, what string) error {
+	var errs []error
+	for _, chatID := range chatIDs {
+		if err := d.notifier.Send(ctx, chatID, message); err != nil {
+			errs = append(errs, fmt.Errorf("notify %s to chat %s: %w", what, chatID, err))
 		}
 	}
-	return strings.TrimSpace(d.cfg.ProductChatID)
+	return errors.Join(errs...)
 }
 
 func formatOrderMessage(subject string, event events.Order, manageWebURL string) string {

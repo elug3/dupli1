@@ -15,17 +15,17 @@ func NewTelegramRouting(subs *TelegramSubscriptions, env *ports.TelegramEnvAllow
 	return &TelegramRouting{subs: subs, env: env}
 }
 
-func (r *TelegramRouting) OrderChatID(ctx context.Context) string {
+func (r *TelegramRouting) OrderChatIDs(ctx context.Context) []string {
 	if r == nil || r.subs == nil {
-		return ""
+		return nil
 	}
 	order, _ := r.subs.RoutingChats(ctx, r.env)
 	return order
 }
 
-func (r *TelegramRouting) ProductChatID(ctx context.Context) string {
+func (r *TelegramRouting) ProductChatIDs(ctx context.Context) []string {
 	if r == nil || r.subs == nil {
-		return ""
+		return nil
 	}
 	_, product := r.subs.RoutingChats(ctx, r.env)
 	return product

@@ -42,11 +42,11 @@ func TestTelegramSubscriptionsAcceptAndRoute(t *testing.T) {
 
 	env := &ports.TelegramEnvAllowlist{}
 	order, product := subs.RoutingChats(ctx, env)
-	if order != "42" {
-		t.Fatalf("order chat = %q, want 42", order)
+	if len(order) != 1 || order[0] != "42" {
+		t.Fatalf("order chats = %v, want [42]", order)
 	}
-	if product != "" {
-		t.Fatalf("product chat = %q, want empty", product)
+	if len(product) != 0 {
+		t.Fatalf("product chats = %v, want none", product)
 	}
 
 	access := service.NewTelegramAccess(subs, env)

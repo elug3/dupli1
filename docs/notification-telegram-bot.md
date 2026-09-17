@@ -60,11 +60,13 @@ Production bot (2026-08): `@MHYM7_BOT` (`dupli1_notification`).
 
 ### Access rules (implemented)
 
-1. **Inbound messages** (webhook or `getUpdates`) upsert a **pending** `telegram_subscriptions` row with `chat_id` and `telegram_user_id`.
+1. **`/start` registers**, and nothing else does. An explicit `/start` from an unknown chat upserts a **pending** `telegram_subscriptions` row with `chat_id` and `telegram_user_id`. Any other message — ordinary chatter in a group the bot sits in, a stray `/help` — is ignored entirely: no row, no reply.
 2. **Managers** accept or reject pending rows, or manually add a user ID / chat ID via the REST API (`notification.telegram.manage`).
-3. **Outbound ops alerts** — sent to env chat IDs, or to accepted subscriptions with `alert_order` / `alert_product` when env is unset.
-4. **`/start` replies** — pending users get a “registration received” message; accepted users (or env allowlist) get the welcome + chat ID.
-5. **Everyone else** — silently ignored on `/start` (unknown users cannot register).
+3. **Outbound ops alerts** — sent to the **union** of the env chat IDs and every accepted subscription carrying `alert_order` / `alert_product`, each chat once. Env destinations do not suppress database ones: while they did, setting `TELEGRAM_ORDER_CHAT_ID` made the whole subscription UI inert.
+4. **`/start` replies** — an unknown chat is acknowledged **once**, when its pending row is created (“registration received”); repeating `/start` while it is still pending, or after a rejection, is silent. Accepted chats, and users on the env allowlist, get the welcome + chat ID every time.
+5. **Env-allowlisted users** need no registration: `/start` welcomes them without creating a pending row for a manager to approve.
+
+Self-service registration is deliberate — it is how a new operator onboards without a manager transcribing numeric Telegram user IDs by hand. Anyone who finds the bot can therefore create one pending row and receive one acknowledgement; a manager decides whether it ever becomes a destination.
 
 ### Webhook authentication (fail closed)
 
@@ -125,8 +127,8 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 | `TELEGRAM_WEBHOOK_SECRET` | **Required** when webhook URL is set | Validates `X-Telegram-Bot-Api-Secret-Token`; startup fails without it, and the handler is fail-closed |
 | `AUTH_JWKS_URL` | **Required for manage-web** | Auth JWKS for RS256 manager tokens. Without it, Telegram manager routes return `503 auth not configured` and manage-web `/telegram` shows **Failed to load Telegram subscriptions**. |
 | `TELEGRAM_ALLOWED_USER_IDS` | Optional bootstrap | Comma-separated user IDs until DB entries exist |
-| `TELEGRAM_ORDER_CHAT_ID` | Fallback routing | Order alerts chat when no DB `alert_order` row |
-| `TELEGRAM_PRODUCT_CHAT_ID` | Fallback routing | Product alerts chat when no DB `alert_product` row |
+| `TELEGRAM_ORDER_CHAT_ID` | Optional routing | Always receives order alerts, in addition to accepted `alert_order` subscriptions |
+| `TELEGRAM_PRODUCT_CHAT_ID` | Optional routing | Always receives product alerts, in addition to accepted `alert_product` subscriptions |
 | `NATS_URL` | Yes (for dispatch) | e.g. `nats://nats.dupli1.local:4222` |
 | `NATS_TOKEN` | Yes (with `--auth`) | Must match the broker token. Compose default `dupli1_nats_dev`; prod Secrets Manager `dupli1/production/nats-token` |
 | `MANAGE_WEB_URL` | Recommended | Base URL for “View order in manage-web” links (default `https://manage.dupli1.com`) |
@@ -154,7 +156,7 @@ persistence:
 
 The service migrates its own schema on startup, so no migration step is needed.
 
-If order/product chat IDs are empty, events are **logged and skipped** (no Telegram send). Core NATS does not redeliver — a missed alert is only visible in CloudWatch (`/ecs/dupli1-notification`).
+If an event has no destination at all — no env chat ID and no accepted subscription with the matching flag — it is **logged and skipped** (no Telegram send). When several chats are configured, each is attempted even if an earlier one fails; the failures are reported together. Core NATS does not redeliver — a missed alert is only visible in CloudWatch (`/ecs/dupli1-notification`).
 
 ### Running more than one task
 

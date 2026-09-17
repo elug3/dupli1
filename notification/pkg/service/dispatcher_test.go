@@ -11,13 +11,22 @@ import (
 )
 
 type recordedNotifier struct {
-	chatID  string
-	message string
+	chatID   string
+	message  string
+	chatIDs  []string
+	messages []string
+	err      error
+	failFor  string
 }
 
 func (r *recordedNotifier) Send(ctx context.Context, chatID string, message string) error {
 	r.chatID = chatID
 	r.message = message
+	r.chatIDs = append(r.chatIDs, chatID)
+	r.messages = append(r.messages, message)
+	if r.err != nil && (r.failFor == "" || r.failFor == chatID) {
+		return r.err
+	}
 	return nil
 }
 
@@ -104,7 +113,7 @@ func TestDispatcherOrderPaid(t *testing.T) {
 
 func TestDispatcherUsesDynamicRouting(t *testing.T) {
 	notifier := &recordedNotifier{}
-	routing := &stubChatRouting{orderChat: "-dynamic-order", productChat: "-dynamic-product"}
+	routing := &stubChatRouting{orderChats: []string{"-dynamic-order"}, productChats: []string{"-dynamic-product"}}
 	dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{
 		Routing:       routing,
 		OrderChatID:   "-static-order",
@@ -122,8 +131,8 @@ func TestDispatcherUsesDynamicRouting(t *testing.T) {
 	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderCreated, orderPayload); err != nil {
 		t.Fatalf("handle order: %v", err)
 	}
-	if notifier.chatID != "-dynamic-order" {
-		t.Fatalf("order chat = %q, want dynamic routing", notifier.chatID)
+	if got := strings.Join(notifier.chatIDs, ","); got != "-dynamic-order,-static-order" {
+		t.Fatalf("order chats = %q, want the routed chat and the static fallback", got)
 	}
 
 	productPayload, _ := json.Marshal(map[string]any{
@@ -139,8 +148,8 @@ func TestDispatcherUsesDynamicRouting(t *testing.T) {
 	if err := dispatcher.HandleForTest(t.Context(), service.SubjectProductCreated, productPayload); err != nil {
 		t.Fatalf("handle product: %v", err)
 	}
-	if notifier.chatID != "-dynamic-product" {
-		t.Fatalf("product chat = %q, want dynamic routing", notifier.chatID)
+	if got := strings.Join(notifier.chatIDs, ","); !strings.HasSuffix(got, "-dynamic-product,-static-product") {
+		t.Fatalf("product chats = %q, want the routed chat and the static fallback", got)
 	}
 }
 
@@ -203,12 +212,12 @@ func TestDispatcherFallsBackToOccurredAt(t *testing.T) {
 }
 
 type stubChatRouting struct {
-	orderChat   string
-	productChat string
+	orderChats   []string
+	productChats []string
 }
 
-func (s *stubChatRouting) OrderChatID(_ context.Context) string   { return s.orderChat }
-func (s *stubChatRouting) ProductChatID(_ context.Context) string { return s.productChat }
+func (s *stubChatRouting) OrderChatIDs(_ context.Context) []string   { return s.orderChats }
+func (s *stubChatRouting) ProductChatIDs(_ context.Context) []string { return s.productChats }
 
 func TestDispatcherProductCreated(t *testing.T) {
 	notifier := &recordedNotifier{}
