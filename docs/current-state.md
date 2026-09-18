@@ -17,7 +17,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Shopping cart | Implemented (PostgreSQL) |
 | Payments (NANO card + Bypass) | Implemented — see [payment-service.md](payment-service.md) |
 | Payment methods | Credit card (NANO) + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
-| Notifications | Implemented (NATS → Telegram when configured) |
+| Notifications | Implemented (NATS → Telegram when configured); **subscriptions are not yet persisted in production** — the ECS task has no `DUPLI1_NOTIFICATION_DB`, see [dupli1-notification](#dupli1-notification) |
 | Customer commerce profile + addresses | Implemented — own **`profile`** service (PostgreSQL), extracted from auth ([profile-service.md](profile-service.md), [auth-profile-extension-plan.md](auth-profile-extension-plan.md)); chat/analytics not started |
 | Guest PDP views + recommendations | Implemented — in product |
 | Manager settings (mutable store policy) | Sketch — see [manager-settings-api.md](manager-settings-api.md) |
@@ -160,9 +160,14 @@ See [service-layout.md](service-layout.md) for details.
 
 - **Host port:** 8084
 - **Features:** NATS subscriber (`order.*`, `product.*`, `payment.canceled`, `payment.callback_rejected`); Telegram ops alerts; webhook or `getUpdates` stores `chat_id` in PostgreSQL; manager API to accept users/chats. See [notification-telegram-bot.md](notification-telegram-bot.md)
-- **Database:** PostgreSQL `notifications` (`DUPLI1_NOTIFICATION_DB`; local port 5438)
-- **Handler failures** (payload decode, Telegram send) are logged; core NATS does not redeliver, so a failed alert is dropped after the log line
-- **Production:** bot token from Secrets Manager; subscriptions and routing in notification DB
+- **Database:** PostgreSQL `notifications` (`DUPLI1_NOTIFICATION_DB`; local port 5438). Without it the service falls back to an in-memory subscription repository that does not survive a restart — which is what production runs today, see **Production** below
+- **Alert routing:** every destination, not one — the union of the env chat IDs (`TELEGRAM_ORDER_CHAT_ID` / `TELEGRAM_PRODUCT_CHAT_ID`) and every accepted subscription carrying `alert_order` / `alert_product`, each chat once. Env no longer overrides the database, so accepting a chat in manage-web takes effect even where the env fallback is set
+- **Registration:** only an explicit `/start` registers a chat, and only if it is not already known, so the "registration received" ack is sent once. An env-allowlisted user is welcomed without a pending row; a `/start` from a known chat refreshes its stored label and username
+- **Delivery:** sends retry 3× with a doubling backoff on a timeout, 5xx or 429 (never on a 4xx); messages are truncated to Telegram's 4096-character limit at a tag/entity boundary. A send that still fails is logged — core NATS does not redeliver, so the alert is then dropped
+- **Webhook:** `TELEGRAM_WEBHOOK_SECRET` is required at startup whenever `TELEGRAM_WEBHOOK_URL` is set, and the secret is compared in constant time. An authenticated update is acknowledged **before** it is processed (work continues under the service context, 30s budget), so Telegram does not redeliver an update already in flight; the backlog drain runs before `setWebhook`, since Telegram answers `getUpdates` with `409` while a webhook is active
+- **More than one task:** NATS subscriptions use the queue group `dupli1-notification`, so an event is delivered once rather than once per task; the cached allowlist is rebuilt from the database every 30s so an accept served by one task reaches the others. Polling is **not** leader-elected — a second poller on the same bot token gets `409` and backs off 30s, which covers a deploy overlap but not permanent multi-task polling
+- **`/health`** reports each wired dependency (`postgres` ping, `nats` connection) and `status: degraded` when one fails, **always with HTTP 200** — nothing probes it today, so a 503 would signal nothing while risking a restart loop for whoever wires a probe to it later. Results cached 5s; probe errors are logged, not returned, since the route is unauthenticated
+- **Production:** bot token from Secrets Manager. **Subscriptions are not persisted:** the ECS task definition carries no `DUPLI1_NOTIFICATION_DB` (confirmed on `dupli1-notification:5`), so the service runs on the in-memory repository and every manager accept/reject is lost on deploy. Terraform is wired for the switch — `var.notification_db_url_secret_arn` defaults to `""` and the secret is omitted while it is empty — and needs the `notifications` database created, its URL stored as `dupli1/production/notification-db-url`, and the variable set. Production also runs **polling**, not webhook mode: neither `TELEGRAM_WEBHOOK_URL` nor `TELEGRAM_WEBHOOK_SECRET` is set on the task
 - **Status:** Health + event dispatch + Telegram manager API (no outbound email/SMS yet)
 
 ### dupli1-proxy
@@ -218,7 +223,7 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Per
 ## Known gaps
 
 1. **Local TLS** — certs in `certs/` are not wired into nginx; gateway is HTTP only
-2. **Notification** — Telegram ops alerts only; no email/SMS
+2. **Notification** — Telegram ops alerts only; no email/SMS. In production the service still runs on the in-memory subscription repository (no `DUPLI1_NOTIFICATION_DB` on the ECS task), so manager accept/reject decisions are lost on every deploy; terraform is ready and waiting on the Secrets Manager entry
 3. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
 4. **Planned packages not started** — user, chat, analytics (beyond `shared/pkg/permissions`)
 5. **Quality/performance** — see [quality-performance-review.md](quality-performance-review.md); money-path Criticals (C1 pricing, H7 JWT) are fixed — remaining items in [TODO.md](TODO.md)
