@@ -263,9 +263,11 @@ func (s *PromotionRedemptionStore) reactivateReleased(
 
 	var used int
 	if err := tx.QueryRow(ctx, `
-		SELECT count(*) FROM promotion_redemptions
-		WHERE code = $1 AND customer_id = $2 AND status IN ('reserved', 'consumed')
-		FOR UPDATE
+		SELECT count(*) FROM (
+			SELECT 1 FROM promotion_redemptions
+			WHERE code = $1 AND customer_id = $2 AND status IN ('reserved', 'consumed')
+			FOR UPDATE
+		) locked
 	`, code, in.CustomerID).Scan(&used); err != nil {
 		return wrapDB("reactivate released redemption", err)
 	}
