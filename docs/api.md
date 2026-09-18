@@ -970,6 +970,12 @@ Unpaid `pending` orders auto-cancel after **5 minutes**. Full design: [payment-s
 
 Health and settings (`GET /health`, `GET /api/v1/notification/health`, `GET /settings`, `GET /api/v1/notification/settings`). Outbound ops alerts are driven by NATS subscriptions (Telegram when configured). Inbound Telegram uses `POST /api/v1/notification/telegram/webhook` (production, requires `TELEGRAM_WEBHOOK_SECRET`) or `getUpdates` polling (local). Managers manage subscriptions at `/api/v1/notification/telegram/subscriptions` (`notification.telegram.read` / `notification.telegram.manage`). Full runbook: [notification-telegram-bot.md](notification-telegram-bot.md).
 
+`GET /health` returns `{"status":"ok"}` plus a `dependencies` map where one is wired (`postgres`, `nats`), each `{"ok": bool}`, and `status` becomes `"degraded"` when a probe fails. **The code is always `200`** — nothing probes this endpoint, so a caller that wants to act reads `status`. Probe results are cached for 5s and probe errors are logged rather than returned, since the route is unauthenticated.
+
+`POST /api/v1/notification/telegram/subscriptions` returns `400` only when neither `telegram_user_id` nor `chat_id` is given, `409` when the chat ID or Telegram user ID already belongs to another subscription, and `500` for a store failure — it no longer returns the driver's error text.
+
+`POST /api/v1/notification/telegram/webhook` answers `200` once the update is authenticated and parsed, **before** it is processed: processing continues in the background, so the `200` means accepted, not handled. A malformed body is `400`, a bad or missing `X-Telegram-Bot-Api-Secret-Token` is `403`, and an unconfigured secret is `503`.
+
 ---
 
 ## Common error shape
