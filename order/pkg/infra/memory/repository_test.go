@@ -97,6 +97,78 @@ func TestCancelIfPendingExpiredSkipsBeforeDue(t *testing.T) {
 	}
 }
 
+// CancelIfPending is the atomic guard for customer-initiated cancels on
+// pending orders (PR #282): a concurrent MarkOrderPaid must not be overwritten.
+func TestCancelIfPendingCancelsPendingOrder(t *testing.T) {
+	ctx := t.Context()
+	repo := memory.NewRepository()
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	seedPendingOrder(t, repo, "ord-pend-1", now.Add(5*time.Minute))
+
+	events := []ports.OutboxEvent{{AggregateID: "ord-pend-1", Subject: "order.canceled", Payload: []byte(`{}`)}}
+	canceled, ok, err := repo.CancelIfPending(ctx, "ord-pend-1", now, events)
+	if err != nil {
+		t.Fatalf("CancelIfPending: %v", err)
+	}
+	if !ok || canceled == nil {
+		t.Fatal("want canceled order")
+	}
+	if canceled.Status != domain.StatusCanceled {
+		t.Fatalf("status = %q, want canceled", canceled.Status)
+	}
+
+	loaded, err := repo.Get(ctx, "ord-pend-1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if loaded.Status != domain.StatusCanceled {
+		t.Fatalf("persisted status = %q, want canceled", loaded.Status)
+	}
+}
+
+func TestCancelIfPendingSkipsPaidOrder(t *testing.T) {
+	ctx := t.Context()
+	repo := memory.NewRepository()
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	order := seedPendingOrder(t, repo, "ord-pend-2", now.Add(5*time.Minute))
+	if err := order.MarkPaid("pay-race", order.TotalWon, now); err != nil {
+		t.Fatalf("MarkPaid: %v", err)
+	}
+	if err := repo.Save(ctx, order); err != nil {
+		t.Fatalf("Save paid: %v", err)
+	}
+
+	_, ok, err := repo.CancelIfPending(ctx, "ord-pend-2", now, nil)
+	if err != nil {
+		t.Fatalf("CancelIfPending: %v", err)
+	}
+	if ok {
+		t.Fatal("expected no cancel on paid order")
+	}
+
+	loaded, err := repo.Get(ctx, "ord-pend-2")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if loaded.Status != domain.StatusPaid {
+		t.Fatalf("status = %q, want paid", loaded.Status)
+	}
+}
+
+func TestCancelIfPendingSkipsMissingOrder(t *testing.T) {
+	ctx := t.Context()
+	repo := memory.NewRepository()
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+
+	_, ok, err := repo.CancelIfPending(ctx, "ord-missing", now, nil)
+	if err != nil {
+		t.Fatalf("CancelIfPending: %v", err)
+	}
+	if ok {
+		t.Fatal("expected no cancel for missing order")
+	}
+}
+
 func TestCancelIfPaidForRefundCancelsMatchingPaidOrder(t *testing.T) {
 	ctx := t.Context()
 	repo := memory.NewRepository()
