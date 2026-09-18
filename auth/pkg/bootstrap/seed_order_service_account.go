@@ -15,6 +15,7 @@ var orderServicePermissions = []string{
 	permissions.OrderStatusUpdate,
 	permissions.InventoryReservationManage,
 	permissions.PaymentCancel, // paid-order cancel refunds via the payment service
+	permissions.PromotionRedeem, // checkout reserve/consume/release on product ledger
 }
 
 // seedOrderServiceAccount creates or updates the dupli1-order service account when configured.

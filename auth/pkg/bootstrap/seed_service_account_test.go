@@ -169,12 +169,7 @@ func TestSeedOrderServiceAccount_CreatesAndSyncs(t *testing.T) {
 	if u == nil {
 		t.Fatal("order service account was not created")
 	}
-	for _, p := range []string{
-		permissions.OrderShip,
-		permissions.OrderStatusUpdate,
-		permissions.InventoryReservationManage,
-		permissions.PaymentCancel,
-	} {
+	for _, p := range orderServicePermissions {
 		if !u.HasPermission(p) {
 			t.Fatalf("missing permission %s in %v", p, u.Permissions)
 		}
