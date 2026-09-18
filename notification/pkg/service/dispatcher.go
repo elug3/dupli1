@@ -131,23 +131,23 @@ func formatPaymentCanceledMessage(event events.PaymentCanceledEvent, manageWebUR
 	reason := strings.TrimSpace(event.Reason)
 	reasonLine := ""
 	if reason != "" {
-		reasonLine = fmt.Sprintf("Reason: %s\n", escapeHTML(reason))
+		reasonLine = fmt.Sprintf("사유: %s\n", escapeHTML(reason))
 	}
 	byLine := ""
 	if by := strings.TrimSpace(event.CanceledBy); by != "" {
-		byLine = fmt.Sprintf("By: %s\n", escapeHTML(by))
+		byLine = fmt.Sprintf("처리자: %s\n", escapeHTML(by))
 	}
 
 	if event.RemainingWon > 0 {
 		return fmt.Sprintf(
-			"↩️ <b>Partial refund</b> %s\n%sRefunded: <b>%s</b>\nStill captured: <b>%s</b>\n%s%sOrder is unchanged — review whether it should still ship.",
+			"↩️ <b>부분 환불</b> %s\n%s환불 금액: <b>%s</b>\n잔여 결제: <b>%s</b>\n%s%s주문은 그대로입니다 — 출고 여부를 확인하세요.",
 			escapeHTML(event.OrderID), manageLink,
 			formatMoney(event.AmountWon), formatMoney(event.RemainingWon),
 			reasonLine, byLine,
 		)
 	}
 	return fmt.Sprintf(
-		"↩️ <b>Refunded in full</b> %s\n%sRefunded: <b>%s</b>\n%s%sOrder has been canceled and its stock released.",
+		"↩️ <b>전액 환불</b> %s\n%s환불 금액: <b>%s</b>\n%s%s주문이 취소되었고 재고가 해제되었습니다.",
 		escapeHTML(event.OrderID), manageLink,
 		formatMoney(event.AmountWon), reasonLine, byLine,
 	)
@@ -179,36 +179,36 @@ func (d *Dispatcher) handlePaymentCallbackRejected(ctx context.Context, payload 
 // payment — so each line is omitted rather than printed empty.
 func formatPaymentCallbackRejectedMessage(event events.PaymentCallbackRejectedEvent, manageWebURL string) string {
 	var b strings.Builder
-	b.WriteString("🚨 <b>Payment approved by PG but rejected here</b>\n")
-	b.WriteString("Check the PG console before the shopper is charged twice.\n")
+	b.WriteString("🚨 <b>PG가 결제를 승인했으나 시스템에서 거부함</b>\n")
+	b.WriteString("구매자가 이중 청구되지 않도록 PG 콘솔을 먼저 확인하세요.\n")
 
 	if orderID := strings.TrimSpace(event.OrderID); orderID != "" {
-		b.WriteString(fmt.Sprintf("Order: %s\n%s", escapeHTML(orderID), formatManageOrderLink(manageWebURL, orderID)))
+		b.WriteString(fmt.Sprintf("주문: %s\n%s", escapeHTML(orderID), formatManageOrderLink(manageWebURL, orderID)))
 	}
 	if paymentID := strings.TrimSpace(event.PaymentID); paymentID != "" {
-		b.WriteString(fmt.Sprintf("Payment: %s\n", escapeHTML(paymentID)))
+		b.WriteString(fmt.Sprintf("결제: %s\n", escapeHTML(paymentID)))
 	}
 	if detail := strings.TrimSpace(event.Detail); detail != "" {
-		b.WriteString(fmt.Sprintf("Cause: %s\n", escapeHTML(detail)))
+		b.WriteString(fmt.Sprintf("원인: %s\n", escapeHTML(detail)))
 	} else {
-		b.WriteString(fmt.Sprintf("Cause: %s\n", escapeHTML(event.Reason)))
+		b.WriteString(fmt.Sprintf("원인: %s\n", escapeHTML(event.Reason)))
 	}
 	if event.ExpectedWon > 0 {
-		b.WriteString(fmt.Sprintf("Expected: <b>%s</b>\n", formatMoney(event.ExpectedWon)))
+		b.WriteString(fmt.Sprintf("예상 금액: <b>%s</b>\n", formatMoney(event.ExpectedWon)))
 	}
 	// Reported verbatim: a malformed amount is itself the clue.
 	if reported := strings.TrimSpace(event.ReportedAmount); reported != "" {
-		b.WriteString(fmt.Sprintf("PG reported: <b>%s</b>\n", escapeHTML(reported)))
+		b.WriteString(fmt.Sprintf("PG 보고 금액: <b>%s</b>\n", escapeHTML(reported)))
 	}
 	if tran := strings.TrimSpace(event.TranNo); tran != "" {
-		b.WriteString(fmt.Sprintf("PG transaction: %s\n", escapeHTML(tran)))
+		b.WriteString(fmt.Sprintf("PG 거래번호: %s\n", escapeHTML(tran)))
 	}
 
 	provider := strings.TrimSpace(event.Provider)
 	if provider == "" {
 		provider = "PG"
 	}
-	b.WriteString(fmt.Sprintf("Source: %s %s callback", escapeHTML(provider), escapeHTML(strings.TrimSpace(event.Source))))
+	b.WriteString(fmt.Sprintf("출처: %s %s 콜백", escapeHTML(provider), escapeHTML(strings.TrimSpace(event.Source))))
 	return b.String()
 }
 
@@ -275,42 +275,44 @@ func formatOrderMessage(subject string, event events.Order, manageWebURL string)
 	}
 	itemsLine := strings.Join(items, ", ")
 	if itemsLine == "" {
-		itemsLine = "no items"
+		itemsLine = "상품 없음"
 	}
 
 	total := formatMoney(event.TotalWon)
 	createdLine := formatOrderCreatedAt(event.CreatedAt, event.Occurred)
 	manageLink := formatManageOrderLink(manageWebURL, event.OrderID)
+	status := formatOrderStatus(event.Status)
 
 	switch subject {
 	case SubjectOrderPaid:
 		return fmt.Sprintf(
-			"💳 <b>Order paid — action required</b> %s\n%s%sStatus: <b>paid</b>\nCustomer: %s\nItems: %s\nTotal: <b>%s</b>\nShip when ready.",
+			"💳 <b>주문 결제 완료 — 조치 필요</b> %s\n%s%s상태: <b>%s</b>\n고객: %s\n상품: %s\n합계: <b>%s</b>\n준비되면 출고하세요.",
 			escapeHTML(event.OrderID),
 			createdLine,
 			manageLink,
+			status,
 			escapeHTML(event.CustomerID),
 			itemsLine,
 			total,
 		)
 	case SubjectOrderCreated:
 		return fmt.Sprintf(
-			"🛒 <b>New order</b> %s\n%s%sStatus: <b>%s</b>\nCustomer: %s\nItems: %s\nTotal: <b>%s</b>",
+			"🛒 <b>신규 주문</b> %s\n%s%s상태: <b>%s</b>\n고객: %s\n상품: %s\n합계: <b>%s</b>",
 			escapeHTML(event.OrderID),
 			createdLine,
 			manageLink,
-			escapeHTML(event.Status),
+			status,
 			escapeHTML(event.CustomerID),
 			itemsLine,
 			total,
 		)
 	default:
 		return fmt.Sprintf(
-			"📦 <b>Order update</b> %s\n%s%sStatus: <b>%s</b>\nCustomer: %s\nTotal: <b>%s</b>",
+			"📦 <b>주문 변경</b> %s\n%s%s상태: <b>%s</b>\n고객: %s\n합계: <b>%s</b>",
 			escapeHTML(event.OrderID),
 			createdLine,
 			manageLink,
-			escapeHTML(event.Status),
+			status,
 			escapeHTML(event.CustomerID),
 			total,
 		)
@@ -329,7 +331,7 @@ func formatOrderCreatedAt(createdAt, occurredAt time.Time) string {
 	if err != nil {
 		loc = time.UTC
 	}
-	return fmt.Sprintf("Created: <b>%s</b>\n", escapeHTML(t.In(loc).Format("2006-01-02 15:04 KST")))
+	return fmt.Sprintf("주문 시각: <b>%s</b>\n", escapeHTML(t.In(loc).Format("2006-01-02 15:04 KST")))
 }
 
 func formatManageOrderLink(manageWebURL, orderID string) string {
@@ -339,7 +341,7 @@ func formatManageOrderLink(manageWebURL, orderID string) string {
 		return ""
 	}
 	url := fmt.Sprintf("%s/orders/%s", manageWebURL, escapeHTML(orderID))
-	return fmt.Sprintf("<a href=\"%s\">View order in manage-web</a>\n", url)
+	return fmt.Sprintf("<a href=\"%s\">관리자에서 주문 보기</a>\n", url)
 }
 
 func formatProductMessage(subject string, event events.Product) string {
@@ -347,21 +349,60 @@ func formatProductMessage(subject string, event events.Product) string {
 	name := escapeHTML(event.Name)
 	brand := escapeHTML(event.Brand)
 	id := escapeHTML(event.ProductID)
+	status := formatProductStatus(event.Status)
 
 	switch subject {
 	case SubjectProductCreated:
-		return fmt.Sprintf("📦 <b>Product created</b>\n%s — %s (%s)\nCategory: %s\nStatus: %s\nPrice: %s",
-			id, name, brand, escapeHTML(event.Category), escapeHTML(event.Status), price)
+		return fmt.Sprintf("📦 <b>상품 등록</b>\n%s — %s (%s)\n카테고리: %s\n상태: %s\n가격: %s",
+			id, name, brand, escapeHTML(event.Category), status, price)
 	case SubjectProductUpdated:
-		return fmt.Sprintf("✏️ <b>Product updated</b>\n%s — %s (%s)\nStatus: %s\nPrice: %s",
-			id, name, brand, escapeHTML(event.Status), price)
+		return fmt.Sprintf("✏️ <b>상품 수정</b>\n%s — %s (%s)\n상태: %s\n가격: %s",
+			id, name, brand, status, price)
 	case SubjectProductDeleted:
-		return fmt.Sprintf("🗑️ <b>Product deleted</b>\n%s — %s", id, name)
+		return fmt.Sprintf("🗑️ <b>상품 삭제</b>\n%s — %s", id, name)
 	case SubjectProductImage:
-		return fmt.Sprintf("🖼️ <b>Product image uploaded</b>\n%s — %s\n%s",
+		return fmt.Sprintf("🖼️ <b>상품 이미지 업로드</b>\n%s — %s\n%s",
 			id, name, escapeHTML(event.ImageURL))
 	default:
-		return fmt.Sprintf("Product event %s for %s", escapeHTML(subject), id)
+		return fmt.Sprintf("상품 이벤트 %s — %s", escapeHTML(subject), id)
+	}
+}
+
+// formatOrderStatus maps wire statuses to the Korean labels ops already see
+// in manage-web. Unknown values stay escaped as-is.
+func formatOrderStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "pending":
+		return "대기 중"
+	case "paid":
+		return "결제 완료"
+	case "confirmed":
+		return "확인됨"
+	case "in_transit":
+		return "배송 중"
+	case "delivered":
+		return "배송 완료"
+	case "fulfilled":
+		return "완료"
+	case "disputed":
+		return "분쟁"
+	case "canceled", "cancelled":
+		return "취소됨"
+	default:
+		return escapeHTML(status)
+	}
+}
+
+func formatProductStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "active":
+		return "활성"
+	case "draft":
+		return "초안"
+	case "archived":
+		return "보관됨"
+	default:
+		return escapeHTML(status)
 	}
 }
 

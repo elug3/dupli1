@@ -22,11 +22,11 @@ func IsStartCommand(text string) bool {
 // FormatPendingReply is sent when a user is registered but not yet accepted.
 func FormatPendingReply(chat Chat) string {
 	return fmt.Sprintf(
-		"⏳ <b>Registration received</b>\n\n"+
+		"⏳ <b>등록 요청이 접수되었습니다</b>\n\n"+
 			"%s\n"+
-			"Chat ID: <code>%s</code>\n\n"+
-			"A manager must approve this chat before alerts are enabled. "+
-			"You will be able to use /start again after approval.",
+			"채팅 ID: <code>%s</code>\n\n"+
+			"관리자가 이 채팅을 승인해야 알림이 활성화됩니다. "+
+			"승인 후 /start를 다시 사용할 수 있습니다.",
 		chatLabel(chat),
 		escapeHTML(chat.FormatID()),
 	)
@@ -38,11 +38,11 @@ func FormatStartReply(chat Chat) string {
 	chatLabel := chatLabel(chat)
 
 	return fmt.Sprintf(
-		"👋 <b>Welcome to Dupli1 ops alerts</b>\n\n"+
-			"This bot sends order and product notifications from the Dupli1 marketplace.\n\n"+
+		"👋 <b>Dupli1 운영 알림</b>\n\n"+
+			"이 봇은 Dupli1 마켓플레이스의 주문·상품 알림을 보냅니다.\n\n"+
 			"%s\n"+
-			"Chat ID: <code>%s</code>\n\n"+
-			"You are on the approved list and can receive ops alerts from this chat.",
+			"채팅 ID: <code>%s</code>\n\n"+
+			"승인된 채팅이므로 이 채팅에서 운영 알림을 받을 수 있습니다.",
 		chatLabel,
 		escapeHTML(chatID),
 	)
@@ -56,23 +56,23 @@ func chatLabel(chat Chat) string {
 			name = strings.TrimSpace(chat.Username)
 		}
 		if name != "" {
-			return fmt.Sprintf("Chat: <b>%s</b> (private)", escapeHTML(name))
+			return fmt.Sprintf("개인 채팅: <b>%s</b>", escapeHTML(name))
 		}
-		return "Chat: <b>private</b>"
+		return "개인 채팅"
 	case "group", "supergroup":
 		title := strings.TrimSpace(chat.Title)
 		if title != "" {
-			return fmt.Sprintf("Group: <b>%s</b>", escapeHTML(title))
+			return fmt.Sprintf("그룹: <b>%s</b>", escapeHTML(title))
 		}
-		return "Group chat"
+		return "그룹 채팅"
 	case "channel":
 		title := strings.TrimSpace(chat.Title)
 		if title != "" {
-			return fmt.Sprintf("Channel: <b>%s</b>", escapeHTML(title))
+			return fmt.Sprintf("채널: <b>%s</b>", escapeHTML(title))
 		}
-		return "Channel"
+		return "채널"
 	default:
-		return "Chat"
+		return "채팅"
 	}
 }
 

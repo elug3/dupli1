@@ -62,8 +62,25 @@ func TestFormatStartReplyIncludesChatID(t *testing.T) {
 	if !strings.Contains(reply, "<code>-1001234567890</code>") {
 		t.Fatalf("expected chat id in reply, got %q", reply)
 	}
-	if !strings.Contains(reply, "Dupli1 Ops") {
-		t.Fatalf("expected group title in reply, got %q", reply)
+	if !strings.Contains(reply, "그룹: <b>Dupli1 Ops</b>") {
+		t.Fatalf("expected Korean group label, got %q", reply)
+	}
+	if !strings.Contains(reply, "Dupli1 운영 알림") {
+		t.Fatalf("expected Korean welcome copy, got %q", reply)
+	}
+}
+
+func TestFormatPendingReplyIsKorean(t *testing.T) {
+	reply := telegram.FormatPendingReply(telegram.Chat{
+		ID:        42,
+		Type:      "private",
+		FirstName: "Alex",
+	})
+	if !strings.Contains(reply, "등록 요청이 접수되었습니다") {
+		t.Fatalf("expected Korean pending copy, got %q", reply)
+	}
+	if !strings.Contains(reply, "개인 채팅: <b>Alex</b>") {
+		t.Fatalf("expected Korean private-chat label, got %q", reply)
 	}
 }
 
@@ -114,7 +131,7 @@ func TestUpdateProcessorStartAccepted(t *testing.T) {
 	if gotChatID != "42" {
 		t.Fatalf("chat id = %q, want 42", gotChatID)
 	}
-	if !strings.Contains(gotText, "Welcome") {
+	if !strings.Contains(gotText, "Dupli1 운영 알림") {
 		t.Fatalf("expected welcome reply, got %q", gotText)
 	}
 }
@@ -163,7 +180,7 @@ func TestUpdateProcessorStartRegistersOnceAndThenStaysQuiet(t *testing.T) {
 	if err := processor.Handle(ctx, update); err != nil {
 		t.Fatalf("first /start: %v", err)
 	}
-	if len(replies) != 1 || !strings.Contains(replies[0], "Registration received") {
+	if len(replies) != 1 || !strings.Contains(replies[0], "등록 요청이 접수되었습니다") {
 		t.Fatalf("first /start should be acknowledged once, got %q", replies)
 	}
 	pending, err := subs.List(ctx, domain.SubscriptionStatusPending)
@@ -271,7 +288,7 @@ func TestUpdateProcessorEnvAllowlistedUserSkipsRegistration(t *testing.T) {
 	if err := processor.Handle(ctx, update); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if len(replies) != 1 || !strings.Contains(replies[0], "Welcome") {
+	if len(replies) != 1 || !strings.Contains(replies[0], "Dupli1 운영 알림") {
 		t.Fatalf("expected the welcome reply, got %q", replies)
 	}
 	rows, err := subs.List(ctx, "")

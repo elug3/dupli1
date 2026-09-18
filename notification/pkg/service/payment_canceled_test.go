@@ -37,7 +37,7 @@ func TestDispatcher_FullRefundAlert(t *testing.T) {
 	if n.chatID != "-100123" {
 		t.Fatalf("chat id = %q", n.chatID)
 	}
-	for _, want := range []string{"Refunded in full", "ORD-001", "₩280,000", "ops reject", "mgr-1", "canceled"} {
+	for _, want := range []string{"전액 환불", "ORD-001", "₩280,000", "ops reject", "mgr-1", "취소"} {
 		if !strings.Contains(n.message, want) {
 			t.Fatalf("message missing %q:\n%s", want, n.message)
 		}
@@ -52,12 +52,12 @@ func TestDispatcher_PartialRefundAlertDiffersFromFull(t *testing.T) {
 		"amount_won": 20000, "remaining_won": 50000,
 	})
 
-	for _, want := range []string{"Partial refund", "₩20,000", "₩50,000", "unchanged"} {
+	for _, want := range []string{"부분 환불", "₩20,000", "₩50,000", "그대로"} {
 		if !strings.Contains(n.message, want) {
 			t.Fatalf("message missing %q:\n%s", want, n.message)
 		}
 	}
-	if strings.Contains(n.message, "Refunded in full") {
+	if strings.Contains(n.message, "전액 환불") {
 		t.Fatalf("partial refund must not read as full:\n%s", n.message)
 	}
 }
@@ -68,7 +68,7 @@ func TestDispatcher_RefundAlertOmitsEmptyFields(t *testing.T) {
 		"event_type": "payment.canceled", "order_id": "ORD-003", "payment_id": "pay_3",
 		"amount_won": 1000, "remaining_won": 0,
 	})
-	for _, unwanted := range []string{"Reason:", "By:"} {
+	for _, unwanted := range []string{"사유:", "처리자:"} {
 		if strings.Contains(n.message, unwanted) {
 			t.Fatalf("message should omit %q when unset:\n%s", unwanted, n.message)
 		}

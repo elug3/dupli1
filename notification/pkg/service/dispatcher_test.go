@@ -65,8 +65,14 @@ func TestDispatcherOrderCreated(t *testing.T) {
 	if !strings.Contains(notifier.message, "₩25,000") {
 		t.Fatalf("expected KRW formatting in message, got %q", notifier.message)
 	}
-	if !strings.Contains(notifier.message, "Created:") || !strings.Contains(notifier.message, "19:30 KST") {
+	if !strings.Contains(notifier.message, "주문 시각:") || !strings.Contains(notifier.message, "19:30 KST") {
 		t.Fatalf("expected created_at in message, got %q", notifier.message)
+	}
+	if !strings.Contains(notifier.message, "신규 주문") {
+		t.Fatalf("expected Korean new-order copy, got %q", notifier.message)
+	}
+	if !strings.Contains(notifier.message, "대기 중") {
+		t.Fatalf("expected Korean pending status, got %q", notifier.message)
 	}
 	if !strings.Contains(notifier.message, `href="https://manage.dupli1.com/orders/ORD-001"`) {
 		t.Fatalf("expected manage-web link in message, got %q", notifier.message)
@@ -100,8 +106,11 @@ func TestDispatcherOrderPaid(t *testing.T) {
 	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderPaid, payload); err != nil {
 		t.Fatalf("handle order paid: %v", err)
 	}
-	if !strings.Contains(notifier.message, "Order paid") || !strings.Contains(notifier.message, "action required") {
+	if !strings.Contains(notifier.message, "주문 결제 완료") || !strings.Contains(notifier.message, "조치 필요") {
 		t.Fatalf("expected paid alert copy, got %q", notifier.message)
+	}
+	if !strings.Contains(notifier.message, "결제 완료") {
+		t.Fatalf("expected Korean paid status, got %q", notifier.message)
 	}
 	if !strings.Contains(notifier.message, "2× BAG-002") {
 		t.Fatalf("expected item line, got %q", notifier.message)
@@ -206,8 +215,11 @@ func TestDispatcherFallsBackToOccurredAt(t *testing.T) {
 	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderStatusUpdate, payload); err != nil {
 		t.Fatalf("handle order update: %v", err)
 	}
-	if !strings.Contains(notifier.message, "Created:") || !strings.Contains(notifier.message, "12:15 KST") {
+	if !strings.Contains(notifier.message, "주문 시각:") || !strings.Contains(notifier.message, "12:15 KST") {
 		t.Fatalf("expected occurred_at fallback in message, got %q", notifier.message)
+	}
+	if !strings.Contains(notifier.message, "주문 변경") {
+		t.Fatalf("expected Korean status-update copy, got %q", notifier.message)
 	}
 }
 
@@ -248,6 +260,12 @@ func TestDispatcherProductCreated(t *testing.T) {
 	if !strings.Contains(notifier.message, "₩2,890,000") {
 		t.Fatalf("expected KRW product price, got %q", notifier.message)
 	}
+	if !strings.Contains(notifier.message, "상품 등록") {
+		t.Fatalf("expected Korean product-created copy, got %q", notifier.message)
+	}
+	if !strings.Contains(notifier.message, "활성") {
+		t.Fatalf("expected Korean active status, got %q", notifier.message)
+	}
 }
 
 // Escaped values are interpolated into an attribute as well as into text:
@@ -282,5 +300,100 @@ func TestDispatcherEscapesQuotesInTheManageLink(t *testing.T) {
 	}
 	if !strings.Contains(notifier.message, "&quot;") {
 		t.Fatalf("expected the quote to be escaped, got %q", notifier.message)
+	}
+}
+
+func TestDispatcherOrderCreatedKoreanSnapshot(t *testing.T) {
+	notifier := &recordedNotifier{}
+	createdAt := time.Date(2026, 8, 5, 10, 30, 0, 0, time.UTC)
+	dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{
+		OrderChatID:  "-100123",
+		ManageWebURL: "https://manage.dupli1.com",
+	})
+
+	payload, err := json.Marshal(map[string]any{
+		"event_type":  "order.created",
+		"order_id":    "ORD-001",
+		"customer_id": "cust-1",
+		"status":      "pending",
+		"total_won":   25000,
+		"items": []map[string]any{
+			{"sku": "BAG-001", "quantity": 1, "unit_price_won": 25000},
+		},
+		"created_at":  createdAt,
+		"occurred_at": createdAt,
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderCreated, payload); err != nil {
+		t.Fatalf("handle order: %v", err)
+	}
+
+	want := "🛒 <b>신규 주문</b> ORD-001\n" +
+		"주문 시각: <b>2026-08-05 19:30 KST</b>\n" +
+		"<a href=\"https://manage.dupli1.com/orders/ORD-001\">관리자에서 주문 보기</a>\n" +
+		"상태: <b>대기 중</b>\n" +
+		"고객: cust-1\n" +
+		"상품: 1× BAG-001\n" +
+		"합계: <b>₩25,000</b>"
+	if notifier.message != want {
+		t.Fatalf("korean order.created snapshot mismatch:\n got: %q\nwant: %q", notifier.message, want)
+	}
+}
+
+func TestDispatcherTranslatesOrderStatuses(t *testing.T) {
+	cases := map[string]string{
+		"pending":    "대기 중",
+		"paid":       "결제 완료",
+		"confirmed":  "확인됨",
+		"in_transit": "배송 중",
+		"delivered":  "배송 완료",
+		"fulfilled":  "완료",
+		"disputed":   "분쟁",
+		"canceled":   "취소됨",
+	}
+	for status, label := range cases {
+		t.Run(status, func(t *testing.T) {
+			notifier := &recordedNotifier{}
+			dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{OrderChatID: "-100123"})
+			payload, err := json.Marshal(map[string]any{
+				"event_type":  "order.status_updated",
+				"order_id":    "ORD-ST",
+				"customer_id": "cust-1",
+				"status":      status,
+				"total_won":   1000,
+			})
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderStatusUpdate, payload); err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if !strings.Contains(notifier.message, "상태: <b>"+label+"</b>") {
+				t.Fatalf("status %q: expected %q in %q", status, label, notifier.message)
+			}
+		})
+	}
+}
+
+func TestDispatcherEmptyItemsUsesKoreanPlaceholder(t *testing.T) {
+	notifier := &recordedNotifier{}
+	dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{OrderChatID: "-100123"})
+	payload, err := json.Marshal(map[string]any{
+		"event_type":  "order.created",
+		"order_id":    "ORD-EMPTY",
+		"customer_id": "cust-1",
+		"status":      "pending",
+		"total_won":   0,
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderCreated, payload); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if !strings.Contains(notifier.message, "상품: 상품 없음") {
+		t.Fatalf("expected empty-items placeholder, got %q", notifier.message)
 	}
 }
