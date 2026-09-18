@@ -369,11 +369,18 @@ func formatMoney(won int64) string {
 	return money.FormatWon(won)
 }
 
+// escapeHTML escapes the characters Telegram's HTML parse mode treats as
+// markup. Quotes are included because escaped values are also interpolated into
+// attributes — formatManageOrderLink puts an order ID inside href="…" — where an
+// unescaped quote would end the attribute and let the rest of the value inject
+// its own.
 func escapeHTML(value string) string {
 	replacer := strings.NewReplacer(
 		"&", "&amp;",
 		"<", "&lt;",
 		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&#39;",
 	)
 	return replacer.Replace(strings.TrimSpace(value))
 }

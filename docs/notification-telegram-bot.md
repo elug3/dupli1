@@ -256,6 +256,8 @@ CREATE TABLE notification_telegram_allowed_users (
 | `order.created` | Order | New order, `created_at`, manage-web link, status, customer, items, total (KRW) |
 | `order.status_updated` | Order | Status change |
 | `order.paid` | Order | **Paid — action required** (ship when ready) |
+| `payment.canceled` | Order | **Refund** — full (order canceled, stock released) or partial (order stands, money still captured), with amount, reason and who canceled |
+| `payment.callback_rejected` | Order | **PG approved a charge dupli1 refused** — expected vs reported amount, PG transaction, cause. Nothing else fires for this, so the alert is the only signal |
 | `product.created` | Product | New product, brand, category, price |
 | `product.updated` | Product | Updated product |
 | `product.deleted` | Product | Deleted product |
@@ -277,7 +279,7 @@ Total: ₩3,450,000
 
 The manage-web link uses `MANAGE_WEB_URL` (default `https://manage.dupli1.com`) + `/orders/{order_id}`.
 
-Publishers: `order` and `product` services (payment success flows through order → `order.paid`).
+Publishers: `order`, `product` and `payment` services (payment success flows through order → `order.paid`; `payment.canceled` and `payment.callback_rejected` come from payment's outbox directly).
 
 ---
 

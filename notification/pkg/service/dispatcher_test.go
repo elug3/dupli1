@@ -249,3 +249,38 @@ func TestDispatcherProductCreated(t *testing.T) {
 		t.Fatalf("expected KRW product price, got %q", notifier.message)
 	}
 }
+
+// Escaped values are interpolated into an attribute as well as into text:
+// formatManageOrderLink puts the order ID inside href="…". An unescaped quote
+// there would close the attribute and let the rest of the value add its own.
+// Order IDs are server-generated ULIDs today, so this guards the format rather
+// than a reachable input.
+func TestDispatcherEscapesQuotesInTheManageLink(t *testing.T) {
+	notifier := &recordedNotifier{}
+	dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{
+		OrderChatID:  "-100123",
+		ManageWebURL: "https://manage.dupli1.com",
+	})
+
+	payload, err := json.Marshal(map[string]any{
+		"event_type":  "order.created",
+		"order_id":    `ORD" onmouseover="alert(1)`,
+		"customer_id": "cust-1",
+		"status":      "pending",
+		"total_won":   1000,
+		"occurred_at": time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectOrderCreated, payload); err != nil {
+		t.Fatalf("handle order: %v", err)
+	}
+
+	if strings.Contains(notifier.message, `onmouseover="`) {
+		t.Fatalf("quote escaped out of the href attribute: %q", notifier.message)
+	}
+	if !strings.Contains(notifier.message, "&quot;") {
+		t.Fatalf("expected the quote to be escaped, got %q", notifier.message)
+	}
+}

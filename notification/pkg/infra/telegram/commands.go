@@ -76,11 +76,16 @@ func chatLabel(chat Chat) string {
 	}
 }
 
+// escapeHTML escapes the characters Telegram's HTML parse mode treats as
+// markup, quotes included so the same helper is safe in an attribute as well as
+// in text. Kept in step with the copy in pkg/service.
 func escapeHTML(value string) string {
 	replacer := strings.NewReplacer(
 		"&", "&amp;",
 		"<", "&lt;",
 		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&#39;",
 	)
 	return replacer.Replace(strings.TrimSpace(value))
 }
