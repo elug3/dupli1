@@ -10,7 +10,7 @@ const (
 	// rejected with a 400 and, since core NATS does not redeliver, the alert is
 	// simply lost — so an order with enough line items used to go unreported.
 	maxMessageRunes  = 4096
-	truncationNotice = "\n… truncated"
+	truncationNotice = "\n… 생략됨"
 )
 
 // truncateMessage shortens message to Telegram's limit while keeping the HTML

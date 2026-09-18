@@ -68,7 +68,7 @@ Production bot (2026-08): `@MHYM7_BOT` (`dupli1_notification`).
    group stops showing its old name in the manager UI. The write happens only
    when a value actually changed, and an inbound field that is absent (a group
    message carries no username) leaves the stored one alone.
-5. **`/start` replies** — an unknown chat is acknowledged **once**, when its pending row is created (“registration received”); repeating `/start` while it is still pending, or after a rejection, is silent. Accepted chats, and users on the env allowlist, get the welcome + chat ID every time.
+5. **`/start` replies** — an unknown chat is acknowledged **once**, when its pending row is created (“등록 요청이 접수되었습니다”); repeating `/start` while it is still pending, or after a rejection, is silent. Accepted chats, and users on the env allowlist, get the welcome + chat ID every time. Replies and outbound alerts are Korean.
 6. **Env-allowlisted users** need no registration: `/start` welcomes them without creating a pending row for a manager to approve.
 
 Self-service registration is deliberate — it is how a new operator onboards without a manager transcribing numeric Telegram user IDs by hand. Anyone who finds the bot can therefore create one pending row and receive one acknowledgement; a manager decides whether it ever becomes a destination.
@@ -143,7 +143,7 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 | `TELEGRAM_PRODUCT_CHAT_ID` | Optional routing | Always receives product alerts, in addition to accepted `alert_product` subscriptions |
 | `NATS_URL` | Yes (for dispatch) | e.g. `nats://nats.dupli1.local:4222` |
 | `NATS_TOKEN` | Yes (with `--auth`) | Must match the broker token. Compose default `dupli1_nats_dev`; prod Secrets Manager `dupli1/production/nats-token` |
-| `MANAGE_WEB_URL` | Recommended | Base URL for “View order in manage-web” links (default `https://manage.dupli1.com`) |
+| `MANAGE_WEB_URL` | Recommended | Base URL for “관리자에서 주문 보기” links (default `https://manage.dupli1.com`) |
 
 Local DB: `postgres://dupli1:dupli1_dev@localhost:5438/notifications?sslmode=disable`
 
@@ -274,28 +274,28 @@ CREATE TABLE notification_telegram_allowed_users (
 
 | NATS subject | Destination chat | Message summary |
 |--------------|------------------|-----------------|
-| `order.created` | Order | New order, `created_at`, manage-web link, status, customer, items, total (KRW) |
-| `order.status_updated` | Order | Status change |
-| `order.paid` | Order | **Paid — action required** (ship when ready) |
-| `payment.canceled` | Order | **Refund** — full (order canceled, stock released) or partial (order stands, money still captured), with amount, reason and who canceled |
-| `payment.callback_rejected` | Order | **PG approved a charge dupli1 refused** — expected vs reported amount, PG transaction, cause. Nothing else fires for this, so the alert is the only signal |
-| `product.created` | Product | New product, brand, category, price |
-| `product.updated` | Product | Updated product |
-| `product.deleted` | Product | Deleted product |
-| `product.image_uploaded` | Product | Image URL |
+| `order.created` | Order | 신규 주문, `created_at`, manage-web link, status, customer, items, total (KRW) |
+| `order.status_updated` | Order | 주문 변경 |
+| `order.paid` | Order | **주문 결제 완료 — 조치 필요** (준비되면 출고) |
+| `payment.canceled` | Order | **환불** — 전액 (주문 취소, 재고 해제) 또는 부분 (주문은 그대로, 잔여 결제 유지), 금액·사유·처리자 |
+| `payment.callback_rejected` | Order | **PG가 결제를 승인했으나 시스템에서 거부** — 예상/보고 금액, PG 거래번호, 원인. 다른 이벤트가 없어 이 알림이 유일한 신호 |
+| `product.created` | Product | 상품 등록, brand, category, price |
+| `product.updated` | Product | 상품 수정 |
+| `product.deleted` | Product | 상품 삭제 |
+| `product.image_uploaded` | Product | 이미지 URL |
 
-Messages use **HTML** (`parse_mode: HTML`). Amounts use KRW formatting via `shared/pkg/money`.
+Messages use **HTML** (`parse_mode: HTML`) and are written in **Korean** (ops staff). Amounts use KRW formatting via `shared/pkg/money`. Order and product statuses use the same Korean labels as manage-web (`대기 중`, `결제 완료`, `배송 중`, …). Identifiers (order ID, SKU, customer ID) stay as on the wire.
 
 **Example `order.created` message:**
 
 ```text
-🛒 New order ORD-2026-0042
-Created: 2026-08-05 19:30 KST
-View order in manage-web
-Status: pending
-Customer: cust_01JAY6Z9K3F8QW1G7H2T5X0ABC
-Items: 1× BAG-BV-CASSETTE-BLACK, 2× BAG-CH-CLASSIC-TAN
-Total: ₩3,450,000
+🛒 신규 주문 ORD-2026-0042
+주문 시각: 2026-08-05 19:30 KST
+관리자에서 주문 보기
+상태: 대기 중
+고객: cust_01JAY6Z9K3F8QW1G7H2T5X0ABC
+상품: 1× BAG-BV-CASSETTE-BLACK, 2× BAG-CH-CLASSIC-TAN
+합계: ₩3,450,000
 ```
 
 The manage-web link uses `MANAGE_WEB_URL` (default `https://manage.dupli1.com`) + `/orders/{order_id}`.

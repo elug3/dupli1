@@ -43,14 +43,14 @@ func TestDispatcher_CallbackRejectedAlert(t *testing.T) {
 		t.Fatalf("chat id = %q", n.chatID)
 	}
 	for _, want := range []string{
-		"approved by PG but rejected",
-		"charged twice",
+		"PG가 결제를 승인했으나 시스템에서 거부함",
+		"이중 청구",
 		"ORD-023",
 		"pay_000023",
 		"callback hashValue did not verify",
 		"₩31,004",
 		"260905001496",
-		"nano return callback",
+		"nano return 콜백",
 		"https://manage.dupli1.com",
 	} {
 		if !strings.Contains(n.message, want) {
@@ -71,7 +71,7 @@ func TestDispatcher_CallbackRejectedWithoutIdentifiedPayment(t *testing.T) {
 	if n.message == "" {
 		t.Fatal("no alert sent")
 	}
-	for _, absent := range []string{"Order:", "Payment:", "Expected:", "PG reported:", "PG transaction:"} {
+	for _, absent := range []string{"주문:", "결제:", "예상 금액:", "PG 보고 금액:", "PG 거래번호:"} {
 		if strings.Contains(n.message, absent) {
 			t.Errorf("unset field rendered as %q:\n%s", absent, n.message)
 		}
@@ -80,7 +80,7 @@ func TestDispatcher_CallbackRejectedWithoutIdentifiedPayment(t *testing.T) {
 	if !strings.Contains(n.message, "unknown_payment") {
 		t.Errorf("message missing the reason:\n%s", n.message)
 	}
-	if !strings.Contains(n.message, "nano webhook callback") {
+	if !strings.Contains(n.message, "nano webhook 콜백") {
 		t.Errorf("message missing the source:\n%s", n.message)
 	}
 }

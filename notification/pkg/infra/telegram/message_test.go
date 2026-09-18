@@ -7,7 +7,7 @@ import (
 )
 
 func TestTruncateMessageLeavesShortMessagesAlone(t *testing.T) {
-	msg := "🛒 <b>New order</b> ORD-1\nTotal: <b>₩1,000</b>"
+	msg := "🛒 <b>신규 주문</b> ORD-1\n합계: <b>₩1,000</b>"
 	if got := truncateMessage(msg); got != msg {
 		t.Fatalf("message within the limit was modified:\n%q", got)
 	}
@@ -19,7 +19,7 @@ func TestTruncateMessageFitsTheLimit(t *testing.T) {
 	if n := utf8.RuneCountInString(got); n > maxMessageRunes {
 		t.Fatalf("truncated message is %d runes, limit is %d", n, maxMessageRunes)
 	}
-	if !strings.Contains(got, "truncated") {
+	if !strings.Contains(got, "생략됨") {
 		t.Fatalf("expected a truncation notice, got tail %q", got[len(got)-40:])
 	}
 }
