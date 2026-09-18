@@ -42,6 +42,14 @@ func (r *TelegramRepository) Close() {
 	}
 }
 
+// Ping reports whether the pool can still reach Postgres, for /health.
+func (r *TelegramRepository) Ping(ctx context.Context) error {
+	if r == nil || r.pool == nil {
+		return fmt.Errorf("notification database not configured")
+	}
+	return r.pool.Ping(ctx)
+}
+
 func (r *TelegramRepository) migrate() error {
 	// Startup schema migration; no request-scoped context to propagate.
 	ctx := context.Background()
@@ -166,6 +174,25 @@ func (r *TelegramRepository) FindByUserID(ctx context.Context, userID int64) (*d
 			alert_order, alert_product, created_at, updated_at, accepted_at, accepted_by
 		FROM telegram_subscriptions WHERE telegram_user_id = $1`, userID)
 	return scanSubscription(row)
+}
+
+// UpdateMetadata refreshes the display fields captured when a chat registered.
+// Each is left alone when the inbound message does not carry it — a group
+// message has no username, and forgetting one is worse than keeping it.
+func (r *TelegramRepository) UpdateMetadata(ctx context.Context, id string, in ports.TelegramMetadataInput) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE telegram_subscriptions
+		SET chat_type   = COALESCE(NULLIF($2, ''), chat_type),
+		    chat_label  = COALESCE(NULLIF($3, ''), chat_label),
+		    username    = COALESCE(NULLIF($4, ''), username),
+		    updated_at  = $5
+		WHERE id = $1`,
+		id, strings.TrimSpace(in.ChatType), strings.TrimSpace(in.ChatLabel), strings.TrimSpace(in.Username), time.Now().UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("update telegram subscription metadata: %w", err)
+	}
+	return nil
 }
 
 func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.TelegramManualInput) (*domain.TelegramSubscription, error) {

@@ -63,8 +63,13 @@ Production bot (2026-08): `@MHYM7_BOT` (`dupli1_notification`).
 1. **`/start` registers**, and nothing else does. An explicit `/start` from an unknown chat upserts a **pending** `telegram_subscriptions` row with `chat_id` and `telegram_user_id`. Any other message — ordinary chatter in a group the bot sits in, a stray `/help` — is ignored entirely: no row, no reply.
 2. **Managers** accept or reject pending rows, or manually add a user ID / chat ID via the REST API (`notification.telegram.manage`).
 3. **Outbound ops alerts** — sent to the **union** of the env chat IDs and every accepted subscription carrying `alert_order` / `alert_product`, each chat once. Env destinations do not suppress database ones: while they did, setting `TELEGRAM_ORDER_CHAT_ID` made the whole subscription UI inert.
-4. **`/start` replies** — an unknown chat is acknowledged **once**, when its pending row is created (“registration received”); repeating `/start` while it is still pending, or after a rejection, is silent. Accepted chats, and users on the env allowlist, get the welcome + chat ID every time.
-5. **Env-allowlisted users** need no registration: `/start` welcomes them without creating a pending row for a manager to approve.
+4. **Metadata refresh** — a `/start` from a chat that is already registered
+   refreshes its stored `chat_type`, `chat_label` and `username`, so a renamed
+   group stops showing its old name in the manager UI. The write happens only
+   when a value actually changed, and an inbound field that is absent (a group
+   message carries no username) leaves the stored one alone.
+5. **`/start` replies** — an unknown chat is acknowledged **once**, when its pending row is created (“registration received”); repeating `/start` while it is still pending, or after a rejection, is silent. Accepted chats, and users on the env allowlist, get the welcome + chat ID every time.
+6. **Env-allowlisted users** need no registration: `/start` welcomes them without creating a pending row for a manager to approve.
 
 Self-service registration is deliberate — it is how a new operator onboards without a manager transcribing numeric Telegram user IDs by hand. Anyone who finds the bot can therefore create one pending row and receive one acknowledgement; a manager decides whether it ever becomes a destination.
 
@@ -141,6 +146,22 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 | `MANAGE_WEB_URL` | Recommended | Base URL for “View order in manage-web” links (default `https://manage.dupli1.com`) |
 
 Local DB: `postgres://dupli1:dupli1_dev@localhost:5438/notifications?sslmode=disable`
+
+### Health endpoint
+
+`GET /health` (and `/api/v1/notification/health`) answers `{"status":"ok"}`, and
+where a dependency is wired it adds a `dependencies` map — `postgres` is pinged,
+`nats` is checked for a live connection — with `status` becoming `degraded` when
+one of them fails.
+
+**The status code is always `200`.** Nothing probes this endpoint today: the
+notification container declares no ECS health check and is reached through Cloud
+Map rather than an ALB target group. A `503` would tell no one anything, while
+arranging a restart loop for whoever later points a probe at it during a NATS
+blip — decide that deliberately, by reading `status`, rather than inheriting it.
+Probe results are cached for 5s so an unauthenticated request cannot drive
+database pings, and a probe's error is logged rather than returned, since the
+route needs no auth and connection errors name hosts.
 
 ### Production database (pending)
 

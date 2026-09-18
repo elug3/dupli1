@@ -72,6 +72,15 @@ func (s *TelegramSubscriptions) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
+// UpdateMetadata refreshes the display fields of a subscription that already
+// exists, so a renamed group does not keep its old label in the manager UI.
+func (s *TelegramSubscriptions) UpdateMetadata(ctx context.Context, id string, in ports.TelegramMetadataInput) error {
+	if !s.Enabled() {
+		return fmt.Errorf("telegram repository not configured")
+	}
+	return s.repo.UpdateMetadata(ctx, id, in)
+}
+
 func (s *TelegramSubscriptions) LookupForMessage(ctx context.Context, chatID string, userID *int64) (*domain.TelegramSubscription, error) {
 	if !s.Enabled() {
 		return nil, nil

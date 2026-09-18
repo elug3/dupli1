@@ -67,6 +67,13 @@ func dispatch(ctx context.Context, handler ports.MessageHandler, subject string,
 	}
 }
 
+// Connected reports whether the NATS connection is currently usable. The client
+// reconnects on its own, so this is a point-in-time answer for /health, not a
+// reason to act.
+func (s *Subscriber) Connected() bool {
+	return s != nil && s.conn != nil && s.conn.IsConnected()
+}
+
 // Close drains and closes the NATS connection.
 func (s *Subscriber) Close() {
 	s.closeOnce.Do(func() {

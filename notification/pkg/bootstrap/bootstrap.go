@@ -98,6 +98,24 @@ func Bootstrap(cfg Config) (*App, error) {
 	// Keep this task's allowlist in step with accepts served by other tasks.
 	go telegramAccess.RunRefresher(telegramCtx, cfg.AccessRefreshInterval)
 
+	// Probed by /health. The NATS subscriber is created further down, so the
+	// closure reads it when the probe runs rather than capturing a nil now.
+	var natsSubscriber *natsinfra.Subscriber
+	healthProbes := map[string]handler.HealthProbe{}
+	if pinger, ok := telegramRepo.(interface {
+		Ping(context.Context) error
+	}); ok {
+		healthProbes["postgres"] = pinger.Ping
+	}
+	if cfg.NATSURL != "" {
+		healthProbes["nats"] = func(context.Context) error {
+			if !natsSubscriber.Connected() {
+				return fmt.Errorf("not connected to %s", cfg.NATSURL)
+			}
+			return nil
+		}
+	}
+
 	settingsResp := BuildSettings(cfg, cfg.DatabaseConnString != "")
 	h := handler.New(handler.Options{
 		TelegramSubs:           telegramSubs,
@@ -107,6 +125,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		Settings:               settingsResp,
 		OnSubscriptionsChanged: refreshAccess,
 		UpdateContext:          telegramCtx,
+		HealthProbes:           healthProbes,
 	})
 
 	mux := http.NewServeMux()
@@ -146,7 +165,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 
 	if cfg.NATSURL != "" {
-		natsSubscriber, err := natsinfra.NewSubscriber(cfg.NATSURL)
+		natsSubscriber, err = natsinfra.NewSubscriber(cfg.NATSURL)
 		if err != nil {
 			cancelWorkers()
 			return nil, err

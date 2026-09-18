@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/elug3/dupli1/notification/pkg/domain"
@@ -12,6 +13,7 @@ import (
 type SubscriptionLookup interface {
 	RegisterFromMessage(ctx context.Context, in SubscriptionInput) (*domain.TelegramSubscription, error)
 	FindForMessage(ctx context.Context, chatID string, userID *int64) (*domain.TelegramSubscription, error)
+	UpdateMetadata(ctx context.Context, id string, in SubscriptionInput) error
 }
 
 // SubscriptionInput captures fields from an inbound Telegram message.
@@ -57,6 +59,7 @@ func (p *UpdateProcessor) Handle(ctx context.Context, update Update) error {
 		return fmt.Errorf("look up telegram subscription: %w", err)
 	}
 	if existing != nil {
+		p.refreshMetadata(ctx, existing, msg, userID)
 		// Known chat: welcome it once accepted, stay quiet while it is pending
 		// or rejected.
 		if existing.IsAccepted() {
@@ -85,6 +88,43 @@ func (p *UpdateProcessor) Handle(ctx context.Context, update Update) error {
 		return p.reply(ctx, msg, FormatStartReply(msg.Chat))
 	}
 	return p.reply(ctx, msg, FormatPendingReply(msg.Chat))
+}
+
+// refreshMetadata keeps the stored display fields in step with the chat.
+//
+// They are captured once, when a chat registers, so a group renamed afterwards
+// kept its old label in the manager UI forever. /start is the only moment fresh
+// metadata arrives, and the write only happens when something actually changed.
+//
+// A failure here is logged rather than returned: the reply is the part the
+// sender is waiting on, and a stale label is not worth losing it over.
+func (p *UpdateProcessor) refreshMetadata(ctx context.Context, sub *domain.TelegramSubscription, msg *Message, userID *int64) {
+	if p.Lookup == nil || sub == nil {
+		return
+	}
+	in := p.subscriptionInput(msg, userID)
+	if !metadataChanged(sub, in) {
+		return
+	}
+	if err := p.Lookup.UpdateMetadata(ctx, sub.ID, in); err != nil {
+		log.Printf("telegram refresh metadata for chat %s: %v", sub.ChatID, err)
+	}
+}
+
+// metadataChanged reports whether in carries a value that differs from what is
+// stored. An empty inbound field is absent, not a deletion.
+func metadataChanged(sub *domain.TelegramSubscription, in SubscriptionInput) bool {
+	for _, field := range []struct{ stored, incoming string }{
+		{sub.ChatType, in.ChatType},
+		{sub.ChatLabel, in.ChatLabel},
+		{sub.Username, in.Username},
+	} {
+		incoming := strings.TrimSpace(field.incoming)
+		if incoming != "" && incoming != field.stored {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *UpdateProcessor) subscriptionInput(msg *Message, userID *int64) SubscriptionInput {

@@ -113,6 +113,29 @@ func (r *TelegramRepository) FindByUserID(ctx context.Context, userID int64) (*d
 	return nil, pgx.ErrNoRows
 }
 
+func (r *TelegramRepository) UpdateMetadata(ctx context.Context, id string, in ports.TelegramMetadataInput) error {
+	_ = ctx
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	sub, ok := r.byID[id]
+	if !ok {
+		return pgx.ErrNoRows
+	}
+	// Empty fields leave the stored value alone, as in Postgres.
+	if v := strings.TrimSpace(in.ChatType); v != "" {
+		sub.ChatType = v
+	}
+	if v := strings.TrimSpace(in.ChatLabel); v != "" {
+		sub.ChatLabel = v
+	}
+	if v := strings.TrimSpace(in.Username); v != "" {
+		sub.Username = v
+	}
+	sub.UpdatedAt = time.Now().UTC()
+	r.byID[id] = sub
+	return nil
+}
+
 func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.TelegramManualInput) (*domain.TelegramSubscription, error) {
 	_ = ctx
 	chatID := strings.TrimSpace(in.ChatID)

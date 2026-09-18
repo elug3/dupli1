@@ -16,7 +16,8 @@ import (
 )
 
 type stubLookup struct {
-	sub *domain.TelegramSubscription
+	sub             *domain.TelegramSubscription
+	metadataUpdates int
 }
 
 func (s *stubLookup) RegisterFromMessage(ctx context.Context, in telegram.SubscriptionInput) (*domain.TelegramSubscription, error) {
@@ -25,6 +26,11 @@ func (s *stubLookup) RegisterFromMessage(ctx context.Context, in telegram.Subscr
 
 func (s *stubLookup) FindForMessage(ctx context.Context, chatID string, userID *int64) (*domain.TelegramSubscription, error) {
 	return s.sub, nil
+}
+
+func (s *stubLookup) UpdateMetadata(ctx context.Context, id string, in telegram.SubscriptionInput) error {
+	s.metadataUpdates++
+	return nil
 }
 
 func TestIsStartCommand(t *testing.T) {

@@ -32,3 +32,11 @@ func (s *subscriptionLookup) RegisterFromMessage(ctx context.Context, in telegra
 func (s *subscriptionLookup) FindForMessage(ctx context.Context, chatID string, userID *int64) (*domain.TelegramSubscription, error) {
 	return s.subs.LookupForMessage(ctx, chatID, userID)
 }
+
+func (s *subscriptionLookup) UpdateMetadata(ctx context.Context, id string, in telegram.SubscriptionInput) error {
+	return s.subs.UpdateMetadata(ctx, id, ports.TelegramMetadataInput{
+		ChatType:  in.ChatType,
+		ChatLabel: in.ChatLabel,
+		Username:  in.Username,
+	})
+}
