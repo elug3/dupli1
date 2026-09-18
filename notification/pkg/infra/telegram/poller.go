@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 )
@@ -9,6 +10,9 @@ import (
 const (
 	pollTimeoutSec   = 30
 	pollErrorBackoff = 5 * time.Second
+	// A conflict clears only when the other consumer stops, so poll back
+	// slowly rather than filling the log every 5s for the length of a deploy.
+	pollConflictBackoff = 30 * time.Second
 )
 
 // DrainUpdates fetches and processes pending updates once (used after webhook setup).
@@ -67,8 +71,18 @@ func RunPoller(ctx context.Context, client *Client, processor *UpdateProcessor) 
 			if ctx.Err() != nil {
 				return
 			}
-			log.Printf("telegram getUpdates: %v", err)
-			sleep(ctx, pollErrorBackoff)
+			backoff := pollErrorBackoff
+			if errors.Is(err, ErrUpdatesConflict) {
+				// Another task polls this bot, or a webhook is registered.
+				// Two pollers on one token is not a state this process can
+				// resolve — one of them simply loses. Keep the loop alive so
+				// polling resumes once the other consumer is gone.
+				backoff = pollConflictBackoff
+				log.Printf("telegram getUpdates: another consumer owns this bot's updates, retrying in %s: %v", backoff, err)
+			} else {
+				log.Printf("telegram getUpdates: %v", err)
+			}
+			sleep(ctx, backoff)
 			continue
 		}
 

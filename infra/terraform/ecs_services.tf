@@ -631,25 +631,41 @@ resource "aws_ecs_task_definition" "notification" {
         # Required for manage-web /telegram (manager JWT via auth JWKS).
         { name = "AUTH_JWKS_URL", value = "http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json" },
       ]
-      secrets = [
-        {
-          name      = "TELEGRAM_BOT_TOKEN"
-          valueFrom = "${var.telegram_secret_arn}:TELEGRAM_BOT_TOKEN::"
-        },
-        {
-          name      = "TELEGRAM_ORDER_CHAT_ID"
-          valueFrom = "${var.telegram_secret_arn}:TELEGRAM_ORDER_CHAT_ID::"
-        },
-        {
-          name      = "TELEGRAM_PRODUCT_CHAT_ID"
-          valueFrom = "${var.telegram_secret_arn}:TELEGRAM_PRODUCT_CHAT_ID::"
-        },
-        {
-          name      = "TELEGRAM_ALLOWED_USER_IDS"
-          valueFrom = "${var.telegram_secret_arn}:TELEGRAM_ALLOWED_USER_IDS::"
-        },
-        local.nats_token_secret,
-      ]
+      # NOTE: DUPLI1_NOTIFICATION_DB is only injected once
+      # notification_db_url_secret_arn is set (create
+      # dupli1/production/notification-db-url in Secrets Manager and pass the
+      # ARN via var.notification_db_url_secret_arn). Until then the task starts
+      # with no secrets block for the DB and notification falls back to its
+      # in-memory Telegram subscription repository, which does not persist
+      # across restarts — every manager accept/reject is lost on deploy, and
+      # tasks do not share an allowlist.
+      secrets = concat(
+        var.notification_db_url_secret_arn == "" ? [] : [
+          {
+            name      = "DUPLI1_NOTIFICATION_DB"
+            valueFrom = var.notification_db_url_secret_arn
+          },
+        ],
+        [
+          {
+            name      = "TELEGRAM_BOT_TOKEN"
+            valueFrom = "${var.telegram_secret_arn}:TELEGRAM_BOT_TOKEN::"
+          },
+          {
+            name      = "TELEGRAM_ORDER_CHAT_ID"
+            valueFrom = "${var.telegram_secret_arn}:TELEGRAM_ORDER_CHAT_ID::"
+          },
+          {
+            name      = "TELEGRAM_PRODUCT_CHAT_ID"
+            valueFrom = "${var.telegram_secret_arn}:TELEGRAM_PRODUCT_CHAT_ID::"
+          },
+          {
+            name      = "TELEGRAM_ALLOWED_USER_IDS"
+            valueFrom = "${var.telegram_secret_arn}:TELEGRAM_ALLOWED_USER_IDS::"
+          },
+          local.nats_token_secret,
+        ]
+      )
       logConfiguration = {
         logDriver = "awslogs"
         options = {

@@ -21,9 +21,9 @@ func BuildSettings(cfg Config, telegramDB bool) settings.Response {
 		"write_timeout_seconds": settings.TimeoutSeconds(cfg.WriteTimeout),
 	}
 	resp.Dependencies = map[string]settings.Dependency{
-		"nats":      {Configured: cfg.NATSURL != ""},
-		"telegram":  {Configured: cfg.TelegramToken != ""},
-		"postgres":  {Configured: cfg.DatabaseConnString != ""},
+		"nats":     {Configured: cfg.NATSURL != ""},
+		"telegram": {Configured: cfg.TelegramToken != ""},
+		"postgres": {Configured: cfg.DatabaseConnString != ""},
 	}
 	return resp
 }

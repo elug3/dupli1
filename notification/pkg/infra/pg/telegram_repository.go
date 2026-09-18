@@ -11,6 +11,7 @@ import (
 	"github.com/elug3/dupli1/notification/pkg/domain"
 	"github.com/elug3/dupli1/notification/pkg/ports"
 	"github.com/elug3/dupli1/shared/pkg/pgsslmode"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/oklog/ulid/v2"
@@ -39,6 +40,14 @@ func (r *TelegramRepository) Close() {
 	if r.pool != nil {
 		r.pool.Close()
 	}
+}
+
+// Ping reports whether the pool can still reach Postgres, for /health.
+func (r *TelegramRepository) Ping(ctx context.Context) error {
+	if r == nil || r.pool == nil {
+		return fmt.Errorf("notification database not configured")
+	}
+	return r.pool.Ping(ctx)
 }
 
 func (r *TelegramRepository) migrate() error {
@@ -114,6 +123,10 @@ func (r *TelegramRepository) UpsertPending(ctx context.Context, in ports.Telegra
 		sub.ID, sub.TelegramUserID, sub.ChatID, sub.ChatType, sub.ChatLabel, sub.Username, sub.Status, sub.CreatedAt, sub.UpdatedAt,
 	)
 	if err != nil {
+		if isUniqueViolation(err) {
+			// Raced with a concurrent update from the same chat or user.
+			return nil, fmt.Errorf("%w: concurrent registration", ports.ErrDuplicateSubscription)
+		}
 		return nil, fmt.Errorf("insert telegram subscription: %w", err)
 	}
 	return &sub, nil
@@ -163,6 +176,25 @@ func (r *TelegramRepository) FindByUserID(ctx context.Context, userID int64) (*d
 	return scanSubscription(row)
 }
 
+// UpdateMetadata refreshes the display fields captured when a chat registered.
+// Each is left alone when the inbound message does not carry it — a group
+// message has no username, and forgetting one is worse than keeping it.
+func (r *TelegramRepository) UpdateMetadata(ctx context.Context, id string, in ports.TelegramMetadataInput) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE telegram_subscriptions
+		SET chat_type   = COALESCE(NULLIF($2, ''), chat_type),
+		    chat_label  = COALESCE(NULLIF($3, ''), chat_label),
+		    username    = COALESCE(NULLIF($4, ''), username),
+		    updated_at  = $5
+		WHERE id = $1`,
+		id, strings.TrimSpace(in.ChatType), strings.TrimSpace(in.ChatLabel), strings.TrimSpace(in.Username), time.Now().UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("update telegram subscription metadata: %w", err)
+	}
+	return nil
+}
+
 func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.TelegramManualInput) (*domain.TelegramSubscription, error) {
 	chatID := strings.TrimSpace(in.ChatID)
 	if chatID == "" && in.TelegramUserID != nil {
@@ -205,6 +237,12 @@ func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.Telegr
 		sub.CreatedAt, sub.UpdatedAt, sub.AcceptedAt, sub.AcceptedBy,
 	)
 	if err != nil {
+		if isUniqueViolation(err) {
+			// The chat_id conflict is handled by ON CONFLICT above, so this is
+			// the telegram_user_id index: that user is already registered
+			// under a different chat.
+			return nil, fmt.Errorf("%w: telegram user already registered to another chat", ports.ErrDuplicateSubscription)
+		}
 		return nil, fmt.Errorf("create accepted telegram subscription: %w", err)
 	}
 	return r.FindByChatID(ctx, chatID)
@@ -309,6 +347,13 @@ func scanSubscriptions(rows pgx.Rows) ([]domain.TelegramSubscription, error) {
 		out = append(out, sub)
 	}
 	return out, rows.Err()
+}
+
+// isUniqueViolation reports whether err is Postgres' unique_violation (23505),
+// which the caller answers with a conflict rather than a server error.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // withPostgresSSLMode picks a safe sslmode for connString — see shared/pkg/pgsslmode.

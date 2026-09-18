@@ -2,12 +2,18 @@ package service
 
 import (
 	"context"
+	"log"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
 	"github.com/elug3/dupli1/notification/pkg/ports"
 )
+
+// DefaultAccessRefreshInterval is how often the cached allowlist is rebuilt
+// from the database when no interval is configured.
+const DefaultAccessRefreshInterval = 30 * time.Second
 
 // TelegramAccess enforces Telegram send and command policy from env + database.
 type TelegramAccess struct {
@@ -62,6 +68,35 @@ func (a *TelegramAccess) Refresh(ctx context.Context) error {
 	a.userIDs = userIDs
 	a.mu.Unlock()
 	return nil
+}
+
+// RunRefresher rebuilds the cached allowlist on a ticker until ctx is done.
+//
+// The handler's OnSubscriptionsChanged callback only refreshes the process that
+// served the request, so without this a chat a manager accepts on one task
+// stays denied on every other one until it restarts — including through the
+// two-task overlap of a rolling deploy.
+func (a *TelegramAccess) RunRefresher(ctx context.Context, every time.Duration) {
+	if a == nil {
+		return
+	}
+	if every <= 0 {
+		every = DefaultAccessRefreshInterval
+	}
+
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := a.Refresh(ctx); err != nil && ctx.Err() == nil {
+				log.Printf("telegram access refresh: %v", err)
+			}
+		}
+	}
 }
 
 func (a *TelegramAccess) AllowsChat(chatID string) bool {

@@ -13,6 +13,13 @@ import (
 
 const apiBase = "https://api.telegram.org"
 
+// Retry budget for a failed send. Vars, not consts, so tests need not wait out
+// the real backoff.
+var (
+	sendMaxAttempts  = 3
+	sendRetryBackoff = 500 * time.Millisecond
+)
+
 // tokenPlaceholder stands in for the bot token in redacted error text.
 const tokenPlaceholder = "<redacted>"
 
@@ -121,6 +128,7 @@ func (c *Client) sendMessage(ctx context.Context, chatID string, message string,
 	if message == "" {
 		return fmt.Errorf("telegram message is required")
 	}
+	message = truncateMessage(message)
 
 	body, err := json.Marshal(map[string]string{
 		"chat_id":    chatID,
@@ -131,30 +139,61 @@ func (c *Client) sendMessage(ctx context.Context, chatID string, message string,
 		return fmt.Errorf("marshal telegram request: %w", err)
 	}
 
+	var lastErr error
+	backoff := sendRetryBackoff
+	for attempt := 1; ; attempt++ {
+		retryable, err := c.postMessage(ctx, body)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if !retryable || attempt >= sendMaxAttempts {
+			return lastErr
+		}
+		select {
+		case <-ctx.Done():
+			return lastErr
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+	}
+}
+
+// postMessage performs one sendMessage call and reports whether the failure is
+// worth repeating. A rejected chat or a malformed message fails the same way
+// every time; a timeout or a 5xx usually does not.
+//
+// The retry runs inline, so a NATS handler waits out the backoff — bounded by
+// sendMaxAttempts, and worth it because core NATS does not redeliver: without a
+// retry here, one blip loses an alert for good, order.paid included.
+func (c *Client) postMessage(ctx context.Context, body []byte) (retryable bool, err error) {
 	url := fmt.Sprintf("%s/bot%s/sendMessage", c.baseURL(), c.token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("create telegram request: %w", c.redact(err))
+		return false, fmt.Errorf("create telegram request: %w", c.redact(err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("send telegram message: %w", c.redact(err))
+		// Transport-level: timeout, reset, DNS. Worth another attempt unless
+		// the caller's context is the thing that ended.
+		return ctx.Err() == nil, fmt.Errorf("send telegram message: %w", c.redact(err))
 	}
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("telegram api status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		retryable := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
+		return retryable, fmt.Errorf("telegram api status %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 
 	var result struct {
 		OK bool `json:"ok"`
 	}
 	if err := json.Unmarshal(respBody, &result); err == nil && !result.OK {
-		return fmt.Errorf("telegram api returned ok=false: %s", strings.TrimSpace(string(respBody)))
+		return false, fmt.Errorf("telegram api returned ok=false: %s", strings.TrimSpace(string(respBody)))
 	}
 
-	return nil
+	return false, nil
 }

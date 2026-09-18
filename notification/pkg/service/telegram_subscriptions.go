@@ -11,6 +11,10 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
+// ErrIdentifierRequired reports a manual subscription with neither a Telegram
+// user ID nor a chat ID — a bad request, distinct from a failing store.
+var ErrIdentifierRequired = errors.New("telegram_user_id or chat_id is required")
+
 type TelegramSubscriptions struct {
 	repo ports.TelegramRepository
 }
@@ -42,7 +46,7 @@ func (s *TelegramSubscriptions) CreateManual(ctx context.Context, in ports.Teleg
 		return nil, fmt.Errorf("telegram repository not configured")
 	}
 	if in.TelegramUserID == nil && strings.TrimSpace(in.ChatID) == "" {
-		return nil, fmt.Errorf("telegram_user_id or chat_id is required")
+		return nil, ErrIdentifierRequired
 	}
 	return s.repo.CreateAccepted(ctx, in)
 }
@@ -66,6 +70,15 @@ func (s *TelegramSubscriptions) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("telegram repository not configured")
 	}
 	return s.repo.Delete(ctx, id)
+}
+
+// UpdateMetadata refreshes the display fields of a subscription that already
+// exists, so a renamed group does not keep its old label in the manager UI.
+func (s *TelegramSubscriptions) UpdateMetadata(ctx context.Context, id string, in ports.TelegramMetadataInput) error {
+	if !s.Enabled() {
+		return fmt.Errorf("telegram repository not configured")
+	}
+	return s.repo.UpdateMetadata(ctx, id, in)
 }
 
 func (s *TelegramSubscriptions) LookupForMessage(ctx context.Context, chatID string, userID *int64) (*domain.TelegramSubscription, error) {
@@ -101,28 +114,61 @@ func (s *TelegramSubscriptions) IsAllowedIncoming(ctx context.Context, chatID st
 	return sub.IsAccepted()
 }
 
-func (s *TelegramSubscriptions) RoutingChats(ctx context.Context, env *ports.TelegramEnvAllowlist) (orderChatID, productChatID string) {
+// RoutingChats returns every chat that should receive order and product
+// alerts: the transitional env destinations first, then each accepted
+// subscription carrying the matching flag, without duplicates.
+//
+// Env and database destinations are unioned rather than one overriding the
+// other. Preferring env meant that as long as TELEGRAM_ORDER_CHAT_ID was set —
+// which it is in production — accepting a chat in manage-web did nothing at
+// all, so the whole subscription UI was inert wherever the fallback existed.
+func (s *TelegramSubscriptions) RoutingChats(ctx context.Context, env *ports.TelegramEnvAllowlist) (orderChatIDs, productChatIDs []string) {
+	var order, product chatSet
 	if env != nil {
-		orderChatID = strings.TrimSpace(env.OrderChatID)
-		productChatID = strings.TrimSpace(env.ProductChatID)
+		order.add(env.OrderChatID)
+		product.add(env.ProductChatID)
 	}
 	if !s.Enabled() {
-		return orderChatID, productChatID
+		return order.list(), product.list()
 	}
 	accepted, err := s.repo.ListAccepted(ctx)
 	if err != nil {
-		return orderChatID, productChatID
+		return order.list(), product.list()
 	}
 	for _, sub := range accepted {
-		if orderChatID == "" && sub.AlertOrder {
-			orderChatID = sub.ChatID
+		if sub.AlertOrder {
+			order.add(sub.ChatID)
 		}
-		if productChatID == "" && sub.AlertProduct {
-			productChatID = sub.ChatID
+		if sub.AlertProduct {
+			product.add(sub.ChatID)
 		}
 	}
-	return orderChatID, productChatID
+	return order.list(), product.list()
 }
+
+// chatSet collects chat IDs in insertion order, trimming blanks and repeats so
+// a chat listed in both env and the database is alerted once.
+type chatSet struct {
+	ids  []string
+	seen map[string]struct{}
+}
+
+func (c *chatSet) add(chatID string) {
+	chatID = strings.TrimSpace(chatID)
+	if chatID == "" {
+		return
+	}
+	if _, ok := c.seen[chatID]; ok {
+		return
+	}
+	if c.seen == nil {
+		c.seen = make(map[string]struct{})
+	}
+	c.seen[chatID] = struct{}{}
+	c.ids = append(c.ids, chatID)
+}
+
+func (c *chatSet) list() []string { return c.ids }
 
 func (s *TelegramSubscriptions) AllowedChatIDs(ctx context.Context, env *ports.TelegramEnvAllowlist) (map[string]struct{}, error) {
 	allowed := make(map[string]struct{})
