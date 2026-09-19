@@ -55,6 +55,45 @@ resp.Storage = settings.StorageMode(dbURL)
 mux.HandleFunc("/settings", settings.Handler(resp))
 ```
 
+### `pkg/telegram`
+
+Telegram Bot API transport, shared by every bot this platform runs. Sends and replies with retry and backoff, redacts the bot token from any error that would otherwise carry it into a log line, registers webhooks, long-polls `getUpdates`, escapes HTML, and truncates to Telegram's 4096-character limit without cutting a tag in half.
+
+It deliberately holds no policy of its own: `AccessPolicy` is the client's only view of who may be messaged, so an ops bot can allowlist a handful of chats while a customer bot answers anyone, with the same transport underneath.
+
+```go
+import "github.com/elug3/dupli1/shared/pkg/telegram"
+
+client := telegram.NewClient(botToken, nil)
+client.SetAccessPolicy(policy) // your own rule for who may be messaged
+_ = client.Send(ctx, chatID, "<b>주문</b> 도착")
+
+// Inbound: webhook, or polling when no webhook URL is configured.
+go telegram.RunPoller(ctx, client, handler) // handler implements Handle(ctx, Update) error
+```
+
+Menus are inline keyboards. A button tap arrives as `Update.CallbackQuery`, which
+Telegram only delivers if the webhook asked for it — an unlisted type is dropped
+before it is sent, and the button then spins on the user's device forever:
+
+```go
+_ = client.SetWebhook(ctx, hookURL, secret,
+	telegram.WithAllowedUpdates("message", "callback_query")) // default is "message" alone
+
+menu := telegram.KeyboardRows(
+	telegram.CallbackButton("📦 주문·배송 문의", "v1:ord"),
+	telegram.CallbackButton("🙋 상담원 연결", "v1:agt"),
+)
+_ = client.ReplyMenu(ctx, chatID, "무엇을 도와드릴까요?", menu)
+
+// On a tap: dismiss the spinner, then walk the menu in place.
+_ = client.AnswerCallback(ctx, query.ID, "")
+_ = client.EditMessageText(ctx, chatID, query.Message.MessageID, answer, nextMenu)
+```
+
+`Send` obeys the access policy; `Reply`, `ReplyMenu`, `EditMessageText` and
+`AnswerCallback` do not, because each answers something the chat itself just did.
+
 ### Testing
 
 ```bash

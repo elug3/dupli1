@@ -25,6 +25,7 @@ dupli1/
 │   ├── cmd/
 │   └── pkg/
 ├── notification/
+├── support/                  # Customer Telegram consultation bot (Phase 2 skeleton)
 │   ├── cmd/
 │   └── pkg/
 ├── shared/                   # Reusable Go modules (permissions, …)

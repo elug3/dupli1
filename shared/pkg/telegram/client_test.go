@@ -10,8 +10,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
+	"github.com/elug3/dupli1/shared/pkg/telegram"
 )
+
+// allowChat is the smallest AccessPolicy that exercises the client: one chat
+// may receive outbound messages, everything else is refused. The ops bot's
+// env-backed Allowlist is one implementation of the same interface and stays
+// with notification, which is the only service that needs its shape.
+type allowChat string
+
+func (a allowChat) AllowsChat(chatID string) bool { return chatID == string(a) }
+
+func (a allowChat) AllowsIncoming(telegram.Chat, *telegram.User) bool { return true }
 
 func TestClientSendRespectsOutboundAllowlist(t *testing.T) {
 	called := false
@@ -22,8 +32,7 @@ func TestClientSendRespectsOutboundAllowlist(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
-	allowlist := telegram.NewAllowlist("-1001", "", "")
-	client.SetAccessPolicy(allowlist)
+	client.SetAccessPolicy(allowChat("-1001"))
 
 	if err := client.Send(t.Context(), "42", "blocked"); err != nil {
 		t.Fatalf("Send: %v", err)
@@ -58,8 +67,7 @@ func TestClientReplyBypassesOutboundAllowlist(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
-	allowlist := telegram.NewAllowlist("-1001", "", "")
-	client.SetAccessPolicy(allowlist)
+	client.SetAccessPolicy(allowChat("-1001"))
 
 	if err := client.Reply(t.Context(), "42", "Registration received"); err != nil {
 		t.Fatalf("Reply: %v", err)

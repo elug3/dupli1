@@ -28,6 +28,7 @@ type TelegramManualInput struct {
 	ChatLabel      string
 	AlertOrder     bool
 	AlertProduct   bool
+	AlertSupport   bool
 	AcceptedBy     string
 }
 
@@ -43,6 +44,7 @@ type TelegramMetadataInput struct {
 type TelegramAcceptInput struct {
 	AlertOrder   bool
 	AlertProduct bool
+	AlertSupport bool
 	AcceptedBy   string
 }
 

@@ -115,6 +115,22 @@ services:
       timeout: 5s
       retries: 10
 
+  postgres-support:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: support
+      POSTGRES_USER: dupli1
+      POSTGRES_PASSWORD: dupli1_dev
+    ports:
+      - "5440:5432"
+    volumes:
+      - postgres-support-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dupli1 -d support"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     ports:
@@ -429,6 +445,45 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  dupli1-support:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: support
+    ports:
+      - "8089:8080"
+    environment:
+      DUPLI1_SUPPORT_ADDR: :8080
+      DUPLI1_SUPPORT_DB: postgres://dupli1:dupli1_dev@postgres-support:5432/support?sslmode=disable
+      # The customer bot's own token and webhook secret. Deliberately NOT the
+      # ops bot's TELEGRAM_* names: two bots, two tokens, and one shared name is
+      # how a deploy ends up pointing both at the same bot — which Telegram
+      # settles by handing one of them a 409.
+      TELEGRAM_SUPPORT_BOT_TOKEN: ${TELEGRAM_SUPPORT_BOT_TOKEN:-}
+      TELEGRAM_SUPPORT_WEBHOOK_URL: ${TELEGRAM_SUPPORT_WEBHOOK_URL:-}
+      TELEGRAM_SUPPORT_WEBHOOK_SECRET: ${TELEGRAM_SUPPORT_WEBHOOK_SECRET:-}
+      # Deep link staff follow from an ops alert into the manager inbox.
+      MANAGE_WEB_URL: ${MANAGE_WEB_URL:-http://localhost:5173}
+      AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
+      NATS_URL: nats://nats:4222
+      NATS_TOKEN: ${NATS_TOKEN:-dupli1_nats_dev}
+    depends_on:
+      postgres-support:
+        condition: service_healthy
+      dupli1-auth:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
   dupli1-proxy:
     build:
       context: .
@@ -462,4 +517,5 @@ volumes:
   postgres-payment-data:
   postgres-notification-data:
   postgres-profile-data:
+  postgres-support-data:
   minio-data:

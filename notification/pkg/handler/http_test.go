@@ -19,6 +19,7 @@ import (
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
+	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -320,7 +321,7 @@ func TestTelegramWebhookAcknowledgesBeforeProcessing(t *testing.T) {
 
 	repo := memory.NewTelegramRepository()
 	subs := service.NewTelegramSubscriptions(repo)
-	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	client := tg.NewTestClient("test-token", srv.Client(), srv.URL)
 	h := handler.New(handler.Options{
 		TelegramSubs: subs,
 		UpdateProcessor: &telegram.UpdateProcessor{

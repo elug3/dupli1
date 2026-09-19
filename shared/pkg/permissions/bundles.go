@@ -4,11 +4,12 @@ import "fmt"
 
 // Bundle names for preset permission sets.
 const (
-	BundleCatalogEditor      = "catalog_editor"
-	BundleCatalogAdmin       = "catalog_admin"
-	BundleFulfillment        = "fulfillment"
-	BundleUserAdmin          = "user_admin"
-	BundleCustomerRegistrar  = "customer_registrar"
+	BundleCatalogEditor     = "catalog_editor"
+	BundleCatalogAdmin      = "catalog_admin"
+	BundleFulfillment       = "fulfillment"
+	BundleUserAdmin         = "user_admin"
+	BundleCustomerRegistrar = "customer_registrar"
+	BundleSupportAgent      = "support_agent"
 )
 
 var bundles = map[string][]string{
@@ -47,6 +48,13 @@ var bundles = map[string][]string{
 	},
 	BundleCustomerRegistrar: {
 		UserCreate,
+	},
+	// A consultation agent reads the inbox and answers shoppers. Editing the
+	// canned answers is deliberately not here: that copy is what every shopper
+	// sees before a person is involved, so it stays with admin.
+	BundleSupportAgent: {
+		SupportRead,
+		SupportReply,
 	},
 }
 

@@ -23,6 +23,14 @@ func (r *TelegramRouting) OrderChatIDs(ctx context.Context) []string {
 	return order
 }
 
+// SupportChatIDs returns the chats opted into customer inquiry handoffs.
+func (r *TelegramRouting) SupportChatIDs(ctx context.Context) []string {
+	if r == nil || r.subs == nil {
+		return nil
+	}
+	return r.subs.SupportChats(ctx)
+}
+
 func (r *TelegramRouting) ProductChatIDs(ctx context.Context) []string {
 	if r == nil || r.subs == nil {
 		return nil

@@ -14,6 +14,7 @@ cd order && go test ./...
 cd cart && go test ./...
 cd payment && go test ./...
 cd notification && go test ./...
+cd support && go test ./...
 cd shared && go test ./...
 
 # Single package
@@ -71,10 +72,11 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/authjwt` | JWKS/JWT validation helpers (RS256 via `AUTH_JWKS_URL`; HS256 fallback) |
 | `shared/pkg/settings` | `GET /settings` response helpers used by all services |
 | `shared/pkg/outbox` | Transactional outbox drain/retry loop (`Drainer`), used by `order` and `payment`; each service keeps its own outbox table/SQL behind the `Store` interface |
-| `shared/pkg/events` | NATS subject constants + payload structs for cross-service events (`order.*`, `payment.succeeded`, `product.*`); one canonical contract per publisher/subscriber pair instead of redeclaring subject strings and payload shapes on each side |
+| `shared/pkg/events` | NATS subject constants + payload structs for cross-service events (`order.*`, `payment.succeeded`, `product.*`, `support.inquiry_opened`); one canonical contract per publisher/subscriber pair instead of redeclaring subject strings and payload shapes on each side |
 | `shared/pkg/pgsslmode` | Picks `sslmode` for a Postgres connection string (local/docker hosts → `disable`, everything else including RDS → `require`); used by every service's DB bootstrap so the local-hostname list can't drift out of sync per service again |
 | `shared/pkg/natspublisher` | JSON-marshaling NATS event publisher (`New`, `Publish`, `Close`), used by `auth`, `order`, `product`, and `payment` |
 | `shared/pkg/authmiddleware` | Bearer-token HTTP middleware (`RequireAuth`, `OptionalAuth`) parameterized by `authjwt.AccessTokenValidator` and a per-service error-response callback, so each service keeps its own error body shape; used by `cart`, `order`, `payment`, `notification`, `product` |
+| `shared/pkg/telegram` | Telegram Bot API client — `Client` (send/reply with retry, backoff and bot-token redaction in errors), wire types (`Update`, `Message`, `Chat`, `User`, `CallbackQuery`), inline-keyboard menus (`ReplyMenu`, `EditMessageText`, `AnswerCallback`), `SendSilent` for an alert that should queue rather than interrupt, webhook registration (`WithAllowedUpdates` opts a bot into `callback_query`; the default stays `message` only), `GetUpdates` polling (`RunPoller`/`DrainUpdates` over a `Handler`), HTML escaping and 4096-char-safe truncation. The `AccessPolicy` interface is the client's only view of who may be messaged, so each bot keeps its own policy; used by `notification` (ops alerts) |
 | `shared/pkg/productclient` | HTTP client for product's variant-lookup endpoint, returning a superset `Variant`; used by `cart` and `order`, each mapping only the display field it needs (`Color` vs `ProductName`) into its own local `ports.VariantInfo` |
 
 ### Service ownership
@@ -86,7 +88,8 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `order` | stdlib `net/http` | Checkout sessions, order lifecycle, transactional outbox → NATS |
 | `cart` | stdlib `net/http` | Persistent per-customer cart; enriches lines from product |
 | `payment` | stdlib `net/http` | NANO card / manager Bypass (also the local/dev testing path); publishes `payment.succeeded` via outbox |
-| `notification` | stdlib `net/http` | NATS subscriber → Telegram ops alerts |
+| `notification` | stdlib `net/http` | NATS subscriber → Telegram ops alerts. Chats opt into each alert class separately (`alert_order`, `alert_product`, `alert_support`); customer inquiry handoffs go only to chats that asked for them, with no env fallback |
+| `support` | stdlib `net/http` | Customer-facing Telegram consultation bot: menu router, conversation state, handoff to staff. **Separate bot and token from `notification`'s ops bot** (`TELEGRAM_SUPPORT_*`, never `TELEGRAM_*`) — one token owns one update stream. Phases 0–4 of [docs/support-telegram-bot.md](docs/support-telegram-bot.md): the menu tree routes, conversations, inquiries and transcripts persist in PostgreSQL (`support`), canned answers are seeded insert-if-absent so staff edits survive a deploy, and asking for a human opens an inquiry and publishes `support.inquiry_opened` for `notification` to fan out. Service hours are weekdays 10:00–22:00 KST (config-driven; holidays are staff behavior, not code). Phase 5 adds the manager inbox (`support.read|reply|manage`, `support_agent` bundle) and the manage-web `/support` tab, where staff claim, reply and close; an undeliverable reply is stored and shown as 미전송 |
 | `profile` | stdlib `net/http` | Customer commerce profile (display name, phone) + saved addresses; subscribes `user.deleted` from auth to cascade-delete. Extracted per [docs/auth-profile-extension-plan.md](docs/auth-profile-extension-plan.md) Phase D |
 
 ### Product model
@@ -129,7 +132,7 @@ Refresh tokens rotate on every use: `/refresh` invalidates the token it was give
 
 Fine-grained permissions (`{resource}.{action}`, e.g. `product.create`, `order.ship`). Wildcards: `*` (owner), `admin.*`, `{resource}.*`. Storefront customers use ABAC (JWT `sub` must match resource owner) with no explicit permission required.
 
-Key bundles: `catalog_editor`, `catalog_admin`, `fulfillment`, `user_admin`. See `docs/permissions.md` for the full catalog.
+Key bundles: `catalog_editor`, `catalog_admin`, `fulfillment`, `user_admin`, `support_agent`. See `docs/permissions.md` for the full catalog.
 
 ### Schema migrations
 
@@ -137,7 +140,7 @@ Services migrate their own schema inline on startup (no separate migration tool)
 
 ### In-memory fallbacks
 
-Order, cart, and payment use PostgreSQL when their `DUPLI1_*_DB` env var is set; otherwise they fall back to an in-memory repository. Tests rely on this — no database needed unless testing Postgres-specific behavior.
+Order, cart, payment, and support use PostgreSQL when their `DUPLI1_*_DB` env var is set; otherwise they fall back to an in-memory repository. Tests rely on this — no database needed unless testing Postgres-specific behavior.
 
 ## Key constraints
 
@@ -160,6 +163,7 @@ Order, cart, and payment use PostgreSQL when their `DUPLI1_*_DB` env var is set;
 | payment | 5437 | `payments` | `dupli1` | `dupli1_dev` |
 | notification | 5438 | `notifications` | `dupli1` | `dupli1_dev` |
 | profile | 5439 | `profiles` | `dupli1` | `dupli1_dev` |
+| support | 5440 | `support` | `dupli1` | `dupli1_dev` |
 
 Seeded owner: `admin@dupli1.com` / `password`.
 

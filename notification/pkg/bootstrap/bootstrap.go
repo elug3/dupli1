@@ -16,6 +16,7 @@ import (
 	"github.com/elug3/dupli1/notification/pkg/ports"
 	"github.com/elug3/dupli1/notification/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
+	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 )
 
 // App holds wired notification dependencies.
@@ -73,7 +74,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 	refreshAccess()
 
-	notifier := telegraminfra.NewClient(cfg.TelegramToken, nil)
+	notifier := tg.NewClient(cfg.TelegramToken, nil)
 	notifier.SetAccessPolicy(telegramAccess)
 
 	processor := &telegraminfra.UpdateProcessor{
@@ -151,7 +152,7 @@ func Bootstrap(cfg Config) (*App, error) {
 			if err := notifier.DeleteWebhook(telegramCtx); err != nil {
 				log.Printf("telegram deleteWebhook before drain: %v", err)
 			}
-			if err := telegraminfra.DrainUpdates(telegramCtx, notifier, processor); err != nil {
+			if err := tg.DrainUpdates(telegramCtx, notifier, processor); err != nil {
 				log.Printf("telegram drain updates: %v", err)
 			}
 			if err := notifier.SetWebhook(telegramCtx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {
@@ -160,7 +161,7 @@ func Bootstrap(cfg Config) (*App, error) {
 			}
 			log.Printf("telegram webhook registered at %s", cfg.TelegramWebhookURL)
 		} else {
-			go telegraminfra.RunPoller(telegramCtx, notifier, processor)
+			go tg.RunPoller(telegramCtx, notifier, processor)
 		}
 	}
 

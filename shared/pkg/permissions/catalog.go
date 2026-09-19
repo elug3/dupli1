@@ -28,16 +28,16 @@ const (
 
 // Product catalog permissions (product service).
 const (
-	ProductCreate         = "product.create"
-	ProductUpdate         = "product.update"
-	ProductDelete         = "product.delete"
-	ProductRead           = "product.read"
-	ProductVariantCreate  = "product.variant.create"
-	ProductVariantUpdate  = "product.variant.update"
-	ProductVariantDelete  = "product.variant.delete"
-	ProductImageUpload    = "product.image.upload"
-	ProductMasterRead     = "product.master.read"
-	ProductMasterWrite    = "product.master.write"
+	ProductCreate        = "product.create"
+	ProductUpdate        = "product.update"
+	ProductDelete        = "product.delete"
+	ProductRead          = "product.read"
+	ProductVariantCreate = "product.variant.create"
+	ProductVariantUpdate = "product.variant.update"
+	ProductVariantDelete = "product.variant.delete"
+	ProductImageUpload   = "product.image.upload"
+	ProductMasterRead    = "product.master.read"
+	ProductMasterWrite   = "product.master.write"
 )
 
 // Promotional code permissions (product service).
@@ -68,8 +68,8 @@ const (
 
 // Inventory permissions (inventory service).
 const (
-	InventoryStockRead        = "inventory.stock.read"
-	InventoryStockWrite       = "inventory.stock.write"
+	InventoryStockRead         = "inventory.stock.read"
+	InventoryStockWrite        = "inventory.stock.write"
 	InventoryReservationManage = "inventory.reservation.manage"
 )
 
@@ -98,6 +98,13 @@ const (
 const (
 	NotificationTelegramRead   = "notification.telegram.read"
 	NotificationTelegramManage = "notification.telegram.manage"
+)
+
+// Support permissions (support service — the customer consultation inbox).
+const (
+	SupportRead   = "support.read"
+	SupportReply  = "support.reply"
+	SupportManage = "support.manage"
 )
 
 // All lists every concrete (non-wildcard) permission in the catalog.
@@ -142,6 +149,9 @@ var Catalog = []string{
 	PaymentCancel,
 	NotificationTelegramRead,
 	NotificationTelegramManage,
+	SupportRead,
+	SupportReply,
+	SupportManage,
 }
 
 // known is the set of concrete permissions for O(1) lookup.

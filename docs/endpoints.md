@@ -22,6 +22,7 @@ All services listen on port `8080` inside Docker. The nginx gateway proxies by p
 | `/api/v1/payments` | `dupli1-payment:8080` |
 | `/api/v1/payments/` | `dupli1-payment:8080` |
 | `/api/v1/notification/` | `dupli1-notification:8080` |
+| `/api/v1/support/` | `dupli1-support:8080` |
 
 Local gateway: `http://localhost:8080` (also host port 80).
 
@@ -680,3 +681,25 @@ NATS → Telegram ops alerts. Design: [notification-telegram-bot.md](notificatio
 | `DELETE` | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` | Delete subscription |
 
 Local Compose uses `getUpdates` polling when webhook URL is unset. Subscriptions persist in PostgreSQL `notifications` (`DUPLI1_NOTIFICATION_DB`, host port **5438**).
+
+---
+
+## Support Service
+
+Customer-facing Telegram consultation bot — **a different bot from the ops one above**, with its own token, webhook secret and update stream. Design: [support-telegram-bot.md](support-telegram-bot.md).
+
+| Method | Path | Permission / rule | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/support/health` | — | Health check |
+| `GET` | `/api/v1/support/settings` | — | Non-secret service settings |
+| `POST` | `/api/v1/support/telegram/webhook` | webhook secret header | Telegram Bot API webhook; serves `message` and `callback_query` |
+| `GET` | `/api/v1/support/inquiries` | `support.read` | Inbox list; `?queue=waiting`, `?assigned_to=me`, `?status=closed` |
+| `GET` | `/api/v1/support/inquiries/{id}` | `support.read` | One inquiry with its full transcript |
+| `POST` | `/api/v1/support/inquiries/{id}/assign` | `support.reply` | Claim, or take over from another manager |
+| `POST` | `/api/v1/support/inquiries/{id}/reply` | `support.reply` | Send the shopper a reply; `{"delivered": false}` when it could not be delivered |
+| `POST` | `/api/v1/support/inquiries/{id}/close` | `support.reply` | Finish, freeing the chat for a later consultation |
+| `GET`/`PUT` | `/api/v1/support/answers` | `support.manage` | Read or edit the bot's canned copy |
+
+Inquiry JSON carries no `chat_id`: the shopper's Telegram identity never leaves the service, and the console does not need it to answer.
+
+Local Compose falls back to `getUpdates` polling when `TELEGRAM_SUPPORT_WEBHOOK_URL` is unset. Conversations and canned answers persist in PostgreSQL `support` (`DUPLI1_SUPPORT_DB`, host port **5440**), with an in-memory fallback when that variable is unset. Answer copy is seeded on start with insert-if-absent, so an edit made from the inbox survives the next deploy.

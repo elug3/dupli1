@@ -19,6 +19,7 @@ import (
 	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
+	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -195,7 +196,7 @@ func (h *Handler) telegramWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var update telegram.Update
+	var update tg.Update
 	if err := json.Unmarshal(body, &update); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid telegram update")
 		return
@@ -239,6 +240,7 @@ func (h *Handler) telegramSubscriptions(w http.ResponseWriter, r *http.Request) 
 			ChatID         string `json:"chat_id"`
 			ChatLabel      string `json:"chat_label"`
 			AlertOrder     bool   `json:"alert_order"`
+			AlertSupport   bool   `json:"alert_support"`
 			AlertProduct   bool   `json:"alert_product"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -251,6 +253,7 @@ func (h *Handler) telegramSubscriptions(w http.ResponseWriter, r *http.Request) 
 			ChatID:         req.ChatID,
 			ChatLabel:      req.ChatLabel,
 			AlertOrder:     req.AlertOrder,
+			AlertSupport:   req.AlertSupport,
 			AlertProduct:   req.AlertProduct,
 			AcceptedBy:     claims.UserID,
 		})
@@ -307,11 +310,13 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 		}
 		var req struct {
 			AlertOrder   bool `json:"alert_order"`
+			AlertSupport bool `json:"alert_support"`
 			AlertProduct bool `json:"alert_product"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		item, err := h.telegramSubs.Accept(r.Context(), id, ports.TelegramAcceptInput{
 			AlertOrder:   req.AlertOrder,
+			AlertSupport: req.AlertSupport,
 			AlertProduct: req.AlertProduct,
 			AcceptedBy:   claims.UserID,
 		})
@@ -364,7 +369,7 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 // processUpdate handles an already-acknowledged webhook update. Its context is
 // the server's, not the request's: the request context is cancelled the moment
 // the response is written, which would abort the work this just promised to do.
-func (h *Handler) processUpdate(update telegram.Update) {
+func (h *Handler) processUpdate(update tg.Update) {
 	ctx, cancel := context.WithTimeout(h.updateCtx, webhookProcessTimeout)
 	defer cancel()
 	if err := h.updateProcessor.Handle(ctx, update); err != nil {

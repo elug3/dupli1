@@ -3,6 +3,8 @@ package telegram
 import (
 	"strconv"
 	"strings"
+
+	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 )
 
 // Allowlist restricts which Telegram users and chats may receive messages.
@@ -67,7 +69,7 @@ func (a *Allowlist) AllowsUser(userID int64) bool {
 }
 
 // AllowsIncoming reports whether an incoming command may be handled for the sender.
-func (a *Allowlist) AllowsIncoming(chat Chat, from *User) bool {
+func (a *Allowlist) AllowsIncoming(chat tg.Chat, from *tg.User) bool {
 	if a.AllowsChat(chat.FormatID()) {
 		return true
 	}

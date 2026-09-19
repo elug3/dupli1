@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
 	"github.com/elug3/dupli1/notification/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/telegram"
 )
 
 // DefaultAccessRefreshInterval is how often the cached allowlist is rebuilt

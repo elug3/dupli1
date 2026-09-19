@@ -37,7 +37,7 @@ Product / Order / Payment services
 
 | Piece | Role |
 |-------|------|
-| `dupli1-notification` | Subscribes to NATS; formats HTML messages; sends via Bot API |
+| `dupli1-notification` | Subscribes to NATS; formats HTML messages; sends via Bot API. Also fans out customer inquiry handoffs from the support bot (`support.inquiry_opened` → chats with `alert_support`), delivered silently when the inquiry was opened outside service hours |
 | `dupli1-nats` | Event bus (`order.*`, `product.*`, `payment.succeeded` consumed indirectly via order) |
 | Telegram Bot API | Outbound `sendMessage`; inbound webhook or `getUpdates` |
 | Secrets Manager `dupli1/production/telegram` | **Bot token** (+ transitional env chat IDs) |
@@ -416,13 +416,16 @@ CloudWatch: `/ecs/dupli1-notification`
 
 ## Implementation map
 
+The Bot API transport moved to `shared/pkg/telegram` so a second bot can reuse it ([support-telegram-bot.md](support-telegram-bot.md) Phase 0). What stays here is what makes this bot the *ops* bot: the allowlist, the `/start` registration flow, and the alert copy.
+
 | Area | Path |
 |------|------|
 | NATS dispatcher | `notification/pkg/service/dispatcher.go` |
-| Telegram client | `notification/pkg/infra/telegram/client.go` |
-| Allowlist | `notification/pkg/infra/telegram/allowlist.go` |
-| `/start` handler | `notification/pkg/infra/telegram/commands.go` |
-| Update poller | `notification/pkg/infra/telegram/poller.go` |
+| Telegram client (shared) | `shared/pkg/telegram/client.go` |
+| Update poller (shared) | `shared/pkg/telegram/poller.go` |
+| Allowlist (ops-specific) | `notification/pkg/infra/telegram/allowlist.go` |
+| `/start` handler (ops-specific) | `notification/pkg/infra/telegram/commands.go` |
+| Update processor (ops-specific) | `notification/pkg/infra/telegram/processor.go` |
 | Bootstrap | `notification/pkg/bootstrap/bootstrap.go` |
 | ECS secrets (transitional) | `infra/terraform/ecs_services.tf` |
 
