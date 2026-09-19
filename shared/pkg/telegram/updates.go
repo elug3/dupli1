@@ -42,10 +42,33 @@ type Message struct {
 	From      *User  `json:"from"`
 }
 
-// Update is a Telegram Bot API update.
+// CallbackQuery is an inline-keyboard button tap.
+//
+// Message is the message the button hangs under — the bot's own — so its
+// MessageID is what EditMessageText needs to walk a menu in place. Data is the
+// button's callback_data, capped by Telegram at 64 bytes.
+type CallbackQuery struct {
+	ID      string   `json:"id"`
+	From    *User    `json:"from"`
+	Message *Message `json:"message"`
+	Data    string   `json:"data"`
+}
+
+// Chat reports the chat a button tap came from, or the zero Chat when the
+// update carries no message (Telegram omits it for very old messages).
+func (q CallbackQuery) Chat() Chat {
+	if q.Message == nil {
+		return Chat{}
+	}
+	return q.Message.Chat
+}
+
+// Update is a Telegram Bot API update. Exactly one of the pointer fields is
+// set; a handler checks the one it serves and ignores the rest.
 type Update struct {
-	UpdateID int64    `json:"update_id"`
-	Message  *Message `json:"message"`
+	UpdateID      int64          `json:"update_id"`
+	Message       *Message       `json:"message"`
+	CallbackQuery *CallbackQuery `json:"callback_query"`
 }
 
 func (c Chat) FormatID() string {
@@ -137,8 +160,28 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeout int) ([]U
 	return result.Result, nil
 }
 
+// WebhookOption customizes webhook registration.
+type WebhookOption func(*webhookConfig)
+
+type webhookConfig struct {
+	allowedUpdates []string
+}
+
+// WithAllowedUpdates names the update types Telegram should deliver. A bot with
+// menus needs "callback_query" alongside "message": Telegram filters anything
+// not listed here, so an unlisted button tap is dropped before it is ever sent
+// and the button spins on the user's device forever.
+//
+// The default stays "message" alone, which is what an alert-only bot wants and
+// what the ops bot has always registered.
+func WithAllowedUpdates(types ...string) WebhookOption {
+	return func(cfg *webhookConfig) {
+		cfg.allowedUpdates = types
+	}
+}
+
 // SetWebhook registers the bot webhook URL and optional secret token.
-func (c *Client) SetWebhook(ctx context.Context, webhookURL, secretToken string) error {
+func (c *Client) SetWebhook(ctx context.Context, webhookURL, secretToken string, opts ...WebhookOption) error {
 	if c == nil || c.token == "" {
 		return nil
 	}
@@ -147,9 +190,16 @@ func (c *Client) SetWebhook(ctx context.Context, webhookURL, secretToken string)
 		return fmt.Errorf("telegram webhook url is required")
 	}
 
+	cfg := webhookConfig{allowedUpdates: []string{"message"}}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+
 	payload := map[string]any{
 		"url":                  webhookURL,
-		"allowed_updates":      []string{"message"},
+		"allowed_updates":      cfg.allowedUpdates,
 		"drop_pending_updates": false,
 	}
 	if secret := strings.TrimSpace(secretToken); secret != "" {

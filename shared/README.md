@@ -72,6 +72,28 @@ _ = client.Send(ctx, chatID, "<b>주문</b> 도착")
 go telegram.RunPoller(ctx, client, handler) // handler implements Handle(ctx, Update) error
 ```
 
+Menus are inline keyboards. A button tap arrives as `Update.CallbackQuery`, which
+Telegram only delivers if the webhook asked for it — an unlisted type is dropped
+before it is sent, and the button then spins on the user's device forever:
+
+```go
+_ = client.SetWebhook(ctx, hookURL, secret,
+	telegram.WithAllowedUpdates("message", "callback_query")) // default is "message" alone
+
+menu := telegram.KeyboardRows(
+	telegram.CallbackButton("📦 주문·배송 문의", "v1:ord"),
+	telegram.CallbackButton("🙋 상담원 연결", "v1:agt"),
+)
+_ = client.ReplyMenu(ctx, chatID, "무엇을 도와드릴까요?", menu)
+
+// On a tap: dismiss the spinner, then walk the menu in place.
+_ = client.AnswerCallback(ctx, query.ID, "")
+_ = client.EditMessageText(ctx, chatID, query.Message.MessageID, answer, nextMenu)
+```
+
+`Send` obeys the access policy; `Reply`, `ReplyMenu`, `EditMessageText` and
+`AnswerCallback` do not, because each answers something the chat itself just did.
+
 ### Testing
 
 ```bash

@@ -2,7 +2,7 @@
 
 Design spec for the **customer-facing** Telegram inquiry bot: menu-driven consultation, conversation state, and handoff to a human operator.
 
-**Status:** Phase 0 complete (the Bot API client now lives in `shared/pkg/telegram`); Phases 1–7 not started. No `support` service, schema, or infrastructure exists yet. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
+**Status:** Phases 0–1 complete — the Bot API client lives in `shared/pkg/telegram` and now speaks menus (inline keyboards, `callback_query`, `answerCallbackQuery`, `editMessageText`). Phases 2–7 not started. No `support` service, schema, or infrastructure exists yet. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
 
 **Scope (Tier 2):** inline-keyboard consultation menus, canned answers, and human handoff. **Out of scope (Tier 3):** authenticated order lookups ("where is my order?"), which need a Telegram↔customer identity binding — see [Deferred: authenticated lookups](#deferred-authenticated-lookups).
 
@@ -104,7 +104,7 @@ support/
 
 ## What must be built in the Bot API client
 
-The current client cannot express a menu. Four concrete gaps, all in `shared/pkg/telegram/` since Phase 0:
+All four gaps below are closed as of Phase 1; the table is kept as the record of what was built and why.
 
 | Gap | Where it is today | What is needed |
 |---|---|---|
@@ -368,7 +368,7 @@ This runs straight into the ABAC rule that the JWT `sub` must match the resource
 | Phase | Work | Done when |
 |---|---|---|
 | **0** ✅ | Extract the Bot API client to `shared/pkg/telegram`. `notification` imports it | **Done.** Both suites green, all 33 telegram test functions preserved; `notification` keeps only ops-specific code |
-| **1** | Extend `shared/pkg/telegram`: typed send payload with `reply_markup`, `CallbackQuery`, `answerCallbackQuery`, `editMessageText` | Unit tests against a fake API server, as `NewTestClient` already allows |
+| **1** ✅ | Extend `shared/pkg/telegram`: typed send payload with `reply_markup`, `CallbackQuery`, `answerCallbackQuery`, `editMessageText` | **Done.** 16 tests against a fake API server; `notification` needed zero source changes |
 | **2** | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route. Uses a throwaway `@BotFather` bot, not the production account | `/start` answers with the root menu locally |
 | **3** | Menu router, conversation state, Postgres repos, canned answers + seed | Every node reachable; stale callbacks degrade to the root menu |
 | **4** | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber. Business-hours window and after-hours copy | Escalation lands in the ops chat; an after-hours escalation states the service window |

@@ -96,45 +96,129 @@ func (c *Client) SetAccessPolicy(policy AccessPolicy) {
 // Send posts a text message to the given chat ID.
 // When an access policy is set, chats that are not allowlisted are skipped (no error).
 func (c *Client) Send(ctx context.Context, chatID string, message string) error {
-	return c.sendMessage(ctx, chatID, message, true)
+	return c.sendMessage(ctx, chatID, message, true, nil)
 }
 
 // Reply posts a command reply (e.g. /start ack) without applying the outbound chat allowlist.
 // Pending registrations are not allowlisted yet, so ops acks must bypass AllowsChat.
+//
+// The same reasoning covers every answer to something the chat just did —
+// AnswerCallback and EditMessageText below — because a chat the bot is
+// mid-conversation with must hear back whether or not it is allowlisted.
 func (c *Client) Reply(ctx context.Context, chatID string, message string) error {
-	return c.sendMessage(ctx, chatID, message, false)
+	return c.sendMessage(ctx, chatID, message, false, nil)
 }
 
-func (c *Client) sendMessage(ctx context.Context, chatID string, message string, enforcePolicy bool) error {
+// ReplyMenu is Reply with an inline keyboard attached — the opening menu of a
+// consultation, sent in answer to /start.
+//
+// It bypasses the outbound allowlist for the same reason Reply does. There is
+// deliberately no policy-enforced variant: a menu is always an answer to
+// something the chat just did, never an unsolicited push. Add one when a bot
+// genuinely needs to start a conversation with buttons.
+func (c *Client) ReplyMenu(ctx context.Context, chatID string, message string, markup *InlineKeyboardMarkup) error {
+	return c.sendMessage(ctx, chatID, message, false, markup)
+}
+
+// EditMessageText replaces the text (and any keyboard) of a message the bot
+// already sent. A menu walks in place with this rather than stacking a new
+// message per tap, which is what keeps a consultation readable on a phone.
+//
+// A nil markup clears the buttons: Telegram treats an absent reply_markup on
+// an edit as "no keyboard", which is exactly what a final answer wants.
+func (c *Client) EditMessageText(ctx context.Context, chatID string, messageID int64, message string, markup *InlineKeyboardMarkup) error {
 	if c == nil || c.token == "" {
 		return nil
 	}
-	chatID = strings.TrimSpace(chatID)
-	if chatID == "" {
-		return fmt.Errorf("telegram chat id is required")
+	if messageID == 0 {
+		return fmt.Errorf("telegram message id is required")
 	}
-	if enforcePolicy && c.policy != nil && !c.policy.AllowsChat(chatID) {
-		return nil
+	payload, err := c.buildMessage(chatID, message, false, markup)
+	if err != nil || payload == nil {
+		return err
 	}
-	message = strings.TrimSpace(message)
-	if message == "" {
-		return fmt.Errorf("telegram message is required")
-	}
-	message = truncateMessage(message)
+	payload.MessageID = messageID
 
-	body, err := json.Marshal(map[string]string{
-		"chat_id":    chatID,
-		"text":       message,
-		"parse_mode": "HTML",
-	})
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal telegram request: %w", err)
 	}
+	return c.callWithRetry(ctx, "editMessageText", body)
+}
 
+// AnswerCallback acknowledges a button tap. Telegram shows a loading spinner on
+// the tapped button until this is called, so every CallbackQuery needs one even
+// when there is nothing to say — text may be empty, which just dismisses it.
+//
+// Like Reply, this bypasses the outbound allowlist: it answers an interaction
+// the chat itself started.
+func (c *Client) AnswerCallback(ctx context.Context, callbackQueryID string, text string) error {
+	if c == nil || c.token == "" {
+		return nil
+	}
+	callbackQueryID = strings.TrimSpace(callbackQueryID)
+	if callbackQueryID == "" {
+		return fmt.Errorf("telegram callback query id is required")
+	}
+
+	payload := map[string]string{"callback_query_id": callbackQueryID}
+	if text = strings.TrimSpace(text); text != "" {
+		payload["text"] = text
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal telegram request: %w", err)
+	}
+	return c.callWithRetry(ctx, "answerCallbackQuery", body)
+}
+
+func (c *Client) sendMessage(ctx context.Context, chatID string, message string, enforcePolicy bool, markup *InlineKeyboardMarkup) error {
+	if c == nil || c.token == "" {
+		return nil
+	}
+	payload, err := c.buildMessage(chatID, message, enforcePolicy, markup)
+	if err != nil || payload == nil {
+		return err
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal telegram request: %w", err)
+	}
+	return c.callWithRetry(ctx, "sendMessage", body)
+}
+
+// buildMessage validates and assembles a message body. A nil payload with a nil
+// error means the access policy refused this chat, which Send reports as
+// success — a skipped alert is not a failure for the caller to retry.
+func (c *Client) buildMessage(chatID string, message string, enforcePolicy bool, markup *InlineKeyboardMarkup) (*messagePayload, error) {
+	chatID = strings.TrimSpace(chatID)
+	if chatID == "" {
+		return nil, fmt.Errorf("telegram chat id is required")
+	}
+	if enforcePolicy && c.policy != nil && !c.policy.AllowsChat(chatID) {
+		return nil, nil
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return nil, fmt.Errorf("telegram message is required")
+	}
+
+	return &messagePayload{
+		ChatID:      chatID,
+		Text:        truncateMessage(message),
+		ParseMode:   "HTML",
+		ReplyMarkup: markup,
+	}, nil
+}
+
+// callWithRetry posts body to one Bot API method, repeating a failure that is
+// worth repeating.
+func (c *Client) callWithRetry(ctx context.Context, method string, body []byte) error {
 	var lastErr error
 	backoff := sendRetryBackoff
 	for attempt := 1; ; attempt++ {
-		retryable, err := c.postMessage(ctx, body)
+		retryable, err := c.postMessage(ctx, method, body)
 		if err == nil {
 			return nil
 		}
@@ -151,15 +235,15 @@ func (c *Client) sendMessage(ctx context.Context, chatID string, message string,
 	}
 }
 
-// postMessage performs one sendMessage call and reports whether the failure is
+// postMessage performs one Bot API call and reports whether the failure is
 // worth repeating. A rejected chat or a malformed message fails the same way
 // every time; a timeout or a 5xx usually does not.
 //
 // The retry runs inline, so a NATS handler waits out the backoff — bounded by
 // sendMaxAttempts, and worth it because core NATS does not redeliver: without a
 // retry here, one blip loses an alert for good, order.paid included.
-func (c *Client) postMessage(ctx context.Context, body []byte) (retryable bool, err error) {
-	url := fmt.Sprintf("%s/bot%s/sendMessage", c.baseURL(), c.token)
+func (c *Client) postMessage(ctx context.Context, method string, body []byte) (retryable bool, err error) {
+	url := fmt.Sprintf("%s/bot%s/%s", c.baseURL(), c.token, method)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return false, fmt.Errorf("create telegram request: %w", c.redact(err))
