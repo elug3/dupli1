@@ -114,7 +114,29 @@ Root menu, sent on `/start` and reachable from every leaf via `⬅️ 처음으�
 
 Canned answers live in the database (`support_answers`), not in Go constants, so staff can edit copy from the manage-web inbox without a deploy. Seed them from a migration.
 
-**Language:** Korean first, matching the ops bot's existing message style (`notification/pkg/infra/telegram/commands.go`). The storefront supports ko/en/zh; the deep-link payload carries the shopper's active language so the bot can open in it. Ship Korean copy first, English second, Chinese when staff can service it — an unanswerable language is worse than no button.
+```sql
+CREATE TABLE support_answers (
+  node       TEXT NOT NULL,
+  language   TEXT NOT NULL DEFAULT 'ko',
+  body       TEXT NOT NULL,              -- Telegram HTML
+  updated_by TEXT,
+  updated_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (node, language)
+);
+```
+
+**Language is in the key from day one even though only `ko` rows ship.** This repo migrates schema inline on startup and supports additive `ADD COLUMN IF NOT EXISTS` only — "breaking schema changes are not supported this way" (root `CLAUDE.md`). Widening a primary key later is exactly such a change. One unused column now costs nothing; retrofitting the key costs a hand-written migration on a live table.
+
+### Language policy
+
+**Decided: Korean only at launch.** Menus, canned answers, and staff replies are Korean, matching the ops bot's existing message style (`notification/pkg/infra/telegram/commands.go`).
+
+Two things still happen for non-Korean shoppers, because "Korean only" should not mean "silently Korean":
+
+1. **The entry language is recorded, not acted on.** The deep-link payload already carries the storefront's active language, and `support_conversations.language` stores it. Every reply is Korean regardless. Recording it is nearly free now and impossible to backfill later, and the count of `en` / `zh` inquiries is exactly the evidence that decides whether a second language is worth staffing.
+2. **A non-Korean shopper is told, once, in their own language.** On first contact with an `en` or `zh` entry language, the bot prepends one static sentence — *"Support is currently available in Korean only."* — before the Korean root menu. Two hardcoded strings, not a translation surface: a sign on the door, not a second shop. Arriving at a wall of Korean with no explanation is the one outcome worth avoiding.
+
+The storefront button stays visible in all three languages. It still works — a shopper who reads Korean is served regardless of which UI language they picked, and the one-line notice handles the rest.
 
 ### Callback data scheme
 
@@ -247,7 +269,7 @@ Add an `alert_support` flag to `telegram_subscriptions` so ops chats can opt int
 
 ## Manager inbox
 
-New tab in `dupli1-manage-web` at `/support`, using the SSR `loader`/`action` pattern already used by `/telegram` (`app/lib/server/notification.server.ts`) so the browser never calls the support service directly.
+Each inquiry row shows its entry language, so staff see who they are answering and so the `en`/`zh` counts that decide a second language are visible without a query. New tab in `dupli1-manage-web` at `/support`, using the SSR `loader`/`action` pattern already used by `/telegram` (`app/lib/server/notification.server.ts`) so the browser never calls the support service directly.
 
 | Method | Route | Permission |
 |---|---|---|
@@ -326,6 +348,7 @@ Phases 0–1 are prerequisites with no user-visible change and can land first, i
 |---|---|---|
 | **Service hours** | Weekdays 10:00–22:00 KST; closed weekends and public holidays | [Business hours](#business-hours) — config-driven window, data-driven holiday calendar |
 | **Bot account** | Created later; not a prerequisite | Phases 0–5 need no real bot (see below). The handle only binds at Phase 6 |
+| **Language** | Korean only at launch | [Language policy](#language-policy) — `language` in the answer key now, one static notice for `en`/`zh` arrivals |
 
 ### Creating the bot later is fine
 
@@ -344,10 +367,9 @@ One thing to settle *before* Phase 6, not at it: whether the bot takes over `@Du
 
 These need a human decision before Phase 2:
 
-1. **Language policy.** Korean-only at launch, or Korean + English? An unanswerable language is worse than a bot that says it only speaks Korean.
-2. **Retention.** Is 180 days right for chat bodies containing customer PII?
-3. **Service vs adapter.** This spec assumes a new `support` service. If the infrastructure cost is not worth it, the fallback is a second adapter inside `notification` — same design, one less module.
-4. **Holiday calendar ownership.** Who refills `support_business_holidays` each year, and where does that reminder live?
+1. **Retention.** Is 180 days right for chat bodies containing customer PII?
+2. **Service vs adapter.** This spec assumes a new `support` service. If the infrastructure cost is not worth it, the fallback is a second adapter inside `notification` — same design, one less module.
+3. **Holiday calendar ownership.** Who refills `support_business_holidays` each year, and where does that reminder live?
 
 ---
 
