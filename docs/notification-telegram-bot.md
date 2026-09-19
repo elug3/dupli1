@@ -15,7 +15,7 @@ The Telegram bot gives **operations staff** real-time alerts from the marketplac
 - New and updated orders (especially **paid** orders that need shipping)
 - Product catalog changes (create, update, delete, image upload)
 
-It is **not** a customer-facing channel. Shoppers never interact with this bot.
+It is **not** a customer-facing channel. Shoppers never interact with this bot — a separate customer inquiry bot, with its own token and service, is specified in [support-telegram-bot.md](support-telegram-bot.md).
 
 ```text
 Product / Order / Payment services

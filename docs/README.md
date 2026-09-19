@@ -81,6 +81,7 @@ These retain design history. Prefer the living docs above for current behavior.
 | [auth-profile-extension-plan.md](auth-profile-extension-plan.md) | Phases A–B shipped; Phase D (`profile` service) live — data copy from auth's orphaned tables still open. See [profile-service.md](profile-service.md) |
 | [order-tracking-plan.md](order-tracking-plan.md) | Customer order history + required ship tracking |
 | [manager-settings-api.md](manager-settings-api.md) | Sketch only |
+| [support-telegram-bot.md](support-telegram-bot.md) | Customer-facing Telegram inquiry bot: menus, conversation state, staff handoff — **proposed, not implemented** |
 | [frontend-product-variants-migration.md](frontend-product-variants-migration.md) | Sibling frontend migration notes |
 | [quality-performance-review.md](quality-performance-review.md) | Jul 2026 audit (mostly fixed) |
 | [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) | Remaining: Redis cache, frontend paths (H6 done) |
