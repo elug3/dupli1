@@ -2,7 +2,11 @@ package memory
 
 import (
 	"context"
+	"sort"
 	"sync"
+	"time"
+
+	"github.com/elug3/dupli1/support/pkg/ports"
 
 	"github.com/elug3/dupli1/support/pkg/domain"
 )
@@ -30,6 +34,56 @@ func (r *InquiryRepository) FindOpenByChatID(_ context.Context, chatID string) (
 	return nil, nil
 }
 
+func (r *InquiryRepository) FindByID(_ context.Context, id string) (*domain.Inquiry, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	row, ok := r.rows[id]
+	if !ok {
+		return nil, nil
+	}
+	found := row
+	return &found, nil
+}
+
+func (r *InquiryRepository) List(_ context.Context, filter ports.InquiryFilter) ([]domain.Inquiry, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var out []domain.Inquiry
+	for _, row := range r.rows {
+		if filter.Status != "" && row.Status != filter.Status {
+			continue
+		}
+		if filter.AssignedTo != "" && row.AssignedTo != filter.AssignedTo {
+			continue
+		}
+		if filter.Unassigned && (row.AssignedTo != "" || !row.IsOpen()) {
+			continue
+		}
+		out = append(out, row)
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].OpenedAt.After(out[b].OpenedAt) })
+	if filter.Limit > 0 && len(out) > filter.Limit {
+		out = out[:filter.Limit]
+	}
+	return out, nil
+}
+
+func (r *InquiryRepository) ListStaleOpen(_ context.Context, quietSince time.Time) ([]domain.Inquiry, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var out []domain.Inquiry
+	for _, row := range r.rows {
+		if row.IsOpen() && row.OpenedAt.Before(quietSince) {
+			out = append(out, row)
+		}
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].OpenedAt.Before(out[b].OpenedAt) })
+	return out, nil
+}
+
 func (r *InquiryRepository) Save(_ context.Context, inquiry *domain.Inquiry) error {
 	if inquiry == nil {
 		return nil
@@ -49,6 +103,20 @@ type MessageRepository struct {
 
 func NewMessageRepository() *MessageRepository {
 	return &MessageRepository{}
+}
+
+// Transcript returns a conversation's messages, oldest first.
+func (r *MessageRepository) Transcript(_ context.Context, conversationID string) ([]domain.Message, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var out []domain.Message
+	for _, row := range r.rows {
+		if row.ConversationID == conversationID {
+			out = append(out, row)
+		}
+	}
+	return out, nil
 }
 
 func (r *MessageRepository) Append(_ context.Context, message *domain.Message) error {

@@ -45,6 +45,12 @@ func (i *Inquiry) IsOpen() bool {
 	return i != nil && i.Status != InquiryClosed
 }
 
+// Delivery outcomes for an outbound message.
+const (
+	DeliverySent   = "sent"
+	DeliveryFailed = "failed"
+)
+
 // Message is one line of a conversation, kept as a business record.
 //
 // Bodies hold whatever a shopper typed — names, phone numbers, addresses — so
@@ -56,7 +62,12 @@ type Message struct {
 	Direction      string
 	Author         string
 	Body           string
-	CreatedAt      time.Time
+	// Delivery is set on outbound messages only: "sent", or "failed" with the
+	// reason in DeliveryError. A reply that silently never arrived is the worst
+	// outcome here — worse than an error — so it is recorded, not assumed.
+	Delivery      string
+	DeliveryError string
+	CreatedAt     time.Time
 }
 
 // Excerpt shortens a message for an ops alert.

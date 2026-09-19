@@ -32,6 +32,19 @@ func (r *ConversationRepository) FindByChatID(_ context.Context, chatID string) 
 	return &row, nil
 }
 
+func (r *ConversationRepository) FindByID(_ context.Context, id string) (*domain.Conversation, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, row := range r.rows {
+		if row.ID == id {
+			found := row
+			return &found, nil
+		}
+	}
+	return nil, nil
+}
+
 func (r *ConversationRepository) Save(_ context.Context, conversation *domain.Conversation) error {
 	if conversation == nil {
 		return nil

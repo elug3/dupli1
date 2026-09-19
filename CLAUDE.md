@@ -89,7 +89,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `cart` | stdlib `net/http` | Persistent per-customer cart; enriches lines from product |
 | `payment` | stdlib `net/http` | NANO card / manager Bypass (also the local/dev testing path); publishes `payment.succeeded` via outbox |
 | `notification` | stdlib `net/http` | NATS subscriber → Telegram ops alerts. Chats opt into each alert class separately (`alert_order`, `alert_product`, `alert_support`); customer inquiry handoffs go only to chats that asked for them, with no env fallback |
-| `support` | stdlib `net/http` | Customer-facing Telegram consultation bot: menu router, conversation state, handoff to staff. **Separate bot and token from `notification`'s ops bot** (`TELEGRAM_SUPPORT_*`, never `TELEGRAM_*`) — one token owns one update stream. Phases 0–4 of [docs/support-telegram-bot.md](docs/support-telegram-bot.md): the menu tree routes, conversations, inquiries and transcripts persist in PostgreSQL (`support`), canned answers are seeded insert-if-absent so staff edits survive a deploy, and asking for a human opens an inquiry and publishes `support.inquiry_opened` for `notification` to fan out. Service hours are weekdays 10:00–22:00 KST (config-driven; holidays are staff behavior, not code). The manager inbox is not built |
+| `support` | stdlib `net/http` | Customer-facing Telegram consultation bot: menu router, conversation state, handoff to staff. **Separate bot and token from `notification`'s ops bot** (`TELEGRAM_SUPPORT_*`, never `TELEGRAM_*`) — one token owns one update stream. Phases 0–4 of [docs/support-telegram-bot.md](docs/support-telegram-bot.md): the menu tree routes, conversations, inquiries and transcripts persist in PostgreSQL (`support`), canned answers are seeded insert-if-absent so staff edits survive a deploy, and asking for a human opens an inquiry and publishes `support.inquiry_opened` for `notification` to fan out. Service hours are weekdays 10:00–22:00 KST (config-driven; holidays are staff behavior, not code). Phase 5 adds the manager inbox (`support.read|reply|manage`, `support_agent` bundle) and the manage-web `/support` tab, where staff claim, reply and close; an undeliverable reply is stored and shown as 미전송 |
 | `profile` | stdlib `net/http` | Customer commerce profile (display name, phone) + saved addresses; subscribes `user.deleted` from auth to cascade-delete. Extracted per [docs/auth-profile-extension-plan.md](docs/auth-profile-extension-plan.md) Phase D |
 
 ### Product model
@@ -132,7 +132,7 @@ Refresh tokens rotate on every use: `/refresh` invalidates the token it was give
 
 Fine-grained permissions (`{resource}.{action}`, e.g. `product.create`, `order.ship`). Wildcards: `*` (owner), `admin.*`, `{resource}.*`. Storefront customers use ABAC (JWT `sub` must match resource owner) with no explicit permission required.
 
-Key bundles: `catalog_editor`, `catalog_admin`, `fulfillment`, `user_admin`. See `docs/permissions.md` for the full catalog.
+Key bundles: `catalog_editor`, `catalog_admin`, `fulfillment`, `user_admin`, `support_agent`. See `docs/permissions.md` for the full catalog.
 
 ### Schema migrations
 

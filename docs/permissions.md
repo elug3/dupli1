@@ -349,8 +349,26 @@ registered as an alias.
 | `POST` | `/api/v1/notification/telegram/subscriptions/{id}/accept` | `notification.telegram.manage` |
 | `POST` | `/api/v1/notification/telegram/subscriptions/{id}/reject` | `notification.telegram.manage` |
 | `DELETE` | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` |
+| `GET` | `/api/v1/support/inquiries` | `support.read` |
+| `GET` | `/api/v1/support/inquiries/{id}` | `support.read` |
+| `POST` | `/api/v1/support/inquiries/{id}/assign` | `support.reply` |
+| `POST` | `/api/v1/support/inquiries/{id}/reply` | `support.reply` |
+| `POST` | `/api/v1/support/inquiries/{id}/close` | `support.reply` |
+| `GET`/`PUT` | `/api/v1/support/answers` | `support.manage` |
 
 Webhook (`POST /api/v1/notification/telegram/webhook`) and NATS event dispatch require no JWT. Manager routes require Bearer + `AUTH_JWKS_URL` on the notification task in production.
+
+### Support
+
+| Permission | Description |
+|------------|-------------|
+| `support.read` | Read the consultation inbox, including a shopper's transcript |
+| `support.reply` | Claim an inquiry, reply to the shopper, close it |
+| `support.manage` | Edit the bot's canned answers — the copy every shopper sees before a person is involved |
+
+`support.reply` implies read: an agent who may answer may obviously look. `support.manage` is deliberately *not* in the `support_agent` bundle — canned copy is published content, so editing it stays with `admin.*`.
+
+The bot's own webhook (`POST /api/v1/support/telegram/webhook`) is unauthenticated by necessity, since Telegram calls it; the secret header is what makes it safe, and a missing secret fails closed. Every inbox route requires Bearer, and without a validator configured they answer `503` rather than serving open.
 
 ---
 
@@ -365,6 +383,7 @@ Code-defined sets for common job functions. Assigning a bundle expands to explic
 | `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass`, `payment.cancel` |
 | `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update`, `user.delete` |
 | `customer_registrar` | `user.create` |
+| `support_agent` | `support.read`, `support.reply` |
 
 API exposure of bundles is deferred; Phase 2 seeds and migrations use these expansions directly.
 
@@ -380,6 +399,7 @@ One-time mapping applied to `users.permissions` during database migration (`auth
 | `admin` | `admin.*`, `user.*`, `product.*`, `promotion.*`, `coupon.*`, `inventory.stock.write`, `inventory.reservation.manage`, `order.ship`, `order.status.update`, `order.read.all`, `cart.read`, `payment.bypass` |
 | `user_manager` | `user.password.update`, `user.status.update` |
 | `customer_registrar` | `user.create` |
+| `support_agent` | `support.read`, `support.reply` |
 | `product_manager` | `product.*`, `promotion.*`, `coupon.*` |
 | `order_manager` | `order.ship`, `order.status.update`, `order.read.all`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass` |
 | `customer` | _(empty — storefront ABAC only)_ |
@@ -392,6 +412,7 @@ Users with multiple legacy roles receive the **union** of expanded permissions (
 |---------|----------|-------|-----------------|
 | Owner | `OWNER_EMAIL` | `owner`, `product_manager` | `*` |
 | dupli1-web | `DUPLI1_WEB_SERVICE_*` | `customer_registrar` | `user.create` |
+| `support_agent` | `support.read`, `support.reply` |
 | dupli1-order | `DUPLI1_ORDER_SERVICE_*` | `order_manager` | `order.ship`, `order.status.update`, `inventory.reservation.manage`, `payment.cancel` |
 
 Note: `dupli1-order` does not need `cart.read` or `inventory.stock.write` for its runtime paths (reservations only). `payment.cancel` is so a paid-order cancel can refund through the gateway if the operator Bearer is missing. The legacy `order_manager` role was broader than the order service account requires.

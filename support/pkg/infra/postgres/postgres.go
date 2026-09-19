@@ -70,6 +70,10 @@ func Migrate(db *sql.DB) error {
 			body             TEXT NOT NULL,
 			created_at       TIMESTAMPTZ NOT NULL
 		)`,
+		// Additive, per this repo's inline-migration convention: delivery
+		// outcomes arrived with the manager inbox.
+		`ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS delivery TEXT`,
+		`ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS delivery_error TEXT`,
 		`CREATE INDEX IF NOT EXISTS support_messages_conversation_idx
 		 ON support_messages (conversation_id, created_at DESC)`,
 		`CREATE TABLE IF NOT EXISTS support_answers (

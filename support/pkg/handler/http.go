@@ -11,8 +11,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 	tg "github.com/elug3/dupli1/shared/pkg/telegram"
+	"github.com/elug3/dupli1/support/pkg/ports"
+	"github.com/elug3/dupli1/support/pkg/service"
 )
 
 const (
@@ -31,6 +35,9 @@ type UpdateHandler interface {
 // Options are the handler's dependencies.
 type Options struct {
 	Updates       UpdateHandler
+	Inbox         *service.Inbox
+	Answers       ports.AnswerRepository
+	JWTValidator  authjwt.AccessTokenValidator
 	WebhookSecret string
 	Settings      settings.Response
 	// UpdateContext is the root for work that continues after a webhook has
@@ -44,6 +51,9 @@ type HealthProbe func(context.Context) error
 
 type Handler struct {
 	updates       UpdateHandler
+	inbox         *service.Inbox
+	answers       ports.AnswerRepository
+	jwtValidator  authjwt.AccessTokenValidator
 	webhookSecret string
 	settings      settings.Response
 	updateCtx     context.Context
@@ -57,6 +67,9 @@ func New(opts Options) *Handler {
 	}
 	return &Handler{
 		updates:       opts.Updates,
+		inbox:         opts.Inbox,
+		answers:       opts.Answers,
+		jwtValidator:  opts.JWTValidator,
 		webhookSecret: opts.WebhookSecret,
 		settings:      opts.Settings,
 		updateCtx:     updateCtx,
@@ -70,6 +83,16 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/settings", h.settingsHandler)
 	mux.HandleFunc("/api/v1/support/settings", h.settingsHandler)
 	mux.HandleFunc("/api/v1/support/telegram/webhook", h.telegramWebhook)
+
+	// Everything below is the manager inbox: authenticated, permission-checked,
+	// and the only place a shopper's conversation can be read in full.
+	mux.HandleFunc("/api/v1/support/inquiries", h.requireAuth(h.inquiries))
+	mux.HandleFunc("/api/v1/support/inquiries/", h.requireAuth(h.inquiryAction))
+	mux.HandleFunc("/api/v1/support/answers", h.requireAuth(h.answersHandler))
+}
+
+func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return authmiddleware.RequireAuth(h.jwtValidator, respondError)(next)
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {

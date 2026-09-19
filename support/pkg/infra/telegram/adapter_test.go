@@ -23,6 +23,8 @@ func (b *capturingBot) ReplyMenu(context.Context, string, string, []ports.MenuBu
 	return nil
 }
 
+func (b *capturingBot) Reply(context.Context, string, string) error { return nil }
+
 func (b *capturingBot) EditMenu(context.Context, string, int64, string, []ports.MenuButton) error {
 	b.edits++
 	return nil

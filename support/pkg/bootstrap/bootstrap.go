@@ -14,6 +14,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/natspublisher"
 	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 	"github.com/elug3/dupli1/support/pkg/domain"
@@ -96,12 +97,38 @@ func Bootstrap(cfg Config) (*App, error) {
 	// lifetime of their request.
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 
+	inbox := service.NewInbox(store.conversations, store.inquiries, store.messages, bot, newULID, time.Now)
+
+	// The inbox is the only authenticated surface here, and the only place a
+	// shopper's conversation can be read in full. Without a validator those
+	// routes answer 503 rather than serving unauthenticated.
+	var jwtValidator authjwt.AccessTokenValidator
+	if cfg.JWKSURL != "" || cfg.JWTSecret != "" {
+		jwtValidator, err = authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
+		if err != nil {
+			cancelWorkers()
+			_ = closePublisher()
+			_ = store.close()
+			return nil, fmt.Errorf("auth validator: %w", err)
+		}
+	} else {
+		log.Println("WARNING: neither AUTH_JWKS_URL nor JWT_SECRET is set — the manager inbox will answer 503")
+	}
+
 	h := handler.New(handler.Options{
 		Updates:       processor,
+		Inbox:         inbox,
+		Answers:       store.answers,
+		JWTValidator:  jwtValidator,
 		WebhookSecret: cfg.TelegramWebhookSecret,
 		Settings:      BuildSettings(cfg),
 		UpdateContext: workerCtx,
 	})
+
+	// Close what nobody has touched, so the queue shows live work rather than
+	// history. Conservative on purpose: a consultation still being answered is
+	// never stale, however long it runs.
+	go runStaleCloser(workerCtx, inbox, cfg.InquiryQuietPeriod)
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -247,6 +274,32 @@ func openPublisher(cfg Config) (ports.InquiryPublisher, func() error, error) {
 		publisher.Close()
 		return nil
 	}, nil
+}
+
+// runStaleCloser sweeps abandoned inquiries closed.
+func runStaleCloser(ctx context.Context, inbox *service.Inbox, quietFor time.Duration) {
+	if quietFor <= 0 {
+		quietFor = DefaultInquiryQuietPeriod
+	}
+	// Hourly is plenty for a seven-day window and costs one indexed query.
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			closed, err := inbox.CloseStale(ctx, quietFor)
+			if err != nil {
+				log.Printf("close stale inquiries: %v", err)
+				continue
+			}
+			if closed > 0 {
+				log.Printf("closed %d inquiry(ies) after %s of silence", closed, quietFor)
+			}
+		}
+	}
 }
 
 var ulidEntropy = ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)

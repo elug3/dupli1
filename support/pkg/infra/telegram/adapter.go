@@ -24,6 +24,14 @@ func (b *Bot) ReplyMenu(ctx context.Context, chatID string, text string, buttons
 	return b.Client.ReplyMenu(ctx, chatID, text, keyboard(buttons))
 }
 
+// Reply sends plain text with no keyboard — a manager's words, as typed.
+func (b *Bot) Reply(ctx context.Context, chatID string, text string) error {
+	if b == nil || b.Client == nil {
+		return nil
+	}
+	return b.Client.Reply(ctx, chatID, text)
+}
+
 // EditMenu replaces an earlier message in place.
 //
 // Telegram answers a re-tap of the button already open with 400 "message is not

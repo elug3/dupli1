@@ -25,10 +25,25 @@ type editedMenu struct {
 	buttons   []ports.MenuButton
 }
 
+type sentReply struct {
+	chatID string
+	text   string
+}
+
 type fakeBot struct {
 	menus     []sentMenu
 	edits     []editedMenu
+	replies   []sentReply
 	callbacks []string
+	replyErr  error
+}
+
+func (b *fakeBot) Reply(_ context.Context, chatID string, text string) error {
+	if b.replyErr != nil {
+		return b.replyErr
+	}
+	b.replies = append(b.replies, sentReply{chatID: chatID, text: text})
+	return nil
 }
 
 func (b *fakeBot) ReplyMenu(_ context.Context, chatID string, text string, buttons []ports.MenuButton) error {
@@ -376,6 +391,10 @@ func TestMissingCopyFallsBackToTheSeededText(t *testing.T) {
 type stubAnswers struct{ body string }
 
 func (s *stubAnswers) Body(context.Context, string, string) (string, error) { return s.body, nil }
+
+func (s *stubAnswers) All(context.Context, string) (map[string]string, error) { return nil, nil }
+
+func (s *stubAnswers) Put(context.Context, string, string, string, string) error { return nil }
 
 func TestRepeatVisitorKeepsOneConversation(t *testing.T) {
 	router, _, repo := newRouter()

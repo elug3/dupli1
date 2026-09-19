@@ -693,7 +693,13 @@ Customer-facing Telegram consultation bot — **a different bot from the ops one
 | `GET` | `/api/v1/support/health` | — | Health check |
 | `GET` | `/api/v1/support/settings` | — | Non-secret service settings |
 | `POST` | `/api/v1/support/telegram/webhook` | webhook secret header | Telegram Bot API webhook; serves `message` and `callback_query` |
+| `GET` | `/api/v1/support/inquiries` | `support.read` | Inbox list; `?queue=waiting`, `?assigned_to=me`, `?status=closed` |
+| `GET` | `/api/v1/support/inquiries/{id}` | `support.read` | One inquiry with its full transcript |
+| `POST` | `/api/v1/support/inquiries/{id}/assign` | `support.reply` | Claim, or take over from another manager |
+| `POST` | `/api/v1/support/inquiries/{id}/reply` | `support.reply` | Send the shopper a reply; `{"delivered": false}` when it could not be delivered |
+| `POST` | `/api/v1/support/inquiries/{id}/close` | `support.reply` | Finish, freeing the chat for a later consultation |
+| `GET`/`PUT` | `/api/v1/support/answers` | `support.manage` | Read or edit the bot's canned copy |
 
-The manager inbox routes (`/api/v1/support/inquiries…`, `support.read` / `support.reply`) arrive in Phase 5 and are specced, not built.
+Inquiry JSON carries no `chat_id`: the shopper's Telegram identity never leaves the service, and the console does not need it to answer.
 
 Local Compose falls back to `getUpdates` polling when `TELEGRAM_SUPPORT_WEBHOOK_URL` is unset. Conversations and canned answers persist in PostgreSQL `support` (`DUPLI1_SUPPORT_DB`, host port **5440**), with an in-memory fallback when that variable is unset. Answer copy is seeded on start with insert-if-absent, so an edit made from the inbox survives the next deploy.

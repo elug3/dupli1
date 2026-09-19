@@ -18,19 +18,29 @@ func NewConversationRepository(db *sql.DB) *ConversationRepository {
 	return &ConversationRepository{db: db}
 }
 
+// FindByID looks a conversation up by its own id, which is what an inquiry
+// holds.
+func (r *ConversationRepository) FindByID(ctx context.Context, id string) (*domain.Conversation, error) {
+	return r.findBy(ctx, `id = $1`, id)
+}
+
 func (r *ConversationRepository) FindByChatID(ctx context.Context, chatID string) (*domain.Conversation, error) {
-	const query = `
+	return r.findBy(ctx, `chat_id = $1`, chatID)
+}
+
+func (r *ConversationRepository) findBy(ctx context.Context, where string, arg any) (*domain.Conversation, error) {
+	query := `
 		SELECT id, chat_id, telegram_user_id, username, language, node,
 		       COALESCE(entry_payload, ''), last_seen_at, created_at
 		  FROM support_conversations
-		 WHERE chat_id = $1`
+		 WHERE ` + where
 
 	var (
 		conversation domain.Conversation
 		userID       sql.NullInt64
 		username     sql.NullString
 	)
-	err := r.db.QueryRowContext(ctx, query, chatID).Scan(
+	err := r.db.QueryRowContext(ctx, query, arg).Scan(
 		&conversation.ID,
 		&conversation.ChatID,
 		&userID,

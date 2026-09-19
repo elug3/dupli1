@@ -2,7 +2,7 @@
 
 Design spec for the **customer-facing** Telegram inquiry bot: menu-driven consultation, conversation state, and handoff to a human operator.
 
-**Status:** Phases 0–4 complete — the bot consults, escalates, and tells staff: an inquiry is opened, the transcript recorded, and `support.inquiry_opened` fanned out by `notification` to chats holding `alert_support`, quietly outside service hours. Phases 5–7 not started: **staff cannot reply yet**, because the manager inbox is where a reply is typed. The bot must not be pointed at shoppers (Phase 6) before that lands. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
+**Status:** Phases 0–5 complete — the consultation works end to end: the bot answers, escalates, tells staff, and staff claim and reply from manage-web `/support`, with the shopper receiving their words. Phases 6–7 not started: the storefront button still points at a human account, and nothing is deployed. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
 
 **Scope (Tier 2):** inline-keyboard consultation menus, canned answers, and human handoff. **Out of scope (Tier 3):** authenticated order lookups ("where is my order?"), which need a Telegram↔customer identity binding — see [Deferred: authenticated lookups](#deferred-authenticated-lookups).
 
@@ -372,7 +372,7 @@ This runs straight into the ABAC rule that the JWT `sub` must match the resource
 | **2** ✅ | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route, CI job | **Done.** Verified against a mock Bot API: `/start` returns the five-button root menu, a tap is acknowledged, a group chat is ignored. A throwaway `@BotFather` bot was not needed — `TELEGRAM_SUPPORT_API_BASE` points the bot at a mock instead |
 | **3** ✅ | Menu router, conversation state, Postgres repos, canned answers + seed | **Done.** Every node renders when tapped (asserted over `domain.Nodes`, so a new node cannot be added without copy); stale and malformed callbacks reopen the root; repo tests run against a real Postgres 16 |
 | **4** ✅ | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber. Business-hours window and after-hours copy | **Done.** Verified live across both services on real Postgres and NATS: an escalation reaches the opted-in ops chat with the shopper's own words quoted, and an after-hours one states the window and never a day. Postgres caught a foreign-key ordering bug the in-memory store could not |
-| **5** | Manager inbox API + manage-web `/support` tab (대기 / 내 상담 / 완료, claim, reply, close) + permissions | A manager claims and replies from the console, the shopper receives it, and an undeliverable reply shows as 미전송 |
+| **5** ✅ | Manager inbox API + manage-web `/support` tab (대기 / 내 상담 / 완료, claim, reply, close) + permissions | **Done.** Verified live: a manager replied from the console and the shopper received it; against a Bot API returning 403 the reply was stored with `delivery: failed` and came back `delivered: false`, which the tab renders as 미전송. Inquiry JSON carries no chat id |
 | **6** | Storefront deep-link payload; point the button at the bot (**handle decided here**) | Context arrives with the first message |
 | **7** | Production: separate secret, webhook registration, ECS task, retention job | Live behind the floating button |
 

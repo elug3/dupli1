@@ -6,6 +6,10 @@ import (
 	"github.com/elug3/dupli1/support/pkg/domain"
 )
 
+// DefaultInquiryQuietPeriod is how long an inquiry may sit untouched before
+// the sweeper closes it.
+const DefaultInquiryQuietPeriod = 7 * 24 * time.Hour
+
 // Config holds everything Bootstrap needs to wire the support service.
 type Config struct {
 	Addr                  string
@@ -17,9 +21,12 @@ type Config struct {
 	NATSURL               string
 	ManageWebURL          string
 	BusinessHours         domain.BusinessHours
-	JWTSecret             string
-	JWKSURL               string
-	ReadTimeout           time.Duration
-	WriteTimeout          time.Duration
-	IdleTimeout           time.Duration
+	// InquiryQuietPeriod is how long an inquiry may sit untouched before it
+	// is closed automatically. Zero means DefaultInquiryQuietPeriod.
+	InquiryQuietPeriod time.Duration
+	JWTSecret          string
+	JWKSURL            string
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
 }
