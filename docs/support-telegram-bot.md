@@ -302,6 +302,35 @@ Each inquiry row shows its entry language, so staff see who they are answering a
 | `POST` | `/api/v1/support/inquiries/{id}/close` | `support.reply` |
 | `GET`/`PUT` | `/api/v1/support/answers` | `support.manage` |
 
+### Where managers work
+
+Two surfaces with different jobs: Telegram **tells** them, manage-web **is where they work**.
+
+1. **The ops Telegram chat notifies.** The `support.inquiry_opened` fan-out lands there with topic, entry language, the first message excerpt, and a deep link straight to that inquiry in manage-web. It is a doorbell, not a workbench: a reply typed in the ops chat reaches other staff, never the shopper.
+2. **`/support` in manage-web is the workbench.** Three lists — **대기** (unclaimed, oldest first), **내 상담** (claimed by me), **완료** — and a detail view holding the full transcript, the entry context decoded from the deep link (which page they came from), the entry language, the canned answers for one-click insertion, and the reply box.
+
+**Accepting is claiming.** `POST .../assign` is the accept: it stamps the inquiry with the manager's auth user id so two people do not answer the same shopper. The semantics that matter:
+
+- A claim is **visible, not exclusive.** Anyone with `support.reply` can take over a claimed inquiry; the takeover is recorded rather than blocked. A hard lock strands inquiries when someone's shift ends mid-conversation.
+- **Replying auto-claims.** A manager who opens an unclaimed inquiry and just answers should not have to press claim first — the claim is a side effect of the reply.
+- Claiming sends the shopper nothing. They are not told a name or that someone picked it up; the next thing they see is an actual answer.
+
+**Replying.** `POST .../reply` writes the message and sends it through the bot to the shopper's chat, storing it in `support_messages` with `author` set to the auth user id — so the transcript records which manager said what, which Telegram alone could never tell you. Delivery is not assumed: if the shopper has blocked the bot, Telegram answers `403` and the inbox shows the reply as **미전송** against that inquiry. A reply that silently never arrived is the worst outcome here, worse than an error.
+
+**Closing** is explicit (`POST .../close`), with an auto-close after 7 days of silence so the queue reflects live work rather than history.
+
+#### Replying from Telegram itself: not at launch
+
+Evening hours run to 22:00, so staff will not always be at a desk, and "just reply in the ops chat" is the obvious wish. It is deliberately not in scope, because the convenient version is unsafe:
+
+- Telegram group membership would become the authorization check. Anyone in the ops chat could speak **as the brand**, with no `support.reply` permission involved.
+- Internal chatter in an alert thread would be relayed to a customer by accident. That failure is unrecoverable — the message is already on their phone.
+- The audit trail would record a chat id, not an auth user.
+
+If it is wanted later it needs an explicit relay command rather than bare replies, a Telegram-user-id → auth-user mapping, and its own permission — which is the same identity-binding machinery [Tier 3](#deferred-authenticated-lookups) needs, just pointed at staff instead of shoppers. Worth building once, for both, rather than twice.
+
+Until then the mobile path is the deep link: manage-web is already published at `manage.dupli1.com` and works in a phone browser, so the doorbell leads to the workbench in two taps.
+
 Gateway: one `location /api/v1/support/ { set $upstream http://dupli1-support:8080; }` block in `api/nginx.conf`, alongside the existing `/api/v1/notification/` block. The `resolver` directive stays `127.0.0.11` only.
 
 New permissions for [permissions.md](permissions.md), plus a `support_agent` bundle granting `support.read` + `support.reply`. `support.manage` (editing canned answers) stays with `admin.*`.
@@ -316,7 +345,7 @@ New permissions for [permissions.md](permissions.md), plus a `support_agent` bun
 | Token in logs | Reuse the existing `redactedError` wrapper — every Bot API URL carries the token in its path |
 | Webhook authenticity | Own `TELEGRAM_SUPPORT_WEBHOOK_SECRET`, constant-time compare of `X-Telegram-Bot-Api-Secret-Token`, mirroring `notification/pkg/handler/http.go:187` |
 | Abuse / flood | Per-chat rate limit and a daily message cap per chat; a chat over the cap is answered once with "잠시 후 다시 시도해 주세요" and then ignored until the window resets |
-| Customer PII | Shoppers will paste names, phone numbers and addresses into chat. Message bodies are business records: store them, but keep them out of logs entirely, and set a retention policy before launch (proposal: 180 days, then purge bodies and keep the inquiry metadata) |
+| Customer PII | Shoppers will paste names, phone numbers and addresses into chat. Message bodies are business records: store them, but keep them out of logs entirely. **Retention: 180 days**, after which a scheduled job purges `support_messages.body` and keeps the inquiry metadata (topic, timings, who handled it) so the volume history survives the purge. The job ships in Phase 7 — a retention policy with no job that enforces it is not a policy |
 | Identity | A Telegram user ID is **not** a Dupli1 identity. No order, payment, or account data is returned to a chat under this spec. This is the hard boundary between Tier 2 and Tier 3 |
 | Channel/group abuse | Ignore updates from `channel` chat types and from groups; this bot serves private chats only |
 
@@ -343,7 +372,7 @@ This runs straight into the ABAC rule that the JWT `sub` must match the resource
 | **2** | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route. Uses a throwaway `@BotFather` bot, not the production account | `/start` answers with the root menu locally |
 | **3** | Menu router, conversation state, Postgres repos, canned answers + seed | Every node reachable; stale callbacks degrade to the root menu |
 | **4** | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber. Business-hours window and after-hours copy | Escalation lands in the ops chat; an after-hours escalation states the service window |
-| **5** | Manager inbox API + manage-web `/support` tab + permissions | A manager replies from the console and the shopper receives it |
+| **5** | Manager inbox API + manage-web `/support` tab (대기 / 내 상담 / 완료, claim, reply, close) + permissions | A manager claims and replies from the console, the shopper receives it, and an undeliverable reply shows as 미전송 |
 | **6** | Storefront deep-link payload; point the button at the bot (**handle decided here**) | Context arrives with the first message |
 | **7** | Production: separate secret, webhook registration, ECS task, retention job | Live behind the floating button |
 
@@ -364,11 +393,14 @@ Phases 0–1 are prerequisites with no user-visible change and can land first, i
 
 ## Decisions taken
 
+All open questions are settled; nothing blocks Phase 0.
+
 | Question | Decision | Consequence |
 |---|---|---|
 | **Service hours** | Weekdays 10:00–22:00 KST; closed weekends and public holidays | [Business hours](#business-hours) — config-driven window; holidays are staff behavior, not code ([no calendar](#holidays-are-not-tracked)) |
 | **Bot account** | Created later; not a prerequisite | Phases 0–5 need no real bot (see below). The handle only binds at Phase 6 |
 | **Service vs adapter** | Separate `support` service | [Is separating worth it?](#is-separating-worth-it) — measured: ~420 lines, no new RDS/ALB/NAT/instance |
+| **Retention** | 180 days for message bodies | Purge job in Phase 7; inquiry metadata kept |
 | **Language** | Korean only at launch | [Language policy](#language-policy) — `language` in the answer key now, one static notice for `en`/`zh` arrivals |
 
 ### Creating the bot later is fine
@@ -383,14 +415,6 @@ Nothing before Phase 6 depends on the production account:
 Until Phase 6 the storefront keeps pointing at `@Dupli1212` and behaves exactly as it does today, so this sequencing costs nothing.
 
 One thing to settle *before* Phase 6, not at it: whether the bot takes over `@Dupli1212` or gets its own handle. Taking it over means the human account has to be freed first, and a handle in use by a person cannot be transferred to a bot — the name has to be released and re-registered through `@BotFather`, with a gap in between during which the storefront button points at nothing. A fresh handle avoids that entirely and is the safer default unless `@Dupli1212` is already on customer-facing material.
-
-## Open questions
-
-One decision still open before Phase 2:
-
-1. **Retention.** Is 180 days right for chat bodies containing customer PII?
-
----
 
 ## Docs to update when this ships
 
