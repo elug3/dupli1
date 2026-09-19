@@ -230,3 +230,46 @@ func TestStaleInquiriesCloseThemselves(t *testing.T) {
 		t.Fatalf("inquiry = %+v, want closed with a timestamp", view.Inquiry)
 	}
 }
+
+func TestRetentionPurgeDropsOnlyExpiredWords(t *testing.T) {
+	h := newHarnessAt(openHours)
+	ctx := t.Context()
+
+	if err := h.router.Handle(ctx, service.Inbound{
+		ChatID: "42", ChatType: "private", Text: "제 연락처는 010-1234-5678 입니다",
+	}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+
+	// Same day: nothing is due.
+	inbox := newInbox(h)
+	if purged, err := inbox.PurgeExpiredBodies(ctx, 180*24*time.Hour); err != nil || purged != 0 {
+		t.Fatalf("purged %d (%v), want none while inside the window", purged, err)
+	}
+
+	// Half a year on, the words go.
+	later := service.NewInbox(h.conversations, h.inquiries, h.messages, h.bot,
+		func() string { return "msg-x" },
+		func() time.Time { return openHours.Add(200 * 24 * time.Hour) })
+	purged, err := later.PurgeExpiredBodies(ctx, 180*24*time.Hour)
+	if err != nil {
+		t.Fatalf("PurgeExpiredBodies: %v", err)
+	}
+	if purged != 1 {
+		t.Fatalf("purged %d, want the expired message", purged)
+	}
+	transcript, _ := h.messages.Transcript(ctx, "id-1")
+	for _, message := range transcript {
+		if strings.Contains(message.Body, "010-1234-5678") {
+			t.Fatal("a phone number survived its retention window")
+		}
+	}
+}
+
+func TestRetentionCanBeDisabled(t *testing.T) {
+	h := newHarnessAt(openHours)
+	inbox := newInbox(h)
+	if purged, err := inbox.PurgeExpiredBodies(t.Context(), 0); err != nil || purged != 0 {
+		t.Fatalf("purged %d (%v), want the sweep skipped entirely", purged, err)
+	}
+}

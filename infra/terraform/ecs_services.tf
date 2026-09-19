@@ -119,6 +119,26 @@ resource "aws_service_discovery_service" "notification" {
   }
 }
 
+resource "aws_service_discovery_service" "support" {
+  name = "support"
+
+  dns_config {
+    namespace_id = var.service_discovery_namespace_id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
 resource "aws_service_discovery_service" "profile" {
   name = "profile"
 
@@ -603,6 +623,90 @@ resource "aws_ecs_task_definition" "payment" {
     }
   ])
 }
+# The CUSTOMER consultation bot. Deliberately a separate task, token and
+# database from notification's ops bot: one Telegram token owns one update
+# stream, the two have opposite access models, and a flood on the customer side
+# must not disturb the channel carrying paid-order alerts. See
+# docs/support-telegram-bot.md.
+resource "aws_ecs_task_definition" "support" {
+  family                   = "${var.project_name}-support"
+  network_mode             = local.common_task.network_mode
+  requires_compatibilities = local.common_task.requires_compatibilities
+  execution_role_arn       = local.common_task.execution_role_arn
+  cpu                      = "256"
+  memory                   = "512"
+
+  container_definitions = jsonencode([
+    {
+      name      = "support"
+      image     = local.service_images.support
+      essential = true
+      portMappings = [
+        {
+          containerPort = 8080
+          hostPort      = 8080
+          protocol      = "tcp"
+        }
+      ]
+      environment = concat(
+        [
+          # Match nginx upstream dupli1-support:8080 (default process port is 8089).
+          { name = "DUPLI1_SUPPORT_ADDR", value = ":8080" },
+          { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
+          # The manager inbox validates staff JWTs against auth's JWKS. Without
+          # it every inbox route answers 503 rather than serving open.
+          { name = "AUTH_JWKS_URL", value = "http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json" },
+          # Deep link staff follow from an ops alert into the inbox.
+          { name = "MANAGE_WEB_URL", value = "https://manage.dupli1.com" },
+          { name = "DUPLI1_SUPPORT_MESSAGE_RETENTION_DAYS", value = tostring(var.support_message_retention_days) },
+        ],
+        # Registering a webhook without its secret leaves the handler answering
+        # 503 for every update — a silently dead inbound path — so the URL is
+        # injected only alongside the secret. Without it the service falls back
+        # to getUpdates polling, which works but is not how production should run.
+        var.telegram_support_secret_arn == "" ? [] : [
+          { name = "TELEGRAM_SUPPORT_WEBHOOK_URL", value = var.support_webhook_url },
+        ]
+      )
+      # NOTE: DUPLI1_SUPPORT_DB is only injected once support_db_url_secret_arn
+      # is set (create dupli1/production/support-db-url in Secrets Manager and
+      # pass the ARN via var.support_db_url_secret_arn). Until then the task
+      # starts with no DB and keeps conversations, inquiries and transcripts in
+      # memory, which does not survive a restart: every open consultation is
+      # lost on deploy and the manager inbox comes back empty.
+      secrets = concat(
+        var.support_db_url_secret_arn == "" ? [] : [
+          {
+            name      = "DUPLI1_SUPPORT_DB"
+            valueFrom = var.support_db_url_secret_arn
+          },
+        ],
+        var.telegram_support_secret_arn == "" ? [] : [
+          {
+            name      = "TELEGRAM_SUPPORT_BOT_TOKEN"
+            valueFrom = "${var.telegram_support_secret_arn}:TELEGRAM_SUPPORT_BOT_TOKEN::"
+          },
+          {
+            name      = "TELEGRAM_SUPPORT_WEBHOOK_SECRET"
+            valueFrom = "${var.telegram_support_secret_arn}:TELEGRAM_SUPPORT_WEBHOOK_SECRET::"
+          },
+        ],
+        [
+          local.nats_token_secret,
+        ]
+      )
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.services["support"].name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    }
+  ])
+}
+
 resource "aws_ecs_task_definition" "notification" {
   family                   = "${var.project_name}-notification"
   network_mode             = local.common_task.network_mode
@@ -970,6 +1074,38 @@ resource "aws_ecs_service" "payment" {
 
   depends_on = [
     aws_ecs_service.order,
+    aws_ecs_service.nats,
+    aws_iam_role_policy.ecs_execution_secrets,
+  ]
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
+}
+
+resource "aws_ecs_service" "support" {
+  name            = "dupli1-support"
+  cluster         = data.aws_ecs_cluster.production.id
+  task_definition = aws_ecs_task_definition.support.arn
+  desired_count   = var.desired_count
+
+  capacity_provider_strategy {
+    capacity_provider = aws_ecs_capacity_provider.ec2.name
+    weight            = 1
+    base              = 1
+  }
+
+  network_configuration {
+    subnets         = local.private_network.subnets
+    security_groups = local.private_network.security_groups
+  }
+
+  service_registries {
+    registry_arn = aws_service_discovery_service.support.arn
+  }
+
+  depends_on = [
+    aws_ecs_service.auth,
     aws_ecs_service.nats,
     aws_iam_role_policy.ecs_execution_secrets,
   ]

@@ -2,7 +2,7 @@
 
 Design spec for the **customer-facing** Telegram inquiry bot: menu-driven consultation, conversation state, and handoff to a human operator.
 
-**Status:** Phases 0–6 complete — the consultation works end to end and the storefront button now opens the bot, carrying where the shopper came from. Phase 7 (deploy) not started: **nothing runs in production yet**, and the bot is not reachable until its token is in Secrets Manager and the ECS task exists. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
+**Status:** Phases 0–6 complete, and Phase 7 prepared but not applied — the consultation works end to end, the storefront button opens the bot carrying where the shopper came from, and the Terraform, CI rows and retention job for production are all in the tree. **Nothing runs in production yet:** the bot stays unreachable until an operator creates the two secrets and runs `terraform apply` ([Deploying](#deploying-phase-7)). Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
 
 **Scope (Tier 2):** inline-keyboard consultation menus, canned answers, and human handoff. **Out of scope (Tier 3):** authenticated order lookups ("where is my order?"), which need a Telegram↔customer identity binding — see [Deferred: authenticated lookups](#deferred-authenticated-lookups).
 
@@ -347,7 +347,7 @@ New permissions for [permissions.md](permissions.md), plus a `support_agent` bun
 | Token in logs | Reuse the existing `redactedError` wrapper — every Bot API URL carries the token in its path |
 | Webhook authenticity | Own `TELEGRAM_SUPPORT_WEBHOOK_SECRET`, constant-time compare of `X-Telegram-Bot-Api-Secret-Token`, mirroring `notification/pkg/handler/http.go:187` |
 | Abuse / flood | Per-chat rate limit and a daily message cap per chat; a chat over the cap is answered once with "잠시 후 다시 시도해 주세요" and then ignored until the window resets |
-| Customer PII | Shoppers will paste names, phone numbers and addresses into chat. Message bodies are business records: store them, but keep them out of logs entirely. **Retention: 180 days**, after which a scheduled job purges `support_messages.body` and keeps the inquiry metadata (topic, timings, who handled it) so the volume history survives the purge. The job ships in Phase 7 — a retention policy with no job that enforces it is not a policy |
+| Customer PII | Shoppers will paste names, phone numbers and addresses into chat. Message bodies are business records: store them, but keep them out of logs entirely. **Retention: 180 days**, after which a scheduled job purges `support_messages.body` and keeps the inquiry metadata (topic, timings, who handled it) so the volume history survives the purge. The job ships in Phase 7 and is written — a retention policy with no job that enforces it is not a policy. It replaces the body with a placeholder rather than deleting the row, so the transcript keeps its shape (who spoke, when) while the words go |
 | Identity | A Telegram user ID is **not** a Dupli1 identity. No order, payment, or account data is returned to a chat under this spec. This is the hard boundary between Tier 2 and Tier 3 |
 | Channel/group abuse | Ignore updates from `channel` chat types and from groups; this bot serves private chats only |
 
@@ -376,9 +376,46 @@ This runs straight into the ABAC rule that the JWT `sub` must match the resource
 | **4** ✅ | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber. Business-hours window and after-hours copy | **Done.** Verified live across both services on real Postgres and NATS: an escalation reaches the opted-in ops chat with the shopper's own words quoted, and an after-hours one states the window and never a day. Postgres caught a foreign-key ordering bug the in-memory store could not |
 | **5** ✅ | Manager inbox API + manage-web `/support` tab (대기 / 내 상담 / 완료, claim, reply, close) + permissions | **Done.** Verified live: a manager replied from the console and the shopper received it; against a Bot API returning 403 the reply was stored with `delivery: failed` and came back `delivered: false`, which the tab renders as 미전송. Inquiry JSON carries no chat id |
 | **6** ✅ | Storefront deep-link payload; point the button at the bot | **Done.** The button opens `@dupli1_support_bot` with `?start=<surface>_<ref>_<lang>`; verified in a browser and through the live bot, where `c_b-louis-vuitton_ko` landed in `entry_payload` and surfaced in the inbox as the inquiry's entry context |
-| **7** | Production: separate secret, webhook registration, ECS task, retention job | Live behind the floating button |
+| **7** ◐ | Production: separate secret, webhook registration, ECS task, retention job | **Prepared, not applied.** ECR repo, log group, Cloud Map entry, task definition and service are written; `dupli1-support` is in both CI matrices; the retention purge runs on a 24h sweep and was verified against a real Postgres. What is left is not code — see [Deploying](#deploying-phase-7) |
 
 Phases 0–1 are prerequisites with no user-visible change and can land first, independently, and need no Telegram account at all. Phase 6 is the only change to `dupli1-web`, and the first phase that needs the real bot handle.
+
+---
+
+## Deploying (Phase 7)
+
+Everything that is code is in the tree. What remains needs an AWS console and the
+bot token, so it is an operator's work, not a commit.
+
+### What the repo already carries
+
+| Piece | Where | Note |
+|---|---|---|
+| ECR repo `dupli1-support` | `infra/terraform/ecr.tf` | Terraform creates it; CI cannot push before the first apply |
+| Image tag wiring | `infra/terraform/data.tf` | `service_images.support` |
+| Log group | `infra/terraform/logs.tf` | Same retention as every other service |
+| Cloud Map `support.dupli1.local` | `infra/terraform/ecs_services.tf` | Registered with the namespace the gateway resolves |
+| Task definition + service | `infra/terraform/ecs_services.tf` | 256 CPU / 512 MB, depends on auth and nats |
+| Gateway route `/api/v1/support/` | `api/nginx.ecs.conf`, `api/nginx.ecs.conf.template`, `api/nginx.prod.conf` | Telegram posts the webhook through the ALB, so a missing block here is a dead bot, not just a dead admin tab |
+| Build + deploy rows | `.github/workflows/aws.yml` | `dupli1-support` in both matrices |
+| Retention purge | `support/pkg/service/inbox.go`, wired in `bootstrap` | Sweeps at start, then every 24h |
+
+### What only an operator can do
+
+1. **Create the bot** with `@BotFather` and keep the token out of chat, tickets and this repo — it carries full send rights as the bot.
+2. **Create `dupli1/production/telegram-support`** in Secrets Manager with two keys: `TELEGRAM_SUPPORT_BOT_TOKEN` and `TELEGRAM_SUPPORT_WEBHOOK_SECRET` (any long random string; Telegram echoes it back on every update and the handler rejects a mismatch with `403`).
+3. **Create `dupli1/production/support-db-url`** pointing at a `support` database on the existing RDS instance (`bash infra/scripts/create-rds-databases.sh` makes the database).
+4. **Set both ARNs** as `telegram_support_secret_arn` and `support_db_url_secret_arn` in tfvars, then `terraform apply`.
+5. **Opt a chat into `alert_support`** from the manage-web `/telegram` tab, or no escalation reaches anyone.
+
+### What happens if a step is skipped
+
+Each omission degrades rather than crashes, which is the trap — the service comes
+up green either way:
+
+- **No DB secret:** conversations, inquiries and transcripts live in memory. Every open consultation is lost on the next deploy and the manager inbox comes back empty.
+- **No Telegram secret:** the webhook URL is not injected either (the task definition ties them together deliberately), so the bot falls back to `getUpdates` polling. That works, but it is not how production should run, and with no token it does not run at all.
+- **No `alert_support` chat:** inquiries open and sit in the inbox, and nobody is told. There is no env fallback by design — an ops alert going to a chat that never asked for customer messages is the thing that fallback would cause.
 
 ---
 

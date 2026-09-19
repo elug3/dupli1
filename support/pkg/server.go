@@ -34,6 +34,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		NATSURL:               opts.NATSURL,
 		ManageWebURL:          opts.ManageWebURL,
 		BusinessHours:         opts.BusinessHours,
+		MessageRetention:      opts.MessageRetention,
 		JWTSecret:             opts.JWTSecret,
 		JWKSURL:               opts.JWKSURL,
 		ReadTimeout:           opts.ReadTimeout,

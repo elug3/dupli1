@@ -17,6 +17,7 @@ type ServerOptions struct {
 	NATSURL               string
 	ManageWebURL          string
 	BusinessHours         domain.BusinessHours
+	MessageRetention      time.Duration
 	JWTSecret             string
 	JWKSURL               string
 	ReadTimeout           time.Duration

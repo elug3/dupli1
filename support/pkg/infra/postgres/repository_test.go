@@ -34,9 +34,23 @@ func requirePostgres(t *testing.T) *sql.DB {
 // freshChat returns ids unique to the calling test, and clears any row a
 // previous run left behind. Both keys are namespaced: chat_id is unique, and so
 // is the conversation id, so two tests cannot collide on either.
+//
+// Messages and inquiries point at the conversation with a plain foreign key, so
+// they are cleared first: deleting the parent alone succeeds only against a
+// database no earlier run has touched, which is not the database anyone
+// actually runs these against twice.
 func freshChat(t *testing.T, db *sql.DB) (chatID, convID string) {
 	t.Helper()
 	chatID, convID = t.Name()+"-chat", t.Name()+"-conv"
+	owned := `SELECT id FROM support_conversations WHERE chat_id = $1 OR id LIKE $2`
+	for _, child := range []string{"support_messages", "support_inquiries"} {
+		if _, err := db.Exec(
+			`DELETE FROM `+child+` WHERE conversation_id IN (`+owned+`)`,
+			chatID, t.Name()+"-%",
+		); err != nil {
+			t.Fatalf("clean %s: %v", child, err)
+		}
+	}
 	if _, err := db.Exec(
 		`DELETE FROM support_conversations WHERE chat_id = $1 OR id LIKE $2`,
 		chatID, t.Name()+"-%",
@@ -276,5 +290,100 @@ func TestOnlyOneInquiryPerChatCanBeOpen(t *testing.T) {
 	}
 	if err := inquiries.Save(ctx, domain.NewInquiry(convID+"-b", convID, chatID, domain.NodeAgent, closed)); err != nil {
 		t.Fatalf("second consultation after closing: %v", err)
+	}
+}
+
+func TestPurgeDropsWordsAndKeepsTheRecord(t *testing.T) {
+	// Retention is a promise to shoppers. The words go; the shape of the
+	// consultation — how many messages, when, from whom, and the inquiry
+	// itself — stays, because that is the business record.
+	db := requirePostgres(t)
+	ctx := context.Background()
+	chatID, convID := freshChat(t, db)
+	now := time.Now().UTC()
+
+	if err := postgres.NewConversationRepository(db).Save(ctx, domain.NewConversation(convID, chatID, now)); err != nil {
+		t.Fatalf("save conversation: %v", err)
+	}
+	inquiries := postgres.NewInquiryRepository(db)
+	inquiry := domain.NewInquiry(convID+"-inq", convID, chatID, domain.NodeAgent, now.Add(-200*24*time.Hour))
+	if err := inquiries.Save(ctx, inquiry); err != nil {
+		t.Fatalf("save inquiry: %v", err)
+	}
+
+	messages := postgres.NewMessageRepository(db)
+	old := &domain.Message{
+		ID: convID + "-old", ConversationID: convID, InquiryID: inquiry.ID,
+		Direction: domain.DirectionInbound,
+		Body:      "제 연락처는 010-1234-5678 입니다",
+		CreatedAt: now.Add(-200 * 24 * time.Hour),
+	}
+	recent := &domain.Message{
+		ID: convID + "-recent", ConversationID: convID, InquiryID: inquiry.ID,
+		Direction: domain.DirectionOutbound, Author: "manager-1",
+		Body: "확인해 드리겠습니다", Delivery: domain.DeliverySent,
+		CreatedAt: now.Add(-10 * 24 * time.Hour),
+	}
+	for _, message := range []*domain.Message{old, recent} {
+		if err := messages.Append(ctx, message); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+	}
+
+	purged, err := messages.PurgeBodies(ctx, now.Add(-180*24*time.Hour), domain.PurgedBody)
+	if err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if purged != 1 {
+		t.Fatalf("purged %d, want only the message past its window", purged)
+	}
+
+	transcript, err := messages.Transcript(ctx, convID)
+	if err != nil {
+		t.Fatalf("transcript: %v", err)
+	}
+	if len(transcript) != 2 {
+		t.Fatalf("transcript has %d rows, want both kept", len(transcript))
+	}
+	if transcript[0].Body != domain.PurgedBody {
+		t.Fatalf("expired body = %q, want the placeholder", transcript[0].Body)
+	}
+	if transcript[0].Direction != domain.DirectionInbound || transcript[0].CreatedAt.IsZero() {
+		t.Fatalf("purge destroyed the record: %+v", transcript[0])
+	}
+	if transcript[1].Body != "확인해 드리겠습니다" || transcript[1].Author != "manager-1" {
+		t.Fatalf("a message inside the window was touched: %+v", transcript[1])
+	}
+	if open, err := inquiries.FindByID(ctx, inquiry.ID); err != nil || open == nil {
+		t.Fatalf("inquiry metadata must survive the purge: (%v, %v)", open, err)
+	}
+}
+
+func TestPurgeIsIdempotent(t *testing.T) {
+	// It sweeps daily and once at start, so re-running must not churn rows it
+	// has already handled.
+	db := requirePostgres(t)
+	ctx := context.Background()
+	chatID, convID := freshChat(t, db)
+	now := time.Now().UTC()
+
+	if err := postgres.NewConversationRepository(db).Save(ctx, domain.NewConversation(convID, chatID, now)); err != nil {
+		t.Fatalf("save conversation: %v", err)
+	}
+	messages := postgres.NewMessageRepository(db)
+	err := messages.Append(ctx, &domain.Message{
+		ID: convID + "-old", ConversationID: convID, Direction: domain.DirectionInbound,
+		Body: "오래된 메시지", CreatedAt: now.Add(-200 * 24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	cutoff := now.Add(-180 * 24 * time.Hour)
+	if purged, _ := messages.PurgeBodies(ctx, cutoff, domain.PurgedBody); purged != 1 {
+		t.Fatalf("first sweep purged %d, want 1", purged)
+	}
+	if purged, _ := messages.PurgeBodies(ctx, cutoff, domain.PurgedBody); purged != 0 {
+		t.Fatalf("second sweep purged %d, want none", purged)
 	}
 }

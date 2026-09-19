@@ -130,6 +130,14 @@ func Bootstrap(cfg Config) (*App, error) {
 	// never stale, however long it runs.
 	go runStaleCloser(workerCtx, inbox, cfg.InquiryQuietPeriod)
 
+	// Retention is a promise to shoppers: transcripts hold whatever they typed,
+	// so the words go on schedule even if nobody remembers to ask.
+	retention := cfg.MessageRetention
+	if retention == 0 {
+		retention = DefaultMessageRetention
+	}
+	go runRetentionPurge(workerCtx, inbox, retention)
+
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
@@ -298,6 +306,41 @@ func runStaleCloser(ctx context.Context, inbox *service.Inbox, quietFor time.Dur
 			if closed > 0 {
 				log.Printf("closed %d inquiry(ies) after %s of silence", closed, quietFor)
 			}
+		}
+	}
+}
+
+// runRetentionPurge drops message text past its retention window.
+//
+// It sweeps once at start and then daily: a deploy should not be able to
+// postpone a purge that was already due, which an interval-only ticker would
+// do on a service that restarts often.
+func runRetentionPurge(ctx context.Context, inbox *service.Inbox, retention time.Duration) {
+	if retention <= 0 {
+		log.Println("message retention is disabled — transcripts are kept indefinitely")
+		return
+	}
+
+	purge := func() {
+		purged, err := inbox.PurgeExpiredBodies(ctx, retention)
+		if err != nil {
+			log.Printf("purge expired message bodies: %v", err)
+			return
+		}
+		if purged > 0 {
+			log.Printf("purged %d message body(ies) older than %s", purged, retention)
+		}
+	}
+	purge()
+
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			purge()
 		}
 	}
 }

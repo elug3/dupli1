@@ -36,6 +36,9 @@ type MessageRepository interface {
 	Append(ctx context.Context, message *domain.Message) error
 	// Transcript returns a conversation's messages, oldest first.
 	Transcript(ctx context.Context, conversationID string) ([]domain.Message, error)
+	// PurgeBodies replaces the text of messages older than the cutoff with a
+	// placeholder, keeping the row. Returns how many were purged.
+	PurgeBodies(ctx context.Context, olderThan time.Time, placeholder string) (int, error)
 }
 
 // MessageReader is implemented by message stores that can look back. It is a
