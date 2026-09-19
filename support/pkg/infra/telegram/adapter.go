@@ -5,6 +5,7 @@ package telegram
 
 import (
 	"context"
+	"strings"
 
 	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 	"github.com/elug3/dupli1/support/pkg/ports"
@@ -20,11 +21,24 @@ func (b *Bot) ReplyMenu(ctx context.Context, chatID string, text string, buttons
 	if b == nil || b.Client == nil {
 		return nil
 	}
-	rendered := make([]tg.InlineKeyboardButton, 0, len(buttons))
-	for _, button := range buttons {
-		rendered = append(rendered, tg.CallbackButton(button.Label, button.CallbackData))
+	return b.Client.ReplyMenu(ctx, chatID, text, keyboard(buttons))
+}
+
+// EditMenu replaces an earlier message in place.
+//
+// Telegram answers a re-tap of the button already open with 400 "message is not
+// modified", because the new content is identical to the old. Nothing is wrong
+// — the shopper is already looking at what they asked for — so it is not worth
+// an error line in the log on an interaction people make all the time.
+func (b *Bot) EditMenu(ctx context.Context, chatID string, messageID int64, text string, buttons []ports.MenuButton) error {
+	if b == nil || b.Client == nil {
+		return nil
 	}
-	return b.Client.ReplyMenu(ctx, chatID, text, tg.KeyboardRows(rendered...))
+	err := b.Client.EditMessageText(ctx, chatID, messageID, text, keyboard(buttons))
+	if err != nil && strings.Contains(err.Error(), "message is not modified") {
+		return nil
+	}
+	return err
 }
 
 func (b *Bot) AnswerCallback(ctx context.Context, callbackQueryID string, text string) error {
@@ -32,6 +46,14 @@ func (b *Bot) AnswerCallback(ctx context.Context, callbackQueryID string, text s
 		return nil
 	}
 	return b.Client.AnswerCallback(ctx, callbackQueryID, text)
+}
+
+func keyboard(buttons []ports.MenuButton) *tg.InlineKeyboardMarkup {
+	rendered := make([]tg.InlineKeyboardButton, 0, len(buttons))
+	for _, button := range buttons {
+		rendered = append(rendered, tg.CallbackButton(button.Label, button.CallbackData))
+	}
+	return tg.KeyboardRows(rendered...)
 }
 
 // UpdateProcessor turns a Bot API update into one service call. It satisfies
@@ -64,6 +86,11 @@ func inboundFrom(update tg.Update) (service.Inbound, bool) {
 			ChatType:        chat.Type,
 			CallbackQueryID: query.ID,
 			CallbackData:    query.Data,
+		}
+		if query.Message != nil {
+			// The id of the message the button hangs under — what the menu is
+			// edited in place by.
+			in.MessageID = query.Message.MessageID
 		}
 		if query.From != nil {
 			id := query.From.ID

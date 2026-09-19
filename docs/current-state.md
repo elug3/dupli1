@@ -18,7 +18,7 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Payments (NANO card + Bypass) | Implemented — see [payment-service.md](payment-service.md) |
 | Payment methods | Credit card (NANO) + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
 | Notifications | Implemented (NATS → Telegram when configured); **subscriptions are not yet persisted in production** — the ECS task has no `DUPLI1_NOTIFICATION_DB`, see [dupli1-notification](#dupli1-notification) |
-| Customer Telegram consultation bot | Skeleton — **`support`** service serves `/start` with the root consultation menu and acknowledges button taps ([support-telegram-bot.md](support-telegram-bot.md) Phases 0–2). Menu routing, conversation storage, staff handoff and the manager inbox are specced, not built |
+| Customer Telegram consultation bot | Partial — **`support`** service walks the full consultation menu in place (five topics, order sub-menu, back-to-root everywhere), storing conversations and editable canned answers in PostgreSQL ([support-telegram-bot.md](support-telegram-bot.md) Phases 0–3). Staff handoff, the `support.inquiry_opened` event and the manager inbox are specced, not built |
 | Customer commerce profile + addresses | Implemented — own **`profile`** service (PostgreSQL), extracted from auth ([profile-service.md](profile-service.md), [auth-profile-extension-plan.md](auth-profile-extension-plan.md)); chat/analytics not started |
 | Guest PDP views + recommendations | Implemented — in product |
 | Manager settings (mutable store policy) | Sketch — see [manager-settings-api.md](manager-settings-api.md) |

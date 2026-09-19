@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,13 +18,26 @@ type sentMenu struct {
 	buttons []ports.MenuButton
 }
 
+type editedMenu struct {
+	chatID    string
+	messageID int64
+	text      string
+	buttons   []ports.MenuButton
+}
+
 type fakeBot struct {
 	menus     []sentMenu
+	edits     []editedMenu
 	callbacks []string
 }
 
 func (b *fakeBot) ReplyMenu(_ context.Context, chatID string, text string, buttons []ports.MenuButton) error {
 	b.menus = append(b.menus, sentMenu{chatID: chatID, text: text, buttons: buttons})
+	return nil
+}
+
+func (b *fakeBot) EditMenu(_ context.Context, chatID string, messageID int64, text string, buttons []ports.MenuButton) error {
+	b.edits = append(b.edits, editedMenu{chatID: chatID, messageID: messageID, text: text, buttons: buttons})
 	return nil
 }
 
@@ -37,7 +51,7 @@ func newRouter() (*service.Router, *fakeBot, *memory.ConversationRepository) {
 	bot := &fakeBot{}
 	fixed := time.Date(2026, 9, 19, 11, 0, 0, 0, time.UTC)
 	n := 0
-	router := service.NewRouter(repo, bot, func() string {
+	router := service.NewRouter(repo, memory.NewAnswerRepository(), bot, func() string {
 		n++
 		return "conv-" + string(rune('0'+n))
 	}, func() time.Time { return fixed })
@@ -59,8 +73,8 @@ func TestStartOpensTheRootMenu(t *testing.T) {
 	if menu.chatID != "42" {
 		t.Fatalf("chat id = %q", menu.chatID)
 	}
-	if len(menu.buttons) != len(domain.RootMenu) {
-		t.Fatalf("buttons = %d, want %d", len(menu.buttons), len(domain.RootMenu))
+	if len(menu.buttons) != len(domain.RootMenu()) {
+		t.Fatalf("buttons = %d, want %d", len(menu.buttons), len(domain.RootMenu()))
 	}
 	if menu.buttons[0].CallbackData != domain.CallbackData(domain.NodeOrder) {
 		t.Fatalf("first button routes to %q", menu.buttons[0].CallbackData)
@@ -147,12 +161,11 @@ func TestGroupAndChannelChatsAreIgnored(t *testing.T) {
 }
 
 func TestButtonTapIsAlwaysAcknowledged(t *testing.T) {
-	// Telegram spins the button until answerCallbackQuery lands. Routing into a
-	// topic is Phase 3, but the spinner must stop today.
+	// Telegram spins the button until answerCallbackQuery lands.
 	router, bot, _ := newRouter()
 
 	err := router.Handle(t.Context(), service.Inbound{
-		ChatID: "42", ChatType: "private",
+		ChatID: "42", ChatType: "private", MessageID: 555,
 		CallbackQueryID: "cbq-1", CallbackData: domain.CallbackData(domain.NodeOrder),
 	})
 	if err != nil {
@@ -162,6 +175,145 @@ func TestButtonTapIsAlwaysAcknowledged(t *testing.T) {
 		t.Fatalf("callbacks = %v, want the tap acknowledged", bot.callbacks)
 	}
 }
+
+func TestTapWalksTheMenuInPlace(t *testing.T) {
+	router, bot, repo := newRouter()
+
+	err := router.Handle(t.Context(), service.Inbound{
+		ChatID: "42", ChatType: "private", MessageID: 555,
+		CallbackQueryID: "cbq-1", CallbackData: domain.CallbackData(domain.NodeReturn),
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+
+	if len(bot.menus) != 0 {
+		t.Fatalf("a tap must edit the open menu, not stack a new message (%d sent)", len(bot.menus))
+	}
+	if len(bot.edits) != 1 {
+		t.Fatalf("edits = %d, want 1", len(bot.edits))
+	}
+	edit := bot.edits[0]
+	if edit.messageID != 555 {
+		t.Fatalf("edited message id = %d, want the tapped message", edit.messageID)
+	}
+	if edit.text != domain.AnswerFor(domain.NodeReturn) {
+		t.Fatalf("edited text = %q, want the node's copy", edit.text)
+	}
+	// Every non-root node offers a way back, or a shopper is stranded.
+	last := edit.buttons[len(edit.buttons)-1]
+	if last.Label != domain.BackLabel || last.CallbackData != domain.CallbackData(domain.NodeRoot) {
+		t.Fatalf("last button = %+v, want a route back to the root", last)
+	}
+
+	saved, _ := repo.FindByChatID(t.Context(), "42")
+	if saved.Node != domain.NodeReturn {
+		t.Fatalf("conversation node = %q, want the tapped node", saved.Node)
+	}
+}
+
+func TestEveryNodeRendersWhenTapped(t *testing.T) {
+	// "Every node reachable" is the phase's acceptance criterion, so walk them.
+	for id := range domain.Nodes {
+		router, bot, _ := newRouter()
+		err := router.Handle(t.Context(), service.Inbound{
+			ChatID: "42", ChatType: "private", MessageID: 555,
+			CallbackQueryID: "cbq", CallbackData: domain.CallbackData(id),
+		})
+		if err != nil {
+			t.Fatalf("Handle(%s): %v", id, err)
+		}
+		if len(bot.edits) != 1 {
+			t.Fatalf("node %q produced %d edits, want 1", id, len(bot.edits))
+		}
+		if strings.TrimSpace(bot.edits[0].text) == "" {
+			t.Fatalf("node %q rendered an empty message, which Telegram rejects", id)
+		}
+	}
+}
+
+func TestStaleTapReopensTheRootMenu(t *testing.T) {
+	// A button from a menu version that no longer exists is still tappable.
+	router, bot, repo := newRouter()
+
+	err := router.Handle(t.Context(), service.Inbound{
+		ChatID: "42", ChatType: "private", MessageID: 555,
+		CallbackQueryID: "cbq-1", CallbackData: "v0:gone",
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if bot.edits[0].text != domain.RootGreeting {
+		t.Fatalf("stale tap rendered %q, want the root menu", bot.edits[0].text)
+	}
+	saved, _ := repo.FindByChatID(t.Context(), "42")
+	if saved.Node != domain.NodeRoot {
+		t.Fatalf("conversation node = %q, want root", saved.Node)
+	}
+}
+
+func TestTapWithNoMessageSendsAFreshMenu(t *testing.T) {
+	// Telegram omits the message for taps on very old ones; the answer must
+	// still arrive rather than being dropped for want of something to edit.
+	router, bot, _ := newRouter()
+
+	err := router.Handle(t.Context(), service.Inbound{
+		ChatID: "42", ChatType: "private",
+		CallbackQueryID: "cbq-1", CallbackData: domain.CallbackData(domain.NodePayment),
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if len(bot.edits) != 0 {
+		t.Fatal("there was no message to edit")
+	}
+	if len(bot.menus) != 1 || bot.menus[0].text != domain.AnswerFor(domain.NodePayment) {
+		t.Fatalf("menus = %+v, want the node sent fresh", bot.menus)
+	}
+}
+
+func TestStoredCopyBeatsTheSeededDefault(t *testing.T) {
+	// Staff edit copy from the inbox; the bot must serve their words, not the
+	// text a deploy shipped.
+	repo := memory.NewConversationRepository()
+	bot := &fakeBot{}
+	answers := &stubAnswers{body: "<b>직접 수정한 안내</b>"}
+	router := service.NewRouter(repo, answers, bot, func() string { return "conv-1" }, nil)
+
+	err := router.Handle(t.Context(), service.Inbound{
+		ChatID: "42", ChatType: "private", MessageID: 5,
+		CallbackQueryID: "cbq-1", CallbackData: domain.CallbackData(domain.NodeReturn),
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if bot.edits[0].text != "<b>직접 수정한 안내</b>" {
+		t.Fatalf("text = %q, want the stored copy", bot.edits[0].text)
+	}
+}
+
+func TestMissingCopyFallsBackToTheSeededText(t *testing.T) {
+	// A deleted row must not render an empty message: Telegram rejects one, so
+	// a single missing row would otherwise kill the node.
+	repo := memory.NewConversationRepository()
+	bot := &fakeBot{}
+	router := service.NewRouter(repo, &stubAnswers{body: "  "}, bot, func() string { return "conv-1" }, nil)
+
+	err := router.Handle(t.Context(), service.Inbound{
+		ChatID: "42", ChatType: "private", MessageID: 5,
+		CallbackQueryID: "cbq-1", CallbackData: domain.CallbackData(domain.NodeReturn),
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if bot.edits[0].text != domain.AnswerFor(domain.NodeReturn) {
+		t.Fatalf("text = %q, want the seeded fallback", bot.edits[0].text)
+	}
+}
+
+type stubAnswers struct{ body string }
+
+func (s *stubAnswers) Body(context.Context, string, string) (string, error) { return s.body, nil }
 
 func TestRepeatVisitorKeepsOneConversation(t *testing.T) {
 	router, _, repo := newRouter()

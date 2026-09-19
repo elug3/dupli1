@@ -4,17 +4,6 @@ package domain
 
 import "time"
 
-// Menu node ids. Kept to three characters because they travel in Telegram
-// callback_data, which is capped at 64 bytes for the whole string.
-const (
-	NodeRoot    = "root"
-	NodeOrder   = "ord"
-	NodeProduct = "prd"
-	NodeReturn  = "ret"
-	NodePayment = "pay"
-	NodeAgent   = "agt"
-)
-
 // DefaultLanguage is the only language the bot answers in at launch. The entry
 // language a shopper arrives with is still recorded — see
 // docs/support-telegram-bot.md — because it is free to capture now, impossible

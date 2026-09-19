@@ -14,8 +14,10 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	tg "github.com/elug3/dupli1/shared/pkg/telegram"
+	"github.com/elug3/dupli1/support/pkg/domain"
 	"github.com/elug3/dupli1/support/pkg/handler"
 	"github.com/elug3/dupli1/support/pkg/infra/memory"
+	"github.com/elug3/dupli1/support/pkg/infra/postgres"
 	telegraminfra "github.com/elug3/dupli1/support/pkg/infra/telegram"
 	"github.com/elug3/dupli1/support/pkg/ports"
 	"github.com/elug3/dupli1/support/pkg/service"
@@ -56,7 +58,10 @@ func Bootstrap(cfg Config) (*App, error) {
 		return nil, fmt.Errorf("TELEGRAM_SUPPORT_WEBHOOK_SECRET is required when TELEGRAM_SUPPORT_WEBHOOK_URL is set")
 	}
 
-	conversations := openConversationRepository(cfg.DatabaseConnString)
+	conversations, answers, closeStore, err := openStore(cfg.DatabaseConnString)
+	if err != nil {
+		return nil, err
+	}
 
 	client := newBotClient(cfg)
 	// No access policy is set, and that is the point: this bot answers whoever
@@ -64,7 +69,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	// with the ops bot.
 	bot := &telegraminfra.Bot{Client: client}
 
-	router := service.NewRouter(conversations, bot, newULID, time.Now)
+	router := service.NewRouter(conversations, answers, bot, newULID, time.Now)
 	processor := &telegraminfra.UpdateProcessor{Router: router}
 
 	// Long-lived worker root; cancelled on shutdown. Created before the handler
@@ -93,6 +98,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	if client.Enabled() {
 		if err := startInbound(workerCtx, client, processor, cfg); err != nil {
 			cancelWorkers()
+			_ = closeStore()
 			return nil, err
 		}
 	} else {
@@ -103,7 +109,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		Router:        mux,
 		HTTP:          httpSrv,
 		cancelWorkers: cancelWorkers,
-		close:         func() error { return nil },
+		close:         closeStore,
 	}, nil
 }
 
@@ -150,14 +156,34 @@ func startInbound(ctx context.Context, client *tg.Client, processor tg.Handler, 
 	return nil
 }
 
-// openConversationRepository picks storage. Postgres arrives in Phase 3; until
-// then an unset DUPLI1_SUPPORT_DB is the only supported mode, and a set one is
-// reported rather than silently ignored.
-func openConversationRepository(connString string) ports.ConversationRepository {
-	if strings.TrimSpace(connString) != "" {
-		log.Println("DUPLI1_SUPPORT_DB is set but the Postgres repository lands in Phase 3 — using the in-memory store")
+// openStore picks storage: PostgreSQL when DUPLI1_SUPPORT_DB is set, otherwise
+// in-memory, as order, cart and payment already do. Tests and a bare
+// `npm run`-style local start need no database.
+//
+// Seeding happens here, at boot, and only fills nodes that have no row — staff
+// edit this copy from the manager inbox, and a deploy that overwrote their
+// wording every restart would make that editor pointless.
+func openStore(connString string) (ports.ConversationRepository, ports.AnswerRepository, func() error, error) {
+	if strings.TrimSpace(connString) == "" {
+		log.Println("DUPLI1_SUPPORT_DB not set — conversations are in memory and will not survive a restart")
+		return memory.NewConversationRepository(), memory.NewAnswerRepository(), func() error { return nil }, nil
 	}
-	return memory.NewConversationRepository()
+
+	db, err := postgres.Open(connString)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	seedCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	seeded, err := postgres.SeedAnswers(seedCtx, db, domain.DefaultLanguage)
+	if err != nil {
+		_ = db.Close()
+		return nil, nil, nil, err
+	}
+	if seeded > 0 {
+		log.Printf("seeded %d support answer(s)", seeded)
+	}
+	return postgres.NewConversationRepository(db), postgres.NewAnswerRepository(db), db.Close, nil
 }
 
 var ulidEntropy = ulid.Monotonic(rand.New(rand.NewSource(time.Now().UnixNano())), 0)

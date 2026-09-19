@@ -696,4 +696,4 @@ Customer-facing Telegram consultation bot — **a different bot from the ops one
 
 The manager inbox routes (`/api/v1/support/inquiries…`, `support.read` / `support.reply`) arrive in Phase 5 and are specced, not built.
 
-Local Compose falls back to `getUpdates` polling when `TELEGRAM_SUPPORT_WEBHOOK_URL` is unset. Conversations live in memory until the Postgres repository lands in Phase 3; the database (`support`, host port **5440**) is already provisioned by Compose.
+Local Compose falls back to `getUpdates` polling when `TELEGRAM_SUPPORT_WEBHOOK_URL` is unset. Conversations and canned answers persist in PostgreSQL `support` (`DUPLI1_SUPPORT_DB`, host port **5440**), with an in-memory fallback when that variable is unset. Answer copy is seeded on start with insert-if-absent, so an edit made from the inbox survives the next deploy.

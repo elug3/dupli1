@@ -9,21 +9,93 @@ import "strings"
 // tap and answer it with the current root menu instead of misrouting it.
 const callbackVersion = "v1"
 
-// MenuItem is one button on a menu: the label a shopper reads and the node it
-// leads to.
-type MenuItem struct {
-	Label string
-	Node  string
+// Node is one place in the consultation menu.
+//
+// Children are the buttons shown when the node is open, in order. A node with
+// Escalates set hands the conversation to a human — the inquiry itself lands in
+// Phase 4 (docs/support-telegram-bot.md); until then the node renders its copy
+// and nothing is queued.
+type Node struct {
+	ID        string
+	Label     string
+	Children  []string
+	Escalates bool
 }
 
-// RootMenu is the opening consultation menu. Order matters — it is the order
-// the buttons appear in, most common request first.
-var RootMenu = []MenuItem{
-	{Label: "📦 주문·배송 문의", Node: NodeOrder},
-	{Label: "🛍 상품·재고 문의", Node: NodeProduct},
-	{Label: "🔁 교환·반품", Node: NodeReturn},
-	{Label: "💳 결제 문의", Node: NodePayment},
-	{Label: "🙋 상담원 연결", Node: NodeAgent},
+// Menu node ids. Short because they travel in callback_data, which Telegram
+// caps at 64 bytes for the whole string.
+const (
+	NodeRoot     = "root"
+	NodeOrder    = "ord"
+	NodeOrderETA = "ord.eta"
+	NodeOrderTrk = "ord.trk"
+	NodeOrderAdr = "ord.adr"
+	NodeProduct  = "prd"
+	NodeReturn   = "ret"
+	NodePayment  = "pay"
+	NodeAgent    = "agt"
+)
+
+// BackLabel returns to the root menu from anywhere. Every non-root node carries
+// it, so a shopper is never stranded down a branch.
+const BackLabel = "⬅️ 처음으로"
+
+// Nodes is the whole menu. One map, so a node cannot exist as a button without
+// existing as a destination.
+var Nodes = map[string]Node{
+	NodeRoot: {
+		ID:       NodeRoot,
+		Children: []string{NodeOrder, NodeProduct, NodeReturn, NodePayment, NodeAgent},
+	},
+	NodeOrder: {
+		ID:       NodeOrder,
+		Label:    "📦 주문·배송 문의",
+		Children: []string{NodeOrderETA, NodeOrderTrk, NodeOrderAdr, NodeAgent},
+	},
+	NodeOrderETA: {ID: NodeOrderETA, Label: "🚚 배송 기간", Children: []string{NodeAgent}},
+	NodeOrderTrk: {ID: NodeOrderTrk, Label: "🔎 배송 조회", Children: []string{NodeAgent}},
+	NodeOrderAdr: {ID: NodeOrderAdr, Label: "🏠 주소 변경", Children: []string{NodeAgent}},
+	NodeProduct: {
+		ID:       NodeProduct,
+		Label:    "🛍 상품·재고 문의",
+		Children: []string{NodeAgent},
+	},
+	NodeReturn: {
+		ID:       NodeReturn,
+		Label:    "🔁 교환·반품",
+		Children: []string{NodeAgent},
+	},
+	NodePayment: {
+		ID:       NodePayment,
+		Label:    "💳 결제 문의",
+		Children: []string{NodeAgent},
+	},
+	NodeAgent: {
+		ID:        NodeAgent,
+		Label:     "🙋 상담원 연결",
+		Escalates: true,
+	},
+}
+
+// RootMenu is the opening menu's buttons, in order.
+func RootMenu() []Node {
+	return ChildrenOf(NodeRoot)
+}
+
+// ChildrenOf returns the child nodes of a node, skipping any id with no
+// definition — a button that leads nowhere is worse than a missing button.
+func ChildrenOf(id string) []Node {
+	node, ok := Nodes[id]
+	if !ok {
+		return nil
+	}
+	children := make([]Node, 0, len(node.Children))
+	for _, childID := range node.Children {
+		if child, ok := Nodes[childID]; ok {
+			children = append(children, child)
+		}
+	}
+	return children
 }
 
 // RootGreeting opens a consultation.
@@ -52,9 +124,6 @@ func ParseCallbackData(data string) string {
 
 // IsKnownNode reports whether node is one this version of the menu serves.
 func IsKnownNode(node string) bool {
-	switch node {
-	case NodeRoot, NodeOrder, NodeProduct, NodeReturn, NodePayment, NodeAgent:
-		return true
-	}
-	return false
+	_, ok := Nodes[node]
+	return ok
 }

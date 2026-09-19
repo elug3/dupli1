@@ -2,7 +2,7 @@
 
 Design spec for the **customer-facing** Telegram inquiry bot: menu-driven consultation, conversation state, and handoff to a human operator.
 
-**Status:** Phases 0–2 complete — the shared Bot API client speaks menus, and the `support` service exists: it answers `/start` with the root consultation menu, acknowledges button taps, and runs in Compose (DB `5440`, service `8089`) behind `/api/v1/support/`. Phases 3–7 not started: conversations are in memory, menu taps do not yet route, and there is no handoff or manager inbox. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
+**Status:** Phases 0–3 complete — the shared Bot API client speaks menus, and the `support` service walks the whole consultation tree in place, persisting conversations and editable canned answers in PostgreSQL. Phases 4–7 not started: **nothing is queued for staff yet**, so the escalation nodes render their copy without opening an inquiry. The bot must not be pointed at shoppers (Phase 6) before the handoff lands. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
 
 **Scope (Tier 2):** inline-keyboard consultation menus, canned answers, and human handoff. **Out of scope (Tier 3):** authenticated order lookups ("where is my order?"), which need a Telegram↔customer identity binding — see [Deferred: authenticated lookups](#deferred-authenticated-lookups).
 
@@ -370,7 +370,7 @@ This runs straight into the ABAC rule that the JWT `sub` must match the resource
 | **0** ✅ | Extract the Bot API client to `shared/pkg/telegram`. `notification` imports it | **Done.** Both suites green, all 33 telegram test functions preserved; `notification` keeps only ops-specific code |
 | **1** ✅ | Extend `shared/pkg/telegram`: typed send payload with `reply_markup`, `CallbackQuery`, `answerCallbackQuery`, `editMessageText` | **Done.** 16 tests against a fake API server; `notification` needed zero source changes |
 | **2** ✅ | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route, CI job | **Done.** Verified against a mock Bot API: `/start` returns the five-button root menu, a tap is acknowledged, a group chat is ignored. A throwaway `@BotFather` bot was not needed — `TELEGRAM_SUPPORT_API_BASE` points the bot at a mock instead |
-| **3** | Menu router, conversation state, Postgres repos, canned answers + seed | Every node reachable; stale callbacks degrade to the root menu |
+| **3** ✅ | Menu router, conversation state, Postgres repos, canned answers + seed | **Done.** Every node renders when tapped (asserted over `domain.Nodes`, so a new node cannot be added without copy); stale and malformed callbacks reopen the root; repo tests run against a real Postgres 16 |
 | **4** | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber. Business-hours window and after-hours copy | Escalation lands in the ops chat; an after-hours escalation states the service window |
 | **5** | Manager inbox API + manage-web `/support` tab (대기 / 내 상담 / 완료, claim, reply, close) + permissions | A manager claims and replies from the console, the shopper receives it, and an undeliverable reply shows as 미전송 |
 | **6** | Storefront deep-link payload; point the button at the bot (**handle decided here**) | Context arrives with the first message |

@@ -14,11 +14,17 @@ import (
 
 type capturingBot struct {
 	menus     int
+	edits     int
 	callbacks []string
 }
 
 func (b *capturingBot) ReplyMenu(context.Context, string, string, []ports.MenuButton) error {
 	b.menus++
+	return nil
+}
+
+func (b *capturingBot) EditMenu(context.Context, string, int64, string, []ports.MenuButton) error {
+	b.edits++
 	return nil
 }
 
@@ -30,7 +36,7 @@ func (b *capturingBot) AnswerCallback(_ context.Context, id string, _ string) er
 func newProcessor() (*telegraminfra.UpdateProcessor, *capturingBot, *memory.ConversationRepository) {
 	repo := memory.NewConversationRepository()
 	bot := &capturingBot{}
-	router := service.NewRouter(repo, bot, func() string { return "conv-1" }, nil)
+	router := service.NewRouter(repo, memory.NewAnswerRepository(), bot, func() string { return "conv-1" }, nil)
 	return &telegraminfra.UpdateProcessor{Router: router}, bot, repo
 }
 
@@ -78,6 +84,10 @@ func TestProcessorRoutesACallbackQuery(t *testing.T) {
 	if len(bot.callbacks) != 1 || bot.callbacks[0] != "cbq-1" {
 		t.Fatalf("callbacks = %v", bot.callbacks)
 	}
+	// The message id from the callback is what the menu is edited in place by.
+	if bot.edits != 1 {
+		t.Fatalf("edits = %d, want the menu walked in place", bot.edits)
+	}
 }
 
 func TestProcessorIgnoresUpdatesItDoesNotServe(t *testing.T) {
@@ -88,7 +98,7 @@ func TestProcessorIgnoresUpdatesItDoesNotServe(t *testing.T) {
 	if err := processor.Handle(t.Context(), tg.Update{UpdateID: 3}); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if bot.menus != 0 || len(bot.callbacks) != 0 {
+	if bot.menus != 0 || bot.edits != 0 || len(bot.callbacks) != 0 {
 		t.Fatal("an unrecognised update must do nothing")
 	}
 }

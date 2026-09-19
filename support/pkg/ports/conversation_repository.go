@@ -22,6 +22,9 @@ type ConversationRepository interface {
 type Bot interface {
 	// ReplyMenu sends text with an inline keyboard of (label, callbackData).
 	ReplyMenu(ctx context.Context, chatID string, text string, buttons []MenuButton) error
+	// EditMenu replaces an earlier message's text and buttons, which is how a
+	// menu walks in place instead of stacking one message per tap.
+	EditMenu(ctx context.Context, chatID string, messageID int64, text string, buttons []MenuButton) error
 	// AnswerCallback dismisses the loading spinner on a tapped button.
 	AnswerCallback(ctx context.Context, callbackQueryID string, text string) error
 }
