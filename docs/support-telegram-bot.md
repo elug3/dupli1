@@ -2,7 +2,7 @@
 
 Design spec for the **customer-facing** Telegram inquiry bot: menu-driven consultation, conversation state, and handoff to a human operator.
 
-**Status:** Phases 0–5 complete — the consultation works end to end: the bot answers, escalates, tells staff, and staff claim and reply from manage-web `/support`, with the shopper receiving their words. Phases 6–7 not started: the storefront button still points at a human account, and nothing is deployed. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
+**Status:** Phases 0–6 complete — the consultation works end to end and the storefront button now opens the bot, carrying where the shopper came from. Phase 7 (deploy) not started: **nothing runs in production yet**, and the bot is not reachable until its token is in Secrets Manager and the ECS task exists. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
 
 **Scope (Tier 2):** inline-keyboard consultation menus, canned answers, and human handoff. **Out of scope (Tier 3):** authenticated order lookups ("where is my order?"), which need a Telegram↔customer identity binding — see [Deferred: authenticated lookups](#deferred-authenticated-lookups).
 
@@ -224,8 +224,10 @@ Follows the repo's inline-migration convention (services migrate their own schem
 | Field | Example | Why |
 |---|---|---|
 | surface | `h` (home) / `c` (category) / `p` (product) | Where they were |
-| ref | category slug or product ULID, shortened | What they were looking at |
-| lang | `ko` / `en` / `zh` | Open in their language |
+| ref | `b-louis-vuitton`, `t-shoulder-bags` — a one-letter facet code, then the slug | What they were looking at |
+| lang | `ko` / `en` / `zh` | Recorded; the bot still answers Korean only |
+
+Fields join with `_` and slugs use `-`, so the two never collide, and the facet code is split off at the *first* hyphen — otherwise `t-shoulder-bags` would read as facet `t-shoulder`. An over-long reference is **dropped rather than truncated**: a cut-off reference points at the wrong product, which is worse for staff than no reference at all.
 
 So a shopper on `/category/brand/louis-vuitton` arrives with the bot already knowing the brand, and a future product-page button arrives with the SKU. A payload that does not decode is ignored — it is a hint, never trusted input, and never a permission.
 
@@ -373,7 +375,7 @@ This runs straight into the ABAC rule that the JWT `sub` must match the resource
 | **3** ✅ | Menu router, conversation state, Postgres repos, canned answers + seed | **Done.** Every node renders when tapped (asserted over `domain.Nodes`, so a new node cannot be added without copy); stale and malformed callbacks reopen the root; repo tests run against a real Postgres 16 |
 | **4** ✅ | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber. Business-hours window and after-hours copy | **Done.** Verified live across both services on real Postgres and NATS: an escalation reaches the opted-in ops chat with the shopper's own words quoted, and an after-hours one states the window and never a day. Postgres caught a foreign-key ordering bug the in-memory store could not |
 | **5** ✅ | Manager inbox API + manage-web `/support` tab (대기 / 내 상담 / 완료, claim, reply, close) + permissions | **Done.** Verified live: a manager replied from the console and the shopper received it; against a Bot API returning 403 the reply was stored with `delivery: failed` and came back `delivered: false`, which the tab renders as 미전송. Inquiry JSON carries no chat id |
-| **6** | Storefront deep-link payload; point the button at the bot (**handle decided here**) | Context arrives with the first message |
+| **6** ✅ | Storefront deep-link payload; point the button at the bot | **Done.** The button opens `@dupli1_support_bot` with `?start=<surface>_<ref>_<lang>`; verified in a browser and through the live bot, where `c_b-louis-vuitton_ko` landed in `entry_payload` and surfaced in the inbox as the inquiry's entry context |
 | **7** | Production: separate secret, webhook registration, ECS task, retention job | Live behind the floating button |
 
 Phases 0–1 are prerequisites with no user-visible change and can land first, independently, and need no Telegram account at all. Phase 6 is the only change to `dupli1-web`, and the first phase that needs the real bot handle.
