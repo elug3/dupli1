@@ -1,6 +1,10 @@
 package support
 
-import "time"
+import (
+	"time"
+
+	"github.com/elug3/dupli1/support/pkg/domain"
+)
 
 // ServerOptions configures the support server process.
 type ServerOptions struct {
@@ -11,6 +15,8 @@ type ServerOptions struct {
 	TelegramWebhookSecret string
 	TelegramAPIBase       string
 	NATSURL               string
+	ManageWebURL          string
+	BusinessHours         domain.BusinessHours
 	JWTSecret             string
 	JWKSURL               string
 	ReadTimeout           time.Duration
@@ -22,6 +28,7 @@ type ServerOptions struct {
 func NewServerOptions() *ServerOptions {
 	return &ServerOptions{
 		Addr:            ":8089",
+		BusinessHours:   domain.DefaultBusinessHours(),
 		ReadTimeout:     5 * time.Second,
 		WriteTimeout:    10 * time.Second,
 		IdleTimeout:     120 * time.Second,

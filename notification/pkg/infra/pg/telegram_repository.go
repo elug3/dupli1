@@ -69,6 +69,10 @@ func (r *TelegramRepository) migrate() error {
 			accepted_at       TIMESTAMPTZ,
 			accepted_by       TEXT NOT NULL DEFAULT ''
 		)`,
+		// Additive, as this repo's inline-migration convention allows: an
+		// existing deployment's table predates customer inquiry handoffs.
+		`ALTER TABLE telegram_subscriptions
+		 ADD COLUMN IF NOT EXISTS alert_support BOOLEAN NOT NULL DEFAULT FALSE`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS telegram_subscriptions_chat_id_idx
 		 ON telegram_subscriptions (chat_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS telegram_subscriptions_user_id_idx
@@ -135,7 +139,7 @@ func (r *TelegramRepository) UpsertPending(ctx context.Context, in ports.Telegra
 func (r *TelegramRepository) List(ctx context.Context, status string) ([]domain.TelegramSubscription, error) {
 	status = strings.TrimSpace(status)
 	query := `SELECT id, telegram_user_id, chat_id, chat_type, chat_label, username, status,
-		alert_order, alert_product, created_at, updated_at, accepted_at, accepted_by
+		alert_order, alert_product, alert_support, created_at, updated_at, accepted_at, accepted_by
 		FROM telegram_subscriptions`
 	args := []any{}
 	if status != "" {
@@ -155,7 +159,7 @@ func (r *TelegramRepository) List(ctx context.Context, status string) ([]domain.
 func (r *TelegramRepository) GetByID(ctx context.Context, id string) (*domain.TelegramSubscription, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, telegram_user_id, chat_id, chat_type, chat_label, username, status,
-			alert_order, alert_product, created_at, updated_at, accepted_at, accepted_by
+			alert_order, alert_product, alert_support, created_at, updated_at, accepted_at, accepted_by
 		FROM telegram_subscriptions WHERE id = $1`, id)
 	return scanSubscription(row)
 }
@@ -163,7 +167,7 @@ func (r *TelegramRepository) GetByID(ctx context.Context, id string) (*domain.Te
 func (r *TelegramRepository) FindByChatID(ctx context.Context, chatID string) (*domain.TelegramSubscription, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, telegram_user_id, chat_id, chat_type, chat_label, username, status,
-			alert_order, alert_product, created_at, updated_at, accepted_at, accepted_by
+			alert_order, alert_product, alert_support, created_at, updated_at, accepted_at, accepted_by
 		FROM telegram_subscriptions WHERE chat_id = $1`, strings.TrimSpace(chatID))
 	return scanSubscription(row)
 }
@@ -171,7 +175,7 @@ func (r *TelegramRepository) FindByChatID(ctx context.Context, chatID string) (*
 func (r *TelegramRepository) FindByUserID(ctx context.Context, userID int64) (*domain.TelegramSubscription, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, telegram_user_id, chat_id, chat_type, chat_label, username, status,
-			alert_order, alert_product, created_at, updated_at, accepted_at, accepted_by
+			alert_order, alert_product, alert_support, created_at, updated_at, accepted_at, accepted_by
 		FROM telegram_subscriptions WHERE telegram_user_id = $1`, userID)
 	return scanSubscription(row)
 }
@@ -213,6 +217,7 @@ func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.Telegr
 		Status:         domain.SubscriptionStatusAccepted,
 		AlertOrder:     in.AlertOrder,
 		AlertProduct:   in.AlertProduct,
+		AlertSupport:   in.AlertSupport,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 		AcceptedAt:     &now,
@@ -222,18 +227,19 @@ func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.Telegr
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO telegram_subscriptions (
 			id, telegram_user_id, chat_id, chat_type, chat_label, username, status,
-			alert_order, alert_product, created_at, updated_at, accepted_at, accepted_by
-		) VALUES ($1,$2,$3,'','',$4,'accepted',$5,$6,$7,$8,$9,$10)
+			alert_order, alert_product, alert_support, created_at, updated_at, accepted_at, accepted_by
+		) VALUES ($1,$2,$3,'','',$4,'accepted',$5,$6,$7,$8,$9,$10,$11)
 		ON CONFLICT (chat_id) DO UPDATE SET
 			telegram_user_id = COALESCE(EXCLUDED.telegram_user_id, telegram_subscriptions.telegram_user_id),
 			chat_label = CASE WHEN EXCLUDED.chat_label <> '' THEN EXCLUDED.chat_label ELSE telegram_subscriptions.chat_label END,
 			status = 'accepted',
 			alert_order = EXCLUDED.alert_order,
+			alert_support = EXCLUDED.alert_support,
 			alert_product = EXCLUDED.alert_product,
 			updated_at = EXCLUDED.updated_at,
 			accepted_at = EXCLUDED.accepted_at,
 			accepted_by = EXCLUDED.accepted_by`,
-		sub.ID, sub.TelegramUserID, sub.ChatID, sub.ChatLabel, sub.AlertOrder, sub.AlertProduct,
+		sub.ID, sub.TelegramUserID, sub.ChatID, sub.ChatLabel, sub.AlertOrder, sub.AlertProduct, sub.AlertSupport,
 		sub.CreatedAt, sub.UpdatedAt, sub.AcceptedAt, sub.AcceptedBy,
 	)
 	if err != nil {
@@ -252,10 +258,10 @@ func (r *TelegramRepository) Accept(ctx context.Context, id string, in ports.Tel
 	now := time.Now().UTC()
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE telegram_subscriptions
-		SET status = 'accepted', alert_order = $2, alert_product = $3,
+		SET status = 'accepted', alert_order = $2, alert_product = $3, alert_support = $6,
 		    accepted_at = $4, accepted_by = $5, updated_at = $4
 		WHERE id = $1 AND status = 'pending'`,
-		id, in.AlertOrder, in.AlertProduct, now, strings.TrimSpace(in.AcceptedBy),
+		id, in.AlertOrder, in.AlertProduct, now, strings.TrimSpace(in.AcceptedBy), in.AlertSupport,
 	)
 	if err != nil {
 		return nil, err
@@ -308,7 +314,7 @@ func scanSubscription(row scannable) (*domain.TelegramSubscription, error) {
 	var acceptedAt sql.NullTime
 	err := row.Scan(
 		&sub.ID, &userID, &sub.ChatID, &sub.ChatType, &sub.ChatLabel, &sub.Username, &sub.Status,
-		&sub.AlertOrder, &sub.AlertProduct, &sub.CreatedAt, &sub.UpdatedAt, &acceptedAt, &sub.AcceptedBy,
+		&sub.AlertOrder, &sub.AlertProduct, &sub.AlertSupport, &sub.CreatedAt, &sub.UpdatedAt, &acceptedAt, &sub.AcceptedBy,
 	)
 	if err != nil {
 		return nil, err
@@ -332,7 +338,7 @@ func scanSubscriptions(rows pgx.Rows) ([]domain.TelegramSubscription, error) {
 		var acceptedAt sql.NullTime
 		if err := rows.Scan(
 			&sub.ID, &userID, &sub.ChatID, &sub.ChatType, &sub.ChatLabel, &sub.Username, &sub.Status,
-			&sub.AlertOrder, &sub.AlertProduct, &sub.CreatedAt, &sub.UpdatedAt, &acceptedAt, &sub.AcceptedBy,
+			&sub.AlertOrder, &sub.AlertProduct, &sub.AlertSupport, &sub.CreatedAt, &sub.UpdatedAt, &acceptedAt, &sub.AcceptedBy,
 		); err != nil {
 			return nil, err
 		}

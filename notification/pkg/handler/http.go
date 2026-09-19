@@ -240,6 +240,7 @@ func (h *Handler) telegramSubscriptions(w http.ResponseWriter, r *http.Request) 
 			ChatID         string `json:"chat_id"`
 			ChatLabel      string `json:"chat_label"`
 			AlertOrder     bool   `json:"alert_order"`
+			AlertSupport   bool   `json:"alert_support"`
 			AlertProduct   bool   `json:"alert_product"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -252,6 +253,7 @@ func (h *Handler) telegramSubscriptions(w http.ResponseWriter, r *http.Request) 
 			ChatID:         req.ChatID,
 			ChatLabel:      req.ChatLabel,
 			AlertOrder:     req.AlertOrder,
+			AlertSupport:   req.AlertSupport,
 			AlertProduct:   req.AlertProduct,
 			AcceptedBy:     claims.UserID,
 		})
@@ -308,11 +310,13 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 		}
 		var req struct {
 			AlertOrder   bool `json:"alert_order"`
+			AlertSupport bool `json:"alert_support"`
 			AlertProduct bool `json:"alert_product"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		item, err := h.telegramSubs.Accept(r.Context(), id, ports.TelegramAcceptInput{
 			AlertOrder:   req.AlertOrder,
+			AlertSupport: req.AlertSupport,
 			AlertProduct: req.AlertProduct,
 			AcceptedBy:   claims.UserID,
 		})

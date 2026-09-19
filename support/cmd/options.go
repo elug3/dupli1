@@ -2,10 +2,14 @@ package main
 
 import (
 	"flag"
+	"log"
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/elug3/dupli1/support/pkg/domain"
 
 	support "github.com/elug3/dupli1/support/pkg"
 )
@@ -86,12 +90,60 @@ func applyEnv(opts *support.ServerOptions) {
 	} else if v := os.Getenv("NATS_URL"); v != "" {
 		opts.NATSURL = v
 	}
+	if v := os.Getenv("MANAGE_WEB_URL"); v != "" {
+		opts.ManageWebURL = strings.TrimRight(v, "/")
+	}
+	// Service hours are config, not code, so a seasonal change is a deploy
+	// variable. Holidays are deliberately absent — staff simply do not answer
+	// on them, and the copy names the window rather than a day.
+	if v := os.Getenv("DUPLI1_SUPPORT_HOURS_TZ"); v != "" {
+		if loc, err := time.LoadLocation(v); err == nil {
+			opts.BusinessHours.Location = loc
+		} else {
+			log.Printf("DUPLI1_SUPPORT_HOURS_TZ=%q is not a known timezone — keeping %s", v, opts.BusinessHours.Location)
+		}
+	}
+	if hour, min, ok := parseClock(os.Getenv("DUPLI1_SUPPORT_HOURS_OPEN")); ok {
+		opts.BusinessHours.OpenHour, opts.BusinessHours.OpenMin = hour, min
+	}
+	if hour, min, ok := parseClock(os.Getenv("DUPLI1_SUPPORT_HOURS_CLOSE")); ok {
+		opts.BusinessHours.CloseHour, opts.BusinessHours.CloseMin = hour, min
+	}
+	if v := os.Getenv("DUPLI1_SUPPORT_HOURS_DAYS"); v != "" {
+		if days := domain.ParseWeekdays(v); days != nil {
+			opts.BusinessHours.Weekdays = days
+		} else {
+			log.Printf("DUPLI1_SUPPORT_HOURS_DAYS=%q is not readable — keeping Monday–Friday", v)
+		}
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.JWTSecret = v
 	}
 	if v := os.Getenv("AUTH_JWKS_URL"); v != "" {
 		opts.JWKSURL = v
 	}
+}
+
+// parseClock reads "HH:MM". An unreadable value leaves the hours alone rather
+// than silently moving them.
+func parseClock(value string) (hour, min int, ok bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, 0, false
+	}
+	hourText, minText, found := strings.Cut(value, ":")
+	if !found {
+		return 0, 0, false
+	}
+	hour, err := strconv.Atoi(strings.TrimSpace(hourText))
+	if err != nil || hour < 0 || hour > 23 {
+		return 0, 0, false
+	}
+	min, err = strconv.Atoi(strings.TrimSpace(minText))
+	if err != nil || min < 0 || min > 59 {
+		return 0, 0, false
+	}
+	return hour, min, true
 }
 
 func splitAddr(addr string) (string, int, error) {

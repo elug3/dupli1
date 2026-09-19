@@ -27,11 +27,22 @@ const (
 	SubjectProductImage            = events.ProductImage
 	SubjectPaymentCanceled         = events.PaymentCanceled
 	SubjectPaymentCallbackRejected = events.PaymentCallbackRejected
+	SubjectSupportInquiryOpened    = events.SupportInquiryOpened
 )
 
 type ChatRouting interface {
 	OrderChatIDs(ctx context.Context) []string
 	ProductChatIDs(ctx context.Context) []string
+	SupportChatIDs(ctx context.Context) []string
+}
+
+// SilentNotifier is implemented by notifiers that can deliver without a ping.
+//
+// Optional on purpose: ports.Notifier stays a one-method interface, so a test
+// double or a future channel that has no such notion still satisfies it, and an
+// after-hours alert simply arrives loudly there instead of failing.
+type SilentNotifier interface {
+	SendSilent(ctx context.Context, chatID string, message string) error
 }
 
 type DispatcherConfig struct {
@@ -61,6 +72,7 @@ func (d *Dispatcher) Register(subscriber ports.EventSubscriber, ctx context.Cont
 		SubjectProductUpdated,
 		SubjectProductDeleted,
 		SubjectProductImage,
+		SubjectSupportInquiryOpened,
 	}
 	for _, subject := range subjects {
 		if err := subscriber.Subscribe(ctx, subject, d.handle); err != nil {
@@ -85,6 +97,8 @@ func (d *Dispatcher) handle(ctx context.Context, subject string, payload []byte)
 		return d.handlePaymentCallbackRejected(ctx, payload)
 	case SubjectProductCreated, SubjectProductUpdated, SubjectProductDeleted, SubjectProductImage:
 		return d.handleProduct(ctx, subject, payload)
+	case SubjectSupportInquiryOpened:
+		return d.handleSupportInquiry(ctx, payload)
 	default:
 		return nil
 	}
@@ -228,6 +242,108 @@ func (d *Dispatcher) handleProduct(ctx context.Context, subject string, payload 
 
 	message := formatProductMessage(subject, event)
 	return d.sendAll(ctx, chatIDs, message, "product event")
+}
+
+// handleSupportInquiry tells staff a shopper is waiting for a person.
+//
+// An after-hours inquiry is delivered silently: the point is that it is in the
+// queue by morning, not that someone's phone wakes them at 3am for a question
+// that cannot be answered until the window opens.
+func (d *Dispatcher) handleSupportInquiry(ctx context.Context, payload []byte) error {
+	var event events.SupportInquiry
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return fmt.Errorf("decode support inquiry event: %w", err)
+	}
+
+	chatIDs := d.supportChatIDs(ctx)
+	if len(chatIDs) == 0 {
+		// Deliberately loud: a shopper has been told a person will answer, and
+		// nobody is listening. No chat id and no message body in the log —
+		// only that the drop happened.
+		log.Printf("support inquiry %s skipped: no chat has opted into support alerts (alert_support)", event.InquiryID)
+		return nil
+	}
+
+	message := formatSupportInquiryMessage(event)
+	if event.AfterHours {
+		if silent, ok := d.notifier.(SilentNotifier); ok {
+			return d.sendAllSilent(ctx, silent, chatIDs, message)
+		}
+	}
+	return d.sendAll(ctx, chatIDs, message, "support inquiry")
+}
+
+// formatSupportInquiryMessage renders the doorbell.
+//
+// It quotes the excerpt the publisher chose and links to the manager inbox; the
+// conversation itself stays behind that authenticated screen rather than being
+// copied into an ops chat.
+func formatSupportInquiryMessage(event events.SupportInquiry) string {
+	var b strings.Builder
+	if event.AfterHours {
+		b.WriteString("🌙 <b>상담 요청</b> (영업시간 외)\n")
+	} else {
+		b.WriteString("🙋 <b>상담 요청</b>\n")
+	}
+	b.WriteString(fmt.Sprintf("문의 번호: <code>%s</code>\n", tg.EscapeHTML(event.InquiryID)))
+	if topic := supportTopicLabel(event.Topic); topic != "" {
+		b.WriteString(fmt.Sprintf("분류: %s\n", topic))
+	}
+	if user := strings.TrimSpace(event.Username); user != "" {
+		b.WriteString(fmt.Sprintf("고객: @%s\n", tg.EscapeHTML(user)))
+	}
+	if ctxHint := strings.TrimSpace(event.EntryContext); ctxHint != "" {
+		b.WriteString(fmt.Sprintf("유입: <code>%s</code>\n", tg.EscapeHTML(ctxHint)))
+	}
+	if excerpt := strings.TrimSpace(event.Excerpt); excerpt != "" {
+		b.WriteString(fmt.Sprintf("\n<blockquote>%s</blockquote>\n", tg.EscapeHTML(excerpt)))
+	}
+	if url := strings.TrimSpace(event.ManageURL); url != "" {
+		b.WriteString(fmt.Sprintf("\n<a href=\"%s\">상담 열기</a>", tg.EscapeHTML(url)))
+	}
+	return b.String()
+}
+
+// supportTopicLabel names the menu node the shopper escalated from.
+func supportTopicLabel(topic string) string {
+	switch topic {
+	case "ord", "ord.eta", "ord.trk", "ord.adr":
+		return "주문·배송"
+	case "prd":
+		return "상품·재고"
+	case "ret":
+		return "교환·반품"
+	case "pay":
+		return "결제"
+	case "agt":
+		return "상담원 연결"
+	default:
+		return ""
+	}
+}
+
+func (d *Dispatcher) sendAllSilent(ctx context.Context, silent SilentNotifier, chatIDs []string, message string) error {
+	var errs []error
+	for _, chatID := range chatIDs {
+		if err := silent.SendSilent(ctx, chatID, message); err != nil {
+			errs = append(errs, fmt.Errorf("notify support inquiry to chat %s: %w", chatID, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// supportChatIDs has no env fallback. The order and product chat ids are
+// transitional bootstrap config from before the subscription table existed; a
+// chat configured for order alerts never asked to field consultations.
+func (d *Dispatcher) supportChatIDs(ctx context.Context) []string {
+	if d.cfg.Routing == nil {
+		return nil
+	}
+	var set chatSet
+	for _, id := range d.cfg.Routing.SupportChatIDs(ctx) {
+		set.add(id)
+	}
+	return set.list()
 }
 
 func (d *Dispatcher) orderChatIDs(ctx context.Context) []string {

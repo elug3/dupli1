@@ -37,7 +37,7 @@ Product / Order / Payment services
 
 | Piece | Role |
 |-------|------|
-| `dupli1-notification` | Subscribes to NATS; formats HTML messages; sends via Bot API |
+| `dupli1-notification` | Subscribes to NATS; formats HTML messages; sends via Bot API. Also fans out customer inquiry handoffs from the support bot (`support.inquiry_opened` → chats with `alert_support`), delivered silently when the inquiry was opened outside service hours |
 | `dupli1-nats` | Event bus (`order.*`, `product.*`, `payment.succeeded` consumed indirectly via order) |
 | Telegram Bot API | Outbound `sendMessage`; inbound webhook or `getUpdates` |
 | Secrets Manager `dupli1/production/telegram` | **Bot token** (+ transitional env chat IDs) |

@@ -31,7 +31,40 @@ const (
 	ProductImage            = "product.image_uploaded"
 	UserRegistered          = "user.registered"
 	UserDeleted             = "user.deleted"
+	// SupportInquiryOpened fires when a shopper asks the support bot for a
+	// human. Published by support, consumed by notification, which owns where
+	// ops alerts go.
+	SupportInquiryOpened = "support.inquiry_opened"
 )
+
+// SupportInquiry is the payload for SupportInquiryOpened — published by
+// support, consumed by notification.
+//
+// Deliberately carries an excerpt rather than the conversation: message bodies
+// are customer data, and an ops alert is not where they belong in full. The
+// excerpt is what a manager needs to decide whether to pick the inquiry up; the
+// rest waits behind the manager inbox.
+type SupportInquiry struct {
+	InquiryID string `json:"inquiry_id"`
+	ChatID    string `json:"chat_id"`
+	// Topic is the menu node the shopper escalated from (ord, ret, agt, …).
+	Topic string `json:"topic"`
+	// Language is the entry language the storefront passed, recorded but not
+	// acted on while the bot is Korean-only.
+	Language string `json:"language"`
+	Username string `json:"username,omitempty"`
+	// EntryContext is the storefront deep-link payload: a hint about the page
+	// the shopper came from, never an identity and never a permission.
+	EntryContext string `json:"entry_context,omitempty"`
+	Excerpt      string `json:"excerpt,omitempty"`
+	// ManageURL points a manager at this inquiry in the admin console.
+	ManageURL string `json:"manage_url,omitempty"`
+	// AfterHours marks an inquiry opened outside the service window, so the
+	// alert can arrive without a ping and wait for the morning shift.
+	AfterHours bool      `json:"after_hours"`
+	OpenedAt   time.Time `json:"opened_at"`
+	Occurred   time.Time `json:"occurred_at"`
+}
 
 // OrderItem is one line of an Order event payload.
 type OrderItem struct {

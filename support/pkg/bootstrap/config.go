@@ -1,6 +1,10 @@
 package bootstrap
 
-import "time"
+import (
+	"time"
+
+	"github.com/elug3/dupli1/support/pkg/domain"
+)
 
 // Config holds everything Bootstrap needs to wire the support service.
 type Config struct {
@@ -11,6 +15,8 @@ type Config struct {
 	TelegramWebhookSecret string
 	TelegramAPIBase       string
 	NATSURL               string
+	ManageWebURL          string
+	BusinessHours         domain.BusinessHours
 	JWTSecret             string
 	JWKSURL               string
 	ReadTimeout           time.Duration

@@ -182,13 +182,30 @@ func (c *Client) AnswerCallback(ctx context.Context, callbackQueryID string, tex
 	return c.callWithRetry(ctx, "answerCallbackQuery", body)
 }
 
-func (c *Client) sendMessage(ctx context.Context, chatID string, message string, enforcePolicy bool, markup *InlineKeyboardMarkup) error {
+// SendSilent is Send without the notification sound.
+//
+// For an alert that should wait rather than interrupt — an inquiry opened at
+// 3am, where the point is that it is in the queue by morning, not that someone
+// wakes up. It obeys the access policy exactly as Send does.
+func (c *Client) SendSilent(ctx context.Context, chatID string, message string) error {
+	return c.sendMessage(ctx, chatID, message, true, nil, silent)
+}
+
+// sendFlag tunes one outbound message.
+type sendFlag func(*messagePayload)
+
+func silent(p *messagePayload) { p.DisableNotification = true }
+
+func (c *Client) sendMessage(ctx context.Context, chatID string, message string, enforcePolicy bool, markup *InlineKeyboardMarkup, flags ...sendFlag) error {
 	if c == nil || c.token == "" {
 		return nil
 	}
 	payload, err := c.buildMessage(chatID, message, enforcePolicy, markup)
 	if err != nil || payload == nil {
 		return err
+	}
+	for _, flag := range flags {
+		flag(payload)
 	}
 
 	body, err := json.Marshal(payload)

@@ -146,6 +146,29 @@ func (s *TelegramSubscriptions) RoutingChats(ctx context.Context, env *ports.Tel
 	return order.list(), product.list()
 }
 
+// SupportChats returns the chats that opted into customer inquiry handoffs.
+//
+// No env fallback: the order and product chat ids are transitional bootstrap
+// config from before the subscription table existed, and a chat that never
+// asked for consultations should not start receiving them because it was
+// configured for order alerts.
+func (s *TelegramSubscriptions) SupportChats(ctx context.Context) []string {
+	var support chatSet
+	if !s.Enabled() {
+		return support.list()
+	}
+	accepted, err := s.repo.ListAccepted(ctx)
+	if err != nil {
+		return support.list()
+	}
+	for _, sub := range accepted {
+		if sub.AlertSupport {
+			support.add(sub.ChatID)
+		}
+	}
+	return support.list()
+}
+
 // chatSet collects chat IDs in insertion order, trimming blanks and repeats so
 // a chat listed in both env and the database is alerted once.
 type chatSet struct {

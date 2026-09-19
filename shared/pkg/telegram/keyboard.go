@@ -41,9 +41,12 @@ func CallbackButton(text, data string) InlineKeyboardButton {
 // present when a keyboard is attached and absent when it is not — omitempty
 // keeps the wire format byte-identical for plain messages.
 type messagePayload struct {
-	ChatID      string                `json:"chat_id"`
-	Text        string                `json:"text"`
-	ParseMode   string                `json:"parse_mode"`
-	MessageID   int64                 `json:"message_id,omitempty"`
-	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	ChatID    string `json:"chat_id"`
+	Text      string `json:"text"`
+	ParseMode string `json:"parse_mode"`
+	MessageID int64  `json:"message_id,omitempty"`
+	// DisableNotification delivers the message without a sound or vibration.
+	// Telegram still shows it; it simply does not interrupt.
+	DisableNotification bool                  `json:"disable_notification,omitempty"`
+	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
 }

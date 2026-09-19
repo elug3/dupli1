@@ -44,6 +44,34 @@ func Migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS support_conversations_last_seen_idx
 		 ON support_conversations (last_seen_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS support_inquiries (
+			id               TEXT PRIMARY KEY,
+			conversation_id  TEXT NOT NULL REFERENCES support_conversations(id),
+			chat_id          TEXT NOT NULL,
+			topic            TEXT NOT NULL,
+			status           TEXT NOT NULL,
+			assigned_to      TEXT,
+			opened_at        TIMESTAMPTZ NOT NULL,
+			closed_at        TIMESTAMPTZ
+		)`,
+		// One open inquiry per chat, enforced by the database rather than by
+		// the read-then-write in the router: two taps of "상담원 연결" landing
+		// together would otherwise queue the same shopper twice.
+		`CREATE UNIQUE INDEX IF NOT EXISTS support_inquiries_one_open_per_chat
+		 ON support_inquiries (chat_id) WHERE status <> 'closed'`,
+		`CREATE INDEX IF NOT EXISTS support_inquiries_status_idx
+		 ON support_inquiries (status, opened_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS support_messages (
+			id               TEXT PRIMARY KEY,
+			conversation_id  TEXT NOT NULL REFERENCES support_conversations(id),
+			inquiry_id       TEXT REFERENCES support_inquiries(id),
+			direction        TEXT NOT NULL,
+			author           TEXT,
+			body             TEXT NOT NULL,
+			created_at       TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS support_messages_conversation_idx
+		 ON support_messages (conversation_id, created_at DESC)`,
 		`CREATE TABLE IF NOT EXISTS support_answers (
 			node        TEXT NOT NULL,
 			language    TEXT NOT NULL DEFAULT 'ko',

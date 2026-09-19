@@ -163,6 +163,7 @@ func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.Telegr
 		if existing.ChatID == chatID {
 			existing.Status = domain.SubscriptionStatusAccepted
 			existing.AlertOrder = in.AlertOrder
+			existing.AlertSupport = in.AlertSupport
 			existing.AlertProduct = in.AlertProduct
 			existing.UpdatedAt = now
 			existing.AcceptedAt = &now
@@ -186,6 +187,7 @@ func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.Telegr
 		ChatLabel:      strings.TrimSpace(in.ChatLabel),
 		Status:         domain.SubscriptionStatusAccepted,
 		AlertOrder:     in.AlertOrder,
+		AlertSupport:   in.AlertSupport,
 		AlertProduct:   in.AlertProduct,
 		CreatedAt:      now,
 		UpdatedAt:      now,
@@ -208,6 +210,7 @@ func (r *TelegramRepository) Accept(ctx context.Context, id string, in ports.Tel
 	now := time.Now().UTC()
 	sub.Status = domain.SubscriptionStatusAccepted
 	sub.AlertOrder = in.AlertOrder
+	sub.AlertSupport = in.AlertSupport
 	sub.AlertProduct = in.AlertProduct
 	sub.AcceptedAt = &now
 	sub.AcceptedBy = strings.TrimSpace(in.AcceptedBy)

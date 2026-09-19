@@ -32,6 +32,8 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		TelegramWebhookSecret: opts.TelegramWebhookSecret,
 		TelegramAPIBase:       opts.TelegramAPIBase,
 		NATSURL:               opts.NATSURL,
+		ManageWebURL:          opts.ManageWebURL,
+		BusinessHours:         opts.BusinessHours,
 		JWTSecret:             opts.JWTSecret,
 		JWKSURL:               opts.JWKSURL,
 		ReadTimeout:           opts.ReadTimeout,

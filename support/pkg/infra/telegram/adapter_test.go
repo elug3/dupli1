@@ -36,7 +36,12 @@ func (b *capturingBot) AnswerCallback(_ context.Context, id string, _ string) er
 func newProcessor() (*telegraminfra.UpdateProcessor, *capturingBot, *memory.ConversationRepository) {
 	repo := memory.NewConversationRepository()
 	bot := &capturingBot{}
-	router := service.NewRouter(repo, memory.NewAnswerRepository(), bot, func() string { return "conv-1" }, nil)
+	router := service.NewRouter(service.Deps{
+		Conversations: repo,
+		Answers:       memory.NewAnswerRepository(),
+		Bot:           bot,
+		NewID:         func() string { return "conv-1" },
+	})
 	return &telegraminfra.UpdateProcessor{Router: router}, bot, repo
 }
 

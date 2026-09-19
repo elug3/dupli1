@@ -226,10 +226,12 @@ func TestDispatcherFallsBackToOccurredAt(t *testing.T) {
 type stubChatRouting struct {
 	orderChats   []string
 	productChats []string
+	supportChats []string
 }
 
 func (s *stubChatRouting) OrderChatIDs(_ context.Context) []string   { return s.orderChats }
 func (s *stubChatRouting) ProductChatIDs(_ context.Context) []string { return s.productChats }
+func (s *stubChatRouting) SupportChatIDs(_ context.Context) []string { return s.supportChats }
 
 func TestDispatcherProductCreated(t *testing.T) {
 	notifier := &recordedNotifier{}

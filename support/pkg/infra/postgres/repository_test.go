@@ -207,3 +207,74 @@ func TestAnswerBodyIsEmptyForAnUnknownNode(t *testing.T) {
 		t.Fatalf("body = %q, want empty so the seeded fallback takes over", body)
 	}
 }
+
+func TestAMessageCanBeRecordedOnAChatsVeryFirstUpdate(t *testing.T) {
+	// support_messages carries a foreign key to support_conversations, so the
+	// conversation has to be saved before anything references it. Getting the
+	// order wrong took down the whole update — menu included — the first time a
+	// shopper ever wrote, and only a real database showed it.
+	db := requirePostgres(t)
+	ctx := context.Background()
+	chatID, convID := freshChat(t, db)
+	now := time.Now().UTC()
+
+	conversations := postgres.NewConversationRepository(db)
+	messages := postgres.NewMessageRepository(db)
+
+	if err := conversations.Save(ctx, domain.NewConversation(convID, chatID, now)); err != nil {
+		t.Fatalf("save conversation: %v", err)
+	}
+	err := messages.Append(ctx, &domain.Message{
+		ID:             convID + "-msg",
+		ConversationID: convID,
+		Direction:      domain.DirectionInbound,
+		Body:           "주문번호 01HXYZ 인데 배송이 안 와요",
+		CreatedAt:      now,
+	})
+	if err != nil {
+		t.Fatalf("append message: %v", err)
+	}
+
+	body, err := messages.LastInbound(ctx, convID)
+	if err != nil {
+		t.Fatalf("last inbound: %v", err)
+	}
+	if body != "주문번호 01HXYZ 인데 배송이 안 와요" {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+func TestOnlyOneInquiryPerChatCanBeOpen(t *testing.T) {
+	// The router checks before inserting, but two taps landing together would
+	// both pass that check. The partial unique index is what actually stops a
+	// shopper being queued twice.
+	db := requirePostgres(t)
+	ctx := context.Background()
+	chatID, convID := freshChat(t, db)
+	now := time.Now().UTC()
+
+	if err := postgres.NewConversationRepository(db).Save(ctx, domain.NewConversation(convID, chatID, now)); err != nil {
+		t.Fatalf("save conversation: %v", err)
+	}
+	inquiries := postgres.NewInquiryRepository(db)
+	if err := inquiries.Save(ctx, domain.NewInquiry(convID+"-a", convID, chatID, domain.NodeAgent, now)); err != nil {
+		t.Fatalf("first inquiry: %v", err)
+	}
+	if err := inquiries.Save(ctx, domain.NewInquiry(convID+"-b", convID, chatID, domain.NodeAgent, now)); err == nil {
+		t.Fatal("a second open inquiry for one chat must be refused by the database")
+	}
+
+	// Closing the first frees the chat for a later, separate consultation.
+	first, err := inquiries.FindOpenByChatID(ctx, chatID)
+	if err != nil || first == nil {
+		t.Fatalf("find open: (%v, %v)", first, err)
+	}
+	closed := now.Add(time.Hour)
+	first.Status, first.ClosedAt = domain.InquiryClosed, &closed
+	if err := inquiries.Save(ctx, first); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if err := inquiries.Save(ctx, domain.NewInquiry(convID+"-b", convID, chatID, domain.NodeAgent, closed)); err != nil {
+		t.Fatalf("second consultation after closing: %v", err)
+	}
+}

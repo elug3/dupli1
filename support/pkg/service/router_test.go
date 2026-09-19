@@ -46,16 +46,67 @@ func (b *fakeBot) AnswerCallback(_ context.Context, callbackQueryID string, _ st
 	return nil
 }
 
-func newRouter() (*service.Router, *fakeBot, *memory.ConversationRepository) {
-	repo := memory.NewConversationRepository()
-	bot := &fakeBot{}
-	fixed := time.Date(2026, 9, 19, 11, 0, 0, 0, time.UTC)
+// openHours is a Thursday at 11:00 KST — inside the service window.
+var openHours = time.Date(2026, 9, 17, 11, 0, 0, 0, seoul())
+
+func seoul() *time.Location {
+	loc, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		return time.FixedZone("KST", 9*60*60)
+	}
+	return loc
+}
+
+type harness struct {
+	router        *service.Router
+	bot           *fakeBot
+	conversations *memory.ConversationRepository
+	inquiries     *memory.InquiryRepository
+	messages      *memory.MessageRepository
+	published     *fakePublisher
+}
+
+type fakePublisher struct {
+	opened []ports.InquiryOpened
+	err    error
+}
+
+func (p *fakePublisher) InquiryOpened(_ context.Context, in ports.InquiryOpened) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.opened = append(p.opened, in)
+	return nil
+}
+
+func newHarnessAt(now time.Time) *harness {
+	h := &harness{
+		bot:           &fakeBot{},
+		conversations: memory.NewConversationRepository(),
+		inquiries:     memory.NewInquiryRepository(),
+		messages:      memory.NewMessageRepository(),
+		published:     &fakePublisher{},
+	}
 	n := 0
-	router := service.NewRouter(repo, memory.NewAnswerRepository(), bot, func() string {
-		n++
-		return "conv-" + string(rune('0'+n))
-	}, func() time.Time { return fixed })
-	return router, bot, repo
+	h.router = service.NewRouter(service.Deps{
+		Conversations: h.conversations,
+		Answers:       memory.NewAnswerRepository(),
+		Inquiries:     h.inquiries,
+		Messages:      h.messages,
+		Publisher:     h.published,
+		Bot:           h.bot,
+		NewID: func() string {
+			n++
+			return "id-" + string(rune('0'+n))
+		},
+		Now: func() time.Time { return now },
+	})
+	return h
+}
+
+func newRouter() (*service.Router, *fakeBot, *memory.ConversationRepository) {
+	h := newHarnessAt(openHours)
+	return h.router, h.bot, h.conversations
 }
 
 func TestStartOpensTheRootMenu(t *testing.T) {
@@ -277,8 +328,13 @@ func TestStoredCopyBeatsTheSeededDefault(t *testing.T) {
 	// text a deploy shipped.
 	repo := memory.NewConversationRepository()
 	bot := &fakeBot{}
-	answers := &stubAnswers{body: "<b>직접 수정한 안내</b>"}
-	router := service.NewRouter(repo, answers, bot, func() string { return "conv-1" }, nil)
+	router := service.NewRouter(service.Deps{
+		Conversations: repo,
+		Answers:       &stubAnswers{body: "<b>직접 수정한 안내</b>"},
+		Bot:           bot,
+		NewID:         func() string { return "conv-1" },
+		Now:           func() time.Time { return openHours },
+	})
 
 	err := router.Handle(t.Context(), service.Inbound{
 		ChatID: "42", ChatType: "private", MessageID: 5,
@@ -297,7 +353,13 @@ func TestMissingCopyFallsBackToTheSeededText(t *testing.T) {
 	// a single missing row would otherwise kill the node.
 	repo := memory.NewConversationRepository()
 	bot := &fakeBot{}
-	router := service.NewRouter(repo, &stubAnswers{body: "  "}, bot, func() string { return "conv-1" }, nil)
+	router := service.NewRouter(service.Deps{
+		Conversations: repo,
+		Answers:       &stubAnswers{body: "  "},
+		Bot:           bot,
+		NewID:         func() string { return "conv-1" },
+		Now:           func() time.Time { return openHours },
+	})
 
 	err := router.Handle(t.Context(), service.Inbound{
 		ChatID: "42", ChatType: "private", MessageID: 5,
@@ -324,7 +386,7 @@ func TestRepeatVisitorKeepsOneConversation(t *testing.T) {
 	_ = router.Handle(ctx, service.Inbound{ChatID: "42", ChatType: "private", Text: "hello", TelegramUserID: &userID, Username: "shopper"})
 
 	saved, _ := repo.FindByChatID(ctx, "42")
-	if saved.ID != "conv-1" {
+	if saved.ID != "id-1" {
 		t.Fatalf("conversation id = %q, want the original row reused", saved.ID)
 	}
 	if saved.TelegramUserID == nil || *saved.TelegramUserID != 99 || saved.Username != "shopper" {

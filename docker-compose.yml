@@ -463,6 +463,8 @@ services:
       TELEGRAM_SUPPORT_BOT_TOKEN: ${TELEGRAM_SUPPORT_BOT_TOKEN:-}
       TELEGRAM_SUPPORT_WEBHOOK_URL: ${TELEGRAM_SUPPORT_WEBHOOK_URL:-}
       TELEGRAM_SUPPORT_WEBHOOK_SECRET: ${TELEGRAM_SUPPORT_WEBHOOK_SECRET:-}
+      # Deep link staff follow from an ops alert into the manager inbox.
+      MANAGE_WEB_URL: ${MANAGE_WEB_URL:-http://localhost:5173}
       AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
       NATS_URL: nats://nats:4222
