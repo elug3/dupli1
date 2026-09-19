@@ -55,6 +55,23 @@ resp.Storage = settings.StorageMode(dbURL)
 mux.HandleFunc("/settings", settings.Handler(resp))
 ```
 
+### `pkg/telegram`
+
+Telegram Bot API transport, shared by every bot this platform runs. Sends and replies with retry and backoff, redacts the bot token from any error that would otherwise carry it into a log line, registers webhooks, long-polls `getUpdates`, escapes HTML, and truncates to Telegram's 4096-character limit without cutting a tag in half.
+
+It deliberately holds no policy of its own: `AccessPolicy` is the client's only view of who may be messaged, so an ops bot can allowlist a handful of chats while a customer bot answers anyone, with the same transport underneath.
+
+```go
+import "github.com/elug3/dupli1/shared/pkg/telegram"
+
+client := telegram.NewClient(botToken, nil)
+client.SetAccessPolicy(policy) // your own rule for who may be messaged
+_ = client.Send(ctx, chatID, "<b>주문</b> 도착")
+
+// Inbound: webhook, or polling when no webhook URL is configured.
+go telegram.RunPoller(ctx, client, handler) // handler implements Handle(ctx, Update) error
+```
+
 ### Testing
 
 ```bash

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/elug3/dupli1/notification/pkg/domain"
+	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 )
 
 // SubscriptionLookup resolves stored Telegram subscriptions for inbound messages.
@@ -27,9 +28,9 @@ type SubscriptionInput struct {
 
 // UpdateProcessor handles Telegram updates from webhook or getUpdates.
 type UpdateProcessor struct {
-	Client *Client
+	Client *tg.Client
 	Lookup SubscriptionLookup
-	Policy AccessPolicy
+	Policy tg.AccessPolicy
 }
 
 // Handle registers and answers an inbound Telegram message.
@@ -39,7 +40,7 @@ type UpdateProcessor struct {
 // stranger, left a pending row no manager recognises. The pending
 // acknowledgement is sent once, when the row is created — repeating /start
 // while a manager has not acted yet is silent.
-func (p *UpdateProcessor) Handle(ctx context.Context, update Update) error {
+func (p *UpdateProcessor) Handle(ctx context.Context, update tg.Update) error {
 	if p == nil || update.Message == nil {
 		return nil
 	}
@@ -98,7 +99,7 @@ func (p *UpdateProcessor) Handle(ctx context.Context, update Update) error {
 //
 // A failure here is logged rather than returned: the reply is the part the
 // sender is waiting on, and a stale label is not worth losing it over.
-func (p *UpdateProcessor) refreshMetadata(ctx context.Context, sub *domain.TelegramSubscription, msg *Message, userID *int64) {
+func (p *UpdateProcessor) refreshMetadata(ctx context.Context, sub *domain.TelegramSubscription, msg *tg.Message, userID *int64) {
 	if p.Lookup == nil || sub == nil {
 		return
 	}
@@ -127,7 +128,7 @@ func metadataChanged(sub *domain.TelegramSubscription, in SubscriptionInput) boo
 	return false
 }
 
-func (p *UpdateProcessor) subscriptionInput(msg *Message, userID *int64) SubscriptionInput {
+func (p *UpdateProcessor) subscriptionInput(msg *tg.Message, userID *int64) SubscriptionInput {
 	in := SubscriptionInput{
 		ChatID:    msg.Chat.FormatID(),
 		ChatType:  msg.Chat.Type,
@@ -149,14 +150,14 @@ func (p *UpdateProcessor) findExisting(ctx context.Context, chatID string, userI
 
 // reply answers a command with Reply rather than Send: a pending chat is not
 // outbound-allowlisted yet, so the ack has to bypass AllowsChat.
-func (p *UpdateProcessor) reply(ctx context.Context, msg *Message, text string) error {
+func (p *UpdateProcessor) reply(ctx context.Context, msg *tg.Message, text string) error {
 	if p.Client == nil {
 		return nil
 	}
 	return p.Client.Reply(ctx, msg.Chat.FormatID(), text)
 }
 
-func chatLabelText(chat Chat) string {
+func chatLabelText(chat tg.Chat) string {
 	switch strings.TrimSpace(chat.Type) {
 	case "private":
 		if name := strings.TrimSpace(chat.FirstName); name != "" {

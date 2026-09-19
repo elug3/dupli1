@@ -9,14 +9,15 @@ import (
 	"github.com/elug3/dupli1/notification/pkg/infra/memory"
 	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
 	"github.com/elug3/dupli1/notification/pkg/service"
+	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 )
 
-func startUpdate(chatTitle string, chatID int64) telegram.Update {
-	return telegram.Update{
-		Message: &telegram.Message{
+func startUpdate(chatTitle string, chatID int64) tg.Update {
+	return tg.Update{
+		Message: &tg.Message{
 			Text: "/start",
-			From: &telegram.User{ID: 4242, Username: "ops_lead"},
-			Chat: telegram.Chat{ID: chatID, Type: "group", Title: chatTitle},
+			From: &tg.User{ID: 4242, Username: "ops_lead"},
+			Chat: tg.Chat{ID: chatID, Type: "group", Title: chatTitle},
 		},
 	}
 }
@@ -34,7 +35,7 @@ func TestUpdateProcessorRefreshesRenamedChat(t *testing.T) {
 	repo := memory.NewTelegramRepository()
 	subs := service.NewTelegramSubscriptions(repo)
 	processor := &telegram.UpdateProcessor{
-		Client: telegram.NewTestClient("test-token", srv.Client(), srv.URL),
+		Client: tg.NewTestClient("test-token", srv.Client(), srv.URL),
 		Lookup: service.NewSubscriptionLookup(subs),
 	}
 
@@ -83,7 +84,7 @@ func TestUpdateProcessorSkipsUnchangedMetadata(t *testing.T) {
 		Status:    domain.SubscriptionStatusAccepted,
 	}}
 	processor := &telegram.UpdateProcessor{
-		Client: telegram.NewTestClient("test-token", srv.Client(), srv.URL),
+		Client: tg.NewTestClient("test-token", srv.Client(), srv.URL),
 		Lookup: lookup,
 	}
 

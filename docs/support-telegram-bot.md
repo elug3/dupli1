@@ -2,7 +2,7 @@
 
 Design spec for the **customer-facing** Telegram inquiry bot: menu-driven consultation, conversation state, and handoff to a human operator.
 
-**Status:** Proposed — not implemented. No code, schema, or infrastructure for this exists yet. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
+**Status:** Phase 0 complete (the Bot API client now lives in `shared/pkg/telegram`); Phases 1–7 not started. No `support` service, schema, or infrastructure exists yet. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
 
 **Scope (Tier 2):** inline-keyboard consultation menus, canned answers, and human handoff. **Out of scope (Tier 3):** authenticated order lookups ("where is my order?"), which need a Telegram↔customer identity binding — see [Deferred: authenticated lookups](#deferred-authenticated-lookups).
 
@@ -42,7 +42,7 @@ The storefront's floating Telegram button (`dupli1-web`, `app/components/telegra
 
 Decided. Three independent reasons:
 
-1. **One token owns one update stream.** The existing code already names this failure: `ErrUpdatesConflict` (`notification/pkg/infra/telegram/updates.go:19`) is Telegram's `409` when a second consumer polls the same bot, or when a webhook is registered while something polls. Sharing a token means one webhook and one router serving two unrelated audiences.
+1. **One token owns one update stream.** The existing code already names this failure: `ErrUpdatesConflict` (`shared/pkg/telegram/updates.go`) is Telegram's `409` when a second consumer polls the same bot, or when a webhook is registered while something polls. Sharing a token means one webhook and one router serving two unrelated audiences.
 2. **Opposite trust models.** The ops bot is closed by construction: an unknown chat is parked as `pending` and hears nothing until a manager accepts it (`notification/pkg/infra/telegram/processor.go`), and `TELEGRAM_ALLOWED_USER_IDS` gates inbound commands. A customer bot must answer a stranger on the first message and must never allowlist anyone.
 3. **Blast radius.** A flood, a spam wave, or a formatting bug on the customer side must not be able to disturb the channel where paid-order alerts land.
 
@@ -104,16 +104,16 @@ support/
 
 ## What must be built in the Bot API client
 
-The current client cannot express a menu. Four concrete gaps, all in `notification/pkg/infra/telegram/` today:
+The current client cannot express a menu. Four concrete gaps, all in `shared/pkg/telegram/` since Phase 0:
 
 | Gap | Where it is today | What is needed |
 |---|---|---|
-| No `reply_markup` | `client.go:133` marshals a `map[string]string` of exactly `chat_id`, `text`, `parse_mode` | Typed payload struct with optional `reply_markup` (inline keyboard) |
-| Button taps never arrive | `Update` decodes only `message` (`updates.go:46`); `SetWebhook` registers `allowed_updates: ["message"]` (`updates.go:152`) | `CallbackQuery` type + `"callback_query"` in `allowed_updates` |
+| No `reply_markup` | `sendMessage` marshals a `map[string]string` of exactly `chat_id`, `text`, `parse_mode` | Typed payload struct with optional `reply_markup` (inline keyboard) |
+| Button taps never arrive | `Update` decodes only `message`; `SetWebhook` registers `allowed_updates: ["message"]` | `CallbackQuery` type + `"callback_query"` in `allowed_updates` |
 | No `answerCallbackQuery` | absent | Required — until it is called, the button shows a spinner on the shopper's device |
 | No message edit | absent | `editMessageText` so a menu step replaces itself instead of stacking new messages |
 
-Keep from the existing client as-is: token redaction in errors (`client.go:45`), the retry/backoff budget, HTML parse mode, and the 4096-char truncation.
+Keep from the existing client as-is: token redaction in errors (`redactedError`), the retry/backoff budget, HTML parse mode, and the 4096-char truncation.
 
 ### Bot API constraints that shape the design
 
@@ -367,7 +367,7 @@ This runs straight into the ABAC rule that the JWT `sub` must match the resource
 
 | Phase | Work | Done when |
 |---|---|---|
-| **0** | Extract the Bot API client to `shared/pkg/telegram`, verbatim. `notification` imports it | `cd notification && go test ./...` passes unchanged; no behavior diff |
+| **0** ✅ | Extract the Bot API client to `shared/pkg/telegram`. `notification` imports it | **Done.** Both suites green, all 33 telegram test functions preserved; `notification` keeps only ops-specific code |
 | **1** | Extend `shared/pkg/telegram`: typed send payload with `reply_markup`, `CallbackQuery`, `answerCallbackQuery`, `editMessageText` | Unit tests against a fake API server, as `NewTestClient` already allows |
 | **2** | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route. Uses a throwaway `@BotFather` bot, not the production account | `/start` answers with the root menu locally |
 | **3** | Menu router, conversation state, Postgres repos, canned answers + seed | Every node reachable; stale callbacks degrade to the root menu |
@@ -383,7 +383,7 @@ Phases 0–1 are prerequisites with no user-visible change and can land first, i
 ## Testing
 
 - **Router and state machine:** table-driven unit tests over (node, input) → (next node, outbound message). No network.
-- **Bot API adapter:** fake API server, following `notification/pkg/infra/telegram/client_test.go` and `NewTestClient`.
+- **Bot API adapter:** fake API server, following `shared/pkg/telegram/client_test.go` and `NewTestClient`.
 - **Webhook handler:** secret mismatch → `403`; missing secret config → `503`; malformed update → `200` with no side effect (Telegram retries anything else).
 - **Handoff:** publish assertion on the NATS subject, plus a `notification` subscriber test that an `alert_support` chat receives it and a non-opted chat does not.
 - **Business hours:** table-driven over a fixed clock — inside the window, outside it, a weekend, and the 21:55 near-closing edge. Assert the after-hours copy names no specific day. Inject the clock; never call `time.Now()` in the hours logic, or the suite goes red at 22:00 KST.

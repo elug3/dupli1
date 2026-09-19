@@ -3,6 +3,8 @@ package telegram
 import (
 	"fmt"
 	"strings"
+
+	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 )
 
 // IsStartCommand reports whether text is a /start command (optionally with @bot suffix).
@@ -20,7 +22,7 @@ func IsStartCommand(text string) bool {
 }
 
 // FormatPendingReply is sent when a user is registered but not yet accepted.
-func FormatPendingReply(chat Chat) string {
+func FormatPendingReply(chat tg.Chat) string {
 	return fmt.Sprintf(
 		"⏳ <b>등록 요청이 접수되었습니다</b>\n\n"+
 			"%s\n"+
@@ -28,12 +30,12 @@ func FormatPendingReply(chat Chat) string {
 			"관리자가 이 채팅을 승인해야 알림이 활성화됩니다. "+
 			"승인 후 /start를 다시 사용할 수 있습니다.",
 		chatLabel(chat),
-		escapeHTML(chat.FormatID()),
+		tg.EscapeHTML(chat.FormatID()),
 	)
 }
 
 // FormatStartReply returns the welcome message for /start, including the chat ID for ops setup.
-func FormatStartReply(chat Chat) string {
+func FormatStartReply(chat tg.Chat) string {
 	chatID := chat.FormatID()
 	chatLabel := chatLabel(chat)
 
@@ -44,11 +46,11 @@ func FormatStartReply(chat Chat) string {
 			"채팅 ID: <code>%s</code>\n\n"+
 			"승인된 채팅이므로 이 채팅에서 운영 알림을 받을 수 있습니다.",
 		chatLabel,
-		escapeHTML(chatID),
+		tg.EscapeHTML(chatID),
 	)
 }
 
-func chatLabel(chat Chat) string {
+func chatLabel(chat tg.Chat) string {
 	switch strings.TrimSpace(chat.Type) {
 	case "private":
 		name := strings.TrimSpace(chat.FirstName)
@@ -56,36 +58,22 @@ func chatLabel(chat Chat) string {
 			name = strings.TrimSpace(chat.Username)
 		}
 		if name != "" {
-			return fmt.Sprintf("개인 채팅: <b>%s</b>", escapeHTML(name))
+			return fmt.Sprintf("개인 채팅: <b>%s</b>", tg.EscapeHTML(name))
 		}
 		return "개인 채팅"
 	case "group", "supergroup":
 		title := strings.TrimSpace(chat.Title)
 		if title != "" {
-			return fmt.Sprintf("그룹: <b>%s</b>", escapeHTML(title))
+			return fmt.Sprintf("그룹: <b>%s</b>", tg.EscapeHTML(title))
 		}
 		return "그룹 채팅"
 	case "channel":
 		title := strings.TrimSpace(chat.Title)
 		if title != "" {
-			return fmt.Sprintf("채널: <b>%s</b>", escapeHTML(title))
+			return fmt.Sprintf("채널: <b>%s</b>", tg.EscapeHTML(title))
 		}
 		return "채널"
 	default:
 		return "채팅"
 	}
-}
-
-// escapeHTML escapes the characters Telegram's HTML parse mode treats as
-// markup, quotes included so the same helper is safe in an attribute as well as
-// in text. Kept in step with the copy in pkg/service.
-func escapeHTML(value string) string {
-	replacer := strings.NewReplacer(
-		"&", "&amp;",
-		"<", "&lt;",
-		">", "&gt;",
-		`"`, "&quot;",
-		"'", "&#39;",
-	)
-	return replacer.Replace(strings.TrimSpace(value))
 }

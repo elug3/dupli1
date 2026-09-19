@@ -93,14 +93,6 @@ func (c *Client) SetAccessPolicy(policy AccessPolicy) {
 	}
 }
 
-// SetAllowlist configures which chats may receive outbound messages.
-// Deprecated: use SetAccessPolicy.
-func (c *Client) SetAllowlist(allowlist *Allowlist) {
-	if c != nil && allowlist != nil {
-		c.policy = allowlist
-	}
-}
-
 // Send posts a text message to the given chat ID.
 // When an access policy is set, chats that are not allowlisted are skipped (no error).
 func (c *Client) Send(ctx context.Context, chatID string, message string) error {

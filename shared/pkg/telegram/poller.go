@@ -15,9 +15,16 @@ const (
 	pollConflictBackoff = 30 * time.Second
 )
 
+// Handler processes one inbound update. Each bot supplies its own: the ops
+// bot registers chats, a customer bot walks a menu. The poller only cares that
+// something consumes an update, which is what lets this loop be shared.
+type Handler interface {
+	Handle(ctx context.Context, update Update) error
+}
+
 // DrainUpdates fetches and processes pending updates once (used after webhook setup).
-func DrainUpdates(ctx context.Context, client *Client, processor *UpdateProcessor) error {
-	if client == nil || !client.Enabled() || processor == nil {
+func DrainUpdates(ctx context.Context, client *Client, handler Handler) error {
+	if client == nil || !client.Enabled() || handler == nil {
 		return nil
 	}
 	var offset int64
@@ -33,7 +40,7 @@ func DrainUpdates(ctx context.Context, client *Client, processor *UpdateProcesso
 			if update.UpdateID >= offset {
 				offset = update.UpdateID + 1
 			}
-			if err := processor.Handle(ctx, update); err != nil {
+			if err := handler.Handle(ctx, update); err != nil {
 				log.Printf("telegram drain update: %v", err)
 			}
 		}
@@ -41,8 +48,8 @@ func DrainUpdates(ctx context.Context, client *Client, processor *UpdateProcesso
 }
 
 // RunPoller long-polls Telegram when webhook mode is not configured.
-func RunPoller(ctx context.Context, client *Client, processor *UpdateProcessor) {
-	if client == nil || !client.Enabled() || processor == nil {
+func RunPoller(ctx context.Context, client *Client, handler Handler) {
+	if client == nil || !client.Enabled() || handler == nil {
 		return
 	}
 
@@ -90,7 +97,7 @@ func RunPoller(ctx context.Context, client *Client, processor *UpdateProcessor) 
 			if update.UpdateID >= offset {
 				offset = update.UpdateID + 1
 			}
-			if err := processor.Handle(ctx, update); err != nil {
+			if err := handler.Handle(ctx, update); err != nil {
 				log.Printf("telegram handle update: %v", err)
 			}
 		}

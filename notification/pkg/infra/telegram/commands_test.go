@@ -13,6 +13,7 @@ import (
 	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
 	"github.com/elug3/dupli1/notification/pkg/ports"
 	"github.com/elug3/dupli1/notification/pkg/service"
+	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 )
 
 type stubLookup struct {
@@ -54,7 +55,7 @@ func TestIsStartCommand(t *testing.T) {
 }
 
 func TestFormatStartReplyIncludesChatID(t *testing.T) {
-	reply := telegram.FormatStartReply(telegram.Chat{
+	reply := telegram.FormatStartReply(tg.Chat{
 		ID:    -1001234567890,
 		Type:  "supergroup",
 		Title: "Dupli1 Ops",
@@ -71,7 +72,7 @@ func TestFormatStartReplyIncludesChatID(t *testing.T) {
 }
 
 func TestFormatPendingReplyIsKorean(t *testing.T) {
-	reply := telegram.FormatPendingReply(telegram.Chat{
+	reply := telegram.FormatPendingReply(tg.Chat{
 		ID:        42,
 		Type:      "private",
 		FirstName: "Alex",
@@ -105,7 +106,7 @@ func TestUpdateProcessorStartAccepted(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	client := tg.NewTestClient("test-token", srv.Client(), srv.URL)
 	access := service.NewTelegramAccess(service.NewTelegramSubscriptions(memory.NewTelegramRepository()), nil)
 	_ = access.Refresh(t.Context())
 
@@ -118,11 +119,11 @@ func TestUpdateProcessorStartAccepted(t *testing.T) {
 		}},
 	}
 
-	update := telegram.Update{
-		Message: &telegram.Message{
+	update := tg.Update{
+		Message: &tg.Message{
 			Text: "/start",
-			From: &telegram.User{ID: 42},
-			Chat: telegram.Chat{ID: 42, Type: "private", FirstName: "Alex"},
+			From: &tg.User{ID: 42},
+			Chat: tg.Chat{ID: 42, Type: "private", FirstName: "Alex"},
 		},
 	}
 	if err := processor.Handle(t.Context(), update); err != nil {
@@ -159,7 +160,7 @@ func TestUpdateProcessorStartRegistersOnceAndThenStaysQuiet(t *testing.T) {
 		t.Fatalf("refresh: %v", err)
 	}
 
-	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	client := tg.NewTestClient("test-token", srv.Client(), srv.URL)
 	client.SetAccessPolicy(access)
 	processor := &telegram.UpdateProcessor{
 		Client: client,
@@ -169,11 +170,11 @@ func TestUpdateProcessorStartRegistersOnceAndThenStaysQuiet(t *testing.T) {
 		Lookup: service.NewSubscriptionLookup(subs),
 	}
 
-	update := telegram.Update{
-		Message: &telegram.Message{
+	update := tg.Update{
+		Message: &tg.Message{
 			Text: "/start",
-			From: &telegram.User{ID: 999},
-			Chat: telegram.Chat{ID: 999, Type: "private", FirstName: "Stranger"},
+			From: &tg.User{ID: 999},
+			Chat: tg.Chat{ID: 999, Type: "private", FirstName: "Stranger"},
 		},
 	}
 
@@ -221,16 +222,16 @@ func TestUpdateProcessorDoesNotRegisterStrayMessages(t *testing.T) {
 	}
 
 	processor := &telegram.UpdateProcessor{
-		Client: telegram.NewTestClient("test-token", srv.Client(), srv.URL),
+		Client: tg.NewTestClient("test-token", srv.Client(), srv.URL),
 		Policy: access,
 		Lookup: service.NewSubscriptionLookup(subs),
 	}
 
-	update := telegram.Update{
-		Message: &telegram.Message{
+	update := tg.Update{
+		Message: &tg.Message{
 			Text: "good morning everyone",
-			From: &telegram.User{ID: 555},
-			Chat: telegram.Chat{ID: -100555, Type: "group", Title: "Some group"},
+			From: &tg.User{ID: 555},
+			Chat: tg.Chat{ID: -100555, Type: "group", Title: "Some group"},
 		},
 	}
 	if err := processor.Handle(ctx, update); err != nil {
@@ -270,7 +271,7 @@ func TestUpdateProcessorEnvAllowlistedUserSkipsRegistration(t *testing.T) {
 		t.Fatalf("refresh: %v", err)
 	}
 
-	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	client := tg.NewTestClient("test-token", srv.Client(), srv.URL)
 	client.SetAccessPolicy(access)
 	processor := &telegram.UpdateProcessor{
 		Client: client,
@@ -278,11 +279,11 @@ func TestUpdateProcessorEnvAllowlistedUserSkipsRegistration(t *testing.T) {
 		Lookup: service.NewSubscriptionLookup(subs),
 	}
 
-	update := telegram.Update{
-		Message: &telegram.Message{
+	update := tg.Update{
+		Message: &tg.Message{
 			Text: "/start",
-			From: &telegram.User{ID: 777},
-			Chat: telegram.Chat{ID: 777, Type: "private", FirstName: "Ops"},
+			From: &tg.User{ID: 777},
+			Chat: tg.Chat{ID: 777, Type: "private", FirstName: "Ops"},
 		},
 	}
 	if err := processor.Handle(ctx, update); err != nil {
@@ -307,12 +308,12 @@ func TestUpdateProcessorIgnoresOtherCommands(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := telegram.NewTestClient("test-token", srv.Client(), srv.URL)
+	client := tg.NewTestClient("test-token", srv.Client(), srv.URL)
 	processor := &telegram.UpdateProcessor{Client: client}
-	update := telegram.Update{
-		Message: &telegram.Message{
+	update := tg.Update{
+		Message: &tg.Message{
 			Text: "/help",
-			Chat: telegram.Chat{ID: 1, Type: "private"},
+			Chat: tg.Chat{ID: 1, Type: "private"},
 		},
 	}
 	if err := processor.Handle(t.Context(), update); err != nil {

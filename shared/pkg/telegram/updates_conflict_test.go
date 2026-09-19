@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
+	"github.com/elug3/dupli1/shared/pkg/telegram"
 )
 
 // Telegram answers getUpdates with 409 when a second consumer — another task,

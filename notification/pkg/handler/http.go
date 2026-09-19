@@ -19,6 +19,7 @@ import (
 	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/shared/pkg/settings"
+	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -195,7 +196,7 @@ func (h *Handler) telegramWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var update telegram.Update
+	var update tg.Update
 	if err := json.Unmarshal(body, &update); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid telegram update")
 		return
@@ -364,7 +365,7 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 // processUpdate handles an already-acknowledged webhook update. Its context is
 // the server's, not the request's: the request context is cancelled the moment
 // the response is written, which would abort the work this just promised to do.
-func (h *Handler) processUpdate(update telegram.Update) {
+func (h *Handler) processUpdate(update tg.Update) {
 	ctx, cancel := context.WithTimeout(h.updateCtx, webhookProcessTimeout)
 	defer cancel()
 	if err := h.updateProcessor.Handle(ctx, update); err != nil {

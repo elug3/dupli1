@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
+	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 )
 
 func TestAllowlistChatIDs(t *testing.T) {
@@ -29,13 +30,13 @@ func TestAllowlistUserIDs(t *testing.T) {
 func TestAllowsIncomingUserOrChat(t *testing.T) {
 	list := telegram.NewAllowlist("-1001", "", "42")
 
-	if !list.AllowsIncoming(telegram.Chat{ID: 42, Type: "private"}, &telegram.User{ID: 42}) {
+	if !list.AllowsIncoming(tg.Chat{ID: 42, Type: "private"}, &tg.User{ID: 42}) {
 		t.Fatal("expected allowed user in private chat")
 	}
-	if list.AllowsIncoming(telegram.Chat{ID: 99, Type: "private"}, &telegram.User{ID: 99}) {
+	if list.AllowsIncoming(tg.Chat{ID: 99, Type: "private"}, &tg.User{ID: 99}) {
 		t.Fatal("expected unknown user to be denied")
 	}
-	if !list.AllowsIncoming(telegram.Chat{ID: -1001, Type: "supergroup"}, nil) {
+	if !list.AllowsIncoming(tg.Chat{ID: -1001, Type: "supergroup"}, nil) {
 		t.Fatal("expected allowed group chat")
 	}
 }

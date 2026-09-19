@@ -5,9 +5,9 @@ import (
 
 	"github.com/elug3/dupli1/notification/pkg/domain"
 	"github.com/elug3/dupli1/notification/pkg/infra/memory"
-	"github.com/elug3/dupli1/notification/pkg/infra/telegram"
 	"github.com/elug3/dupli1/notification/pkg/ports"
 	"github.com/elug3/dupli1/notification/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/telegram"
 )
 
 func TestTelegramSubscriptionsAcceptAndRoute(t *testing.T) {
