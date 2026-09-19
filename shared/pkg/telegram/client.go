@@ -68,11 +68,21 @@ func NewClient(token string, httpClient *http.Client) *Client {
 	}
 }
 
-// NewTestClient creates a client that talks to a custom API base (for unit tests).
-func NewTestClient(token string, httpClient *http.Client, apiBaseURL string) *Client {
+// NewClientWithAPIBase creates a client that talks to a Bot API at a different
+// base URL than api.telegram.org.
+//
+// This exists for local development and end-to-end tests, which drive a mock
+// Bot API rather than messaging real people: a smoke test that walks a menu
+// cannot run against Telegram in CI. Production must leave the base unset.
+func NewClientWithAPIBase(token string, httpClient *http.Client, apiBaseURL string) *Client {
 	c := NewClient(token, httpClient)
 	c.apiBase = strings.TrimRight(strings.TrimSpace(apiBaseURL), "/")
 	return c
+}
+
+// NewTestClient creates a client that talks to a custom API base (for unit tests).
+func NewTestClient(token string, httpClient *http.Client, apiBaseURL string) *Client {
+	return NewClientWithAPIBase(token, httpClient, apiBaseURL)
 }
 
 func (c *Client) baseURL() string {

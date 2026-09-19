@@ -2,7 +2,7 @@
 
 Design spec for the **customer-facing** Telegram inquiry bot: menu-driven consultation, conversation state, and handoff to a human operator.
 
-**Status:** Phases 0–1 complete — the Bot API client lives in `shared/pkg/telegram` and now speaks menus (inline keyboards, `callback_query`, `answerCallbackQuery`, `editMessageText`). Phases 2–7 not started. No `support` service, schema, or infrastructure exists yet. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
+**Status:** Phases 0–2 complete — the shared Bot API client speaks menus, and the `support` service exists: it answers `/start` with the root consultation menu, acknowledges button taps, and runs in Compose (DB `5440`, service `8089`) behind `/api/v1/support/`. Phases 3–7 not started: conversations are in memory, menu taps do not yet route, and there is no handoff or manager inbox. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
 
 **Scope (Tier 2):** inline-keyboard consultation menus, canned answers, and human handoff. **Out of scope (Tier 3):** authenticated order lookups ("where is my order?"), which need a Telegram↔customer identity binding — see [Deferred: authenticated lookups](#deferred-authenticated-lookups).
 
@@ -369,7 +369,7 @@ This runs straight into the ABAC rule that the JWT `sub` must match the resource
 |---|---|---|
 | **0** ✅ | Extract the Bot API client to `shared/pkg/telegram`. `notification` imports it | **Done.** Both suites green, all 33 telegram test functions preserved; `notification` keeps only ops-specific code |
 | **1** ✅ | Extend `shared/pkg/telegram`: typed send payload with `reply_markup`, `CallbackQuery`, `answerCallbackQuery`, `editMessageText` | **Done.** 16 tests against a fake API server; `notification` needed zero source changes |
-| **2** | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route. Uses a throwaway `@BotFather` bot, not the production account | `/start` answers with the root menu locally |
+| **2** ✅ | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route, CI job | **Done.** Verified against a mock Bot API: `/start` returns the five-button root menu, a tap is acknowledged, a group chat is ignored. A throwaway `@BotFather` bot was not needed — `TELEGRAM_SUPPORT_API_BASE` points the bot at a mock instead |
 | **3** | Menu router, conversation state, Postgres repos, canned answers + seed | Every node reachable; stale callbacks degrade to the root menu |
 | **4** | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber. Business-hours window and after-hours copy | Escalation lands in the ops chat; an after-hours escalation states the service window |
 | **5** | Manager inbox API + manage-web `/support` tab (대기 / 내 상담 / 완료, claim, reply, close) + permissions | A manager claims and replies from the console, the shopper receives it, and an undeliverable reply shows as 미전송 |
@@ -387,7 +387,7 @@ Phases 0–1 are prerequisites with no user-visible change and can land first, i
 - **Webhook handler:** secret mismatch → `403`; missing secret config → `503`; malformed update → `200` with no side effect (Telegram retries anything else).
 - **Handoff:** publish assertion on the NATS subject, plus a `notification` subscriber test that an `alert_support` chat receives it and a non-opted chat does not.
 - **Business hours:** table-driven over a fixed clock — inside the window, outside it, a weekend, and the 21:55 near-closing edge. Assert the after-hours copy names no specific day. Inject the clock; never call `time.Now()` in the hours logic, or the suite goes red at 22:00 KST.
-- **Compose smoke:** a scripted `/start` → menu tap → handoff → manager reply round trip, in the style of `scripts/smoke-money-path.sh`.
+- **Compose smoke:** a scripted `/start` → menu tap → handoff → manager reply round trip, in the style of `scripts/smoke-money-path.sh`. `TELEGRAM_SUPPORT_API_BASE` points the bot at a mock Bot API so the script never messages a real person; the service logs a warning whenever that base is set, because in production it would mean the bot is not talking to Telegram.
 
 ---
 

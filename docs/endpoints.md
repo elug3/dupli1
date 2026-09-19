@@ -22,6 +22,7 @@ All services listen on port `8080` inside Docker. The nginx gateway proxies by p
 | `/api/v1/payments` | `dupli1-payment:8080` |
 | `/api/v1/payments/` | `dupli1-payment:8080` |
 | `/api/v1/notification/` | `dupli1-notification:8080` |
+| `/api/v1/support/` | `dupli1-support:8080` |
 
 Local gateway: `http://localhost:8080` (also host port 80).
 
@@ -680,3 +681,19 @@ NATS → Telegram ops alerts. Design: [notification-telegram-bot.md](notificatio
 | `DELETE` | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` | Delete subscription |
 
 Local Compose uses `getUpdates` polling when webhook URL is unset. Subscriptions persist in PostgreSQL `notifications` (`DUPLI1_NOTIFICATION_DB`, host port **5438**).
+
+---
+
+## Support Service
+
+Customer-facing Telegram consultation bot — **a different bot from the ops one above**, with its own token, webhook secret and update stream. Design: [support-telegram-bot.md](support-telegram-bot.md).
+
+| Method | Path | Permission / rule | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/support/health` | — | Health check |
+| `GET` | `/api/v1/support/settings` | — | Non-secret service settings |
+| `POST` | `/api/v1/support/telegram/webhook` | webhook secret header | Telegram Bot API webhook; serves `message` and `callback_query` |
+
+The manager inbox routes (`/api/v1/support/inquiries…`, `support.read` / `support.reply`) arrive in Phase 5 and are specced, not built.
+
+Local Compose falls back to `getUpdates` polling when `TELEGRAM_SUPPORT_WEBHOOK_URL` is unset. Conversations live in memory until the Postgres repository lands in Phase 3; the database (`support`, host port **5440**) is already provisioned by Compose.

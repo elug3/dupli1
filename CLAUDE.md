@@ -14,6 +14,7 @@ cd order && go test ./...
 cd cart && go test ./...
 cd payment && go test ./...
 cd notification && go test ./...
+cd support && go test ./...
 cd shared && go test ./...
 
 # Single package
@@ -88,6 +89,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `cart` | stdlib `net/http` | Persistent per-customer cart; enriches lines from product |
 | `payment` | stdlib `net/http` | NANO card / manager Bypass (also the local/dev testing path); publishes `payment.succeeded` via outbox |
 | `notification` | stdlib `net/http` | NATS subscriber → Telegram ops alerts |
+| `support` | stdlib `net/http` | Customer-facing Telegram consultation bot: menu router, conversation state, handoff to staff. **Separate bot and token from `notification`'s ops bot** (`TELEGRAM_SUPPORT_*`, never `TELEGRAM_*`) — one token owns one update stream. Phase 2 of [docs/support-telegram-bot.md](docs/support-telegram-bot.md); in-memory store until Phase 3 |
 | `profile` | stdlib `net/http` | Customer commerce profile (display name, phone) + saved addresses; subscribes `user.deleted` from auth to cascade-delete. Extracted per [docs/auth-profile-extension-plan.md](docs/auth-profile-extension-plan.md) Phase D |
 
 ### Product model
@@ -161,6 +163,7 @@ Order, cart, and payment use PostgreSQL when their `DUPLI1_*_DB` env var is set;
 | payment | 5437 | `payments` | `dupli1` | `dupli1_dev` |
 | notification | 5438 | `notifications` | `dupli1` | `dupli1_dev` |
 | profile | 5439 | `profiles` | `dupli1` | `dupli1_dev` |
+| support | 5440 | `support` | `dupli1` | `dupli1_dev` |
 
 Seeded owner: `admin@dupli1.com` / `password`.
 
