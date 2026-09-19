@@ -56,7 +56,33 @@ New service `support/` (`github.com/elug3/dupli1/support`), following the repo's
 
 The Bot API client is **extracted to `shared/pkg/telegram`** rather than copied. This follows the precedent already set by `shared/pkg/natspublisher`, `shared/pkg/authmiddleware`, and `shared/pkg/productclient` — each extracted when a second consumer appeared. The extraction is Phase 0 below and must be behavior-preserving for `notification`.
 
-**Alternative considered:** a second adapter inside `notification`. Rejected — it would put a public, unauthenticated surface inside the service that owns the ops alert path, against that service's documented boundary ("It is **not** a customer-facing channel"). It is cheaper by roughly one service's worth of scaffolding, so it is the fallback if the infrastructure cost is judged too high for the value.
+**Alternative considered:** a second adapter inside `notification`. Rejected — but on the strength of the cost check below, not on taste.
+
+### Is separating worth it?
+
+**Decided: yes.** The cost was measured against this repo rather than assumed, and it is smaller than the usual "one more microservice" instinct suggests.
+
+What a new service actually costs here:
+
+| Cost | Measured | Notes |
+|---|---|---|
+| Boilerplate | **~420 lines** | `profile`'s `cmd/main.go` + `cmd/options.go` + `pkg/server.go` + `pkg/bootstrap` + `pkg/options.go`, mostly copy-adapt |
+| CI | 3 entries | one job in `test.yml`, a build-matrix row and a deploy row in `aws.yml`, plus an ECR repo |
+| Database | **no new instance** | services hold their own database on the shared `dupli1-production` RDS, injected per service from Secrets Manager (`DUPLI1_*_DB`). [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md) lists RDS at $2.40 |
+| ALB / NAT | **none** | it sits behind the existing nginx gateway. Those are the expensive line items — the $50–70 idle mode is ALB + NAT |
+| Compute | **no new billing unit** | ECS on **EC2**, not Fargate: 2 × `t3.large` (16 GB) carrying ~4 GB of task reservations across 12 services. An extra 256 MB task uses headroom already paid for |
+
+The one constraint worth checking before Phase 2 is **ENI slots, not memory** — `infra/terraform/variables.tf:181` names it directly ("2×t3.large packs all services" with `awsvpcTrunking`, "without trunking, raise to ~5"). Trunking is enabled (`ecs_ec2.tf:141`), and 11 of ~20 branch-ENI slots are in use, so there is room. If that ever changes, a third instance is real money and this table needs re-reading.
+
+What separating buys, at the service level specifically (the bot-level arguments above are already satisfied by either option — the adapter would also have its own token, webhook and update stream):
+
+1. **The ops alert path is the money path's last mile.** It is how staff learn an order was paid. In one process, a customer-traffic flood, a goroutine leak, or a panic in menu rendering shares that task's CPU, DB pool and lifecycle. The single strongest argument for separation is that the failure to avoid is "nobody found out the order was paid."
+2. **Deploy independence.** Menu copy and conversation logic will change far more often than ops alerting. Each deploy of the former should not risk the latter.
+3. **Different shape of work.** `notification` is a NATS subscriber that formats outbound messages. This is a stateful, conversational, public-facing HTTP service with a manager inbox. Putting it inside would mean `notification` no longer has a one-sentence job.
+
+Honest counterweight: `notification` already exposes a public webhook, so the public surface is not new *in kind*; and one more service is one more thing to deploy, monitor, roll back and keep current. That is the real recurring cost — human, not dollar.
+
+**What is actually expensive to reverse is the module and data boundary, not the deployment topology.** A separate module can be co-located later far more easily than a tangled one can be split. That asymmetry is what settles it: separate the module now, and treat the ECS task count as the cheap, revisitable decision it is.
 
 ```
 support/
@@ -342,6 +368,7 @@ Phases 0–1 are prerequisites with no user-visible change and can land first, i
 |---|---|---|
 | **Service hours** | Weekdays 10:00–22:00 KST; closed weekends and public holidays | [Business hours](#business-hours) — config-driven window; holidays are staff behavior, not code ([no calendar](#holidays-are-not-tracked)) |
 | **Bot account** | Created later; not a prerequisite | Phases 0–5 need no real bot (see below). The handle only binds at Phase 6 |
+| **Service vs adapter** | Separate `support` service | [Is separating worth it?](#is-separating-worth-it) — measured: ~420 lines, no new RDS/ALB/NAT/instance |
 | **Language** | Korean only at launch | [Language policy](#language-policy) — `language` in the answer key now, one static notice for `en`/`zh` arrivals |
 
 ### Creating the bot later is fine
@@ -359,10 +386,9 @@ One thing to settle *before* Phase 6, not at it: whether the bot takes over `@Du
 
 ## Open questions
 
-These need a human decision before Phase 2:
+One decision still open before Phase 2:
 
 1. **Retention.** Is 180 days right for chat bodies containing customer PII?
-2. **Service vs adapter.** This spec assumes a new `support` service. If the infrastructure cost is not worth it, the fallback is a second adapter inside `notification` — same design, one less module.
 
 ---
 
