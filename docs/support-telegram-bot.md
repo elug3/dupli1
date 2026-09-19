@@ -398,7 +398,7 @@ All open questions are settled; nothing blocks Phase 0.
 | Question | Decision | Consequence |
 |---|---|---|
 | **Service hours** | Weekdays 10:00–22:00 KST; closed weekends and public holidays | [Business hours](#business-hours) — config-driven window; holidays are staff behavior, not code ([no calendar](#holidays-are-not-tracked)) |
-| **Bot account** | Created later; not a prerequisite | Phases 0–5 need no real bot (see below). The handle only binds at Phase 6 |
+| **Bot account** | Created later; not a prerequisite | Phases 0–5 need no real bot (see below). The handle binds at Phase 6, and it cannot be `@Dupli1212` — [bot usernames must end in `bot`](#the-bot-cannot-have-the-handle-dupli1212) |
 | **Service vs adapter** | Separate `support` service | [Is separating worth it?](#is-separating-worth-it) — measured: ~420 lines, no new RDS/ALB/NAT/instance |
 | **Retention** | 180 days for message bodies | Purge job in Phase 7; inquiry metadata kept |
 | **Language** | Korean only at launch | [Language policy](#language-policy) — `language` in the answer key now, one static notice for `en`/`zh` arrivals |
@@ -414,7 +414,15 @@ Nothing before Phase 6 depends on the production account:
 
 Until Phase 6 the storefront keeps pointing at `@Dupli1212` and behaves exactly as it does today, so this sequencing costs nothing.
 
-One thing to settle *before* Phase 6, not at it: whether the bot takes over `@Dupli1212` or gets its own handle. Taking it over means the human account has to be freed first, and a handle in use by a person cannot be transferred to a bot — the name has to be released and re-registered through `@BotFather`, with a gap in between during which the storefront button points at nothing. A fresh handle avoids that entirely and is the safer default unless `@Dupli1212` is already on customer-facing material.
+#### The bot cannot have the handle `@Dupli1212`
+
+**Telegram requires every bot username to end in `bot`.** The ops bot shows it already: `@MHYM7_BOT`. So `@Dupli1212` is not a name a bot can hold, freed from the human account or not — `@BotFather` refuses it.
+
+There is therefore nothing to decide and nothing to transfer. `@Dupli1212` stays the human account, the bot takes a name like `@Dupli1212_bot`, and the storefront button re-points to it at Phase 6. No release, no gap, no window where the button leads nowhere.
+
+*(An earlier revision of this doc described freeing `@Dupli1212` and re-registering it through `@BotFather`. That path does not exist, and the sequencing above replaces it.)*
+
+What Phase 6 needs is only the **username**. The token is a separate thing, issued with the bot and never in this repo: it carries full send rights as the bot, so it goes straight to Secrets Manager (`dupli1/production/telegram-support`) as `TELEGRAM_SUPPORT_BOT_TOKEN`, and the client redacts it from every error it logs.
 
 ## Docs to update when this ships
 
