@@ -185,6 +185,49 @@ This is the only change to `dupli1-web`; the button, its placement, and its rout
 
 ---
 
+## Business hours
+
+**Decided:** weekdays 10:00–22:00 **KST**, closed weekends and public holidays.
+
+### Timezone
+
+Store and compare in `Asia/Seoul` via `time.LoadLocation`, never in the container's clock — ECS tasks run UTC. Korea observes no DST, so the window is a fixed `01:00–13:00 UTC` and never crosses midnight in either zone, which means the weekday is the same in both. That is a convenience, not a licence to hardcode the UTC form: a future hours change (an evening extension, a Saturday shift) would break the equivalence silently.
+
+### Public holidays cannot be computed
+
+Seollal (설날) and Chuseok (추석) follow the lunar calendar, and substitute holidays (대체공휴일) are declared per year. No rule in code can derive them, so the calendar is **data**:
+
+```sql
+CREATE TABLE support_business_holidays (
+  holiday_date  DATE PRIMARY KEY,        -- KST calendar date
+  label         TEXT NOT NULL,           -- e.g. '설날 연휴'
+  created_by    TEXT,                    -- auth user id
+  created_at    TIMESTAMPTZ NOT NULL
+);
+```
+
+Managed from the manage-web `/support` tab (`GET`/`POST`/`DELETE /api/v1/support/holidays`, permission `support.manage`) and seeded at least one year ahead. **An empty or stale calendar fails open** — the bot treats an unlisted day as a business day, so the worst case is an inquiry queued on a holiday and answered the next morning, not a shopper told the shop is closed when it is open. A start-of-year reminder to refill the table belongs in the ops runbook; a silently empty calendar is the likeliest way this feature rots.
+
+### What changes after hours
+
+Only the **handoff** — never the self-serve path. Menus, canned answers, and the whole tree stay available 24/7; a shopper who wanted the return policy at 2am gets it at 2am.
+
+| Node | Open | Closed |
+|---|---|---|
+| Canned answers (배송 기간, 반품 정책, …) | Answer immediately | Answer immediately — unchanged |
+| Any escalation, incl. 🙋 상담원 연결 | Create inquiry, alert ops chat, promise a reply shortly | Create inquiry, state the next opening time, alert ops **quietly** |
+
+After-hours copy names the actual next opening moment, computed by walking forward from now, skipping weekends and holiday rows: *"지금은 상담 시간이 아닙니다. 남겨주신 문의는 접수되었으며, {다음 영업일} 10시부터 순서대로 답변드립니다."* Never "잠시만 기다려 주세요" outside hours — a promise the shop cannot keep is worse than a closed sign.
+
+Two edges worth handling explicitly:
+
+- **Near closing.** An inquiry opened at 21:55 should not promise same-day handling. Treat the last 15 minutes as after-hours for the *promise* only — still alert ops loudly, since someone may well still be there.
+- **Queued overnight.** The inquiry row is created either way. `support.inquiry_opened` carries `after_hours: true` so `notification` can deliver it without a ping, and the morning shift opens the `/support` inbox to a queue sorted oldest-first rather than a wall of overnight alerts.
+
+Hours live in config, not in Go constants (`DUPLI1_SUPPORT_HOURS_OPEN=10:00`, `..._CLOSE=22:00`, `..._DAYS=mon-fri`, `..._TZ=Asia/Seoul`), so a seasonal change is a deploy variable rather than a code change. A later move to manager-editable hours belongs with [manager-settings-api.md](manager-settings-api.md) if that sketch is ever built.
+
+---
+
 ## Handoff to staff
 
 When a node escalates, `support` writes the inquiry row and publishes `support.inquiry_opened` to NATS. `notification` subscribes and fans it out to the ops chats it already resolves (`notification/pkg/service/telegram_routing.go`).
@@ -195,7 +238,7 @@ New subjects in `shared/pkg/events` (one canonical contract per publisher/subscr
 
 | Subject | Payload |
 |---|---|
-| `support.inquiry_opened` | inquiry id, topic, language, entry context, first message excerpt, manage-web deep link |
+| `support.inquiry_opened` | inquiry id, topic, language, entry context, first message excerpt, manage-web deep link, `after_hours` |
 | `support.inquiry_closed` | inquiry id, resolution, handling duration |
 
 Add an `alert_support` flag to `telegram_subscriptions` so ops chats can opt into inquiry alerts independently of order and product alerts.
@@ -215,6 +258,7 @@ New tab in `dupli1-manage-web` at `/support`, using the SSR `loader`/`action` pa
 | `POST` | `/api/v1/support/inquiries/{id}/reply` | `support.reply` |
 | `POST` | `/api/v1/support/inquiries/{id}/close` | `support.reply` |
 | `GET`/`PUT` | `/api/v1/support/answers` | `support.manage` |
+| `GET`/`POST`/`DELETE` | `/api/v1/support/holidays` | `support.manage` |
 
 Gateway: one `location /api/v1/support/ { set $upstream http://dupli1-support:8080; }` block in `api/nginx.conf`, alongside the existing `/api/v1/notification/` block. The `resolver` directive stays `127.0.0.11` only.
 
@@ -254,14 +298,14 @@ This runs straight into the ABAC rule that the JWT `sub` must match the resource
 |---|---|---|
 | **0** | Extract the Bot API client to `shared/pkg/telegram`, verbatim. `notification` imports it | `cd notification && go test ./...` passes unchanged; no behavior diff |
 | **1** | Extend `shared/pkg/telegram`: typed send payload with `reply_markup`, `CallbackQuery`, `answerCallbackQuery`, `editMessageText` | Unit tests against a fake API server, as `NewTestClient` already allows |
-| **2** | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route | `/start` answers with the root menu locally |
+| **2** | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route. Uses a throwaway `@BotFather` bot, not the production account | `/start` answers with the root menu locally |
 | **3** | Menu router, conversation state, Postgres repos, canned answers + seed | Every node reachable; stale callbacks degrade to the root menu |
-| **4** | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber | Escalation lands in the ops chat |
+| **4** | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber. Business-hours window, holiday table + seed, after-hours copy | Escalation lands in the ops chat; an after-hours escalation names the next opening time |
 | **5** | Manager inbox API + manage-web `/support` tab + permissions | A manager replies from the console and the shopper receives it |
-| **6** | Storefront deep-link payload; point the button at the bot | Context arrives with the first message |
+| **6** | Storefront deep-link payload; point the button at the bot (**handle decided here**) | Context arrives with the first message |
 | **7** | Production: separate secret, webhook registration, ECS task, retention job | Live behind the floating button |
 
-Phases 0–1 are prerequisites with no user-visible change and can land first, independently. Phase 6 is the only change to `dupli1-web`.
+Phases 0–1 are prerequisites with no user-visible change and can land first, independently, and need no Telegram account at all. Phase 6 is the only change to `dupli1-web`, and the first phase that needs the real bot handle.
 
 ---
 
@@ -271,19 +315,39 @@ Phases 0–1 are prerequisites with no user-visible change and can land first, i
 - **Bot API adapter:** fake API server, following `notification/pkg/infra/telegram/client_test.go` and `NewTestClient`.
 - **Webhook handler:** secret mismatch → `403`; missing secret config → `503`; malformed update → `200` with no side effect (Telegram retries anything else).
 - **Handoff:** publish assertion on the NATS subject, plus a `notification` subscriber test that an `alert_support` chat receives it and a non-opted chat does not.
+- **Business hours:** table-driven over a fixed clock — inside the window, outside it, a weekend, a seeded holiday, the 21:55 near-closing edge, and an empty holiday table (must fail open). Inject the clock; never call `time.Now()` in the hours logic, or the suite goes red at 22:00 KST.
 - **Compose smoke:** a scripted `/start` → menu tap → handoff → manager reply round trip, in the style of `scripts/smoke-money-path.sh`.
 
 ---
+
+## Decisions taken
+
+| Question | Decision | Consequence |
+|---|---|---|
+| **Service hours** | Weekdays 10:00–22:00 KST; closed weekends and public holidays | [Business hours](#business-hours) — config-driven window, data-driven holiday calendar |
+| **Bot account** | Created later; not a prerequisite | Phases 0–5 need no real bot (see below). The handle only binds at Phase 6 |
+
+### Creating the bot later is fine
+
+Nothing before Phase 6 depends on the production account:
+
+- **Phases 0–1** touch only `shared/pkg/telegram` and run against a fake API server, exactly as `NewTestClient` already allows in `notification`'s tests. No token of any kind.
+- **Phases 2–5** need *a* token to exercise a real chat, but not *the* token. A throwaway bot from `@BotFather` costs a minute, stays in a developer's own Telegram, and is configured by env var — no code knows its name.
+- **Phase 6** is the first step that binds the handle, because that is when the storefront button re-points.
+- **Phase 7** needs the production token in Secrets Manager.
+
+Until Phase 6 the storefront keeps pointing at `@Dupli1212` and behaves exactly as it does today, so this sequencing costs nothing.
+
+One thing to settle *before* Phase 6, not at it: whether the bot takes over `@Dupli1212` or gets its own handle. Taking it over means the human account has to be freed first, and a handle in use by a person cannot be transferred to a bot — the name has to be released and re-registered through `@BotFather`, with a gap in between during which the storefront button points at nothing. A fresh handle avoids that entirely and is the safer default unless `@Dupli1212` is already on customer-facing material.
 
 ## Open questions
 
 These need a human decision before Phase 2:
 
-1. **Bot username.** `@Dupli1212` is currently a human account and the storefront button points at it. Does the bot take over that handle, or get its own (and the button re-points)?
-2. **Staffing and hours.** Handoff is only worth building if someone answers. What are the service hours, and what should the bot say outside them?
-3. **Language policy.** Korean-only at launch, or Korean + English? An unanswerable language is worse than a bot that says it only speaks Korean.
-4. **Retention.** Is 180 days right for chat bodies containing customer PII?
-5. **Service vs adapter.** This spec assumes a new `support` service. If the infrastructure cost is not worth it, the fallback is a second adapter inside `notification` — same design, one less module.
+1. **Language policy.** Korean-only at launch, or Korean + English? An unanswerable language is worse than a bot that says it only speaks Korean.
+2. **Retention.** Is 180 days right for chat bodies containing customer PII?
+3. **Service vs adapter.** This spec assumes a new `support` service. If the infrastructure cost is not worth it, the fallback is a second adapter inside `notification` — same design, one less module.
+4. **Holiday calendar ownership.** Who refills `support_business_holidays` each year, and where does that reminder live?
 
 ---
 
