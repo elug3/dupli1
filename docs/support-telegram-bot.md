@@ -215,20 +215,15 @@ This is the only change to `dupli1-web`; the button, its placement, and its rout
 
 Store and compare in `Asia/Seoul` via `time.LoadLocation`, never in the container's clock — ECS tasks run UTC. Korea observes no DST, so the window is a fixed `01:00–13:00 UTC` and never crosses midnight in either zone, which means the weekday is the same in both. That is a convenience, not a licence to hardcode the UTC form: a future hours change (an evening extension, a Saturday shift) would break the equivalence silently.
 
-### Public holidays cannot be computed
+### Holidays are not tracked
 
-Seollal (설날) and Chuseok (추석) follow the lunar calendar, and substitute holidays (대체공휴일) are declared per year. No rule in code can derive them, so the calendar is **data**:
+**Decided: the bot has no holiday calendar.** Managers simply do not answer on public holidays, and the bot does not know which days those are.
 
-```sql
-CREATE TABLE support_business_holidays (
-  holiday_date  DATE PRIMARY KEY,        -- KST calendar date
-  label         TEXT NOT NULL,           -- e.g. '설날 연휴'
-  created_by    TEXT,                    -- auth user id
-  created_at    TIMESTAMPTZ NOT NULL
-);
-```
+This drops a table, an admin screen, a yearly seeding chore, and the single likeliest way this feature rots — a calendar nobody refills is worse than no calendar, because it is silently wrong. The Korean calendar makes that chore unavoidable otherwise: Seollal (설날) and Chuseok (추석) are lunar, and substitute holidays (대체공휴일) are declared per year, so no rule in code derives them.
 
-Managed from the manage-web `/support` tab (`GET`/`POST`/`DELETE /api/v1/support/holidays`, permission `support.manage`) and seeded at least one year ahead. **An empty or stale calendar fails open** — the bot treats an unlisted day as a business day, so the worst case is an inquiry queued on a holiday and answered the next morning, not a shopper told the shop is closed when it is open. A start-of-year reminder to refill the table belongs in the ops runbook; a silently empty calendar is the likeliest way this feature rots.
+The cost is paid in the copy, not the code: **the bot must never name a specific day it will reply.** A promise of "내일 10시부터" made on the eve of Chuseok is wrong by four days. So the after-hours message states the *window* instead of a date, which stays true on a holiday, during a holiday week, and on an ordinary Tuesday alike. Weekday and clock checks still run — weekends and nights are computed exactly as before; only holidays are invisible.
+
+If long holidays later prove painful, the cheap remedy is **one manual 휴무 toggle** in the inbox that a manager flips when leaving and clears on return — a single boolean with no yearly upkeep, not a calendar. Not specced here; noted so the option is not rebuilt from scratch.
 
 ### What changes after hours
 
@@ -237,9 +232,9 @@ Only the **handoff** — never the self-serve path. Menus, canned answers, and t
 | Node | Open | Closed |
 |---|---|---|
 | Canned answers (배송 기간, 반품 정책, …) | Answer immediately | Answer immediately — unchanged |
-| Any escalation, incl. 🙋 상담원 연결 | Create inquiry, alert ops chat, promise a reply shortly | Create inquiry, state the next opening time, alert ops **quietly** |
+| Any escalation, incl. 🙋 상담원 연결 | Create inquiry, alert ops chat, promise a reply shortly | Create inquiry, state the service window, alert ops **quietly** |
 
-After-hours copy names the actual next opening moment, computed by walking forward from now, skipping weekends and holiday rows: *"지금은 상담 시간이 아닙니다. 남겨주신 문의는 접수되었으며, {다음 영업일} 10시부터 순서대로 답변드립니다."* Never "잠시만 기다려 주세요" outside hours — a promise the shop cannot keep is worse than a closed sign.
+After-hours copy names the service window, never a date: *"지금은 상담 시간이 아닙니다. 남겨주신 문의는 접수되었으며, 영업 시간(평일 10:00–22:00)에 순차적으로 답변드립니다. 공휴일은 휴무입니다."* Never "잠시만 기다려 주세요" outside hours, and never a specific day — a promise the shop cannot keep is worse than a closed sign, and without a holiday calendar any named day is a guess. Naming the window costs the shopper nothing in precision they could have relied on anyway.
 
 Two edges worth handling explicitly:
 
@@ -280,7 +275,6 @@ Each inquiry row shows its entry language, so staff see who they are answering a
 | `POST` | `/api/v1/support/inquiries/{id}/reply` | `support.reply` |
 | `POST` | `/api/v1/support/inquiries/{id}/close` | `support.reply` |
 | `GET`/`PUT` | `/api/v1/support/answers` | `support.manage` |
-| `GET`/`POST`/`DELETE` | `/api/v1/support/holidays` | `support.manage` |
 
 Gateway: one `location /api/v1/support/ { set $upstream http://dupli1-support:8080; }` block in `api/nginx.conf`, alongside the existing `/api/v1/notification/` block. The `resolver` directive stays `127.0.0.11` only.
 
@@ -322,7 +316,7 @@ This runs straight into the ABAC rule that the JWT `sub` must match the resource
 | **1** | Extend `shared/pkg/telegram`: typed send payload with `reply_markup`, `CallbackQuery`, `answerCallbackQuery`, `editMessageText` | Unit tests against a fake API server, as `NewTestClient` already allows |
 | **2** | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route. Uses a throwaway `@BotFather` bot, not the production account | `/start` answers with the root menu locally |
 | **3** | Menu router, conversation state, Postgres repos, canned answers + seed | Every node reachable; stale callbacks degrade to the root menu |
-| **4** | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber. Business-hours window, holiday table + seed, after-hours copy | Escalation lands in the ops chat; an after-hours escalation names the next opening time |
+| **4** | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber. Business-hours window and after-hours copy | Escalation lands in the ops chat; an after-hours escalation states the service window |
 | **5** | Manager inbox API + manage-web `/support` tab + permissions | A manager replies from the console and the shopper receives it |
 | **6** | Storefront deep-link payload; point the button at the bot (**handle decided here**) | Context arrives with the first message |
 | **7** | Production: separate secret, webhook registration, ECS task, retention job | Live behind the floating button |
@@ -337,7 +331,7 @@ Phases 0–1 are prerequisites with no user-visible change and can land first, i
 - **Bot API adapter:** fake API server, following `notification/pkg/infra/telegram/client_test.go` and `NewTestClient`.
 - **Webhook handler:** secret mismatch → `403`; missing secret config → `503`; malformed update → `200` with no side effect (Telegram retries anything else).
 - **Handoff:** publish assertion on the NATS subject, plus a `notification` subscriber test that an `alert_support` chat receives it and a non-opted chat does not.
-- **Business hours:** table-driven over a fixed clock — inside the window, outside it, a weekend, a seeded holiday, the 21:55 near-closing edge, and an empty holiday table (must fail open). Inject the clock; never call `time.Now()` in the hours logic, or the suite goes red at 22:00 KST.
+- **Business hours:** table-driven over a fixed clock — inside the window, outside it, a weekend, and the 21:55 near-closing edge. Assert the after-hours copy names no specific day. Inject the clock; never call `time.Now()` in the hours logic, or the suite goes red at 22:00 KST.
 - **Compose smoke:** a scripted `/start` → menu tap → handoff → manager reply round trip, in the style of `scripts/smoke-money-path.sh`.
 
 ---
@@ -346,7 +340,7 @@ Phases 0–1 are prerequisites with no user-visible change and can land first, i
 
 | Question | Decision | Consequence |
 |---|---|---|
-| **Service hours** | Weekdays 10:00–22:00 KST; closed weekends and public holidays | [Business hours](#business-hours) — config-driven window, data-driven holiday calendar |
+| **Service hours** | Weekdays 10:00–22:00 KST; closed weekends and public holidays | [Business hours](#business-hours) — config-driven window; holidays are staff behavior, not code ([no calendar](#holidays-are-not-tracked)) |
 | **Bot account** | Created later; not a prerequisite | Phases 0–5 need no real bot (see below). The handle only binds at Phase 6 |
 | **Language** | Korean only at launch | [Language policy](#language-policy) — `language` in the answer key now, one static notice for `en`/`zh` arrivals |
 
@@ -369,7 +363,6 @@ These need a human decision before Phase 2:
 
 1. **Retention.** Is 180 days right for chat bodies containing customer PII?
 2. **Service vs adapter.** This spec assumes a new `support` service. If the infrastructure cost is not worth it, the fallback is a second adapter inside `notification` — same design, one less module.
-3. **Holiday calendar ownership.** Who refills `support_business_holidays` each year, and where does that reminder live?
 
 ---
 
