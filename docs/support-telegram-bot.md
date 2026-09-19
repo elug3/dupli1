@@ -1,0 +1,292 @@
+# Support Telegram bot (customer inquiries)
+
+Design spec for the **customer-facing** Telegram inquiry bot: menu-driven consultation, conversation state, and handoff to a human operator.
+
+**Status:** Proposed — not implemented. No code, schema, or infrastructure for this exists yet. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
+
+**Scope (Tier 2):** inline-keyboard consultation menus, canned answers, and human handoff. **Out of scope (Tier 3):** authenticated order lookups ("where is my order?"), which need a Telegram↔customer identity binding — see [Deferred: authenticated lookups](#deferred-authenticated-lookups).
+
+**Related:** [notification-telegram-bot.md](notification-telegram-bot.md), [permissions.md](permissions.md), [service-layout.md](service-layout.md), [current-state.md](current-state.md), [deployment-aws.md](deployment-aws.md).
+
+---
+
+## Purpose
+
+The storefront's floating Telegram button (`dupli1-web`, `app/components/telegram-float.tsx`) sends shoppers to a chat. Today that is a human account. This spec replaces it with a bot that answers the common questions immediately and escalates the rest to staff — the affordance Korean storefronts carry as a KakaoTalk consultation menu.
+
+```text
+                shopper taps floating button on / or /category/*
+                                │  t.me/<support_bot>?start=<context>
+                                ▼
+                      Telegram Bot API
+                                │  webhook POST (message + callback_query)
+                                ▼
+                    ┌───────────────────────┐
+                    │   dupli1-support      │  menu router + conversation state
+                    │   (new service)       │  PostgreSQL `support`
+                    └───────────┬───────────┘
+                                │ publishes support.inquiry_opened (NATS)
+                                ▼
+                          dupli1-nats
+                                │
+                                ▼
+                    dupli1-notification  ──►  ops Telegram chat
+                    (existing fan-out, unchanged routing)
+
+     manager replies from manage-web /support ──► dupli1-support ──► shopper's chat
+```
+
+---
+
+## Why a second bot, not the ops bot
+
+Decided. Three independent reasons:
+
+1. **One token owns one update stream.** The existing code already names this failure: `ErrUpdatesConflict` (`notification/pkg/infra/telegram/updates.go:19`) is Telegram's `409` when a second consumer polls the same bot, or when a webhook is registered while something polls. Sharing a token means one webhook and one router serving two unrelated audiences.
+2. **Opposite trust models.** The ops bot is closed by construction: an unknown chat is parked as `pending` and hears nothing until a manager accepts it (`notification/pkg/infra/telegram/processor.go`), and `TELEGRAM_ALLOWED_USER_IDS` gates inbound commands. A customer bot must answer a stranger on the first message and must never allowlist anyone.
+3. **Blast radius.** A flood, a spam wave, or a formatting bug on the customer side must not be able to disturb the channel where paid-order alerts land.
+
+Each bot therefore gets its own token, its own webhook URL and secret, its own database, and its own service.
+
+---
+
+## Service placement
+
+New service `support/` (`github.com/elug3/dupli1/support`), following the repo's one-module-per-service convention and the `profile` extraction as the closest template.
+
+The Bot API client is **extracted to `shared/pkg/telegram`** rather than copied. This follows the precedent already set by `shared/pkg/natspublisher`, `shared/pkg/authmiddleware`, and `shared/pkg/productclient` — each extracted when a second consumer appeared. The extraction is Phase 0 below and must be behavior-preserving for `notification`.
+
+**Alternative considered:** a second adapter inside `notification`. Rejected — it would put a public, unauthenticated surface inside the service that owns the ops alert path, against that service's documented boundary ("It is **not** a customer-facing channel"). It is cheaper by roughly one service's worth of scaffolding, so it is the fallback if the infrastructure cost is judged too high for the value.
+
+```
+support/
+├── cmd/                    # main.go, options.go (env → ServerOptions)
+└── pkg/
+    ├── domain/             # Conversation, Inquiry, MenuNode, state transitions
+    ├── service/            # Router (menu walk), Handoff, Reply
+    ├── ports/              # ConversationRepository, InquiryRepository, Publisher, Bot
+    ├── infra/
+    │   ├── telegram/       # adapter over shared/pkg/telegram: update → domain intent
+    │   ├── postgres/       # conversations, inquiries, messages
+    │   ├── memory/         # in-memory fallback (tests, local dev without DB)
+    │   └── nats/           # publish support.inquiry_opened / support.inquiry_closed
+    ├── handler/            # POST webhook (public) + manager inbox API (authed)
+    └── bootstrap/          # wiring, config, settings
+```
+
+---
+
+## What must be built in the Bot API client
+
+The current client cannot express a menu. Four concrete gaps, all in `notification/pkg/infra/telegram/` today:
+
+| Gap | Where it is today | What is needed |
+|---|---|---|
+| No `reply_markup` | `client.go:133` marshals a `map[string]string` of exactly `chat_id`, `text`, `parse_mode` | Typed payload struct with optional `reply_markup` (inline keyboard) |
+| Button taps never arrive | `Update` decodes only `message` (`updates.go:46`); `SetWebhook` registers `allowed_updates: ["message"]` (`updates.go:152`) | `CallbackQuery` type + `"callback_query"` in `allowed_updates` |
+| No `answerCallbackQuery` | absent | Required — until it is called, the button shows a spinner on the shopper's device |
+| No message edit | absent | `editMessageText` so a menu step replaces itself instead of stacking new messages |
+
+Keep from the existing client as-is: token redaction in errors (`client.go:45`), the retry/backoff budget, HTML parse mode, and the 4096-char truncation.
+
+### Bot API constraints that shape the design
+
+Verify each against the Bot API docs at implementation time; these are the documented limits the design assumes:
+
+- **`callback_data` ≤ 64 bytes.** Menu routing cannot put prose in the payload — hence the compact scheme below.
+- **`?start=` deep-link payload ≤ 64 chars**, restricted charset (`A-Z a-z 0-9 _ -`). Storefront context must be encoded, not passed as a URL.
+- **A bot cannot message a user first.** Manager replies only work because the shopper opened the chat; if they block the bot, `sendMessage` fails with `403` and the inbox must show that, not retry forever.
+- **Rate limits** (~1 message/second per chat, ~30/second overall). The reply path needs a per-chat queue, not a tight loop.
+
+---
+
+## Menu tree
+
+Root menu, sent on `/start` and reachable from every leaf via `⬅️ 처음으로`:
+
+| Button | Node | Behavior |
+|---|---|---|
+| 📦 주문·배송 문의 | `ord` | Sub-menu: 배송 기간 / 배송 조회 / 주소 변경 → canned answers; 그 외 → handoff |
+| 🛍 상품·재고 문의 | `prd` | Canned sizing/material/stock copy; deep-link context names the product when present → handoff |
+| 🔁 교환·반품 | `ret` | Policy copy (14-day window, condition rules), then handoff with the order number asked for as free text |
+| 💳 결제 문의 | `pay` | Canned payment-method copy → handoff |
+| 🙋 상담원 연결 | `agt` | Immediate handoff |
+
+Canned answers live in the database (`support_answers`), not in Go constants, so staff can edit copy from the manage-web inbox without a deploy. Seed them from a migration.
+
+**Language:** Korean first, matching the ops bot's existing message style (`notification/pkg/infra/telegram/commands.go`). The storefront supports ko/en/zh; the deep-link payload carries the shopper's active language so the bot can open in it. Ship Korean copy first, English second, Chinese when staff can service it — an unanswerable language is worse than no button.
+
+### Callback data scheme
+
+`v1:<node>:<arg>` — version prefix, 3-char node id, optional short arg. Fits 64 bytes with room to spare, and the version prefix means a menu redesign can ignore taps from a stale message rather than misroute them (Telegram keeps old messages tappable forever).
+
+Unknown or stale callback data → answer the callback, then re-send the root menu. Never error at the shopper.
+
+---
+
+## Conversation state
+
+One row per Telegram chat, plus an inquiry row per escalation.
+
+```sql
+CREATE TABLE support_conversations (
+  id              TEXT PRIMARY KEY,           -- ULID
+  chat_id         TEXT NOT NULL UNIQUE,
+  telegram_user_id BIGINT,
+  username        TEXT,
+  language        TEXT NOT NULL DEFAULT 'ko',
+  node            TEXT NOT NULL DEFAULT 'root', -- current menu node
+  entry_context   JSONB,                       -- decoded ?start= payload
+  last_seen_at    TIMESTAMPTZ NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE support_inquiries (
+  id              TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES support_conversations(id),
+  topic           TEXT NOT NULL,              -- ord | prd | ret | pay | agt
+  status          TEXT NOT NULL,              -- open | assigned | answered | closed
+  assigned_to     TEXT,                       -- auth user id
+  opened_at       TIMESTAMPTZ NOT NULL,
+  closed_at       TIMESTAMPTZ
+);
+
+CREATE TABLE support_messages (
+  id              TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES support_conversations(id),
+  inquiry_id      TEXT,
+  direction       TEXT NOT NULL,              -- inbound | outbound
+  author          TEXT,                       -- auth user id for manager replies
+  body            TEXT NOT NULL,
+  telegram_message_id BIGINT,
+  created_at      TIMESTAMPTZ NOT NULL
+);
+```
+
+Follows the repo's inline-migration convention (services migrate their own schema on startup; additive changes via `ADD COLUMN IF NOT EXISTS`). An in-memory repository backs local dev and tests when `DUPLI1_SUPPORT_DB` is unset, as order/cart/payment already do.
+
+**State is a menu position, not a wizard.** The shopper can type free text at any node; that text is stored and, if an inquiry is open, forwarded to staff. Never trap someone in a flow — a bot that ignores typed Korean because it wanted a button press is worse than no bot.
+
+---
+
+## Deep links from the storefront
+
+`telegramContactUrl()` (`dupli1-web`, `app/lib/contact.ts`) gains an optional context argument and emits `https://t.me/<bot>?start=<payload>`. The payload is a compact encoding (≤64 chars, `A-Za-z0-9_-`) of:
+
+| Field | Example | Why |
+|---|---|---|
+| surface | `h` (home) / `c` (category) / `p` (product) | Where they were |
+| ref | category slug or product ULID, shortened | What they were looking at |
+| lang | `ko` / `en` / `zh` | Open in their language |
+
+So a shopper on `/category/brand/louis-vuitton` arrives with the bot already knowing the brand, and a future product-page button arrives with the SKU. A payload that does not decode is ignored — it is a hint, never trusted input, and never a permission.
+
+This is the only change to `dupli1-web`; the button, its placement, and its route gating stay as shipped.
+
+---
+
+## Handoff to staff
+
+When a node escalates, `support` writes the inquiry row and publishes `support.inquiry_opened` to NATS. `notification` subscribes and fans it out to the ops chats it already resolves (`notification/pkg/service/telegram_routing.go`).
+
+**Why via NATS rather than sending to the ops chat directly:** `notification` owns ops-chat routing — the accepted-subscription rows, the `alert_order` / `alert_product` flags, and the env fallbacks. Two services writing to the same ops chat means two places to change when routing changes, and it would hand the customer-facing service credentials for the ops bot. This also reuses the delivery path that already exists rather than building a second one.
+
+New subjects in `shared/pkg/events` (one canonical contract per publisher/subscriber pair, per that package's stated purpose):
+
+| Subject | Payload |
+|---|---|
+| `support.inquiry_opened` | inquiry id, topic, language, entry context, first message excerpt, manage-web deep link |
+| `support.inquiry_closed` | inquiry id, resolution, handling duration |
+
+Add an `alert_support` flag to `telegram_subscriptions` so ops chats can opt into inquiry alerts independently of order and product alerts.
+
+---
+
+## Manager inbox
+
+New tab in `dupli1-manage-web` at `/support`, using the SSR `loader`/`action` pattern already used by `/telegram` (`app/lib/server/notification.server.ts`) so the browser never calls the support service directly.
+
+| Method | Route | Permission |
+|---|---|---|
+| `POST` | `/api/v1/support/telegram/webhook` | none — secret header, see below |
+| `GET` | `/api/v1/support/inquiries` | `support.read` |
+| `GET` | `/api/v1/support/inquiries/{id}` | `support.read` |
+| `POST` | `/api/v1/support/inquiries/{id}/assign` | `support.reply` |
+| `POST` | `/api/v1/support/inquiries/{id}/reply` | `support.reply` |
+| `POST` | `/api/v1/support/inquiries/{id}/close` | `support.reply` |
+| `GET`/`PUT` | `/api/v1/support/answers` | `support.manage` |
+
+Gateway: one `location /api/v1/support/ { set $upstream http://dupli1-support:8080; }` block in `api/nginx.conf`, alongside the existing `/api/v1/notification/` block. The `resolver` directive stays `127.0.0.11` only.
+
+New permissions for [permissions.md](permissions.md), plus a `support_agent` bundle granting `support.read` + `support.reply`. `support.manage` (editing canned answers) stays with `admin.*`.
+
+---
+
+## Security and privacy
+
+| Concern | Measure |
+|---|---|
+| Bot token | Secrets Manager `dupli1/production/telegram-support` — **separate secret from the ops bot**. Never in env files or CI secrets |
+| Token in logs | Reuse the existing `redactedError` wrapper — every Bot API URL carries the token in its path |
+| Webhook authenticity | Own `TELEGRAM_SUPPORT_WEBHOOK_SECRET`, constant-time compare of `X-Telegram-Bot-Api-Secret-Token`, mirroring `notification/pkg/handler/http.go:187` |
+| Abuse / flood | Per-chat rate limit and a daily message cap per chat; a chat over the cap is answered once with "잠시 후 다시 시도해 주세요" and then ignored until the window resets |
+| Customer PII | Shoppers will paste names, phone numbers and addresses into chat. Message bodies are business records: store them, but keep them out of logs entirely, and set a retention policy before launch (proposal: 180 days, then purge bodies and keep the inquiry metadata) |
+| Identity | A Telegram user ID is **not** a Dupli1 identity. No order, payment, or account data is returned to a chat under this spec. This is the hard boundary between Tier 2 and Tier 3 |
+| Channel/group abuse | Ignore updates from `channel` chat types and from groups; this bot serves private chats only |
+
+---
+
+## Deferred: authenticated lookups
+
+"어디쯤 왔나요?" answered with real order data requires binding a Telegram user to a Dupli1 customer. The intended shape, for when it is scheduled:
+
+1. A signed-in shopper opens the storefront, which mints a single-use, short-TTL token bound to their `sub`.
+2. That token is the `?start=` payload; the bot redeems it once and stores the binding.
+3. Order reads still go through the gateway under that customer's own authority.
+
+This runs straight into the ABAC rule that the JWT `sub` must match the resource owner — a Telegram user ID cannot stand in for a `sub`. Until the binding above exists and is auditable, no order data goes down this channel.
+
+---
+
+## Rollout
+
+| Phase | Work | Done when |
+|---|---|---|
+| **0** | Extract the Bot API client to `shared/pkg/telegram`, verbatim. `notification` imports it | `cd notification && go test ./...` passes unchanged; no behavior diff |
+| **1** | Extend `shared/pkg/telegram`: typed send payload with `reply_markup`, `CallbackQuery`, `answerCallbackQuery`, `editMessageText` | Unit tests against a fake API server, as `NewTestClient` already allows |
+| **2** | `support` service skeleton: module, health, settings, webhook endpoint, in-memory repos, compose entry (DB `5440`, service `8089`), nginx route | `/start` answers with the root menu locally |
+| **3** | Menu router, conversation state, Postgres repos, canned answers + seed | Every node reachable; stale callbacks degrade to the root menu |
+| **4** | Handoff: `support.inquiry_opened`, `alert_support` flag, `notification` subscriber | Escalation lands in the ops chat |
+| **5** | Manager inbox API + manage-web `/support` tab + permissions | A manager replies from the console and the shopper receives it |
+| **6** | Storefront deep-link payload; point the button at the bot | Context arrives with the first message |
+| **7** | Production: separate secret, webhook registration, ECS task, retention job | Live behind the floating button |
+
+Phases 0–1 are prerequisites with no user-visible change and can land first, independently. Phase 6 is the only change to `dupli1-web`.
+
+---
+
+## Testing
+
+- **Router and state machine:** table-driven unit tests over (node, input) → (next node, outbound message). No network.
+- **Bot API adapter:** fake API server, following `notification/pkg/infra/telegram/client_test.go` and `NewTestClient`.
+- **Webhook handler:** secret mismatch → `403`; missing secret config → `503`; malformed update → `200` with no side effect (Telegram retries anything else).
+- **Handoff:** publish assertion on the NATS subject, plus a `notification` subscriber test that an `alert_support` chat receives it and a non-opted chat does not.
+- **Compose smoke:** a scripted `/start` → menu tap → handoff → manager reply round trip, in the style of `scripts/smoke-money-path.sh`.
+
+---
+
+## Open questions
+
+These need a human decision before Phase 2:
+
+1. **Bot username.** `@Dupli1212` is currently a human account and the storefront button points at it. Does the bot take over that handle, or get its own (and the button re-points)?
+2. **Staffing and hours.** Handoff is only worth building if someone answers. What are the service hours, and what should the bot say outside them?
+3. **Language policy.** Korean-only at launch, or Korean + English? An unanswerable language is worse than a bot that says it only speaks Korean.
+4. **Retention.** Is 180 days right for chat bodies containing customer PII?
+5. **Service vs adapter.** This spec assumes a new `support` service. If the infrastructure cost is not worth it, the fallback is a second adapter inside `notification` — same design, one less module.
+
+---
+
+## Docs to update when this ships
+
+Per [AGENTS.md](../AGENTS.md) and [docs/README.md](README.md): [current-state.md](current-state.md), [api.md](api.md), [endpoints.md](endpoints.md), [openapi.yaml](openapi.yaml), [permissions.md](permissions.md), [service-layout.md](service-layout.md), and the root `CLAUDE.md` service-ownership and dev-credentials tables.
