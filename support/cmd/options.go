@@ -116,6 +116,20 @@ func applyEnv(opts *support.ServerOptions) {
 			log.Printf("DUPLI1_SUPPORT_HOURS_DAYS=%q is not readable — keeping Monday–Friday", v)
 		}
 	}
+	// Retention in whole days, because that is how the policy is written.
+	// A value of 0 disables the purge and is logged as such; an unreadable one
+	// leaves the default rather than silently keeping transcripts forever.
+	if v := os.Getenv("DUPLI1_SUPPORT_MESSAGE_RETENTION_DAYS"); v != "" {
+		days, err := strconv.Atoi(strings.TrimSpace(v))
+		switch {
+		case err != nil || days < 0:
+			log.Printf("DUPLI1_SUPPORT_MESSAGE_RETENTION_DAYS=%q is not a whole number of days — keeping the default", v)
+		case days == 0:
+			opts.MessageRetention = -1
+		default:
+			opts.MessageRetention = time.Duration(days) * 24 * time.Hour
+		}
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.JWTSecret = v
 	}

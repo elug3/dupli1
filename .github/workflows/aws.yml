@@ -52,6 +52,10 @@ jobs:
             dockerfile: Dockerfile
             context: .
             build_args: SERVICE=profile
+          - service: dupli1-support
+            dockerfile: Dockerfile
+            context: .
+            build_args: SERVICE=support
           - service: dupli1-proxy
             dockerfile: api/Dockerfile.ecs
             context: .
@@ -146,6 +150,7 @@ jobs:
           - dupli1-cart
           - dupli1-payment
           - dupli1-profile
+          - dupli1-support
           - dupli1-proxy
 
     steps:

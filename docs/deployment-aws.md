@@ -11,7 +11,7 @@ Internet → Route53 (dupli1.com / www / manage.dupli1.com / images.dupli1.com)
         → ALB (HTTPS :443, HTTP :80)
              ├── manage.dupli1.com   → dupli1-manage-web (admin)
              ├── /api/*, /gateway/* → dupli1-proxy (nginx → Cloud Map)
-             │     auth / profile / product / order / cart / payment / notification
+             │     auth / profile / product / order / cart / payment / notification / support
              └── /*                 → dupli1-web (storefront, bridge mode)
         → CloudFront (images.dupli1.com) → private S3 product-images (OAC)
          EC2 ASG (ECS capacity provider) in private subnets
@@ -28,8 +28,8 @@ Production uses **Amazon RDS PostgreSQL 16** (`dupli1-production`).
 
 | Component | Details |
 |-----------|---------|
-| Databases | `dupli1_db` (auth), `profiles`, `products`, `orders`, `cart`, `payments`, `notifications` (local Compose; wire on ECS — see [TODO.md](TODO.md)) |
-| Credentials | AWS Secrets Manager (`dupli1/production/*-db-url`, `jwt-secret`, `telegram`, `nats-token`) |
+| Databases | `dupli1_db` (auth), `profiles`, `products`, `orders`, `cart`, `payments`, `notifications`, `support` (local Compose; wire on ECS — see [TODO.md](TODO.md)) |
+| Credentials | AWS Secrets Manager (`dupli1/production/*-db-url`, `jwt-secret`, `telegram`, `telegram-support`, `nats-token`). The two Telegram secrets are separate on purpose: one token owns one update stream, so the ops bot and the customer bot cannot share one |
 | Network | Private subnets; ECS tasks + ECS instances SG → port 5432 |
 | SSL | `sslmode=require` |
 
@@ -80,6 +80,7 @@ must log in again — do it during a quiet window.
 | `dupli1-cart` | Shopping cart API |
 | `dupli1-payment` | Payments (NANO card / Bypass) |
 | `dupli1-notification` | NATS → Telegram ops alerts — see [notification-telegram-bot.md](notification-telegram-bot.md) |
+| `dupli1-support` | Customer Telegram consultation bot + manager inbox — see [support-telegram-bot.md](support-telegram-bot.md). **Written but not applied:** needs `dupli1/production/telegram-support` and `support-db-url` before it is reachable ([Deploying](support-telegram-bot.md#deploying-phase-7)) |
 | `dupli1-proxy` | nginx gateway (ALB `/api/*`, `/gateway/*`) |
 | `dupli1-web` | Public storefront (ALB default) |
 | `dupli1-manage-web` | Admin UI (`https://manage.dupli1.com`) |

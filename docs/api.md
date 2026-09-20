@@ -978,6 +978,49 @@ Health and settings (`GET /health`, `GET /api/v1/notification/health`, `GET /set
 
 ---
 
+## Support Service — `/api/v1/support`
+
+The customer consultation bot and the manager inbox behind it. The bot is a
+**different bot from notification's ops bot**, with its own token and its own
+update stream. Full design: [support-telegram-bot.md](support-telegram-bot.md).
+
+Health and settings (`GET /health`, `GET /api/v1/support/health`, `GET /settings`, `GET /api/v1/support/settings`) follow the same shape as every other stdlib service.
+
+### Inbound from Telegram
+
+`POST /api/v1/support/telegram/webhook` — authenticated by `X-Telegram-Bot-Api-Secret-Token` against `TELEGRAM_SUPPORT_WEBHOOK_SECRET`. Mismatched or missing is `403`; unconfigured is `503`; a malformed body is `200` with no side effect, because Telegram retries anything else. Locally the service falls back to `getUpdates` polling and this route is unused.
+
+### Manager inbox
+
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| GET | `/api/v1/support/inquiries` | `support.read` | List. `?queue=waiting` is the 대기 list (open, claimed by nobody), `?assigned_to=me` resolves to the caller, `?status=closed` is the 완료 list |
+| GET | `/api/v1/support/inquiries/{id}` | `support.read` | One inquiry **with its transcript** |
+| POST | `/api/v1/support/inquiries/{id}/assign` | `support.reply` | Claim it |
+| POST | `/api/v1/support/inquiries/{id}/reply` | `support.reply` | `{ "body": "…" }` — send to the shopper |
+| POST | `/api/v1/support/inquiries/{id}/close` | `support.reply` | Finish it |
+| GET / PUT | `/api/v1/support/answers` | `support.manage` | The bot's canned copy; `PUT` takes `{ "node", "body" }` |
+
+List responses carry `{"inquiries": […]}` without transcripts; single-inquiry
+responses carry `{"inquiry": {…, "transcript": […]}}`.
+
+**Inquiry JSON carries no Telegram chat id.** The shopper's identity on Telegram
+stays inside the service; the console works from the inquiry id alone.
+
+**A reply that could not be delivered is still a `200`**, with
+`{"delivered": false, "error": "undeliverable"}` and the message stored in the
+transcript with `delivery: "failed"`. The manager did their part and the record
+has to say the shopper never got it, so this is not an error response. A
+successful reply returns `{"delivered": true}`.
+
+`PUT /api/v1/support/answers` rejects an unknown `node` and an empty `body` with
+`400` — Telegram refuses to send an empty message, so an empty answer would kill
+that menu node rather than clear it.
+
+**Message bodies are purged after 180 days** (`DUPLI1_SUPPORT_MESSAGE_RETENTION_DAYS`). The purge replaces the body with a placeholder and keeps the row, so a purged transcript still shows who spoke and when.
+
+---
+
 ## Common error shape
 
 All error responses use a JSON envelope:
@@ -1072,3 +1115,12 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | POST | `/api/v1/notification/telegram/subscriptions/{id}/accept` | `notification.telegram.manage` | notification |
 | POST | `/api/v1/notification/telegram/subscriptions/{id}/reject` | `notification.telegram.manage` | notification |
 | DELETE | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` | notification |
+| GET | `/api/v1/support/health` | — | support |
+| GET | `/api/v1/support/settings` | — | support |
+| POST | `/api/v1/support/telegram/webhook` | webhook secret header | support |
+| GET | `/api/v1/support/inquiries` | `support.read` | support |
+| GET | `/api/v1/support/inquiries/{id}` | `support.read` | support |
+| POST | `/api/v1/support/inquiries/{id}/assign` | `support.reply` | support |
+| POST | `/api/v1/support/inquiries/{id}/reply` | `support.reply` | support |
+| POST | `/api/v1/support/inquiries/{id}/close` | `support.reply` | support |
+| GET/PUT | `/api/v1/support/answers` | `support.manage` | support |

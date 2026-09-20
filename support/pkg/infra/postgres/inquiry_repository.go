@@ -233,3 +233,30 @@ func (r *MessageRepository) LastInbound(ctx context.Context, conversationID stri
 	}
 	return body, nil
 }
+
+// PurgeBodies replaces the text of messages older than the cutoff.
+//
+// An UPDATE rather than a DELETE: the inquiry keeps its shape — how many
+// messages, when, from whom — while the words, which are customer data, go.
+// Rows already purged are skipped so a daily sweep does not rewrite history it
+// has already handled.
+func (r *MessageRepository) PurgeBodies(ctx context.Context, olderThan time.Time, placeholder string) (int, error) {
+	const query = `
+		UPDATE support_messages
+		   SET body = $1, delivery_error = NULL
+		 WHERE created_at < $2
+		   AND body <> $1`
+
+	result, err := r.db.ExecContext(ctx, query, placeholder, olderThan)
+	if err != nil {
+		return 0, fmt.Errorf("purge support message bodies: %w", err)
+	}
+	purged, err := result.RowsAffected()
+	if err != nil {
+		// The purge itself succeeded; only the count is unavailable. Reporting
+		// a failure here would make the caller log an error for work that was
+		// done, and retry nothing, since the rows are already rewritten.
+		return 0, nil
+	}
+	return int(purged), nil
+}

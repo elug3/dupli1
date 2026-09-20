@@ -26,6 +26,22 @@ image_tag                  = "latest"
 # starts without a DB secret and falls back to an in-memory repository.
 # profile_db_url_secret_arn = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/profile-db-url-XXXX"
 
+# The CUSTOMER consultation bot (support service). Separate secret from
+# telegram_secret_arn, which holds the OPS bot: one Telegram token owns one
+# update stream, so pointing both services at one token gets one of them a 409.
+# dupli1/production/telegram-support exists and is the variable's default;
+# override only if it is rotated to a new ARN. Its two keys:
+#   TELEGRAM_SUPPORT_BOT_TOKEN       — from @BotFather
+#   TELEGRAM_SUPPORT_WEBHOOK_SECRET  — any long random string
+# telegram_support_secret_arn = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/telegram-support-XXXX"
+
+# support_db_url_secret_arn has no production default yet — create the
+# dupli1/production/support-db-url secret (DUPLI1_SUPPORT_DB connection
+# string) and set this once it exists. Until then conversations, inquiries
+# and transcripts live in memory and every open consultation is lost on
+# deploy.
+# support_db_url_secret_arn = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/support-db-url-XXXX"
+
 # Product images CDN (CloudFront + OAC). Requires ACM SAN or *.dupli1.com.
 # product_images_cdn_aliases = ["images.dupli1.com"]
 # product_images_cdn_aliases = []  # use *.cloudfront.net only

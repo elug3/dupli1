@@ -51,6 +51,14 @@ const (
 	DeliveryFailed = "failed"
 )
 
+// PurgedBody replaces a message's text once its retention window closes.
+//
+// The row survives so the shape of the consultation does — how many messages,
+// when, and from whom — while the words themselves, which are customer data,
+// do not. A placeholder rather than an empty string because the console
+// renders it: "empty" and "expired" should not look the same to staff.
+const PurgedBody = "(보관 기간이 지나 삭제된 메시지입니다)"
+
 // Message is one line of a conversation, kept as a business record.
 //
 // Bodies hold whatever a shopper typed — names, phone numbers, addresses — so

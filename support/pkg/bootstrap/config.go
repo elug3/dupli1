@@ -10,6 +10,10 @@ import (
 // the sweeper closes it.
 const DefaultInquiryQuietPeriod = 7 * 24 * time.Hour
 
+// DefaultMessageRetention is how long a transcript keeps its words. Decided in
+// docs/support-telegram-bot.md; the inquiry's metadata outlives it.
+const DefaultMessageRetention = 180 * 24 * time.Hour
+
 // Config holds everything Bootstrap needs to wire the support service.
 type Config struct {
 	Addr                  string
@@ -24,9 +28,12 @@ type Config struct {
 	// InquiryQuietPeriod is how long an inquiry may sit untouched before it
 	// is closed automatically. Zero means DefaultInquiryQuietPeriod.
 	InquiryQuietPeriod time.Duration
-	JWTSecret          string
-	JWKSURL            string
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
-	IdleTimeout        time.Duration
+	// MessageRetention is how long message bodies are kept. Zero means
+	// DefaultMessageRetention; negative disables the purge.
+	MessageRetention time.Duration
+	JWTSecret        string
+	JWKSURL          string
+	ReadTimeout      time.Duration
+	WriteTimeout     time.Duration
+	IdleTimeout      time.Duration
 }

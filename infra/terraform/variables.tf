@@ -123,6 +123,30 @@ variable "jwt_private_key_secret_arn" {
   default     = ""
 }
 
+variable "support_db_url_secret_arn" {
+  description = "Secrets Manager ARN for support DUPLI1_SUPPORT_DB. Create dupli1/production/support-db-url before applying, then set this (or pass via tfvars). While empty the task starts with no DB and keeps conversations, inquiries and transcripts in memory — every consultation is lost on deploy."
+  type        = string
+  default     = ""
+}
+
+variable "telegram_support_secret_arn" {
+  description = "Secrets Manager ARN for the CUSTOMER consultation bot JSON (TELEGRAM_SUPPORT_BOT_TOKEN, TELEGRAM_SUPPORT_WEBHOOK_SECRET). Separate secret from telegram_secret_arn: that one holds the ops bot, and one token owns one update stream. Setting this also injects TELEGRAM_SUPPORT_WEBHOOK_URL, since a webhook registered without its secret answers 503 to every update."
+  type        = string
+  default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/telegram-support-uMiRuu"
+}
+
+variable "support_webhook_url" {
+  description = "Public URL Telegram posts consultation updates to. The ALB forwards /api/* to the gateway on any host, so the storefront domain reaches the support service. Only injected when telegram_support_secret_arn is set, because registering a webhook without its secret leaves the inbound path answering 503 for every update."
+  type        = string
+  default     = "https://dupli1.com/api/v1/support/telegram/webhook"
+}
+
+variable "support_message_retention_days" {
+  description = "How long a consultation transcript keeps its message bodies before the purge worker replaces them. Inquiry metadata (topic, timings, who handled it) survives the purge."
+  type        = number
+  default     = 180
+}
+
 variable "telegram_secret_arn" {
   description = "Secrets Manager ARN for Telegram bot JSON (TELEGRAM_BOT_TOKEN, TELEGRAM_ORDER_CHAT_ID, TELEGRAM_PRODUCT_CHAT_ID, TELEGRAM_ALLOWED_USER_IDS)."
   type        = string

@@ -239,6 +239,23 @@ func (i *Inbox) Close(ctx context.Context, id, managerID string) (*InquiryView, 
 	return i.Get(ctx, id)
 }
 
+// PurgeExpiredBodies drops the text of messages past their retention window.
+//
+// Retention is a promise to shoppers, not a cleanup nicety: a transcript holds
+// whatever they typed — names, phone numbers, addresses — so the words go on
+// schedule while the inquiry's shape stays for the record.
+func (i *Inbox) PurgeExpiredBodies(ctx context.Context, retention time.Duration) (int, error) {
+	if retention <= 0 {
+		return 0, nil
+	}
+	cutoff := i.now().Add(-retention)
+	purged, err := i.messages.PurgeBodies(ctx, cutoff, domain.PurgedBody)
+	if err != nil {
+		return 0, fmt.Errorf("purge expired message bodies: %w", err)
+	}
+	return purged, nil
+}
+
 // CloseStale finishes inquiries nobody has touched for quietFor, so the queue
 // reflects live work rather than history. Returns how many were closed.
 func (i *Inbox) CloseStale(ctx context.Context, quietFor time.Duration) (int, error) {

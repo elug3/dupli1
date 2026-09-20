@@ -66,6 +66,7 @@ locals {
     payment      = "${data.aws_ecr_repository.services["dupli1-payment"].repository_url}:${var.image_tag}"
     notification = "${data.aws_ecr_repository.services["dupli1-notification"].repository_url}:${var.image_tag}"
     profile      = "${aws_ecr_repository.profile.repository_url}:${var.image_tag}"
+    support      = "${aws_ecr_repository.support.repository_url}:${var.image_tag}"
     proxy        = "${data.aws_ecr_repository.services["dupli1-proxy"].repository_url}:${var.image_tag}"
   }
 }

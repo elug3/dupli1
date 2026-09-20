@@ -143,3 +143,19 @@ func (r *MessageRepository) LastInbound(_ context.Context, conversationID string
 	}
 	return "", nil
 }
+
+// PurgeBodies replaces the text of messages older than the cutoff.
+func (r *MessageRepository) PurgeBodies(_ context.Context, olderThan time.Time, placeholder string) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	purged := 0
+	for i := range r.rows {
+		if r.rows[i].CreatedAt.Before(olderThan) && r.rows[i].Body != placeholder {
+			r.rows[i].Body = placeholder
+			r.rows[i].DeliveryError = ""
+			purged++
+		}
+	}
+	return purged, nil
+}
