@@ -893,6 +893,8 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 
 Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices are **resolved server-side** from the catalog; `unit_price_won` is not part of the request body and is ignored if sent.
 
+**Order line snapshot.** Each stored line also carries `product_id`, `product_name` and `image_url`, captured from the catalog when the order is created and never re-read afterwards, so an order keeps showing what was bought even after the catalog changes. `product_id` is the **parent** product, which is what a storefront links the line back to. All three are `omitempty`: orders placed before a field was captured simply omit it.
+
 **Status machine**
 
 | From | To | Trigger |

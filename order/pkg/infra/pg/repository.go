@@ -173,6 +173,7 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE checkout_session_items ADD COLUMN IF NOT EXISTS sku_id TEXT`,
 	}
 	for _, stmt := range alterStmts {
@@ -477,9 +478,9 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 	}
 	for _, item := range order.Items {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO order_items (order_id, sku, sku_id, quantity, unit_price_won, product_name, image_url)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, order.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceWon, item.ProductName, item.ImageURL); err != nil {
+			INSERT INTO order_items (order_id, sku, sku_id, quantity, unit_price_won, product_id, product_name, image_url)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, order.ID, item.SKU, nullIfEmpty(item.SkuID), item.Quantity, item.UnitPriceWon, item.ProductID, item.ProductName, item.ImageURL); err != nil {
 			return err
 		}
 	}
@@ -655,7 +656,7 @@ func (r *Repository) loadOrderItemsBatch(ctx context.Context, orderIDs []string)
 	}
 	rows, err := r.pool.Query(ctx, `
 		SELECT order_id, sku, COALESCE(sku_id, ''), quantity, unit_price_won,
-			COALESCE(product_name, ''), COALESCE(image_url, '')
+			COALESCE(product_id, ''), COALESCE(product_name, ''), COALESCE(image_url, '')
 		FROM order_items
 		WHERE order_id = ANY($1)
 		ORDER BY order_id, sku
@@ -668,7 +669,8 @@ func (r *Repository) loadOrderItemsBatch(ctx context.Context, orderIDs []string)
 	for rows.Next() {
 		var orderID string
 		var item domain.OrderItem
-		if err := rows.Scan(&orderID, &item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceWon, &item.ProductName, &item.ImageURL); err != nil {
+		if err := rows.Scan(&orderID, &item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceWon,
+			&item.ProductID, &item.ProductName, &item.ImageURL); err != nil {
 			return nil, err
 		}
 		out[orderID] = append(out[orderID], item)
@@ -1008,7 +1010,8 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	order.CancelRequestedAt = cancelRequestedAt
 
 	rows, err := tx.Query(ctx, `
-		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_won
+		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_won,
+			COALESCE(product_id, ''), COALESCE(product_name, ''), COALESCE(image_url, '')
 		FROM order_items WHERE order_id = $1 ORDER BY sku
 	`, orderID)
 	if err != nil {
@@ -1017,7 +1020,8 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	defer rows.Close()
 	for rows.Next() {
 		var item domain.OrderItem
-		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceWon); err != nil {
+		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceWon,
+			&item.ProductID, &item.ProductName, &item.ImageURL); err != nil {
 			return nil, false, err
 		}
 		order.Items = append(order.Items, item)
@@ -1101,7 +1105,8 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 	order.CancelRequestedAt = cancelRequestedAt
 
 	rows, err := tx.Query(ctx, `
-		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_won
+		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_won,
+			COALESCE(product_id, ''), COALESCE(product_name, ''), COALESCE(image_url, '')
 		FROM order_items WHERE order_id = $1 ORDER BY sku
 	`, orderID)
 	if err != nil {
@@ -1110,7 +1115,8 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 	defer rows.Close()
 	for rows.Next() {
 		var item domain.OrderItem
-		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceWon); err != nil {
+		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceWon,
+			&item.ProductID, &item.ProductName, &item.ImageURL); err != nil {
 			return nil, false, err
 		}
 		order.Items = append(order.Items, item)
@@ -1196,7 +1202,8 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	order.CancelRequestedAt = cancelRequestedAt
 
 	rows, err := tx.Query(ctx, `
-		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_won
+		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_won,
+			COALESCE(product_id, ''), COALESCE(product_name, ''), COALESCE(image_url, '')
 		FROM order_items WHERE order_id = $1 ORDER BY sku
 	`, orderID)
 	if err != nil {
@@ -1205,7 +1212,8 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	defer rows.Close()
 	for rows.Next() {
 		var item domain.OrderItem
-		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceWon); err != nil {
+		if err := rows.Scan(&item.SKU, &item.SkuID, &item.Quantity, &item.UnitPriceWon,
+			&item.ProductID, &item.ProductName, &item.ImageURL); err != nil {
 			return nil, false, err
 		}
 		order.Items = append(order.Items, item)

@@ -862,6 +862,7 @@ func (s *Service) priceItems(ctx context.Context, items []domain.OrderItem) ([]d
 			SKU:          info.SKU,
 			Quantity:     item.Quantity,
 			UnitPriceWon: info.UnitPriceWon,
+			ProductID:    info.ProductID,
 			ProductName:  info.ProductName,
 			ImageURL:     info.ImageURL,
 		})

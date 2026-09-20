@@ -70,7 +70,11 @@ type OrderItem struct {
 	SKU          string `json:"sku"`
 	Quantity     int    `json:"quantity"`
 	UnitPriceWon int64  `json:"unit_price_won"` // whole KRW won
-	// ProductName and ImageURL are captured at order creation from the product catalog.
+	// ProductID, ProductName and ImageURL are captured at order creation from
+	// the product catalog. ProductID is the parent product, which is what a
+	// storefront links an order line back to; orders placed before it was
+	// captured carry an empty one.
+	ProductID   string `json:"product_id,omitempty"`
 	ProductName string `json:"product_name,omitempty"`
 	ImageURL    string `json:"image_url,omitempty"`
 	// Available is false when the variant is no longer sellable (checkout session reads).

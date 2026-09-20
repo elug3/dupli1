@@ -192,13 +192,14 @@ func TestCreateOrderIgnoresClientUnitPrice(t *testing.T) {
 	}
 }
 
-func TestCreateOrderCapturesProductNameAndImageURL(t *testing.T) {
+func TestCreateOrderCapturesProductIDNameAndImageURL(t *testing.T) {
 	ctx := t.Context()
 	product := &fakeProduct{
 		byKey: map[string]*ports.VariantInfo{
 			"BAG-001": {
 				SkuID:        "sku-bag-1",
 				SKU:          "BAG-001",
+				ProductID:    "prd-galleria",
 				UnitPriceWon: 50000,
 				ProductName:  "Prada Galleria",
 				ImageURL:     "https://cdn.example/bag.jpg",
@@ -215,6 +216,10 @@ func TestCreateOrderCapturesProductNameAndImageURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOrder: %v", err)
 	}
+	// The parent product id is what a storefront links the line back to.
+	if order.Items[0].ProductID != "prd-galleria" {
+		t.Fatalf("ProductID = %q, want prd-galleria", order.Items[0].ProductID)
+	}
 	if order.Items[0].ProductName != "Prada Galleria" {
 		t.Fatalf("ProductName = %q, want Prada Galleria", order.Items[0].ProductName)
 	}
@@ -226,7 +231,9 @@ func TestCreateOrderCapturesProductNameAndImageURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetOrder: %v", err)
 	}
-	if loaded.Items[0].ProductName != "Prada Galleria" || loaded.Items[0].ImageURL != "https://cdn.example/bag.jpg" {
+	if loaded.Items[0].ProductID != "prd-galleria" ||
+		loaded.Items[0].ProductName != "Prada Galleria" ||
+		loaded.Items[0].ImageURL != "https://cdn.example/bag.jpg" {
 		t.Fatalf("persisted snapshot lost on reload: %+v", loaded.Items[0])
 	}
 }
