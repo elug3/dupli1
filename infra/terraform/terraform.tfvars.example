@@ -29,11 +29,10 @@ image_tag                  = "latest"
 # The CUSTOMER consultation bot (support service). Separate secret from
 # telegram_secret_arn, which holds the OPS bot: one Telegram token owns one
 # update stream, so pointing both services at one token gets one of them a 409.
-# Create dupli1/production/telegram-support with two keys:
+# dupli1/production/telegram-support exists and is the variable's default;
+# override only if it is rotated to a new ARN. Its two keys:
 #   TELEGRAM_SUPPORT_BOT_TOKEN       — from @BotFather
 #   TELEGRAM_SUPPORT_WEBHOOK_SECRET  — any long random string
-# While this is unset the support task runs with an inert bot: HTTP serves,
-# nothing reaches Telegram, and the webhook URL is not injected either.
 # telegram_support_secret_arn = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/telegram-support-XXXX"
 
 # support_db_url_secret_arn has no production default yet — create the

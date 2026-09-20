@@ -130,9 +130,9 @@ variable "support_db_url_secret_arn" {
 }
 
 variable "telegram_support_secret_arn" {
-  description = "Secrets Manager ARN for the CUSTOMER consultation bot JSON (TELEGRAM_SUPPORT_BOT_TOKEN, TELEGRAM_SUPPORT_WEBHOOK_SECRET). Separate secret from telegram_secret_arn: that one holds the ops bot, and one token owns one update stream. While empty the support task runs with an inert bot — HTTP still serves, but nothing reaches Telegram."
+  description = "Secrets Manager ARN for the CUSTOMER consultation bot JSON (TELEGRAM_SUPPORT_BOT_TOKEN, TELEGRAM_SUPPORT_WEBHOOK_SECRET). Separate secret from telegram_secret_arn: that one holds the ops bot, and one token owns one update stream. Setting this also injects TELEGRAM_SUPPORT_WEBHOOK_URL, since a webhook registered without its secret answers 503 to every update."
   type        = string
-  default     = ""
+  default     = "arn:aws:secretsmanager:us-east-1:845061289093:secret:dupli1/production/telegram-support-uMiRuu"
 }
 
 variable "support_webhook_url" {
