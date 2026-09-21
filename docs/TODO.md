@@ -236,7 +236,7 @@ From the Jul 13–19 progress / quality / security check. Merged PRs from that w
 
 ### Still open from that review
 
-- [ ] **API path convention** — migrate storefront / manage-web / external callers off legacy prefixes (`/variants`, `/coupons`, `/catalog`, `/inventory`, `/checkout`, `/carts`)
+- [ ] **API path convention** — migrate storefront / manage-web / external callers off legacy prefixes (`/variants`, `/catalog`, `/inventory`, `/checkout`, `/carts`). `/coupons` is **done**: both frontends call `/api/v1/products/promotions…` as of the Phase 1 rename
 - [ ] **Remove legacy aliases** — drop dual routes + matching nginx locations once callers are migrated
 
 ### Security / quality
@@ -278,7 +278,7 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 
 ### Found while implementing SkuID + inventory merge (2026-07-10)
 
-- [ ] **Frontend repos (`dupli1-web`, `dupli1-manage-web`) legacy path + `skuId` finish** — clients prefer `skuId` for cart/inventory where known, but still call legacy prefixes (`/api/v1/inventory/*`, `/coupons`, `/catalog`, …). Migrate to canonical `/api/v1/products/…` (and peers), then drop aliases. See [frontend-product-variants-migration.md](frontend-product-variants-migration.md).
+- [ ] **Frontend repos (`dupli1-web`, `dupli1-manage-web`) legacy path + `skuId` finish** — clients prefer `skuId` for cart/inventory where known, but still call legacy prefixes (`/api/v1/inventory/*`, `/catalog`, …; `/coupons` is done). Migrate to canonical `/api/v1/products/…` (and peers), then drop aliases. See [frontend-product-variants-migration.md](frontend-product-variants-migration.md).
 
 ## AWS deployment readiness (reviewed 2026-07-13)
 
