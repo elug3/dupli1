@@ -130,6 +130,22 @@ func TestConditionsRejectUnknownAttribute(t *testing.T) {
 	}
 }
 
+// customer.paid_order_count was allowlisted before anything could supply it:
+// only order knows the number, it sends none, and the predicate failed closed,
+// so a manager could author a rule that refused every cart. Removed on
+// 2026-09-21 rather than left as a condition nothing could satisfy.
+func TestConditionsRejectThePaidOrderCountAttribute(t *testing.T) {
+	c := domain.Conditions{
+		Version: domain.ConditionsVersion,
+		All: []domain.Predicate{
+			{Attr: "customer.paid_order_count", Op: domain.OpEq, Value: 0.0},
+		},
+	}
+	if err := c.Validate(); err == nil {
+		t.Fatal("customer.paid_order_count is no longer an allowed attribute")
+	}
+}
+
 func TestConditionsRejectUnknownOp(t *testing.T) {
 	c := domain.Conditions{
 		Version: domain.ConditionsVersion,

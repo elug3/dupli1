@@ -302,36 +302,6 @@ func TestOnSaleExclusion(t *testing.T) {
 	}
 }
 
-// ── First-order-only fails closed ────────────────────────────────────────────
-
-func TestFirstOrderOnlyPredicate(t *testing.T) {
-	promo := active(fixedWon(5000))
-	promo.Conditions = domain.Conditions{
-		Version: domain.ConditionsVersion,
-		All: []domain.Predicate{
-			{Attr: domain.AttrCustomerPaidOrderCount, Op: domain.OpEq, Value: float64(0)},
-		},
-	}
-
-	ctx := cart(line("sku-1", 1, 50000))
-	ctx.PaidOrderCount = ptrInt(0)
-	if got := promo.Evaluate(ctx); !got.OK {
-		t.Fatalf("a first-time buyer should qualify, got %s/%s", got.Reason, got.SubReason)
-	}
-
-	ctx.PaidOrderCount = ptrInt(1)
-	if got := promo.Evaluate(ctx); got.OK {
-		t.Fatal("a returning buyer should not qualify")
-	}
-
-	// An unknown history must not pay out — the caller could not prove the
-	// customer is new, so the safe answer is no.
-	ctx.PaidOrderCount = nil
-	if got := promo.Evaluate(ctx); got.OK {
-		t.Fatal("an unknown paid-order count must fail closed, not grant the discount")
-	}
-}
-
 // ── Legacy rows still price ──────────────────────────────────────────────────
 
 func TestPrePhase2RowPricesFromTheLegacyDiscountColumn(t *testing.T) {

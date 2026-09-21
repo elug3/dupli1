@@ -56,8 +56,6 @@ const (
 	AttrShippingFeeWon = "shipping_fee_won"
 	AttrItemCount      = "item_count"
 
-	AttrCustomerPaidOrderCount = "customer.paid_order_count"
-
 	AttrLineCategory     = "line.category"
 	AttrLineBrandCode    = "line.brandCode"
 	AttrLineUnitPriceWon = "line.unit_price_won"
@@ -76,17 +74,22 @@ const (
 	kindBool
 )
 
+// Every attribute here is one the evaluator can actually read: the money and
+// shape of the checkout it is given, and the catalog attributes it resolves
+// itself. A `customer.paid_order_count` was allowed briefly and removed on
+// 2026-09-21 — only order knows that number, so a rule on it was refused on
+// every cart, and a manager could pick a condition nothing could satisfy. See
+// docs/product-promo-referral-code-plan.md.
 var allowedAttrs = map[string]attrKind{
-	AttrSubtotalWon:            kindNumber,
-	AttrShippingFeeWon:         kindNumber,
-	AttrItemCount:              kindNumber,
-	AttrCustomerPaidOrderCount: kindNumber,
-	AttrLineCategory:           kindString,
-	AttrLineBrandCode:          kindString,
-	AttrLineUnitPriceWon:       kindNumber,
-	AttrLineSkuID:              kindString,
-	AttrLineProductID:          kindString,
-	AttrLineOnSale:             kindBool,
+	AttrSubtotalWon:      kindNumber,
+	AttrShippingFeeWon:   kindNumber,
+	AttrItemCount:        kindNumber,
+	AttrLineCategory:     kindString,
+	AttrLineBrandCode:    kindString,
+	AttrLineUnitPriceWon: kindNumber,
+	AttrLineSkuID:        kindString,
+	AttrLineProductID:    kindString,
+	AttrLineOnSale:       kindBool,
 }
 
 // IsLineAttr reports whether an attribute is read per cart line rather than

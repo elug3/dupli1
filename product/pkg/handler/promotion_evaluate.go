@@ -24,7 +24,6 @@ func (h *Handler) EvaluatePromotion(w http.ResponseWriter, r *http.Request) {
 		Code           string                  `json:"code"`
 		CustomerID     string                  `json:"customer_id"`
 		ShippingFeeWon int64                   `json:"shipping_fee_won"`
-		PaidOrderCount *int                    `json:"paid_order_count"`
 		Lines          []domain.EvaluationLine `json:"lines"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -39,7 +38,6 @@ func (h *Handler) EvaluatePromotion(w http.ResponseWriter, r *http.Request) {
 	result := h.promotionSvc.Evaluate(r.Context(), body.Code, domain.EvaluationContext{
 		CustomerID:     body.CustomerID,
 		ShippingFeeWon: body.ShippingFeeWon,
-		PaidOrderCount: body.PaidOrderCount,
 		Lines:          body.Lines,
 	})
 	h.respondJSON(w, http.StatusOK, result)
@@ -54,7 +52,6 @@ func (h *Handler) ReservePromotion(w http.ResponseWriter, r *http.Request) {
 		OrderID        string                  `json:"order_id"`
 		CustomerID     string                  `json:"customer_id"`
 		ShippingFeeWon int64                   `json:"shipping_fee_won"`
-		PaidOrderCount *int                    `json:"paid_order_count"`
 		Lines          []domain.EvaluationLine `json:"lines"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -69,7 +66,6 @@ func (h *Handler) ReservePromotion(w http.ResponseWriter, r *http.Request) {
 	redemption, result, err := h.promotionSvc.Reserve(r.Context(), body.Code, body.OrderID, domain.EvaluationContext{
 		CustomerID:     body.CustomerID,
 		ShippingFeeWon: body.ShippingFeeWon,
-		PaidOrderCount: body.PaidOrderCount,
 		Lines:          body.Lines,
 	})
 	if err != nil {
