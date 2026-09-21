@@ -35,6 +35,10 @@ sudo docker compose up --build
 
 # End-to-end money path smoke test (stack must be running)
 BASE=http://localhost:8080 scripts/smoke-money-path.sh
+
+# Sign-up campaign dry run — auto-issue, min spend, consume, release
+# (stack must be running; enables the campaign and restores it on the way out)
+BASE=http://localhost:8080 scripts/smoke-promotion-campaign.sh
 ```
 
 **Docker note:** all `docker`/`docker compose` commands need `sudo` on this VM. The `fuse-overlayfs` storage driver is configured; standard overlayfs does not work here.

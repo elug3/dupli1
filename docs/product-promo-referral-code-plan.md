@@ -720,7 +720,7 @@ None of these are code, and none have been done:
 - [ ] `REDIS_URL` on the product ECS task, so the promotional-code rate limit is one shared window rather than one per task.
 - [ ] Run the backfill over existing accounts: `backfill-welcome-promotion -confirm` (dry-runs without `-confirm`; `-code` defaults to the campaign).
 - [ ] Enable `WELCOME50` in the admin. It is seeded **inactive** on purpose: enabling it is a manager action, not a deploy.
-- [ ] Campaign dry run against the dev stack — register, check the wallet, apply below and above the minimum spend, pay, confirm the ledger consumed it, cancel and confirm it came back.
+- [ ] Campaign dry run against the dev stack: `BASE=http://localhost:8080 scripts/smoke-promotion-campaign.sh`. It registers, waits for the auto-issued entitlement, enables the campaign, applies below and above the minimum spend, completes, pays, checks a second use is refused, cancels and checks the use came back — then restores the campaign's `active` flag to whatever it found. **Written but never executed**: this environment's egress policy blocks Docker Hub, so the stack could not be built here. Run it once locally before the marketing date.
 
 ### Full system (Phase 4)
 
