@@ -360,6 +360,11 @@ resource "aws_ecs_task_definition" "product" {
         { name = "S3_PUBLIC_ENDPOINT", value = local.product_images_public_base },
         { name = "S3_BUCKET", value = aws_s3_bucket.product_images.id },
         { name = "GUEST_COOKIE_SECURE", value = "true" },
+        # Shares the promotional-code rate-limit window across tasks. Without
+        # it each task counts attempts in its own memory, so the per-customer
+        # budget multiplies by the task count — and doubles for the length of
+        # every rolling deploy.
+        { name = "REDIS_URL", value = "redis://redis.dupli1.local:6379" },
       ]
       secrets = [
         {

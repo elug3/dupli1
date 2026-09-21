@@ -259,6 +259,13 @@ resource "aws_ecs_task_definition" "manage_web" {
         { name = "HOST", value = "0.0.0.0" },
         { name = "DUPLI1_GATEWAY_URL", value = "http://proxy.dupli1.local" },
         { name = "DUPLI1_API_BASE_URL", value = "http://proxy.dupli1.local" },
+        # Admin sessions (refresh + cached access token) live in Redis rather
+        # than a per-process Map. aws_lb_target_group.manage_web sets no
+        # stickiness and takes the default 300s deregistration delay, so a
+        # rolling deploy serves two tasks for five minutes: without shared
+        # storage a request landing on the other task finds no session, clears
+        # the cookie and signs the operator out.
+        { name = "REDIS_URL", value = "redis://redis.dupli1.local:6379" },
       ]
       logConfiguration = {
         logDriver = "awslogs"

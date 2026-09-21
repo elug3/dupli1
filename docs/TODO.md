@@ -185,7 +185,7 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
   - [x] Existing accounts are backfilled — `product/cmd/backfill-welcome-promotion`
   - [ ] **Enable `WELCOME50` in the admin** when marketing is ready; it is seeded inactive on purpose
   - [ ] **Run the backfill in production** — `backfill-welcome-promotion -code WELCOME50 -confirm` (dry-runs without `-confirm`)
-  - [ ] Set `REDIS_URL` on the product ECS task so the promotional-code rate limit is shared across tasks
+  - [x] Set `REDIS_URL` on the product ECS task so the promotional-code rate limit is shared across tasks — `infra/terraform/ecs_services.tf`; takes effect on the next `terraform apply`
   - [ ] **Close the rename window** one release after Phase 1 — drop the `coupon.*` permissions, the pre-rename routes, the dual JSON key and the nginx `/api/v1/coupons` locations ([product-promotion-rename.md](product-promotion-rename.md) § Closing the window)
 
 Defects found in the review and closed by Phase 2: expiry never compared; unlimited reuse; `discount` unvalidated on write; `ClearPromotion` unreachable; redeem public and unthrottled. All closed: the storefront wallet now reads real entitlements.
