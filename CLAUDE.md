@@ -23,8 +23,10 @@ cd order && go test ./pkg/service/...
 # Single test
 cd order && go test ./pkg/service/... -run TestCreateOrder
 
-# Postgres-backed tests (order example)
+# Postgres-backed tests — skipped when POSTGRES_URL is unset, so run them
+# explicitly. CI supplies one for auth, product and order.
 cd order && POSTGRES_URL=postgres://dupli1:dupli1_dev@localhost:5435/orders?sslmode=disable go test ./...
+cd product && POSTGRES_URL=postgres://dupli1:dupli1_dev@localhost:5433/products?sslmode=disable go test ./...
 
 # Build a service binary
 cd auth && go build ./cmd/
