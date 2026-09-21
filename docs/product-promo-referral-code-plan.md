@@ -536,7 +536,7 @@ The functional core. Everything the campaign needs except the wallet.
 4. [x] Replace the storefront profile stub with the real wallet; show eligible vs ineligible against the current cart with reasons.
 5. [x] Entitlement `revoked` support for issued-by-mistake cases.
 6. [x] Tests: register → one entitlement; **redelivered event mints nothing**; manager/service accounts get none; eligible apply → paid → no reuse; cancel restores; cannot apply another customer's entitlement; min-spend still blocks.
-7. [x] Campaign dry run against the dev stack before the marketing date.
+7. [ ] Campaign dry run against the dev stack before the marketing date — see § Before the marketing date.
 
 ### Phase 4 — Richer attributes + shipping benefit + attribution + reporting
 
@@ -692,15 +692,28 @@ advisory for that one attribute.
 
 ### Campaign go-live (Phases 1–3)
 
-- [ ] Every surface says "promotional code"; no `coupon` identifier left outside the compatibility aliases
-- [ ] Registering an account issues exactly one welcome entitlement; a redelivered `user.registered` issues none
-- [ ] Fixed ₩ benefit never exceeds the eligible subtotal, and the order total never drops below the shipping fee
-- [ ] Minimum spend is enforced at apply **and** re-checked at complete
-- [ ] `expires_at` is enforced in KST end-of-day terms; an expired code cannot be applied
-- [ ] Single-user: issue → one paid use; no transfer/reuse; another customer's entitlement is rejected
-- [ ] Cancel from `pending`/`paid` restores the use; `in_transit` cancel does not
-- [ ] Ineligible carts get explicit reason codes; a customer can remove an applied code
-- [ ] Tests + [api.md](api.md) / [permissions.md](permissions.md) / [current-state.md](current-state.md) updated
+Code complete 2026-09-21. What remains is deployment, not development — see
+**Before the marketing date** below.
+
+- [x] Every surface says "promotional code"; no `coupon` identifier left outside the compatibility aliases
+- [x] Registering an account issues exactly one welcome entitlement; a redelivered `user.registered` issues none
+- [x] Fixed ₩ benefit never exceeds the eligible subtotal, and the order total never drops below the shipping fee
+- [x] Minimum spend is enforced at apply **and** re-checked at complete
+- [x] `expires_at` is enforced in KST end-of-day terms; an expired code cannot be applied
+- [x] Single-user: issue → one paid use; no transfer/reuse; another customer's entitlement is rejected
+- [x] Cancel from `pending`/`paid` restores the use; `in_transit` cancel does not
+- [x] Ineligible carts get explicit reason codes; a customer can remove an applied code
+- [x] Tests + [api.md](api.md) / [permissions.md](permissions.md) / [current-state.md](current-state.md) updated
+
+### Before the marketing date
+
+None of these are code, and none have been done:
+
+- [ ] `DUPLI1_WELCOME_PROMOTION_CODE=WELCOME50` on the product ECS task. Without it the registration subscriber never registers and **no new signup gets a code** — the issuer is disabled, not failing, so nothing will look wrong.
+- [ ] `REDIS_URL` on the same task, so the promotional-code rate limit is one shared window rather than one per task.
+- [ ] Run the backfill over existing accounts: `backfill-welcome-promotion -code WELCOME50 -confirm` (dry-runs without `-confirm`).
+- [ ] Enable `WELCOME50` in the admin. It is seeded **inactive** on purpose: enabling it is a manager action, not a deploy.
+- [ ] Campaign dry run against the dev stack — register, check the wallet, apply below and above the minimum spend, pay, confirm the ledger consumed it, cancel and confirm it came back.
 
 ### Full system (Phase 4)
 
