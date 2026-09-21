@@ -87,7 +87,10 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	}
 	promotionSvc := service.NewPromotionService(promotionStore).
 		WithLedger(pg.NewPromotionRedemptionStore(store.Pool())).
-		WithEntitlements(pg.NewPromotionEntitlementStore(store.Pool()))
+		WithEntitlements(pg.NewPromotionEntitlementStore(store.Pool())).
+		// Conditions on a line's category, brand, parent or sale state read the
+		// catalog here; nothing sends those fields in with a checkout.
+		WithCatalog(service.NewStorePromotionCatalog(store))
 
 	inventoryStore, err := pg.NewInventoryStore(store.Pool())
 	if err != nil {

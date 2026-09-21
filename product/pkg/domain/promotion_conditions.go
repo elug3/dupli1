@@ -188,3 +188,29 @@ func (p Predicate) validate() error {
 }
 
 func (o Op) isSetOp() bool { return o == OpIn || o == OpNin }
+
+// CatalogAttrs are the attributes whose values come from the catalog rather
+// than from the checkout being judged.
+var CatalogAttrs = []string{
+	AttrLineCategory,
+	AttrLineBrandCode,
+	AttrLineProductID,
+	AttrLineOnSale,
+}
+
+// NeedsCatalog reports whether any predicate reads a catalog attribute.
+//
+// The evaluator uses this to decide whether an evaluation has to look lines up
+// at all: most codes gate on money alone and should not pay for a catalog read.
+func (c Conditions) NeedsCatalog() bool {
+	for _, list := range [][]Predicate{c.All, c.Exclude} {
+		for _, p := range list {
+			for _, attr := range CatalogAttrs {
+				if p.Attr == attr {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}

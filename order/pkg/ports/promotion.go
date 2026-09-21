@@ -16,15 +16,18 @@ var (
 // PromotionLine is one priced cart line as the evaluator needs to see it.
 // Order builds these after server-side pricing, so UnitPriceWon is resolved,
 // never a number the client sent.
+//
+// Identity, quantity and price are all order has and all it sends. A
+// condition on a line's category, brand, parent or sale state is resolved by
+// product from its own catalog, keyed on these identifiers — those fields
+// deliberately do not travel here, both because order would have to carry
+// catalog columns it has no other use for and because a discount must not
+// depend on what its caller claims a cart contains.
 type PromotionLine struct {
 	SkuID        string `json:"sku_id"`
 	SKU          string `json:"sku"`
-	ProductID    string `json:"product_id,omitempty"`
-	Category     string `json:"category,omitempty"`
-	BrandCode    string `json:"brand_code,omitempty"`
 	Quantity     int    `json:"quantity"`
 	UnitPriceWon int64  `json:"unit_price_won"`
-	OnSale       bool   `json:"on_sale,omitempty"`
 }
 
 // PromotionContext is the checkout a code is judged against.

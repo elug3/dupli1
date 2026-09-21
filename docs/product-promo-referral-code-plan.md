@@ -521,7 +521,7 @@ The functional core. Everything the campaign needs except the wallet.
 1. [x] `scope`, **`expires_at` enforced** (KST end-of-day authoring), caps, `terms`, `updated_at`; existing rows → `scope=global`.
 2. [x] **Redemption ledger** `promotion_redemptions` with `applied_benefit` snapshot; reserve → consume → release wiring (consume on `payment.succeeded`, release on cancel from `pending`/`paid`, keep consumed on `in_transit` cancel).
 3. [x] Once-per-customer for `global` (ledger unique on `(code, customer_id)`).
-4. [x] **`conditions` + `benefit` JSONB.** Allowlisted attrs for v1: **`subtotal_won`** (campaign), `shipping_fee_won`, `line.category`, `line.brandCode`, `line.unit_price_won`, `line.skuId` / parent id, `line.on_sale`; ops `eq|neq|in|nin|gte|lte|gt|lt`.
+4. [x] **`conditions` + `benefit` JSONB.** Allowlisted attrs for v1: **`subtotal_won`** (campaign), `shipping_fee_won`, `item_count`, `line.category`, `line.brandCode`, `line.unit_price_won`, `line.skuId` / parent id, `line.on_sale`; ops `eq|neq|in|nin|gte|lte|gt|lt`. The catalog attributes are resolved by product itself — see § Where a line's catalog attributes come from. `customer.paid_order_count` is allowed but **not yet supplied** by checkout, so a predicate on it refuses every cart.
 5. [x] **Benefit `percent` + `fixed`** against `target = goods`, with `max_discount_won` and the clamp-to-eligible-base floor. Migrate the legacy `discount` fraction into a default `benefit`.
 6. [x] **Write-time validation** of `benefit` (reject fraction outside `(0,1)`, negative fixed won) so bad definitions cannot be saved.
 7. [x] Order apply/complete call `Evaluate` instead of `Redeem`; add the **remove-applied-code route** wiring `ClearPromotion`.
@@ -572,9 +572,55 @@ The functional core. Everything the campaign needs except the wallet.
   compute a fixed-won or capped discount itself, and showing a client-side
   fraction would have displayed the wrong number for exactly the campaign's
   benefit shape.
+- **Catalog attributes are resolved by product, not sent by the caller.** See
+  the section below; the first cut shipped the predicates without anything to
+  evaluate them against.
 - **`benefit.target` other than `goods` is rejected on write.** Named in the
   schema so Phase 4 is additive, but refused now rather than saving a
   definition that silently discounts nothing.
+
+## Where a line's catalog attributes come from
+
+Decided while finishing Phase 2 (2026-09-21).
+
+A condition can gate on a line's `category`, `brandCode`, parent id or sale
+state, and **none of those travel with a checkout**. Order builds its
+evaluation lines from priced order items, which carry identity, quantity and
+price and nothing else. As first shipped, every such predicate read an empty
+value and matched nothing, so a code carrying one was refused on every cart —
+the admin could author a brand rule that could never be satisfied.
+
+**The evaluator resolves them itself**, from the catalog product already owns:
+
+```text
+line {sku_id, sku} → variant → parent → {category, brandCode, productId, on_sale}
+```
+
+with `on_sale` derived as the parent's `officialPrice` standing above its
+`price` (price lives on the parent, so a markdown is a parent-level fact).
+
+Why here rather than in checkout:
+
+- **One source of truth.** Order, the storefront preview and any future caller
+  get identical verdicts, because none of them supply the values.
+- **A discount must not depend on what the caller claims.** Values are taken
+  from the catalog even when a caller sends them, the same rule that makes
+  order resolve prices server-side. A client cannot claim a brand to earn a
+  code.
+- **No catalog columns in checkout.** Order would otherwise have to carry
+  category and brand through `VariantInfo`, `OrderItem` and its schema for no
+  other purpose.
+
+Cost is bounded: the lookup runs only when a definition's conditions actually
+reference a catalog attribute (`Conditions.NeedsCatalog`), batched by sku id
+with a per-SKU fallback, and one parent read per distinct product. A lookup
+that fails leaves the lines unenriched, so the predicates fail and the code is
+refused — a catalog outage must not hand out discounts.
+
+**Still not supplied:** `customer.paid_order_count`. Only order knows it, and
+it sends none, so a first-order-only rule is refused rather than guessed at.
+Wiring it means counting a customer's paid orders in order and putting the
+number in the evaluation context.
 
 ## Non-goals (this plan)
 
