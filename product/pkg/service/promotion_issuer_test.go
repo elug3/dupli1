@@ -31,7 +31,7 @@ func newIssuer(t *testing.T) (*service.WelcomePromotionIssuer, *service.Promotio
 	t.Helper()
 	svc, _ := newPromotionSvc(t)
 	enableWelcomePromotion(t, svc)
-	return service.NewWelcomePromotionIssuer(svc, "WELCOME50"), svc
+	return service.NewWelcomePromotionIssuer(svc), svc
 }
 
 func TestRegistrationIssuesTheWelcomeCode(t *testing.T) {
@@ -123,16 +123,30 @@ func TestMalformedRegistrationEventIsReportedNotSwallowed(t *testing.T) {
 	}
 }
 
-// An environment that has not created the campaign should do nothing quietly,
-// rather than log an error on every registration.
-func TestIssuerWithNoCodeConfiguredIsInert(t *testing.T) {
-	svc, _ := newPromotionSvc(t)
-	issuer := service.NewWelcomePromotionIssuer(svc, "")
-	if issuer.Enabled() {
-		t.Fatal("an issuer with no code should not be enabled")
+// The issuer is no longer configurable, so what has to hold is that the code
+// it issues is the one the stores seed. If the constant and the seed drifted
+// apart, every registration would log a not-found and no customer would get a
+// code — which is exactly the silent failure removing the env var was meant to
+// end.
+func TestIssuerIssuesTheSeededCampaign(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newPromotionSvc(t)
+	if _, err := store.Get(ctx, domain.WelcomeCode); err != nil {
+		t.Fatalf("the stores must seed %s: %v", domain.WelcomeCode, err)
 	}
-	if err := issuer.Handle(context.Background(), events.UserRegistered, registrationPayload(t, "cust-1", "customer")); err != nil {
-		t.Fatalf("a disabled issuer should be a no-op, got %v", err)
+
+	issuer := service.NewWelcomePromotionIssuer(svc)
+	if err := issuer.Handle(ctx, events.UserRegistered, registrationPayload(t, "cust-1", "customer")); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	// Issued against the seeded definition even while the campaign is off:
+	// enabling it later makes every entitlement already minted work.
+	wallet, err := svc.Wallet(ctx, "cust-1", cartFor("cust-1", 150000))
+	if err != nil {
+		t.Fatalf("Wallet: %v", err)
+	}
+	if len(wallet) != 1 || wallet[0].Entitlement.Code != domain.WelcomeCode {
+		t.Fatalf("wallet = %+v, want one %s entitlement", wallet, domain.WelcomeCode)
 	}
 }
 

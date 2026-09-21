@@ -36,8 +36,8 @@ func NewPromotionStore() *PromotionStore {
 	// The sign-up campaign, mirroring the Postgres seed: 50,000원 off orders
 	// of 100,000원 or more, one per account, 30-day window. Seeded inactive —
 	// a manager enables it when marketing is ready.
-	s.promotions["WELCOME50"] = domain.Promotion{
-		Code:        "WELCOME50",
+	s.promotions[domain.WelcomeCode] = domain.Promotion{
+		Code:        domain.WelcomeCode,
 		Scope:       domain.ScopeSingleUser,
 		Description: "First-purchase discount",
 		Terms:       "100,000원 이상 구매 시 50,000원 할인",

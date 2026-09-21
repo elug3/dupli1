@@ -235,7 +235,6 @@ services:
       AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
       # Single-user code issued to each new customer on user.registered.
       # The definition is seeded inactive; enable it in the admin to go live.
-      DUPLI1_WELCOME_PROMOTION_CODE: WELCOME50
       NATS_URL: nats://nats:4222
       NATS_TOKEN: ${NATS_TOKEN:-dupli1_nats_dev}
       S3_ENDPOINT: http://minio:9000

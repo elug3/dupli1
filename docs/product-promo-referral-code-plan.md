@@ -81,6 +81,14 @@ Two clarifications settled at the same time:
 
 Percent-off, shipping benefits, category/brand predicates and referral attribution stay **after** the campaign ships (Phase 4). They are designed for below so the schema does not have to change again, but they are not built first.
 
+**No environment switch.** The campaign was briefly configured by
+`DUPLI1_WELCOME_PROMOTION_CODE`, removed 2026-09-21. It was a third switch for
+a decision two others already owned: both stores seed the definition, so it
+always exists, and `active` decides whether customers can spend it — a
+manager's call, as decided above. Unset, the issuer never subscribed and no
+registration got a code, with nothing on any screen to say so. The code is now
+`domain.WelcomeCode`, and a test pins it to what the stores seed.
+
 **Auto-issue input already exists.** `auth` publishes `user.registered` today (`auth/pkg/service/service.go:454`, covered by `TestRegisterPublishesUserRegisteredEvent`) with `{event_type, user_id, email, account_type, occurred_at}`. It is declared as a **local subject string** in auth, not in `shared/pkg/events`. Phase 3 promotes it to the shared contract alongside `UserDeleted`, per the one-canonical-contract-per-pair rule in the repo guide, then subscribes product to it. Issuing must be **idempotent** on `(code, customer_id, trigger_key)` so a redelivered event cannot mint duplicates, and must only fire for `account_type` customers — never managers or service accounts.
 
 ## Two promotional code types (product taxonomy)
@@ -709,9 +717,8 @@ Code complete 2026-09-21. What remains is deployment, not development — see
 
 None of these are code, and none have been done:
 
-- [ ] `DUPLI1_WELCOME_PROMOTION_CODE=WELCOME50` on the product ECS task. Without it the registration subscriber never registers and **no new signup gets a code** — the issuer is disabled, not failing, so nothing will look wrong.
-- [ ] `REDIS_URL` on the same task, so the promotional-code rate limit is one shared window rather than one per task.
-- [ ] Run the backfill over existing accounts: `backfill-welcome-promotion -code WELCOME50 -confirm` (dry-runs without `-confirm`).
+- [ ] `REDIS_URL` on the product ECS task, so the promotional-code rate limit is one shared window rather than one per task.
+- [ ] Run the backfill over existing accounts: `backfill-welcome-promotion -confirm` (dry-runs without `-confirm`; `-code` defaults to the campaign).
 - [ ] Enable `WELCOME50` in the admin. It is seeded **inactive** on purpose: enabling it is a manager action, not a deploy.
 - [ ] Campaign dry run against the dev stack — register, check the wallet, apply below and above the minimum spend, pay, confirm the ledger consumed it, cancel and confirm it came back.
 

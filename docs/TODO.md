@@ -185,7 +185,6 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
   - [x] Existing accounts are backfilled — `product/cmd/backfill-welcome-promotion`
   - [ ] **Enable `WELCOME50` in the admin** when marketing is ready; it is seeded inactive on purpose
   - [ ] **Run the backfill in production** — `backfill-welcome-promotion -code WELCOME50 -confirm` (dry-runs without `-confirm`)
-  - [ ] Set `DUPLI1_WELCOME_PROMOTION_CODE=WELCOME50` on the product ECS task, or new signups get nothing
   - [ ] Set `REDIS_URL` on the product ECS task so the promotional-code rate limit is shared across tasks
   - [ ] **Close the rename window** one release after Phase 1 — drop the `coupon.*` permissions, the pre-rename routes, the dual JSON key and the nginx `/api/v1/coupons` locations ([product-promotion-rename.md](product-promotion-rename.md) § Closing the window)
 

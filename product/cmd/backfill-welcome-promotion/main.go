@@ -52,7 +52,7 @@ func main() {
 	productDB := fs.String("product-db", os.Getenv("DUPLI1_PRODUCT_DB"), "product database URL")
 	authURL := fs.String("auth-url", os.Getenv("DUPLI1_AUTH_URL"), "auth base URL (gateway is fine)")
 	authToken := fs.String("auth-token", os.Getenv("DUPLI1_AUTH_TOKEN"), "access token with user.read")
-	code := fs.String("code", os.Getenv("DUPLI1_WELCOME_PROMOTION_CODE"), "promotional code to issue")
+	code := fs.String("code", domain.WelcomeCode, "promotional code to issue")
 	confirm := fs.Bool("confirm", false, "actually issue entitlements (dry-run without this)")
 	includeInactive := fs.Bool("include-inactive", false, "also issue to deactivated accounts")
 	limit := fs.Int("limit", 0, "cap accounts processed (0 = all)")
@@ -66,7 +66,7 @@ Options:
   -product-db string       Product DB URL (also DUPLI1_PRODUCT_DB)
   -auth-url string         Auth base URL (also DUPLI1_AUTH_URL)
   -auth-token string       Bearer token with user.read (also DUPLI1_AUTH_TOKEN)
-  -code string             Code to issue (also DUPLI1_WELCOME_PROMOTION_CODE)
+  -code string             Code to issue (default: the sign-up campaign)
   -confirm                 Actually write (dry-run without this)
   -include-inactive        Also issue to deactivated accounts
   -limit int               Cap accounts processed (0 = all)
