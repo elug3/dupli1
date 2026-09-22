@@ -49,33 +49,7 @@ corrupt append-only file:
 
 ### Applying it
 
-> **WARNING — resolve before any `terraform apply`.** This is not about Redis;
-> it is a pre-existing conflict this apply would trigger.
->
-> `aws_ecs_service.web` and `aws_ecs_service.manage_web` set
-> `task_definition` and carry `ignore_changes = [desired_count]` only, so an
-> apply moves both services onto the Terraform-rendered task definition. That
-> definition uses `:${var.image_tag}` = `:latest` — and **neither frontend
-> pipeline pushes `latest`**: `dupli1-web` pushes only `<full-sha>`,
-> `dupli1-manage-web` only `<full-sha>` and `v<ver>-b<build>`. If no `latest`
-> exists in those two repositories the tasks cannot be pulled and the
-> storefront and admin console go down; if a stale one exists, both silently
-> roll back to it.
->
-> `dupli1-manage-web` is worse: its CI deploys a checked-in
-> `.aws/task-definition.json` to the *same* service name, with a different
-> family (`dupli1-manage-web-task` vs `dupli1-manage-web`) and a different
-> launch type (FARGATE/awsvpc vs bridge/EC2). Two systems own one service and
-> whichever ran last wins. Note that file already carries `REDIS_URL`, added
-> 2026-09-13.
->
-> Pick one owner per service before applying — either add
-> `ignore_changes = [task_definition]` to the two frontend services and leave
-> deploys to their pipelines, or retire the frontend pipelines' task
-> definitions and let Terraform own them. Until then, `terraform plan` output
-> for `aws_ecs_service.web` / `.manage_web` must be read carefully.
-
-Two more things to expect, neither of them zero-impact:
+Two things to expect, neither of them zero-impact:
 
 - **The instance user-data changed**, and the ASG has
   `instance_refresh { triggers = ["launch_template"] }`, so the apply rolls
@@ -105,6 +79,33 @@ aws ecs describe-tasks --cluster production \
 redis-cli -h redis.dupli1.local CONFIG GET appendonly
 ```
 
+
+## Frontend deploys — who owns the task definitions
+
+The two frontend services carry `ignore_changes = [desired_count,
+task_definition]`, so **their images are deployed by their own pipelines and
+Terraform never moves them**. This is load-bearing, not tidiness: the
+Terraform-rendered definitions use `:${var.image_tag}` = `:latest`, and
+neither frontend pipeline pushes that tag — `dupli1-web` pushes `<full-sha>`
+only, `dupli1-manage-web` `<full-sha>` and `v<ver>-b<build>`. Without the
+ignore, an apply would point both at a tag that does not exist and take the
+storefront and admin console down. Terraform still owns those services, their
+target groups and listener rules.
+
+Two loose ends this leaves, neither blocking an apply:
+
+- `aws_ecs_task_definition.web` / `.manage_web` are still rendered but no
+  longer deployed. New revisions accumulate unused on each apply, and env
+  changes made there (such as `REDIS_URL`) do not reach production on their
+  own.
+- `dupli1-manage-web` has **two** definitions of one service in version
+  control: this one, and the checked-in `.aws/task-definition.json` its CI
+  deploys — different family (`dupli1-manage-web-task`), different launch type
+  (FARGATE/awsvpc against this file's bridge/EC2). They are not
+  interchangeable, so which one the service actually runs cannot be answered
+  from the repository; check the live service before changing either. Both
+  currently set `REDIS_URL`, so that setting holds whichever is live, but they
+  must be kept in step by hand until one is retired.
 
 ## Telegram (notification)
 

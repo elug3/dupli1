@@ -307,8 +307,15 @@ resource "aws_ecs_service" "web" {
     aws_iam_role_policy.ecs_execution_secrets,
   ]
 
+  # task_definition belongs to the dupli1-web pipeline, not to Terraform.
+  # That pipeline pushes `web:<full-sha>` and never `latest`, so an apply that
+  # moved this service onto the Terraform-rendered definition — which uses
+  # `:${var.image_tag}`, i.e. `:latest` — would point it at a tag that does not
+  # exist and take the storefront down. Terraform still owns the service, the
+  # target group and the listener rules; the image and the task definition are
+  # deployed by .github/workflows/deploy.yml in dupli1-web.
   lifecycle {
-    ignore_changes = [desired_count]
+    ignore_changes = [desired_count, task_definition]
   }
 }
 
@@ -344,7 +351,22 @@ resource "aws_ecs_service" "manage_web" {
     aws_security_group_rule.alb_to_manage_host,
   ]
 
+  # As for web, and more so: dupli1-manage-web deploys a checked-in
+  # .aws/task-definition.json to this same service under its own family
+  # (dupli1-manage-web-task) and its own launch type, so two systems would
+  # otherwise fight over it and whichever ran last would win. Its pipeline
+  # pushes `<full-sha>` and `v<ver>-b<build>`, never `latest`.
+  #
+  # Consequence worth knowing: aws_ecs_task_definition.manage_web is still
+  # rendered but no longer deployed by Terraform, so from here the value that
+  # reaches production is whatever that JSON carries. It has carried REDIS_URL
+  # since 2026-09-13, so the setting holds either way — but the two files must
+  # be kept in step by hand until one of them is retired. Which of the two the
+  # service is running right now is not answerable from the repository: the
+  # JSON is FARGATE/awsvpc while this service declares an EC2 capacity
+  # provider and an instance-type target group, so they are not
+  # interchangeable. Check before assuming either.
   lifecycle {
-    ignore_changes = [desired_count]
+    ignore_changes = [desired_count, task_definition]
   }
 }
