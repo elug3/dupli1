@@ -134,6 +134,8 @@ Both order and payment use a **transactional outbox** pattern: event rows are wr
 
 Refresh tokens rotate on every use: `/refresh` invalidates the token it was given and returns a new one, which the caller must store and use next time. Reusing an already-rotated refresh token fails with `401`.
 
+`/refresh` answers `401` **only** when the token itself is bad (invalid, expired, revoked, or the account is gone/locked). If the refresh-token ledger or the user lookup is unreachable it answers `503 refresh unavailable`, because a client cannot tell the two apart and every BFF discards the token on a `401` — flattening a Redis blip into `401` signed out every customer and operator on a routine deploy. Clients must keep the token and retry on `503`.
+
 ### Authorization
 
 Fine-grained permissions (`{resource}.{action}`, e.g. `product.create`, `order.ship`). Wildcards: `*` (owner), `admin.*`, `{resource}.*`. Storefront customers use ABAC (JWT `sub` must match resource owner) with no explicit permission required.

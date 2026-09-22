@@ -880,12 +880,11 @@ resource "aws_ecs_service" "redis" {
   # Stop the old task before starting the new one, for the same reason. The
   # ECS default (100/200) overlaps them, which is exactly the two-writer case.
   # The cost is a few seconds with no Redis whenever this task is replaced:
-  # auth refresh 5xxes (a dial failure is not ErrSessionNotFound, so it is not
-  # mistaken for revocation) and manage-web's session store throws. Note that
-  # manage-web's exchangeRefreshToken treats any non-ok response as a spent
-  # token, so operators caught in that window are signed out even though their
-  # tokens are fine. Replacements are rare, and the alternative is a corrupt
-  # AOF, but do not treat a redis apply as zero-impact.
+  # auth refresh answers 503 (handler.go returns that rather than 401 when the
+  # session ledger is unreachable) and both BFFs keep the session and retry
+  # instead of signing anyone out. manage-web's own session store still throws
+  # during the gap, so the console errors for a moment; a redis apply is not
+  # zero-impact, it is just no longer a logout.
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
 

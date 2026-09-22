@@ -55,11 +55,11 @@ Two things to expect, neither of them zero-impact:
   `instance_refresh { triggers = ["launch_template"] }`, so the apply rolls
   both EC2 hosts at `min_healthy_percentage = 50`. Every task is rescheduled.
 - **Replacing the Redis task is a brief outage** — by design, since the old
-  task must stop first. During it, auth refresh returns 5xx (a dial failure is
-  not `ErrSessionNotFound`, so it is *not* mistaken for revocation), but
-  manage-web's `exchangeRefreshToken` treats any non-ok response as a spent
-  token, so operators caught in that window are signed out anyway. Apply
-  outside business hours.
+  task must stop first. During it auth refresh answers `503`, which both BFFs
+  now treat as "retry, keep the session" rather than as a dead token, so
+  nobody is signed out. manage-web's own session store still throws while
+  Redis is away, so the console errors for a few seconds. Prefer applying
+  outside business hours, but it is no longer a forced logout.
 
 The first task to start creates an empty AOF; everything already in the
 old in-memory Redis is lost at that point, which is the same forced re-login

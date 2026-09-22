@@ -20,7 +20,7 @@ Authorization: Bearer <access_token>
 
 1. `POST /api/v1/auth/login` → `{ "refresh_token": "<jwt>" }`
 2. `POST /api/v1/auth/refresh` with that refresh token → `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`
-3. Use the access token on protected routes until it expires (default 15 min), then refresh again — using the `refresh_token` the previous refresh returned. Refresh tokens rotate on every use: the one just spent stops working, so the caller must store the new one. Reusing an already-rotated refresh token returns `401`.
+3. Use the access token on protected routes until it expires (default 15 min), then refresh again — using the `refresh_token` the previous refresh returned. Refresh tokens rotate on every use: the one just spent stops working, so the caller must store the new one. Reusing an already-rotated refresh token returns `401`. A `401` from `/refresh` always means the token is finished; a `503 refresh unavailable` means auth could not reach its own session ledger, so keep the token and retry rather than treating the session as over.
 
 **Access token claims**
 
