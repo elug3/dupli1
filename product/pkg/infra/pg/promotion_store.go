@@ -217,11 +217,11 @@ func (s *PromotionStore) seedDefaults() error {
 			conditions, benefit, max_per_customer, entitlement_ttl_days, terms
 		)
 		VALUES (
-			'WELCOME50', 'single_user', 0, 'First-purchase discount', '', FALSE,
-			$1::jsonb, $2::jsonb, 1, 30, '100,000원 이상 구매 시 50,000원 할인'
+			$1, 'single_user', 0, 'First-purchase discount', '', FALSE,
+			$2::jsonb, $3::jsonb, 1, 30, '100,000원 이상 구매 시 50,000원 할인'
 		)
 		ON CONFLICT (code) DO NOTHING
-	`, welcome50Conditions, welcome50Benefit)
+	`, domain.WelcomeCode, welcome50Conditions, welcome50Benefit)
 	return err
 }
 

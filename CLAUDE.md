@@ -23,8 +23,10 @@ cd order && go test ./pkg/service/...
 # Single test
 cd order && go test ./pkg/service/... -run TestCreateOrder
 
-# Postgres-backed tests (order example)
+# Postgres-backed tests — skipped when POSTGRES_URL is unset, so run them
+# explicitly. CI supplies one for auth, product and order.
 cd order && POSTGRES_URL=postgres://dupli1:dupli1_dev@localhost:5435/orders?sslmode=disable go test ./...
+cd product && POSTGRES_URL=postgres://dupli1:dupli1_dev@localhost:5433/products?sslmode=disable go test ./...
 
 # Build a service binary
 cd auth && go build ./cmd/
@@ -35,6 +37,10 @@ sudo docker compose up --build
 
 # End-to-end money path smoke test (stack must be running)
 BASE=http://localhost:8080 scripts/smoke-money-path.sh
+
+# Sign-up campaign dry run — auto-issue, min spend, consume, release
+# (stack must be running; enables the campaign and restores it on the way out)
+BASE=http://localhost:8080 scripts/smoke-promotion-campaign.sh
 ```
 
 **Docker note:** all `docker`/`docker compose` commands need `sudo` on this VM. The `fuse-overlayfs` storage driver is configured; standard overlayfs does not work here.
@@ -128,6 +134,8 @@ Both order and payment use a **transactional outbox** pattern: event rows are wr
 
 Refresh tokens rotate on every use: `/refresh` invalidates the token it was given and returns a new one, which the caller must store and use next time. Reusing an already-rotated refresh token fails with `401`.
 
+`/refresh` answers `401` **only** when the token itself is bad (invalid, expired, revoked, or the account is gone/locked). If the refresh-token ledger or the user lookup is unreachable it answers `503 refresh unavailable`, because a client cannot tell the two apart and every BFF discards the token on a `401` — flattening a Redis blip into `401` signed out every customer and operator on a routine deploy. Clients must keep the token and retry on `503`.
+
 ### Authorization
 
 Fine-grained permissions (`{resource}.{action}`, e.g. `product.create`, `order.ship`). Wildcards: `*` (owner), `admin.*`, `{resource}.*`. Storefront customers use ABAC (JWT `sub` must match resource owner) with no explicit permission required.
@@ -148,7 +156,7 @@ Order, cart, payment, and support use PostgreSQL when their `DUPLI1_*_DB` env va
 - **Money fields are `*_won`** — in JSON, Go identifiers, and Postgres columns. Never `*_krw` (canonical only from 2026-09-09 to 09-14) or `*_cents`. Nothing emits the old names, but a few decoders still *accept* them, so writing one fails silently rather than loudly. Branches and docs cut in that window still say `*_krw`; treat them as stale. See `shared/pkg/money`.
 - **No `go.work`.** Run and test from each service module directory.
 - **nginx resolver:** `api/nginx.conf` must list only Docker's embedded DNS `127.0.0.11` in its `resolver` directive. Adding `10.0.0.2` (AWS VPC) causes ~50% of local requests to fail with `502`.
-- **Promotional codes, not coupons.** Canonical everywhere: table `promotions`, `promotion_code`, `promotion.*` permissions, `/api/v1/products/promotions`, `domain.Promotion`. `discount_won` keeps its name. Definitions carry `benefit` and `conditions` JSONB and an enforced `expires_at`; `promotion_redemptions` is the usage ledger (reserve at checkout complete → consume on paid → release on a cancel before shipment, mirroring the stock rule). Order asks product to price a code against the cart rather than computing a discount itself. `single_user` codes need a `customer_promotions` entitlement, issued automatically on `user.registered` (`DUPLI1_WELCOME_PROMOTION_CODE`), by a manager, or by `product/cmd/backfill-welcome-promotion`; the entitlement grants access while the ledger still decides whether it has been spent. The sign-up campaign `WELCOME50` is seeded **inactive** — enabling it is a manager action, not a deploy. Renamed from `coupon` on 2026-09-16; for **one release** the old spellings are still accepted — the `coupon.*` permissions, the `/api/v1/products/coupons` and `/api/v1/coupons` routes, the `…/sessions/{id}/coupon` sub-route, and a `coupon_code` key that order still emits alongside `promotion_code`. Write only the new names; every remaining `coupon` in the tree is deliberate compatibility scaffolding listed in [docs/product-promotion-rename.md](docs/product-promotion-rename.md), which also says how to remove it.
+- **Promotional codes, not coupons.** Canonical everywhere: table `promotions`, `promotion_code`, `promotion.*` permissions, `/api/v1/products/promotions`, `domain.Promotion`. `discount_won` keeps its name. Definitions carry `benefit` and `conditions` JSONB and an enforced `expires_at`; `promotion_redemptions` is the usage ledger (reserve at checkout complete → consume on paid → release on a cancel before shipment, mirroring the stock rule). Order asks product to price a code against the cart rather than computing a discount itself, and sends only each line's `{sku_id, sku, quantity, unit_price_won}` — conditions on a line's category, brand, parent or sale state are resolved by the evaluator from product's own catalog, so they cannot be claimed by a caller. `single_user` codes need a `customer_promotions` entitlement, issued automatically on `user.registered` (the campaign is `domain.WelcomeCode`, a constant — there is no env var, because both stores seed the definition and `active` is the switch), by a manager, or by `product/cmd/backfill-welcome-promotion`; the entitlement grants access while the ledger still decides whether it has been spent. The sign-up campaign `WELCOME50` is seeded **inactive** — enabling it is a manager action, not a deploy. Renamed from `coupon` on 2026-09-16; for **one release** the old spellings are still accepted — the `coupon.*` permissions, the `/api/v1/products/coupons` and `/api/v1/coupons` routes, the `…/sessions/{id}/coupon` sub-route, and a `coupon_code` key that order still emits alongside `promotion_code`. Write only the new names; every remaining `coupon` in the tree is deliberate compatibility scaffolding listed in [docs/product-promotion-rename.md](docs/product-promotion-rename.md), which also says how to remove it.
 - **Legacy API aliases.** Canonical paths are `/api/v1/{service}/…`; legacy top-level prefixes (`/api/v1/inventory/`, `/api/v1/checkout/`, `/api/v1/carts/`, etc.) are still registered. New code uses canonical paths only.
 - **Docs.** Before adding a new `docs/*.md`, check [docs/README.md](docs/README.md) and existing overlap. Use the service-name prefix (`order-*.md`, `product-*.md`). Update `docs/current-state.md` and `docs/api.md` when the API surface changes.
 

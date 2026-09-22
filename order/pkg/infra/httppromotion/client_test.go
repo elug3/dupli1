@@ -75,9 +75,9 @@ func TestClientReserveUnwrapsNestedResult(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"result": map[string]any{
 				"ok":           true,
-				"discount_won":   5000,
-				"reason":         "",
-				"sub_reason":     "",
+				"discount_won": 5000,
+				"reason":       "",
+				"sub_reason":   "",
 			},
 			"redemption": map[string]any{"order_id": "ord-1", "code": "WELCOME"},
 		})
@@ -144,5 +144,55 @@ func TestClientUpstreamErrorIncludesBody(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "order_id is required") {
 		t.Fatalf("err = %q, want upstream error text", err.Error())
+	}
+}
+
+// The evaluator resolves a line's category, brand, parent and sale state from
+// product's own catalog, keyed on the identifiers below. Dropping either
+// identifier would leave those conditions unresolvable, so the shape is pinned
+// here rather than left to whoever next edits the struct.
+func TestClientSendsLineIdentifiersForCatalogLookup(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "discount_won": 0})
+	}))
+	t.Cleanup(srv.Close)
+
+	client := httppromotion.NewClient(srv.URL, srv.Client(), httpauth.StaticToken("t"))
+	if _, err := client.Evaluate(t.Context(), "CODE", ports.PromotionContext{
+		CustomerID:     "cust-1",
+		ShippingFeeWon: 3000,
+		Lines: []ports.PromotionLine{
+			{SkuID: "01J8SKU", SKU: "PRA_GALLERIA_BLK_M", Quantity: 2, UnitPriceWon: 50000},
+		},
+	}); err != nil {
+		t.Fatalf("Evaluate: %v", err)
+	}
+
+	lines, ok := body["lines"].([]any)
+	if !ok || len(lines) != 1 {
+		t.Fatalf("lines = %#v, want one line", body["lines"])
+	}
+	line, ok := lines[0].(map[string]any)
+	if !ok {
+		t.Fatalf("line = %#v", lines[0])
+	}
+	for key, want := range map[string]any{
+		"sku_id":         "01J8SKU",
+		"sku":            "PRA_GALLERIA_BLK_M",
+		"quantity":       float64(2),
+		"unit_price_won": float64(50000),
+	} {
+		if line[key] != want {
+			t.Fatalf("line[%q] = %#v, want %#v", key, line[key], want)
+		}
+	}
+	// Catalog attributes are product's to resolve, not order's to assert.
+	for _, key := range []string{"category", "brand_code", "product_id", "on_sale"} {
+		if _, present := line[key]; present {
+			t.Fatalf("line carries %q; the evaluator reads that from the catalog", key)
+		}
 	}
 }

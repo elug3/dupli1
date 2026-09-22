@@ -20,7 +20,7 @@ Authorization: Bearer <access_token>
 
 1. `POST /api/v1/auth/login` → `{ "refresh_token": "<jwt>" }`
 2. `POST /api/v1/auth/refresh` with that refresh token → `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`
-3. Use the access token on protected routes until it expires (default 15 min), then refresh again — using the `refresh_token` the previous refresh returned. Refresh tokens rotate on every use: the one just spent stops working, so the caller must store the new one. Reusing an already-rotated refresh token returns `401`.
+3. Use the access token on protected routes until it expires (default 15 min), then refresh again — using the `refresh_token` the previous refresh returned. Refresh tokens rotate on every use: the one just spent stops working, so the caller must store the new one. Reusing an already-rotated refresh token returns `401`. A `401` from `/refresh` always means the token is finished; a `503 refresh unavailable` means auth could not reach its own session ledger, so keep the token and retry rather than treating the session as over.
 
 **Access token claims**
 
@@ -559,7 +559,7 @@ Being replaced by a cart-aware evaluation call as part of [product-promo-referra
 
 | Method | Path | Permission | Purpose | Status |
 |--------|------|------------|---------|--------|
-| `POST` | `/api/v1/products/promotions/evaluate` | — (public, rate-limited) | Price a code against a checkout context → `{ ok, discount_won, eligible_sku_ids, eligible_subtotal_won, reason, sub_reason }`. Order calls it at apply and again at complete; the storefront uses it to preview | **live** |
+| `POST` | `/api/v1/products/promotions/evaluate` | — (public, rate-limited) | Price a code against a checkout context → `{ ok, discount_won, eligible_sku_ids, eligible_subtotal_won, reason, sub_reason }`. Order calls it at apply and again at complete; the storefront uses it to preview. Lines need only `{sku_id, sku, quantity, unit_price_won}` — a line's category, brand, parent and sale state are read from the catalog here, and a caller that sends them has them overwritten | **live** |
 | `POST` | `/api/v1/products/promotions/reserve` | `promotion.redeem` | Re-evaluate and record a pending use against an order. Idempotent per order | **live** |
 | `POST` | `/api/v1/products/promotions/consume` | `promotion.redeem` | Mark an order's reservation paid. Idempotent | **live** |
 | `POST` | `/api/v1/products/promotions/release` | `promotion.redeem` | Hand a use back, for a cancel before shipment | **live** |

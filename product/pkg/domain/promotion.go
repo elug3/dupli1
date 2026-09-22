@@ -66,6 +66,18 @@ type Promotion struct {
 	Expires  string  `json:"expires"`
 }
 
+// WelcomeCode is the sign-up campaign: the single-user code every new
+// customer is issued when auth publishes user.registered.
+//
+// It is a constant rather than configuration because nothing about it is
+// per-environment. Both stores seed the definition, so it always exists, and
+// whether customers can spend it is the definition's own `active` flag — a
+// manager's switch, not a deploy's. A third switch in the environment could
+// only ever disagree with those two, and did: unset, the issuer never
+// subscribed and no registration got a code, with nothing on any screen to
+// say so.
+const WelcomeCode = "WELCOME50"
+
 // NormalizedCode is the storage and lookup form of a code.
 func NormalizedCode(code string) string {
 	return strings.ToUpper(strings.TrimSpace(code))

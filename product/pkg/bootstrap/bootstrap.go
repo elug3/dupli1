@@ -87,7 +87,10 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	}
 	promotionSvc := service.NewPromotionService(promotionStore).
 		WithLedger(pg.NewPromotionRedemptionStore(store.Pool())).
-		WithEntitlements(pg.NewPromotionEntitlementStore(store.Pool()))
+		WithEntitlements(pg.NewPromotionEntitlementStore(store.Pool())).
+		// Conditions on a line's category, brand, parent or sale state read the
+		// catalog here; nothing sends those fields in with a checkout.
+		WithCatalog(service.NewStorePromotionCatalog(store))
 
 	inventoryStore, err := pg.NewInventoryStore(store.Pool())
 	if err != nil {
@@ -113,10 +116,11 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 
 	// New customers get their welcome promotional code from auth's
 	// user.registered event. Issuing is keyed on the event's user id, so a
-	// redelivery mints nothing. An unset code disables the subscriber, which
-	// is what an environment without the campaign wants.
-	welcomeIssuer := service.NewWelcomePromotionIssuer(promotionSvc, cfg.WelcomePromotionCode)
-	if natsSubscriber != nil && welcomeIssuer.Enabled() {
+	// redelivery mints nothing. Always subscribed: the campaign's definition
+	// is seeded, and whether customers can spend what this grants is the
+	// definition's `active` flag, not a deploy-time switch.
+	welcomeIssuer := service.NewWelcomePromotionIssuer(promotionSvc)
+	if natsSubscriber != nil {
 		if err := welcomeIssuer.Register(ctx, natsSubscriber); err != nil {
 			natsSubscriber.Close()
 			natsPublisher.Close()

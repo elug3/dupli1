@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -810,4 +812,119 @@ func TestDeleteUser(t *testing.T) {
 			t.Fatalf("self-delete: want 403, got %d: %s", w.Code, w.Body.String())
 		}
 	})
+}
+
+// ---- session store that is simply unreachable ------------------------------
+
+// brokenSessionStore stands in for Redis being replaced or unreachable. It
+// fails with a transport-shaped error rather than ports.ErrSessionNotFound,
+// which is the distinction the refresh handler has to preserve.
+type brokenSessionStore struct{ err error }
+
+func (b brokenSessionStore) Set(context.Context, string, string, time.Duration) error {
+	return b.err
+}
+
+func (b brokenSessionStore) Get(context.Context, string) (string, error) {
+	return "", b.err
+}
+
+func (b brokenSessionStore) Delete(context.Context, string) error { return b.err }
+
+func (b brokenSessionStore) Rotate(context.Context, string, string, string, time.Duration) error {
+	return b.err
+}
+
+// A refresh token is only dead when auth says it is dead. Every BFF in front
+// of this service discards the token and signs the operator out on a 401, so
+// answering 401 when the session ledger is merely unreachable turned a few
+// seconds of Redis downtime into a forced logout for every signed-in user.
+func TestRefresh_StoreOutageIsNotARejection(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	repo := newFakeUserRepo()
+	accessGen := jwtgen.NewTokenGeneratorWithType("access-secret", 900, "access")
+	refreshGen := jwtgen.NewTokenGeneratorWithType("refresh-secret", 3600, "refresh")
+
+	user, err := domain.NewUser(
+		uuid.New().String(),
+		"outage@example.com",
+		"supersecret",
+		domain.AccountTypeCustomer,
+	)
+	if err != nil {
+		t.Fatalf("NewUser: %v", err)
+	}
+	if err := repo.Save(t.Context(), user); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// A genuinely valid, signed refresh token — nothing is wrong with it.
+	token, err := refreshGen.Generate(t.Context(), user.ID, nil, "")
+	if err != nil {
+		t.Fatalf("Generate refresh token: %v", err)
+	}
+
+	svc := service.NewService(
+		repo,
+		accessGen,
+		service.WithRefreshTokenGen(refreshGen, time.Hour),
+		service.WithSessionStore(brokenSessionStore{
+			err: errors.New("dial tcp 10.0.1.23:6379: connect: connection refused"),
+		}),
+	)
+	r := bootstrap.NewRouter(handler.NewHandler(svc, zerolog.Nop()), false, nil, nil, nil)
+
+	body, _ := json.Marshal(map[string]string{"refresh_token": token})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503 so the caller keeps its token and retries, got %d: %s",
+			w.Code, w.Body.String())
+	}
+
+	// The wrapped error names the host and port of internal infrastructure.
+	if strings.Contains(w.Body.String(), "6379") ||
+		strings.Contains(w.Body.String(), "10.0.1.23") {
+		t.Errorf("response leaks infrastructure detail: %s", w.Body.String())
+	}
+}
+
+// The counterpart: a token auth has actually revoked still ends the session.
+func TestRefresh_RevokedTokenStillRejects(t *testing.T) {
+	s := newStack(t)
+
+	w := s.doWithAuth(t, http.MethodPost, "/api/v1/auth/register", s.registrarToken, map[string]string{
+		"email": "revoked@example.com", "password": "supersecret",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("register: want 201, got %d", w.Code)
+	}
+
+	w = s.do(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+		"email": "revoked@example.com", "password": "supersecret",
+	})
+	var loginResp struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&loginResp); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+
+	w = s.do(t, http.MethodPost, "/api/v1/auth/logout", map[string]string{
+		"refresh_token": loginResp.RefreshToken,
+	})
+	if w.Code != http.StatusNoContent && w.Code != http.StatusOK {
+		t.Fatalf("logout: got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = s.do(t, http.MethodPost, "/api/v1/auth/refresh", map[string]string{
+		"refresh_token": loginResp.RefreshToken,
+	})
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("want 401 for a revoked token, got %d: %s", w.Code, w.Body.String())
+	}
 }

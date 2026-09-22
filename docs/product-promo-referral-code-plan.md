@@ -81,6 +81,14 @@ Two clarifications settled at the same time:
 
 Percent-off, shipping benefits, category/brand predicates and referral attribution stay **after** the campaign ships (Phase 4). They are designed for below so the schema does not have to change again, but they are not built first.
 
+**No environment switch.** The campaign was briefly configured by
+`DUPLI1_WELCOME_PROMOTION_CODE`, removed 2026-09-21. It was a third switch for
+a decision two others already owned: both stores seed the definition, so it
+always exists, and `active` decides whether customers can spend it — a
+manager's call, as decided above. Unset, the issuer never subscribed and no
+registration got a code, with nothing on any screen to say so. The code is now
+`domain.WelcomeCode`, and a test pins it to what the stores seed.
+
 **Auto-issue input already exists.** `auth` publishes `user.registered` today (`auth/pkg/service/service.go:454`, covered by `TestRegisterPublishesUserRegisteredEvent`) with `{event_type, user_id, email, account_type, occurred_at}`. It is declared as a **local subject string** in auth, not in `shared/pkg/events`. Phase 3 promotes it to the shared contract alongside `UserDeleted`, per the one-canonical-contract-per-pair rule in the repo guide, then subscribes product to it. Issuing must be **idempotent** on `(code, customer_id, trigger_key)` so a redelivered event cannot mint duplicates, and must only fire for `account_type` customers — never managers or service accounts.
 
 ## Two promotional code types (product taxonomy)
@@ -126,7 +134,7 @@ Built from the checkout session / order draft:
 | **Catalog / taxonomy** | `category`, `subCategory`, `brandCode`, `styleCode`, `colorCode`, `sizeCode`, `edition`, merchandising fields, future category facets (`details.*`) |
 | **Line identity** | `sku`, `skuId`, parent product id, quantity |
 | **Shipping** | Flat fee amount; whether fee is present; free-shipping threshold style rules |
-| **Customer** | `customer_id`, first-order / prior paid order count, account age (later) |
+| **Customer** | `customer_id` (prior paid order count and account age: see § Why there is no first-order-only rule) |
 | **Cart shape** | Item count, distinct brands/categories, only-eligible-lines subtotal |
 
 "Almost all attributes" means: **any field order already has (or can load via product) for pricing lines** should be addressable in conditions as the catalog grows — prefer a **data-driven condition document** over adding one DB column per rule.
@@ -155,7 +163,6 @@ conditions: {
     { attr: "line.category", op: "in", value: ["bags", "wallets"] },
     { attr: "line.brandCode", op: "in", value: ["PRADA"] },
     { attr: "line.unit_price_won", op: "gte", value: 500000 },
-    { attr: "customer.paid_order_count", op: "eq", value: 0 }
   ],
   line_match: "any" | "all" | "eligible_only",  -- how line predicates combine with cart
   exclude: [             -- optional hard exclusions
@@ -271,7 +278,7 @@ Verified against the code on 2026-09-16. Builds and tests pass in `product/pkg/{
 | **Minimum spend** | `conditions.all[{ attr: "subtotal_won", op: "gte", value: N }]` — a predicate, not a bare column (campaign shape) |
 | Free / partial shipping | `benefit.target = shipping` or `goods_and_shipping`; fraction or fixed ₩ off `shipping_fee_won`, floored at 0 |
 | Brand / SKU / category scope | Predicates on `line.category`, `line.subCategory`, `line.brandCode`, `line.styleCode`, `line.skuId`; percent applies to **eligible lines only** when `benefit.apply_to = eligible_lines` |
-| First order only | `conditions.all[{ attr: "customer.paid_order_count", op: "eq", value: 0 }]` — counts **paid** orders, so unpaid/canceled attempts do not consume the privilege |
+| First order only | **Not available.** Removed 2026-09-21 — see § Why there is no first-order-only rule. A new-customer campaign is delivered as a `single_user` entitlement issued at registration instead |
 | New customers only | The sign-up campaign gets this structurally (issued at registration), so the predicate is not required for it; still available for global new-customer codes |
 | Discount base | Line **selling price** (`price`), the value order already resolves server-side. `officialPrice` is display-only and never a discount base |
 
@@ -521,7 +528,7 @@ The functional core. Everything the campaign needs except the wallet.
 1. [x] `scope`, **`expires_at` enforced** (KST end-of-day authoring), caps, `terms`, `updated_at`; existing rows → `scope=global`.
 2. [x] **Redemption ledger** `promotion_redemptions` with `applied_benefit` snapshot; reserve → consume → release wiring (consume on `payment.succeeded`, release on cancel from `pending`/`paid`, keep consumed on `in_transit` cancel).
 3. [x] Once-per-customer for `global` (ledger unique on `(code, customer_id)`).
-4. [x] **`conditions` + `benefit` JSONB.** Allowlisted attrs for v1: **`subtotal_won`** (campaign), `shipping_fee_won`, `line.category`, `line.brandCode`, `line.unit_price_won`, `line.skuId` / parent id, `line.on_sale`; ops `eq|neq|in|nin|gte|lte|gt|lt`.
+4. [x] **`conditions` + `benefit` JSONB.** Allowlisted attrs for v1: **`subtotal_won`** (campaign), `shipping_fee_won`, `item_count`, `line.category`, `line.brandCode`, `line.unit_price_won`, `line.skuId` / parent id, `line.on_sale`; ops `eq|neq|in|nin|gte|lte|gt|lt`. The catalog attributes are resolved by product itself — see § Where a line's catalog attributes come from. `customer.paid_order_count` was allowlisted here and **removed on 2026-09-21** — see § Why there is no first-order-only rule.
 5. [x] **Benefit `percent` + `fixed`** against `target = goods`, with `max_discount_won` and the clamp-to-eligible-base floor. Migrate the legacy `discount` fraction into a default `benefit`.
 6. [x] **Write-time validation** of `benefit` (reject fraction outside `(0,1)`, negative fixed won) so bad definitions cannot be saved.
 7. [x] Order apply/complete call `Evaluate` instead of `Redeem`; add the **remove-applied-code route** wiring `ClearPromotion`.
@@ -537,11 +544,11 @@ The functional core. Everything the campaign needs except the wallet.
 4. [x] Replace the storefront profile stub with the real wallet; show eligible vs ineligible against the current cart with reasons.
 5. [x] Entitlement `revoked` support for issued-by-mistake cases.
 6. [x] Tests: register → one entitlement; **redelivered event mints nothing**; manager/service accounts get none; eligible apply → paid → no reuse; cancel restores; cannot apply another customer's entitlement; min-spend still blocks.
-7. [x] Campaign dry run against the dev stack before the marketing date.
+7. [ ] Campaign dry run against the dev stack before the marketing date — see § Before the marketing date.
 
 ### Phase 4 — Richer attributes + shipping benefit + attribution + reporting
 
-1. Expand allowlist: `subCategory`, style/color/size, `details.*` facets as multi-category lands, `customer.paid_order_count` (first-order-only), account age.
+1. Expand allowlist: `subCategory`, style/color/size, `details.*` facets as multi-category lands. Anything the evaluator cannot resolve itself needs a supplier first — see § Why there is no first-order-only rule.
 2. Benefit targets `shipping` / `goods_and_shipping` / `none`; `shipping_discount_won` on session + order and in the total formula.
 3. `kind`, `partner_id`, self-referral block; stats API (paid-only ledger) splitting goods vs shipping discount; manage-web campaign report.
 4. Eligible-lines-only percent/fixed + `max_discount_won` polish; optional claim of global codes into the wallet.
@@ -567,14 +574,87 @@ The functional core. Everything the campaign needs except the wallet.
 - **Rate limiting has a per-process fallback.** Product had no Redis dependency
   and compose has no Redis service, so an unset `REDIS_URL` uses an in-process
   window. That is per-task, so the effective budget is multiplied by the task
-  count until Redis is configured in ECS.
+  count. ECS now sets `REDIS_URL` (`infra/terraform/ecs_services.tf`), which
+  leaves the fallback for local dev and tests; a bad or unreachable URL logs
+  and degrades to the in-process window rather than failing the service.
 - **The storefront previews through the public `evaluate` endpoint.** It cannot
   compute a fixed-won or capped discount itself, and showing a client-side
   fraction would have displayed the wrong number for exactly the campaign's
   benefit shape.
+- **Catalog attributes are resolved by product, not sent by the caller.** See
+  the section below; the first cut shipped the predicates without anything to
+  evaluate them against.
 - **`benefit.target` other than `goods` is rejected on write.** Named in the
   schema so Phase 4 is additive, but refused now rather than saving a
   definition that silently discounts nothing.
+
+## Where a line's catalog attributes come from
+
+Decided while finishing Phase 2 (2026-09-21).
+
+A condition can gate on a line's `category`, `brandCode`, parent id or sale
+state, and **none of those travel with a checkout**. Order builds its
+evaluation lines from priced order items, which carry identity, quantity and
+price and nothing else. As first shipped, every such predicate read an empty
+value and matched nothing, so a code carrying one was refused on every cart —
+the admin could author a brand rule that could never be satisfied.
+
+**The evaluator resolves them itself**, from the catalog product already owns:
+
+```text
+line {sku_id, sku} → variant → parent → {category, brandCode, productId, on_sale}
+```
+
+with `on_sale` derived as the parent's `officialPrice` standing above its
+`price` (price lives on the parent, so a markdown is a parent-level fact).
+
+Why here rather than in checkout:
+
+- **One source of truth.** Order, the storefront preview and any future caller
+  get identical verdicts, because none of them supply the values.
+- **A discount must not depend on what the caller claims.** Values are taken
+  from the catalog even when a caller sends them, the same rule that makes
+  order resolve prices server-side. A client cannot claim a brand to earn a
+  code.
+- **No catalog columns in checkout.** Order would otherwise have to carry
+  category and brand through `VariantInfo`, `OrderItem` and its schema for no
+  other purpose.
+
+Cost is bounded: the lookup runs only when a definition's conditions actually
+reference a catalog attribute (`Conditions.NeedsCatalog`), batched by sku id
+with a per-SKU fallback, and one parent read per distinct product. A lookup
+that fails leaves the lines unenriched, so the predicates fail and the code is
+refused — a catalog outage must not hand out discounts.
+
+## Why there is no first-order-only rule
+
+`customer.paid_order_count` was allowlisted with the rest of the condition
+attributes and removed on **2026-09-21**, without ever having been satisfiable.
+
+Unlike a line's category or brand, the evaluator cannot resolve it: only order
+knows how many paid orders a customer has, and order sends no such number. The
+predicate failed closed, so a manager could pick "customer's paid orders is 0"
+from the condition builder and ship a code that was refused on every cart.
+
+Supplying it is possible — order would count the customer's non-canceled paid
+orders and put the number in the evaluation context — but it was not worth it:
+
+- **The sign-up campaign does not need it.** `WELCOME50` is a `single_user`
+  entitlement minted on `user.registered`, so it is new-customer by
+  construction. The predicate only matters for a *global, typed* code
+  restricted to first-time buyers, which no campaign has asked for.
+- **Product could not verify it.** Every other attribute is either derived
+  from the lines or read from the catalog, so a caller cannot claim its way to
+  a discount. A paid-order count can only be asserted by the caller, and the
+  same endpoint serves the public storefront preview — a browser could claim
+  `0` and see a discount it would not get at complete.
+- **A condition nothing can satisfy is worse than a missing one.** The whole
+  class of bug this plan kept hitting is a rule that looks authorable and
+  silently never matches.
+
+If a first-time-buyer global code is ever wanted: order fills the field, the
+admin marks the rule as preview-inaccurate, and the storefront preview stays
+advisory for that one attribute.
 
 ## Non-goals (this plan)
 
@@ -622,15 +702,27 @@ The functional core. Everything the campaign needs except the wallet.
 
 ### Campaign go-live (Phases 1–3)
 
-- [ ] Every surface says "promotional code"; no `coupon` identifier left outside the compatibility aliases
-- [ ] Registering an account issues exactly one welcome entitlement; a redelivered `user.registered` issues none
-- [ ] Fixed ₩ benefit never exceeds the eligible subtotal, and the order total never drops below the shipping fee
-- [ ] Minimum spend is enforced at apply **and** re-checked at complete
-- [ ] `expires_at` is enforced in KST end-of-day terms; an expired code cannot be applied
-- [ ] Single-user: issue → one paid use; no transfer/reuse; another customer's entitlement is rejected
-- [ ] Cancel from `pending`/`paid` restores the use; `in_transit` cancel does not
-- [ ] Ineligible carts get explicit reason codes; a customer can remove an applied code
-- [ ] Tests + [api.md](api.md) / [permissions.md](permissions.md) / [current-state.md](current-state.md) updated
+Code complete 2026-09-21. What remains is deployment, not development — see
+**Before the marketing date** below.
+
+- [x] Every surface says "promotional code"; no `coupon` identifier left outside the compatibility aliases
+- [x] Registering an account issues exactly one welcome entitlement; a redelivered `user.registered` issues none
+- [x] Fixed ₩ benefit never exceeds the eligible subtotal, and the order total never drops below the shipping fee
+- [x] Minimum spend is enforced at apply **and** re-checked at complete
+- [x] `expires_at` is enforced in KST end-of-day terms; an expired code cannot be applied
+- [x] Single-user: issue → one paid use; no transfer/reuse; another customer's entitlement is rejected
+- [x] Cancel from `pending`/`paid` restores the use; `in_transit` cancel does not
+- [x] Ineligible carts get explicit reason codes; a customer can remove an applied code
+- [x] Tests + [api.md](api.md) / [permissions.md](permissions.md) / [current-state.md](current-state.md) updated
+
+### Before the marketing date
+
+The terraform is written; the rest are human actions, not deploys:
+
+- [x] `REDIS_URL` on the product ECS task, so the promotional-code rate limit is one shared window rather than one per task. Set in `infra/terraform/ecs_services.tf`; live after the next `terraform apply`.
+- [ ] Run the backfill over existing accounts: `backfill-welcome-promotion -confirm` (dry-runs without `-confirm`; `-code` defaults to the campaign).
+- [ ] Enable `WELCOME50` in the admin. It is seeded **inactive** on purpose: enabling it is a manager action, not a deploy.
+- [ ] Campaign dry run against the dev stack: `BASE=http://localhost:8080 scripts/smoke-promotion-campaign.sh`. It registers, waits for the auto-issued entitlement, enables the campaign, applies below and above the minimum spend, completes, pays, checks a second use is refused, cancels and checks the use came back — then restores the campaign's `active` flag to whatever it found. **Written but never executed**: this environment's egress policy blocks Docker Hub, so the stack could not be built here. Run it once locally before the marketing date.
 
 ### Full system (Phase 4)
 

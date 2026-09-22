@@ -79,7 +79,6 @@ type PromotionRedemptionStore interface {
 	CountsByCode(ctx context.Context, code string) (active int, consumed int, err error)
 }
 
-
 // IssueEntitlementInput grants one account the right to use a single-user code.
 type IssueEntitlementInput struct {
 	Code       string
@@ -107,4 +106,40 @@ type PromotionEntitlementStore interface {
 	// Revoke withdraws an entitlement. It never rewrites an order that already
 	// used it.
 	Revoke(ctx context.Context, id string, at time.Time) error
+}
+
+// LineRef identifies one cart line to the catalog. Callers send whichever
+// identifier they hold; sku_id is canonical, sku is the human string.
+type LineRef struct {
+	SkuID string
+	SKU   string
+}
+
+// LineCatalog is what the catalog knows about a cart line. Everything here is
+// read from the seller's own data rather than taken from the caller, so a
+// client cannot claim a brand or a category to earn a discount.
+type LineCatalog struct {
+	Found     bool
+	SkuID     string
+	SKU       string
+	ProductID string
+	Category  string
+	BrandCode string
+	// OnSale is the parent's official price standing above its selling price.
+	OnSale bool
+}
+
+// PromotionCatalog resolves the catalog attributes a condition can address.
+//
+// Conditions can gate on a line's category, brand, parent or sale state, and
+// none of those travel with a checkout: order builds its evaluation lines from
+// priced order items, which carry identity, quantity and price and nothing
+// else. Rather than plumb catalog columns through checkout — where a client
+// could also supply them — the evaluator reads them here, from the service
+// that owns the catalog.
+type PromotionCatalog interface {
+	// LineAttributes returns one entry per ref, in the same order. A line the
+	// catalog cannot resolve comes back with Found false rather than an error,
+	// so one unknown SKU cannot fail a whole evaluation.
+	LineAttributes(ctx context.Context, refs []LineRef) ([]LineCatalog, error)
 }

@@ -84,7 +84,7 @@ func TestMigrateSeedsReservationSequenceFromExistingRows(t *testing.T) {
 	}
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO reservations (id, order_id, status, created_at, updated_at)
-		VALUES ('res_000005', 'ord-1', 'held', $1, $1)
+		VALUES ('res_000005', 'ord-1', 'active', $1, $1)
 	`, now); err != nil {
 		t.Fatalf("seed reservation: %v", err)
 	}
@@ -140,13 +140,26 @@ func TestMigrateBackfillsStockItemsForOrphanVariants(t *testing.T) {
 		}
 	}
 	now := time.Now().UTC()
+
+	// stock_items is migrate's to create, so the "before stock tracking" state
+	// has to be built through it rather than around it: migrate once to get the
+	// schema, then leave sku-with-stock holding real numbers and sku-orphan
+	// with no row at all — exactly the shape a pre-tracking database has.
+	if _, err := NewInventoryStore(pool); err != nil {
+		t.Fatalf("NewInventoryStore (schema): %v", err)
+	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO stock_items (sku_id, quantity, reserved, updated_at)
-		VALUES ('sku-with-stock', 5, 1, $1)
+		UPDATE stock_items SET quantity = 5, reserved = 1, updated_at = $1
+		WHERE sku_id = 'sku-with-stock'
 	`, now); err != nil {
 		t.Fatalf("seed existing stock row: %v", err)
 	}
+	if _, err := pool.Exec(ctx, `DELETE FROM stock_items WHERE sku_id = 'sku-orphan'`); err != nil {
+		t.Fatalf("remove orphan stock row: %v", err)
+	}
 
+	// The migrate under test: it must backfill the orphan and leave the other
+	// row untouched.
 	store, err := NewInventoryStore(pool)
 	if err != nil {
 		t.Fatalf("NewInventoryStore: %v", err)
@@ -213,7 +226,7 @@ func TestMigrateRepairsStaleReservationSequence(t *testing.T) {
 	}
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO reservations (id, order_id, status, created_at, updated_at)
-		VALUES ('res_000005', 'ord-1', 'held', $1, $1)
+		VALUES ('res_000005', 'ord-1', 'active', $1, $1)
 	`, now); err != nil {
 		t.Fatalf("seed reservation: %v", err)
 	}
@@ -272,11 +285,18 @@ func TestSetQuantityPreservesReserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewInventoryStore: %v", err)
 	}
+	// migrate backfills a zeroed stock row for every variant, and this one was
+	// inserted before the store was built, so seed by upsert rather than
+	// assuming the row is absent.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO stock_items (sku_id, quantity, reserved, updated_at)
 		VALUES ('sku-1', 10, 8, $1)
+		ON CONFLICT (sku_id) DO UPDATE SET
+			quantity = EXCLUDED.quantity,
+			reserved = EXCLUDED.reserved,
+			updated_at = EXCLUDED.updated_at
 	`, now); err != nil {
-		t.Fatalf("insert stock: %v", err)
+		t.Fatalf("seed stock: %v", err)
 	}
 
 	item, err := store.SetQuantity(ctx, "sku-1", 20, now)
@@ -307,11 +327,17 @@ func TestEnsureItemDoesNotClobberReserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewInventoryStore: %v", err)
 	}
+	// As above: the variant predates the store, so migrate has already put a
+	// zeroed row here.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO stock_items (sku_id, quantity, reserved, updated_at)
 		VALUES ('sku-1', 0, 8, $1)
+		ON CONFLICT (sku_id) DO UPDATE SET
+			quantity = EXCLUDED.quantity,
+			reserved = EXCLUDED.reserved,
+			updated_at = EXCLUDED.updated_at
 	`, now); err != nil {
-		t.Fatalf("insert stock: %v", err)
+		t.Fatalf("seed stock: %v", err)
 	}
 
 	if err := store.EnsureItem(ctx, "sku-1", "TEST-1", now); err != nil {

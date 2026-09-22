@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ type PromotionService struct {
 	store        ports.PromotionStore
 	ledger       ports.PromotionRedemptionStore
 	entitlements ports.PromotionEntitlementStore
+	catalog      ports.PromotionCatalog
 	now          func() time.Time
 }
 
@@ -34,6 +36,14 @@ func (s *PromotionService) WithLedger(ledger ports.PromotionRedemptionStore) *Pr
 // single_user code cannot be used at all, because nothing can say who holds it.
 func (s *PromotionService) WithEntitlements(store ports.PromotionEntitlementStore) *PromotionService {
 	s.entitlements = store
+	return s
+}
+
+// WithCatalog attaches the catalog the evaluator reads line attributes from.
+// Without it, a condition on a line's category, brand, parent or sale state
+// matches nothing, because no caller sends those fields.
+func (s *PromotionService) WithCatalog(catalog ports.PromotionCatalog) *PromotionService {
+	s.catalog = catalog
 	return s
 }
 
@@ -161,6 +171,8 @@ func (s *PromotionService) evaluate(ctx context.Context, code string, evalCtx do
 		}
 	}
 
+	evalCtx.Lines = s.withCatalogAttributes(ctx, *promotion, evalCtx.Lines)
+
 	result := promotion.Evaluate(evalCtx)
 	if !result.OK {
 		return result
@@ -178,6 +190,51 @@ func (s *PromotionService) evaluate(ctx context.Context, code string, evalCtx do
 		}
 	}
 	return result
+}
+
+// withCatalogAttributes fills each line's category, brand, parent and sale
+// state from the catalog, for a definition whose conditions read them.
+//
+// The values are taken from the catalog even when the caller supplied some,
+// for the same reason order resolves prices server-side: a discount must not
+// depend on what the client claims the cart contains. Checkout sends none of
+// them today, so in practice this is the only place they come from.
+//
+// A catalog that cannot answer leaves the lines as they are. The predicates
+// then fail to match and the code is refused, which is the safe direction: a
+// lookup failure must not hand out a discount the cart may not have earned.
+func (s *PromotionService) withCatalogAttributes(
+	ctx context.Context,
+	promotion domain.Promotion,
+	lines []domain.EvaluationLine,
+) []domain.EvaluationLine {
+	if s.catalog == nil || len(lines) == 0 || !promotion.Conditions.NeedsCatalog() {
+		return lines
+	}
+	refs := make([]ports.LineRef, len(lines))
+	for i, line := range lines {
+		refs[i] = ports.LineRef{SkuID: line.SkuID, SKU: line.SKU}
+	}
+	attrs, err := s.catalog.LineAttributes(ctx, refs)
+	if err != nil || len(attrs) != len(lines) {
+		if err != nil {
+			log.Printf("promotion %s: catalog lookup failed, catalog conditions cannot match: %v", promotion.Code, err)
+		}
+		return lines
+	}
+
+	out := make([]domain.EvaluationLine, len(lines))
+	copy(out, lines)
+	for i, attr := range attrs {
+		if !attr.Found {
+			continue
+		}
+		out[i].ProductID = attr.ProductID
+		out[i].Category = attr.Category
+		out[i].BrandCode = attr.BrandCode
+		out[i].OnSale = attr.OnSale
+	}
+	return out
 }
 
 // Reserve records a pending use at checkout complete. It re-evaluates first so

@@ -55,11 +55,7 @@ type EvaluationContext struct {
 	CustomerID     string           `json:"customer_id"`
 	ShippingFeeWon int64            `json:"shipping_fee_won"`
 	Lines          []EvaluationLine `json:"lines"`
-	// PaidOrderCount is nil when the caller could not determine it. A
-	// first-order-only rule then fails closed rather than handing out a
-	// discount on an unknown history.
-	PaidOrderCount *int      `json:"paid_order_count,omitempty"`
-	Now            time.Time `json:"-"`
+	Now            time.Time        `json:"-"`
 }
 
 // SubtotalWon sums the lines. It is derived rather than passed in so a caller
@@ -264,13 +260,6 @@ func (p Predicate) matchScalar(ctx EvaluationContext) (ok bool, known bool) {
 		return p.compareNumber(float64(ctx.ShippingFeeWon)), true
 	case AttrItemCount:
 		return p.compareNumber(float64(ctx.itemCount())), true
-	case AttrCustomerPaidOrderCount:
-		if ctx.PaidOrderCount == nil {
-			// Unknown history fails closed: a first-order-only code must not
-			// pay out just because the caller could not look the count up.
-			return false, false
-		}
-		return p.compareNumber(float64(*ctx.PaidOrderCount)), true
 	}
 	return false, false
 }

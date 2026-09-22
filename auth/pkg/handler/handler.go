@@ -460,21 +460,39 @@ func (h *Handler) Refresh(c *gin.Context) {
 
 	newToken, newRefreshToken, err := h.svc.Refresh(c.Request.Context(), payload.RefreshToken)
 	if err != nil {
+		// Only a verdict on the token itself is a 401. Everything else — the
+		// session store unreachable, the user lookup failing, signing broken —
+		// is our fault and says nothing about the caller's token.
+		//
+		// This used to answer 401 either way. A BFF holding a refresh token
+		// cannot tell the two apart, and every one of ours treats a 401 from
+		// here as proof the session is over, so it discards the token and
+		// signs the operator out. That turned a few seconds of Redis downtime
+		// — the session ledger lives there, and the task is replaced
+		// stop-before-start — into a forced logout for everyone holding a
+		// token, on a routine deploy.
 		if errors.Is(err, autherrors.ErrInvalidToken) || errors.Is(err, autherrors.ErrTokenExpired) ||
+			errors.Is(err, autherrors.ErrUserNotFound) ||
 			errors.Is(err, autherrors.ErrAccountDeactivated) || errors.Is(err, autherrors.ErrAccountLocked) {
 			h.logger.Warn().
 				Str("event", "refresh_rejected").
 				Str("ip", ip).
 				Err(err).
 				Msg("refresh failed: invalid, expired, locked, or deactivated")
-		} else {
-			h.logger.Error().
-				Str("event", "refresh_error").
-				Str("ip", ip).
-				Err(err).
-				Msg("refresh failed: internal error")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Errorf("refresh: %w", err).Error()})
+			return
 		}
-		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Errorf("refresh: %w", err).Error()})
+
+		h.logger.Error().
+			Str("event", "refresh_error").
+			Str("ip", ip).
+			Err(err).
+			Msg("refresh failed: internal error")
+		// 503, not 500: the usual cause is a dependency that is coming back,
+		// so the caller should keep its token and retry rather than treat the
+		// session as finished. The body stays generic — the wrapped error
+		// carries host and port of internal infrastructure.
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "refresh unavailable"})
 		return
 	}
 
