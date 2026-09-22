@@ -351,22 +351,18 @@ resource "aws_ecs_service" "manage_web" {
     aws_security_group_rule.alb_to_manage_host,
   ]
 
-  # As for web, and more so: dupli1-manage-web deploys a checked-in
-  # .aws/task-definition.json to this same service under its own family
-  # (dupli1-manage-web-task) and its own launch type, so two systems would
-  # otherwise fight over it and whichever ran last would win. Its pipeline
-  # pushes `<full-sha>` and `v<ver>-b<build>`, never `latest`.
+  # Unlike web, this service's task definition is Terraform's. dupli1-manage-web
+  # used to deploy a checked-in .aws/task-definition.json here — a second
+  # family (dupli1-manage-web-task) and a FARGATE launch type for the same
+  # service, so two systems owned one service and whichever ran last won. That
+  # file is gone; the pipeline now pushes `latest` alongside its `<full-sha>`
+  # and `v<ver>-b<build>` tags and calls update-service --force-new-deployment,
+  # exactly as the backend services do.
   #
-  # Consequence worth knowing: aws_ecs_task_definition.manage_web is still
-  # rendered but no longer deployed by Terraform, so from here the value that
-  # reaches production is whatever that JSON carries. It has carried REDIS_URL
-  # since 2026-09-13, so the setting holds either way — but the two files must
-  # be kept in step by hand until one of them is retired. Which of the two the
-  # service is running right now is not answerable from the repository: the
-  # JSON is FARGATE/awsvpc while this service declares an EC2 capacity
-  # provider and an instance-type target group, so they are not
-  # interchangeable. Check before assuming either.
+  # So task_definition is deliberately NOT ignored here: this resource is what
+  # production runs, and env changes above (REDIS_URL among them) reach it on
+  # the next apply.
   lifecycle {
-    ignore_changes = [desired_count, task_definition]
+    ignore_changes = [desired_count]
   }
 }
