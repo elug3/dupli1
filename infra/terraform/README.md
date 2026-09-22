@@ -97,17 +97,19 @@ frontends, Terraform does not. Two consequences follow from it.
 
 - **`aws_ecs_task_definition.web` / `.manage_web` are rendered but never
   deployed.** New revisions accumulate unused on each apply, and an env change
-  made there — `REDIS_URL` among them — does **not** reach production. To
-  change a frontend's environment, CPU or memory, edit the pipeline's own task
-  definition instead.
+  made there does **not** reach production. To change a frontend's
+  environment, CPU or memory, edit the pipeline's own task definition
+  instead. `aws_ecs_task_definition.manage_web` carries a comment where
+  `REDIS_URL` would otherwise go, so nobody adds it back believing it does
+  something.
 - **`dupli1-manage-web` defines this service twice**, here and in its
   checked-in `.aws/task-definition.json`: different family
   (`dupli1-manage-web-task`), different launch type (FARGATE/awsvpc against
   this file's bridge/EC2). The pipeline's copy is the one that deploys. They
   are not interchangeable, so which one the service is running right now
   cannot be answered from the repository — check the live service before
-  changing either. Both currently set `REDIS_URL`, so that setting holds
-  either way, but the two drift apart unless kept in step by hand.
+  changing either. `REDIS_URL` is deliberately set only in that JSON, so
+  there is one place to look for it rather than two that can disagree.
 
 ## Telegram (notification)
 

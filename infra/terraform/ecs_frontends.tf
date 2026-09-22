@@ -259,13 +259,11 @@ resource "aws_ecs_task_definition" "manage_web" {
         { name = "HOST", value = "0.0.0.0" },
         { name = "DUPLI1_GATEWAY_URL", value = "http://proxy.dupli1.local" },
         { name = "DUPLI1_API_BASE_URL", value = "http://proxy.dupli1.local" },
-        # Admin sessions (refresh + cached access token) live in Redis rather
-        # than a per-process Map. aws_lb_target_group.manage_web sets no
-        # stickiness and takes the default 300s deregistration delay, so a
-        # rolling deploy serves two tasks for five minutes: without shared
-        # storage a request landing on the other task finds no session, clears
-        # the cookie and signs the operator out.
-        { name = "REDIS_URL", value = "redis://redis.dupli1.local:6379" },
+        # No REDIS_URL here on purpose. This definition is never deployed (see
+        # the lifecycle block below), so setting it would only look like
+        # configuration. The admin session store's Redis URL is set in
+        # dupli1-manage-web's own .aws/task-definition.json, which is what
+        # reaches production.
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -357,11 +355,9 @@ resource "aws_ecs_service" "manage_web" {
   # otherwise fight over it and whichever ran last would win. Its pipeline
   # pushes `<full-sha>` and `v<ver>-b<build>`, never `latest`.
   #
-  # Consequence worth knowing: aws_ecs_task_definition.manage_web is still
-  # rendered but no longer deployed by Terraform, so from here the value that
-  # reaches production is whatever that JSON carries. It has carried REDIS_URL
-  # since 2026-09-13, so the setting holds either way — but the two files must
-  # be kept in step by hand until one of them is retired. Which of the two the
+  # Consequence worth knowing: aws_ecs_task_definition.manage_web is rendered
+  # but never deployed, so its environment, CPU and memory are inert. Change
+  # this service's configuration in that JSON, not here. Which of the two the
   # service is running right now is not answerable from the repository: the
   # JSON is FARGATE/awsvpc while this service declares an EC2 capacity
   # provider and an instance-type target group, so they are not
