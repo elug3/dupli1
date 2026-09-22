@@ -13,10 +13,72 @@ Terraform provisions the production compute path on the existing VPC and RDS:
 | CloudFront + OAC | Public CDN for product images (`images.dupli1.com`) |
 | CloudWatch Logs | `/ecs/dupli1-*` log groups |
 | ECS services | auth, product, order, cart, payment, notification, profile, proxy, web, manage-web, redis, nats |
+| EFS (`redis_storage.tf`) | Durable `/data` for the Redis task — see [Redis persistence](#redis-persistence) |
 
 Existing resources reused (not recreated): VPC `dupli1-prod-vpc`, ECS cluster `production`, RDS `dupli1-production`, ECR repos **except** `dupli1-profile`, Cloud Map `dupli1.local`, Secrets Manager DB URLs / JWT / Telegram.
 
 `dupli1-profile` is Terraform-managed (`aws_ecr_repository.profile`). Older service repos stay as `data.aws_ecr_repository` lookups. GitHub Actions `AmazonEC2ContainerRegistryPowerUser` cannot create repositories; `aws_iam_role_policy.github_actions_ecr_create` grants `ecr:CreateRepository` on `dupli1-*` so `.github/workflows/aws.yml` can create a missing matrix repo after this policy is applied.
+
+## Redis persistence
+
+Redis is **not** a cache in this stack. auth's refresh-token ledger lives in
+it, and `Refresh` treats a lookup miss as revoked
+(`auth/pkg/service/service.go`), so an empty Redis rejects every refresh token
+in existence — every customer and every operator is signed out at once.
+manage-web's admin sessions are in there too. The rate-limit counters (auth
+per-IP, product per-code) are the only genuinely disposable keys.
+
+`redis_storage.tf` gives the task an EFS file system mounted at `/data`, and
+the task runs `redis-server --appendonly yes`. EFS rather than a host path
+because ECS places the task on either instance and only a network file system
+survives the move. `appendfsync` stays at the default `everysec`.
+
+Three constraints hold this together — changing any one of them risks a
+corrupt append-only file:
+
+- **One writer.** `aws_ecs_service.redis` pins `desired_count = 1` rather than
+  following `var.desired_count`. Two tasks would append to the same AOF.
+- **Stop before start.** `deployment_minimum_healthy_percent = 0` /
+  `deployment_maximum_percent = 100`. The ECS default (100/200) overlaps the
+  old and new task, which is the two-writer case during every deploy.
+- **The access point.** The task mounts through
+  `aws_efs_access_point.redis`, which pins writes to uid/gid 999 (the `redis`
+  user in `redis:7-alpine`) and roots the task at `/redis`. ECS requires
+  `transit_encryption = "ENABLED"` whenever an access point is named, which is
+  why the instance user-data installs `amazon-efs-utils`.
+
+### Applying it
+
+Two things to expect, neither of them zero-impact:
+
+- **The instance user-data changed**, and the ASG has
+  `instance_refresh { triggers = ["launch_template"] }`, so the apply rolls
+  both EC2 hosts at `min_healthy_percentage = 50`. Every task is rescheduled.
+- **Replacing the Redis task is a brief outage** — by design, since the old
+  task must stop first. During it, auth refresh returns 5xx (a dial failure is
+  not `ErrSessionNotFound`, so it is *not* mistaken for revocation), but
+  manage-web's `exchangeRefreshToken` treats any non-ok response as a spent
+  token, so operators caught in that window are signed out anyway. Apply
+  outside business hours.
+
+The first task to start creates an empty AOF; everything already in the
+old in-memory Redis is lost at that point, which is the same forced re-login
+described above. Nothing needs migrating.
+
+Verify after the apply:
+
+```bash
+# The task is mounting EFS, not a local volume.
+aws ecs describe-tasks --cluster production \
+  --tasks "$(aws ecs list-tasks --cluster production --service-name dupli1-redis \
+    --query 'taskArns[0]' --output text)" \
+  --query 'tasks[0].attachments[?type==`AmazonElasticFileSystem`]'
+
+# Persistence is actually on (expects appendonly:yes).
+# From any task in the VPC, e.g. exec into auth:
+redis-cli -h redis.dupli1.local CONFIG GET appendonly
+```
+
 
 ## Telegram (notification)
 

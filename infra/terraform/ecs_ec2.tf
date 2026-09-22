@@ -173,6 +173,11 @@ aws ecs put-account-setting \
   --name awsvpcTrunking \
   --value enabled \
   --region "$REGION"
+# The Redis task mounts EFS with transit encryption, which goes through the
+# efs-utils mount helper (stunnel) rather than the kernel NFS client. The
+# ECS-optimized AMI is expected to ship it; install explicitly so the task can
+# still place if a future AMI drops it. No-op when already present.
+dnf install -y amazon-efs-utils || yum install -y amazon-efs-utils || true
 cat > /etc/ecs/ecs.config <<EOF
 ECS_CLUSTER=${var.ecs_cluster_name}
 ECS_ENABLE_CONTAINER_METADATA=true

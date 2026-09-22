@@ -192,13 +192,46 @@ resource "aws_ecs_task_definition" "redis" {
   requires_compatibilities = local.common_task.requires_compatibilities
   execution_role_arn       = local.common_task.execution_role_arn
   cpu                      = "128"
-  memory                   = "256"
+  # 256 before AOF. An append-only rewrite forks, and the copy-on-write peak
+  # is what would OOM-kill the task and lose the ledger this change exists to
+  # protect. The dataset is a few MB; the headroom is for the fork.
+  memory = "512"
+
+  # See redis_storage.tf for why this is EFS rather than a host path.
+  # transit_encryption is ENABLED because ECS requires it whenever an access
+  # point is named, which in turn is what makes the mount writable as the
+  # container's own uid.
+  volume {
+    name = "redis-data"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.redis.id
+      transit_encryption = "ENABLED"
+
+      authorization_config {
+        access_point_id = aws_efs_access_point.redis.id
+        iam             = "DISABLED"
+      }
+    }
+  }
 
   container_definitions = jsonencode([
     {
       name      = "redis"
       image     = "redis:7-alpine"
       essential = true
+      # appendonly writes every command to /data/appendonlydir and replays it
+      # on start. appendfsync stays at the default everysec: always would put
+      # an EFS round trip in the path of each login, and the second of writes
+      # at risk is worth far less than that.
+      command = ["redis-server", "--appendonly", "yes", "--dir", "/data"]
+      mountPoints = [
+        {
+          sourceVolume  = "redis-data"
+          containerPath = "/data"
+          readOnly      = false
+        }
+      ]
       portMappings = [
         {
           containerPort = 6379
@@ -838,7 +871,23 @@ resource "aws_ecs_service" "redis" {
   name            = "dupli1-redis"
   cluster         = data.aws_ecs_cluster.production.id
   task_definition = aws_ecs_task_definition.redis.arn
-  desired_count   = var.desired_count
+
+  # Pinned to one, not var.desired_count: two tasks would mount the same EFS
+  # access point and append to the same AOF, which corrupts it. Raising the
+  # per-service count for the application services must not scale this.
+  desired_count = 1
+
+  # Stop the old task before starting the new one, for the same reason. The
+  # ECS default (100/200) overlaps them, which is exactly the two-writer case.
+  # The cost is a few seconds with no Redis whenever this task is replaced:
+  # auth refresh 5xxes (a dial failure is not ErrSessionNotFound, so it is not
+  # mistaken for revocation) and manage-web's session store throws. Note that
+  # manage-web's exchangeRefreshToken treats any non-ok response as a spent
+  # token, so operators caught in that window are signed out even though their
+  # tokens are fine. Replacements are rare, and the alternative is a corrupt
+  # AOF, but do not treat a redis apply as zero-impact.
+  deployment_minimum_healthy_percent = 0
+  deployment_maximum_percent         = 100
 
   capacity_provider_strategy {
     capacity_provider = aws_ecs_capacity_provider.ec2.name
@@ -858,11 +907,16 @@ resource "aws_ecs_service" "redis" {
   depends_on = [
     aws_ecs_cluster_capacity_providers.production,
     aws_nat_gateway.prod,
+    # The task definition references the file system and access point, so
+    # those are ordered already; the mount targets are not, and without one in
+    # the task's AZ the mount fails and the task never starts.
+    aws_efs_mount_target.redis,
   ]
 
-  lifecycle {
-    ignore_changes = [desired_count]
-  }
+  # Deliberately no ignore_changes on desired_count, unlike the application
+  # services. For them an out-of-band scale is a legitimate operator action
+  # Terraform should not fight; here a second task corrupts the AOF, so the
+  # count is an invariant and every apply should put it back to one.
 }
 
 resource "aws_ecs_service" "nats" {

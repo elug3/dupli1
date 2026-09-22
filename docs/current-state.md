@@ -61,6 +61,7 @@ See [service-layout.md](service-layout.md) for details.
   - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage`, `payment.cancel` (`DUPLI1_ORDER_SERVICE_*`); order refreshes a Bearer access token and calls product stock/promotions **and payment cancel** via **`DUPLI1_GATEWAY_URL`** (`httpstock` / `httppayment` / gateway paths)
   - Login/refresh rate-limited per IP via Redis; Gin trusts only RFC1918 proxy hops (`SetTrustedProxies`) so a client-supplied `X-Forwarded-For` can't spoof a fresh IP and bypass the limit
   - Session store falls back to in-memory (with background GC) when no Redis is configured, so `/logout` and refresh-token revocation still work on a single instance instead of silently no-op'ing
+  - In production the ledger is authoritative and fail-closed: `Refresh` treats a missing key as revoked, so an empty Redis signs out every customer and operator. The ECS Redis task therefore persists to EFS with AOF — see [infra/terraform/README.md](../infra/terraform/README.md#redis-persistence)
   - `user.registered` NATS publish is best-effort: a broker outage is logged and the account still registers
   - Structured **zerolog** logging (`event` field) for session paths, internal errors, and bootstrap — [auth-logging.md](auth-logging.md)
 - **Tests:** `cd auth && go test ./...`
