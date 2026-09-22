@@ -82,50 +82,32 @@ redis-cli -h redis.dupli1.local CONFIG GET appendonly
 
 ## Frontend deploys — who owns the task definitions
 
-The two frontends are deliberately different, because their pipelines are.
+The two frontend services carry `ignore_changes = [desired_count,
+task_definition]`, so **their images are deployed by their own pipelines and
+Terraform never moves them**. This is load-bearing, not tidiness: the
+Terraform-rendered definitions use `:${var.image_tag}` = `:latest`, and
+neither frontend pipeline pushes that tag — `dupli1-web` pushes `<full-sha>`
+only, `dupli1-manage-web` `<full-sha>` and `v<ver>-b<build>`. Without the
+ignore, an apply would point both at a tag that does not exist and take the
+storefront and admin console down. Terraform still owns those services, their
+target groups and listener rules.
 
-**manage-web: Terraform owns the task definition.** `aws_ecs_task_definition.manage_web`
-is what production runs, so env changes there (`REDIS_URL` among them) reach
-it on the next apply. `dupli1-manage-web`'s pipeline pushes `latest` alongside
-its `<full-sha>` and `v<ver>-b<build>` tags and then calls
-`update-service --force-new-deployment`, so ECS re-pulls `latest` against the
-Terraform-managed definition — the same shape as the backend services. It
-previously deployed a checked-in `.aws/task-definition.json` declaring a second
-family (`dupli1-manage-web-task`) and a FARGATE launch type for this same
-service; that file is retired.
+This is a settled choice, not a pending cleanup: GitHub Actions deploys the
+frontends, Terraform does not. Two consequences follow from it.
 
-**web: the pipeline owns it.** `aws_ecs_service.web` keeps
-`ignore_changes = [task_definition]` because `dupli1-web` pushes only
-`<full-sha>` — never `latest` — so an apply that moved it onto the
-Terraform-rendered definition (`:${var.image_tag}`, i.e. `:latest`) would point
-it at a tag that does not exist and take the storefront down. Do not remove
-that ignore without first teaching `dupli1-web`'s pipeline to push `latest` and
-force a redeployment, the way manage-web now does.
-
-Terraform owns both services, their target groups and their listener rules
-either way.
-
-### Order of operations for the manage-web switchover
-
-`manage-web:latest` must exist in ECR **before** the apply points the service
-at it. Merging `dupli1-manage-web` first is what creates that tag.
-
-1. Merge `dupli1-manage-web`. Its pipeline pushes `latest` and force-deploys.
-   The service is still on whatever definition it was running, so this is a
-   normal deploy.
-2. Confirm the tag landed:
-   ```bash
-   aws ecr describe-images --repository-name manage-web \
-     --image-ids imageTag=latest --query 'imageDetails[0].imagePushedAt'
-   ```
-3. Then `terraform apply`. It moves the service onto
-   `aws_ecs_task_definition.manage_web` (family `dupli1-manage-web`, bridge/EC2,
-   256 CPU / 512 MB — the same shape `web` already runs).
-
-Applying before step 1 points manage-web at a tag that does not exist. If the
-service is currently running the retired FARGATE definition, step 3 is also a
-launch-type change: watch that the new task registers in
-`…-manage-inst-tg`, which is instance-type and cannot take an awsvpc task.
+- **`aws_ecs_task_definition.web` / `.manage_web` are rendered but never
+  deployed.** New revisions accumulate unused on each apply, and an env change
+  made there — `REDIS_URL` among them — does **not** reach production. To
+  change a frontend's environment, CPU or memory, edit the pipeline's own task
+  definition instead.
+- **`dupli1-manage-web` defines this service twice**, here and in its
+  checked-in `.aws/task-definition.json`: different family
+  (`dupli1-manage-web-task`), different launch type (FARGATE/awsvpc against
+  this file's bridge/EC2). The pipeline's copy is the one that deploys. They
+  are not interchangeable, so which one the service is running right now
+  cannot be answered from the repository — check the live service before
+  changing either. Both currently set `REDIS_URL`, so that setting holds
+  either way, but the two drift apart unless kept in step by hand.
 
 ## Telegram (notification)
 
