@@ -254,6 +254,7 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 - [x] **Product attributes memo** — parent `attributes` string map (JSONB); PDP display only — [product-attributes.md](product-attributes.md).
 - [ ] **Auth-aware `GET /api/v1/products/{id}`** — managers should see drafts/cost on PDP without a separate `/manage` path (optional Bearer, same pattern as list search).
 - [x] **Guest session cookie + unique product view counter** — implemented; see [product-guest-views-plan.md](product-guest-views-plan.md). Browser `dupli1_guest` cookie; exact unique views per parent product on public PDP (`viewCount`).
+- [ ] **Internal product view count** — expose per-product view counts to managers (manage-web / manager product APIs) as an internal metric, rather than only as public PDP social proof. Consider excluding manager traffic from the count (open question in [product-guest-views-plan.md](product-guest-views-plan.md)).
 - [x] **Product sold count** — implemented; see [product-sold-count.md](product-sold-count.md). Parent `soldCount` increments on inventory reservation commit (order ship).
 - [x] **Rich product search + wishlist** — implemented; see [product-rich-search.md](product-rich-search.md). `sort`/`order`/`q`; wishlist add/remove/list with `wishlistCount`.
 - [x] **Simple PDP recommendations** — implemented; see [product-recommendations.md](product-recommendations.md). `GET /api/v1/products/{id}/recommendations`; content similarity + `view_count` boost.
