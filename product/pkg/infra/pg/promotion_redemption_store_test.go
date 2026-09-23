@@ -169,3 +169,90 @@ func TestPromotionRedemptionReleaseFreesCampaignSlotInPostgres(t *testing.T) {
 		t.Fatalf("redemption_count = %d, want 1 after release + re-reserve", got.RedemptionCount)
 	}
 }
+
+// Regression for PR #282: cancel-before-pay releases the ledger row, but a late
+// payment.succeeded on the same order_id must spend the campaign slot again.
+func TestPromotionRedemptionConsumeAfterReleaseRestoresCampaignCountInPostgres(t *testing.T) {
+	ctx := t.Context()
+	promoStore, ledger := newPromotionStores(t)
+
+	max := 1
+	code := "LATE_PAY_PG"
+	if err := promoStore.Create(ctx, fixedPromotionForLedger(code, &max)); err != nil {
+		t.Fatalf("create promotion: %v", err)
+	}
+
+	if _, err := ledger.Reserve(ctx, reserveInput(code, "ord-late", "cust-1"), 1); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+
+	now := time.Now().UTC()
+	if err := ledger.Release(ctx, "ord-late", now); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	def, err := promoStore.Get(ctx, code)
+	if err != nil {
+		t.Fatalf("get after release: %v", err)
+	}
+	if def.RedemptionCount != 0 {
+		t.Fatalf("redemption_count = %d, want 0 after release", def.RedemptionCount)
+	}
+
+	if err := ledger.Consume(ctx, "ord-late", now); err != nil {
+		t.Fatalf("consume after release: %v", err)
+	}
+	def, err = promoStore.Get(ctx, code)
+	if err != nil {
+		t.Fatalf("get after consume: %v", err)
+	}
+	if def.RedemptionCount != 1 {
+		t.Fatalf("redemption_count = %d, want 1 after late consume", def.RedemptionCount)
+	}
+
+	if _, err := ledger.Reserve(ctx, reserveInput(code, "ord-other", "cust-2"), 1); !ports.IsCampaignExhaustedConflict(err) {
+		t.Fatalf("campaign should be exhausted after late consume, err = %v", err)
+	}
+}
+
+// A retried checkout complete must reactivate a released row instead of
+// inserting a second redemption for the same order.
+func TestPromotionRedemptionReserveReactivatesReleasedRowInPostgres(t *testing.T) {
+	ctx := t.Context()
+	promoStore, ledger := newPromotionStores(t)
+
+	max := 1
+	code := "REACTIVATE_PG"
+	if err := promoStore.Create(ctx, fixedPromotionForLedger(code, &max)); err != nil {
+		t.Fatalf("create promotion: %v", err)
+	}
+
+	in := reserveInput(code, "ord-retry", "cust-1")
+	first, err := ledger.Reserve(ctx, in, 1)
+	if err != nil {
+		t.Fatalf("first reserve: %v", err)
+	}
+
+	now := time.Now().UTC()
+	if err := ledger.Release(ctx, "ord-retry", now); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+
+	second, err := ledger.Reserve(ctx, in, 1)
+	if err != nil {
+		t.Fatalf("reserve after release: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("reactivated redemption %q, want same row %q", second.ID, first.ID)
+	}
+	if second.Status != domain.RedemptionReserved {
+		t.Fatalf("status = %q, want reserved", second.Status)
+	}
+
+	def, err := promoStore.Get(ctx, code)
+	if err != nil {
+		t.Fatalf("get promotion: %v", err)
+	}
+	if def.RedemptionCount != 1 {
+		t.Fatalf("redemption_count = %d, want 1 after reactivate", def.RedemptionCount)
+	}
+}
