@@ -6,7 +6,7 @@ Config lives in [`deploy/venus/`](../deploy/venus/); secrets never enter git.
 
 Status (2026-09-26): **prepared and rehearsed, not cut over.** AWS still serves
 production. VENUS runs a full copy loaded from a fresh production dump, reachable
-only on `127.0.0.1:80`.
+over plain HTTP on port 80 from the home network (`http://192.168.0.69`).
 
 ## Architecture
 
@@ -17,6 +17,8 @@ browser ──TLS──▶ Cloudflare (dupli1.com DNS + proxy, already in use to
                    ▼
 VENUS  docker compose project "dupli1"  (deploy/venus/docker-compose.yml)
   edge (nginx)            ALB + CloudFront replacement
+    :8080 cloudflared only (trusts CF-Connecting-IP), not published
+    :80   direct HTTP, published on 0.0.0.0 for the home network
     manage.dupli1.com  ──▶ manage-web
     /api/*, /gateway/* ──▶ proxy (API gateway = production's nginx.ecs.conf)
     /product-images/*  ──▶ s3 (SeaweedFS, anonymous read-only on product-images)
@@ -77,6 +79,12 @@ $DC up -d
 Host changes: `apache2` disabled (it held port 80), `vm.overcommit_memory = 1`
 (`/etc/sysctl.d/99-dupli1-redis.conf`), `age` installed.
 
+The edge publishes port 80 on all interfaces, so anything on the home network
+reaches the stack directly over plain HTTP. Docker-published ports bypass the
+host firewall; don't forward port 80 on the router — public traffic belongs on
+the tunnel. Direct clients can't spoof their IP: only the tunnel listener
+(`:8080`) honours `CF-Connecting-IP`.
+
 ## Before cutover — checklist
 
 1. **Smoke-test the copy as owner** (the copy is replaced at cutover, so test
@@ -117,7 +125,7 @@ Downtime ≈ ECS scale-down + 4½ min + DNS switch.
 2. Check `docker logs dupli1-cloudflared-1` shows registered connections.
 3. Verify locally: `curl -H Host:dupli1.com http://127.0.0.1/gateway/health`.
 4. **Switch DNS:** in the tunnel's *Public Hostname* tab add
-   `dupli1.com` → `http://edge:80` and `manage.dupli1.com` → `http://edge:80`,
+   `dupli1.com` → `http://edge:8080` and `manage.dupli1.com` → `http://edge:8080`,
    accepting the replacement of the existing records (those pointed at the ALB).
 5. Verify publicly: storefront, sign-in (existing sessions should survive),
    product images, manage-web order feed, a Telegram ops alert, one real

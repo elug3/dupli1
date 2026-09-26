@@ -224,8 +224,10 @@ services:
     image: nginx:1.27-alpine
     volumes:
       - ./nginx-edge.conf:/etc/nginx/conf.d/default.conf:ro
+    # :80 is direct HTTP for the home network; :8080 is cloudflared's
+    # listener and stays unpublished (see nginx-edge.conf).
     ports:
-      - "127.0.0.1:80:80"
+      - "0.0.0.0:80:80"
     depends_on: [proxy, web, manage-web, s3]
 
   # Public ingress. Started only at cutover: `--profile tunnel up -d`.
