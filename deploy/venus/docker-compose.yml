@@ -233,7 +233,7 @@ services:
   # Public ingress. Started only at cutover: `--profile tunnel up -d`.
   cloudflared:
     <<: *service
-    image: cloudflare/cloudflared:2025.9.1
+    image: cloudflare/cloudflared:2026.9.3
     profiles: ["tunnel"]
     command: ["tunnel", "--no-autoupdate", "run"]
     environment:
