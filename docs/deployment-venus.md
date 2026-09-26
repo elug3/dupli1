@@ -88,10 +88,9 @@ Host changes: `apache2` disabled (it held port 80), `vm.overcommit_memory = 1`
    Also sign in to the storefront and manage-web against VENUS: add
    `127.0.0.1 dupli1.com manage.dupli1.com` to `/etc/hosts` on VENUS
    temporarily and browse `http://dupli1.com` / `http://manage.dupli1.com`.
-2. **Nano Pay IP allowlist.** Ask Nano whether API calls are restricted by
-   source IP. On AWS they left from the NAT gateway; after cutover they leave
-   from your home connection's public IP (dynamic). Card payments fail if
-   it isn't allowed.
+2. **Nano Pay IP allowlist** — **done.** Nano confirmed API calls are not
+   restricted by source IP, so the switch from the AWS NAT gateway to the home
+   connection's dynamic public IP doesn't affect card payments.
 3. **Create the tunnel** (Cloudflare dashboard → Zero Trust → Networks →
    Tunnels → Create → Cloudflared). Copy the token into `/opt/dupli1/.env` as
    `CLOUDFLARE_TUNNEL_TOKEN='…'`. Do **not** add public hostnames yet — adding
@@ -100,8 +99,9 @@ Host changes: `apache2` disabled (it held port 80), `vm.overcommit_memory = 1`
    `dupli1-migration-backup-20260926`, role `dupli1-migration-backup-task`,
    task definition `dupli1-migration-backup`, log group
    `/dupli1/migration-backup`) — `cutover.sh` uses them for the final dump.
-5. **Machine:** prefer wired Ethernet over Wi-Fi, a UPS, and BIOS "power on
-   after AC loss". Docker and all containers start on boot.
+5. **Machine:** wired Ethernet — **done** (`enp1s0`, DHCP, Wi-Fi disabled).
+   Still recommended: a UPS and BIOS "power on after AC loss". Docker and all
+   containers start on boot.
 6. **Rehearse** as often as you like; it doesn't touch AWS:
    `deploy/venus/cutover.sh rehearse` (≈4½ min on 2026-09-26).
 
