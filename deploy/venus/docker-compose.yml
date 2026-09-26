@@ -1,0 +1,244 @@
+# Self-hosted production on VENUS (replaces ECS + RDS + ALB + S3/CloudFront).
+# See docs/deployment-venus.md.
+#
+# Runs the exact images production ran on ECS (pulled by digest, tagged
+# dupli1-prod/<name>:<date>) with the ECS task-definition environment. Each
+# container carries its Cloud Map name (auth.dupli1.local, …) as a network
+# alias, so service-to-service URLs are unchanged from ECS.
+#
+# Secrets come from /opt/dupli1/.env (written by make-env.sh, never committed):
+#   docker compose -f deploy/venus/docker-compose.yml --env-file /opt/dupli1/.env up -d
+
+name: dupli1
+
+x-service: &service
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  # ── state ────────────────────────────────────────────────────────────────
+  postgres:
+    <<: *service
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${PG_SUPERUSER_PASSWORD:?run make-env.sh}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # S3-compatible object store for product images (was S3 + CloudFront).
+  # SeaweedFS because MinIO stopped publishing community images. Identities:
+  # dupli1 (the product service) is full access; anonymous may only read
+  # objects in product-images — no listing — which the edge serves publicly.
+  s3:
+    <<: *service
+    image: chrislusf/seaweedfs:4.47
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        cat > /tmp/s3.json <<EOF
+        {"identities": [
+          {"name": "dupli1", "credentials": [{"accessKey": "dupli1", "secretKey": "$$S3_SECRET_KEY"}],
+           "actions": ["Admin", "Read", "List", "Tagging", "Write"]},
+          {"name": "anonymous", "actions": ["Read:product-images"]}
+        ]}
+        EOF
+        exec weed server -dir=/data -s3 -s3.port=8333 -s3.config=/tmp/s3.json -volume.max=0 -master.volumeSizeLimitMB=1024
+    environment:
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?run make-env.sh}
+    volumes:
+      - s3data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Production ran both without persistence; kept identical.
+  redis:
+    <<: *service
+    image: dupli1-prod/redis:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    networks: { default: { aliases: [redis.dupli1.local] } }
+
+  nats:
+    <<: *service
+    image: dupli1-prod/nats:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    command: ["-js"]
+    networks: { default: { aliases: [nats.dupli1.local] } }
+
+  # ── services (env mirrors the ECS task definitions) ──────────────────────
+  auth:
+    <<: *service
+    image: dupli1-prod/auth:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    entrypoint: ["/usr/local/bin/service"]
+    command: []
+    environment:
+      DUPLI1_AUTH_ADDR: ":8080"
+      DB_URL: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/schick_db?sslmode=disable
+      REDIS_URL: redis://redis.dupli1.local:6379
+      NATS_URL: nats://nats.dupli1.local:4222
+      JWT_SECRET: ${JWT_SECRET:?run make-env.sh}
+      JWT_PRIVATE_KEY_FILE: /run/secrets/jwt_private_key.pem
+      DUPLI1_WEB_SERVICE_EMAIL: dupli1-web@web.dupli1.com
+      DUPLI1_WEB_SERVICE_PASSWORD: ${AUTH_WEB_SERVICE_PASSWORD:?run make-env.sh}
+      DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL:?run make-env.sh}
+      DUPLI1_ORDER_SERVICE_PASSWORD: ${DUPLI1_ORDER_SERVICE_PASSWORD:?run make-env.sh}
+    volumes:
+      - /opt/dupli1/secrets/jwt_private_key.pem:/run/secrets/jwt_private_key.pem:ro
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_started }, nats: { condition: service_started } }
+    networks: { default: { aliases: [auth.dupli1.local] } }
+
+  product:
+    <<: *service
+    image: dupli1-prod/product:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8080"
+      DUPLI1_PRODUCT_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/products?sslmode=disable
+      AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
+      JWT_SECRET: ${JWT_SECRET}
+      NATS_URL: nats://nats.dupli1.local:4222
+      S3_ENDPOINT: http://s3:8333
+      S3_BUCKET: product-images
+      S3_PUBLIC_ENDPOINT: ${PUBLIC_ORIGIN:-https://dupli1.com}/product-images
+      S3_ACCESS_KEY: dupli1
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+    depends_on: { postgres: { condition: service_healthy }, s3: { condition: service_healthy }, auth: { condition: service_started } }
+    networks: { default: { aliases: [product.dupli1.local] } }
+
+  order:
+    <<: *service
+    image: dupli1-prod/order:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    environment:
+      DUPLI1_ORDER_ADDR: ":8080"
+      DUPLI1_ORDER_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/orders?sslmode=disable
+      AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
+      DUPLI1_AUTH_URL: http://auth.dupli1.local:8080
+      DUPLI1_GATEWAY_URL: http://proxy.dupli1.local
+      DUPLI1_INVENTORY_URL: http://product.dupli1.local:8080
+      DUPLI1_PRODUCT_URL: http://product.dupli1.local:8080
+      NATS_URL: nats://nats.dupli1.local:4222
+      JWT_SECRET: ${JWT_SECRET}
+      DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL}
+      DUPLI1_ORDER_SERVICE_PASSWORD: ${DUPLI1_ORDER_SERVICE_PASSWORD}
+    depends_on: { postgres: { condition: service_healthy }, auth: { condition: service_started } }
+    networks: { default: { aliases: [order.dupli1.local] } }
+
+  cart:
+    <<: *service
+    image: dupli1-prod/cart:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    environment:
+      DUPLI1_CART_ADDR: ":8080"
+      DUPLI1_CART_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/cart?sslmode=disable
+      AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
+      DUPLI1_INVENTORY_URL: http://product.dupli1.local:8080
+      DUPLI1_PRODUCT_URL: http://product.dupli1.local:8080
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on: { postgres: { condition: service_healthy } }
+    networks: { default: { aliases: [cart.dupli1.local] } }
+
+  payment:
+    <<: *service
+    image: dupli1-prod/payment:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    environment:
+      DUPLI1_PAYMENT_ADDR: ":8080"
+      DUPLI1_PAYMENT_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/payments?sslmode=disable
+      AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
+      DUPLI1_ORDER_URL: http://order.dupli1.local:8080
+      DUPLI1_PAYMENT_PUBLIC_URL: ${PUBLIC_ORIGIN:-https://dupli1.com}
+      NATS_URL: nats://nats.dupli1.local:4222
+      JWT_SECRET: ${JWT_SECRET}
+      NANO_BASE_URL: https://pay.nanopay.co.kr
+      NANO_SUCCESS_URL: ${PUBLIC_ORIGIN:-https://dupli1.com}/checkout/confirmation
+      NANO_FAILURE_URL: ${PUBLIC_ORIGIN:-https://dupli1.com}/checkout
+      NANO_API_KEY: ${NANO_API_KEY:-}
+      NANO_LOGIN_ID: ${NANO_LOGIN_ID:-}
+      NANO_SHOPCODE: ${NANO_SHOPCODE:-}
+      NANO_VER: ${NANO_VER:-}
+    depends_on: { postgres: { condition: service_healthy } }
+    networks: { default: { aliases: [payment.dupli1.local] } }
+
+  profile:
+    <<: *service
+    image: dupli1-prod/profile:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    environment:
+      DUPLI1_PROFILE_ADDR: ":8080"
+      AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
+      NATS_URL: nats://nats.dupli1.local:4222
+      JWT_SECRET: ${JWT_SECRET}
+    networks: { default: { aliases: [profile.dupli1.local] } }
+
+  notification:
+    <<: *service
+    image: dupli1-prod/notification:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    environment:
+      DUPLI1_NOTIFICATION_ADDR: ":8080"
+      AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
+      MANAGE_WEB_URL: https://manage.dupli1.com
+      NATS_URL: nats://nats.dupli1.local:4222
+      # Empty until cutover: one bot token must never be polled by AWS and
+      # VENUS at the same time (Telegram answers the second poller with 409).
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_ORDER_CHAT_ID: ${TELEGRAM_ORDER_CHAT_ID:-}
+      TELEGRAM_PRODUCT_CHAT_ID: ${TELEGRAM_PRODUCT_CHAT_ID:-}
+    networks: { default: { aliases: [notification.dupli1.local] } }
+
+  # ── HTTP ─────────────────────────────────────────────────────────────────
+  # API gateway: production's nginx.ecs.conf with Docker's resolver.
+  proxy:
+    <<: *service
+    image: dupli1-prod/proxy:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    volumes:
+      - ./nginx-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: { default: { aliases: [proxy.dupli1.local] } }
+
+  web:
+    <<: *service
+    image: dupli1-prod/web:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DUPLI1_API_BASE_URL: http://proxy.dupli1.local
+      DUPLI1_WEB_SERVICE_EMAIL: ${WEB_SERVICE_EMAIL:?run make-env.sh}
+      DUPLI1_WEB_SERVICE_PASSWORD: ${WEB_SERVICE_PASSWORD:?run make-env.sh}
+
+  manage-web:
+    <<: *service
+    image: dupli1-prod/manage-web-container:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    environment:
+      PORT: "80"
+      DUPLI1_API_BASE_URL: http://proxy.dupli1.local
+      DUPLI1_GATEWAY_URL: http://proxy.dupli1.local
+      REDIS_URL: redis://redis.dupli1.local:6379
+
+  # Replaces the ALB: host/path routing plus /product-images/ (was CloudFront).
+  edge:
+    <<: *service
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx-edge.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:80:80"
+    depends_on: [proxy, web, manage-web, s3]
+
+  # Public ingress. Started only at cutover: `--profile tunnel up -d`.
+  cloudflared:
+    <<: *service
+    image: cloudflare/cloudflared:2025.9.1
+    profiles: ["tunnel"]
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      # From the Cloudflare dashboard; cloudflared exits if it's empty.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on: [edge]
+
+volumes:
+  pgdata:
+  s3data:
