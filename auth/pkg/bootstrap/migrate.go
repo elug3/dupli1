@@ -32,6 +32,7 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS account_type TEXT NOT NULL DEFAULT 'customer'`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS service_name TEXT NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS auth_outbox (
 			id BIGSERIAL PRIMARY KEY,
 			aggregate_id TEXT NOT NULL,

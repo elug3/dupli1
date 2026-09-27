@@ -98,8 +98,8 @@ func GenerateRSAKey(bits int) (*rsa.PrivateKey, error) {
 
 // Generate issues a signed RS256 JWT. Access tokens include permissions and
 // email (when non-empty); refresh tokens include only sub, type, exp, iat, and jti.
-func (g *RSATokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string, email string) (string, error) {
-	claims := buildMapClaims(userID, g.tokenType, time.Now().Add(g.expiryDuration), userPermissions, email)
+func (g *RSATokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string, id ports.Identity) (string, error) {
+	claims := buildMapClaims(userID, g.tokenType, time.Now().Add(g.expiryDuration), userPermissions, id)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = g.keyID

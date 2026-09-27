@@ -284,3 +284,44 @@ func TestNewAccessTokenValidatorRequiresSecretOrJWKS(t *testing.T) {
 		t.Fatal("expected error when neither JWKS nor HMAC secret is set")
 	}
 }
+
+func TestHMACValidatorReadsAccountTypeAndServiceName(t *testing.T) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":          "svc-1",
+		"type":         "access",
+		"exp":          time.Now().Add(time.Hour).Unix(),
+		"account_type": "service",
+		"service_name": "dupli1-order",
+	})
+	signed, err := token.SignedString([]byte("test-secret"))
+	if err != nil {
+		t.Fatalf("SignedString: %v", err)
+	}
+	claims, err := NewHMACValidator("test-secret").ValidateAccessToken(signed)
+	if err != nil {
+		t.Fatalf("ValidateAccessToken: %v", err)
+	}
+	if claims.AccountType != "service" || claims.ServiceName != "dupli1-order" {
+		t.Fatalf("claims = %+v", claims)
+	}
+}
+
+func TestClaimsCalledBy(t *testing.T) {
+	cases := []struct {
+		name   string
+		claims Claims
+		want   bool
+	}{
+		{"named service", Claims{AccountType: "service", ServiceName: "dupli1-order"}, true},
+		{"other service", Claims{AccountType: "service", ServiceName: "dupli1-web"}, false},
+		{"unnamed service", Claims{AccountType: "service"}, false},
+		{"manager", Claims{AccountType: "manager", Permissions: []string{permissions.All}}, false},
+		{"customer claiming the name", Claims{AccountType: "customer", ServiceName: "dupli1-order"}, false},
+		{"pre-claim token", Claims{Permissions: []string{permissions.PromotionRedeem}}, true},
+	}
+	for _, tc := range cases {
+		if got := tc.claims.CalledBy("dupli1-order"); got != tc.want {
+			t.Errorf("%s: CalledBy = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

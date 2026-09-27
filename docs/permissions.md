@@ -37,6 +37,8 @@ Storefront **customers** are not permissions. Customer self-service stays **auth
 | `sub` | string | User ID (unchanged) |
 | `type` | string | `"access"` (unchanged) |
 | `permissions` | string[] | Fine-grained authorization strings |
+| `account_type` | string | `customer` \| `manager` \| `service`, from the user row at issue time |
+| `service_name` | string | Service accounts only (e.g. `dupli1-order`); internal APIs allowlist it. See [Internal APIs](#internal-apis) |
 | `email` | string | User's login email (omitted when empty). Used by payment for NANO `compOrderMem`; not an authorization claim — do not trust it for access control without re-checking auth |
 | `exp`, `iat` | number | Unchanged |
 | `jti` | string | Random per-token ID; prevents same-second token collisions (required for refresh rotation) |
@@ -286,7 +288,7 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `DELETE` | `/api/v1/products/promotions/by-code/{code}` | `promotion.delete` (or `coupon.delete`) |
 | `POST` | `/api/v1/products/promotions/redeem` | — (public, rate-limited) |
 | `POST` | `/api/v1/products/promotions/evaluate` | — (public, rate-limited) |
-| `POST` | `/api/v1/products/promotions/reserve\|consume\|release` | `promotion.redeem` (service-to-service) |
+| `POST` | `/api/v1/products/promotions/reserve\|consume\|release` | `promotion.redeem` + caller `dupli1-order` ([internal](#internal-apis)) |
 
 Legacy top-level aliases (`/api/v1/variants/…`, `/api/v1/catalog/…`, `/api/v1/coupons/…`) are still registered with the same permissions; see [TODO.md](TODO.md) for the migration table. The promotion routes additionally answer on the pre-rename `/api/v1/products/coupons…` spelling ([product-promotion-rename.md](product-promotion-rename.md)).
 
@@ -303,9 +305,9 @@ registered as an alias.
 | `GET` | `/api/v1/products/inventory/items/{sku}` | — (public) |
 | `PUT` | `/api/v1/products/inventory/items/{sku}` | `inventory.stock.write` |
 | `POST` | `/api/v1/products/inventory/items/{sku}/adjust` | `inventory.stock.write` |
-| `POST` | `/api/v1/products/inventory/reservations` | `inventory.reservation.manage` |
-| `POST` | `/api/v1/products/inventory/reservations/{id}/commit` | `inventory.reservation.manage` |
-| `POST` | `/api/v1/products/inventory/reservations/{id}/release` | `inventory.reservation.manage` |
+| `POST` | `/api/v1/products/inventory/reservations` | `inventory.reservation.manage` + caller `dupli1-order` ([internal](#internal-apis)) |
+| `POST` | `/api/v1/products/inventory/reservations/{id}/commit` | `inventory.reservation.manage` + caller `dupli1-order` |
+| `POST` | `/api/v1/products/inventory/reservations/{id}/release` | `inventory.reservation.manage` + caller `dupli1-order` |
 
 ### Order service
 
@@ -375,6 +377,21 @@ Webhook (`POST /api/v1/notification/telegram/webhook`) and NATS event dispatch r
 The bot's own webhook (`POST /api/v1/support/telegram/webhook`) is unauthenticated by necessity, since Telegram calls it; the secret header is what makes it safe, and a missing secret fails closed. Every inbox route requires Bearer, and without a validator configured they answer `503` rather than serving open.
 
 ---
+
+## Internal APIs
+
+Some routes exist only for one service to call. A permission is not enough to reach them, since wildcards (`promotion.*` in `catalog_admin`, the owner's `*`) cover it; the access token must also be a `service` account whose `service_name` is on the route's allowlist (`authjwt.Claims.CalledBy`, names in `shared/pkg/serviceaccount`). A person is refused with `403` even as owner.
+
+| Route | Allowed caller |
+|-------|----------------|
+| `POST /api/v1/products/promotions/reserve\|consume\|release` | `dupli1-order` |
+| `POST /api/v1/products/inventory/reservations`, `…/{id}/commit`, `…/{id}/release` (and the legacy `/api/v1/inventory/…` aliases) | `dupli1-order` |
+
+`service_name` is set only by auth's startup seeds (`DUPLI1_ORDER_SERVICE_*` → `dupli1-order`, `DUPLI1_WEB_SERVICE_*` → `dupli1-web`); no API writes it.
+
+**Rollout:** a token with no `account_type` claim was minted before auth stamped one and is judged on its permission alone. Access tokens live 15 minutes, so this only bridges a deploy in which product ships before auth; remove the fallback in `CalledBy` the release after.
+
+Login is split the same way: `POST /login` takes a `client` (`storefront` | `manage` | `service`) and auth refuses an account type that does not belong there — customers cannot sign in to manage-web, and service accounts cannot sign in to either web app. See [api.md](api.md#post-apiv1authlogin).
 
 ## Named bundles (presets)
 

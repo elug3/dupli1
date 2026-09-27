@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/elug3/dupli1/auth/pkg/ports"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,7 +35,7 @@ func TestManagerCanManageCustomerPassword(t *testing.T) {
 	_ = repo.Save(t.Context(), manager)
 	_ = repo.Save(t.Context(), customer)
 
-	token, _ := accessGen.Generate(t.Context(), manager.ID, manager.Permissions, manager.Email)
+	token, _ := accessGen.Generate(t.Context(), manager.ID, manager.Permissions, ports.Identity{Email: manager.Email})
 	body, _ := json.Marshal(map[string]string{"password": "newsecret1"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/users/"+customer.ID+"/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -62,7 +63,7 @@ func TestManagerCannotManageAdminPassword(t *testing.T) {
 	_ = repo.Save(t.Context(), manager)
 	_ = repo.Save(t.Context(), admin)
 
-	token, _ := accessGen.Generate(t.Context(), manager.ID, manager.Permissions, manager.Email)
+	token, _ := accessGen.Generate(t.Context(), manager.ID, manager.Permissions, ports.Identity{Email: manager.Email})
 	body, _ := json.Marshal(map[string]string{"password": "newsecret1"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/users/"+admin.ID+"/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -90,7 +91,7 @@ func TestAdminCanManageManagerPassword(t *testing.T) {
 	_ = repo.Save(t.Context(), admin)
 	_ = repo.Save(t.Context(), manager)
 
-	token, _ := accessGen.Generate(t.Context(), admin.ID, admin.Permissions, admin.Email)
+	token, _ := accessGen.Generate(t.Context(), admin.ID, admin.Permissions, ports.Identity{Email: admin.Email})
 	body, _ := json.Marshal(map[string]string{"password": "newsecret1"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/users/"+manager.ID+"/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -117,7 +118,7 @@ func TestAdminCannotManageOwnerPassword(t *testing.T) {
 	_ = repo.Save(t.Context(), admin)
 	_ = repo.Save(t.Context(), owner)
 
-	token, _ := accessGen.Generate(t.Context(), admin.ID, admin.Permissions, admin.Email)
+	token, _ := accessGen.Generate(t.Context(), admin.ID, admin.Permissions, ports.Identity{Email: admin.Email})
 	body, _ := json.Marshal(map[string]string{"password": "newsecret1"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/users/"+owner.ID+"/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -144,7 +145,7 @@ func TestOwnerCanManageAdminPassword(t *testing.T) {
 	_ = repo.Save(t.Context(), owner)
 	_ = repo.Save(t.Context(), admin)
 
-	token, _ := accessGen.Generate(t.Context(), owner.ID, owner.Permissions, owner.Email)
+	token, _ := accessGen.Generate(t.Context(), owner.ID, owner.Permissions, ports.Identity{Email: owner.Email})
 	body, _ := json.Marshal(map[string]string{"password": "newsecret1"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/users/"+admin.ID+"/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

@@ -44,7 +44,7 @@ func (r *fakeUserRepository) ListAll(ctx context.Context) ([]*domain.User, error
 
 type fakeTokenGenerator struct{}
 
-func (g fakeTokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string, email string) (string, error) {
+func (g fakeTokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string, id ports.Identity) (string, error) {
 	return "token", nil
 }
 
@@ -55,11 +55,13 @@ func (g fakeTokenGenerator) Validate(ctx context.Context, token string) (ports.C
 type capturingTokenGenerator struct {
 	capturedUserID      string
 	capturedPermissions []string
+	capturedIdentity    ports.Identity
 }
 
-func (g *capturingTokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string, email string) (string, error) {
+func (g *capturingTokenGenerator) Generate(ctx context.Context, userID string, userPermissions []string, id ports.Identity) (string, error) {
 	g.capturedUserID = userID
 	g.capturedPermissions = append([]string(nil), userPermissions...)
+	g.capturedIdentity = id
 	return "token", nil
 }
 
@@ -157,7 +159,7 @@ func TestLogin_RefreshTokenOmitsPermissions(t *testing.T) {
 	gen := &capturingTokenGenerator{}
 	svc := NewService(repo, gen)
 
-	if _, err := svc.Login(t.Context(), "user@example.com", "pass"); err != nil {
+	if _, err := svc.Login(t.Context(), "user@example.com", "pass", ""); err != nil {
 		t.Fatalf("Login returned error: %v", err)
 	}
 	if gen.capturedUserID != "u-1" {
@@ -182,6 +184,22 @@ func TestRefresh_FetchesFreshPermissionsFromDB(t *testing.T) {
 	}
 	if !permissions.Has(gen.capturedPermissions, permissions.AdminAll) {
 		t.Fatalf("Generate permissions = %v, want admin wildcard", gen.capturedPermissions)
+	}
+}
+
+func TestRefresh_StampsAccountTypeAndServiceName(t *testing.T) {
+	user, _ := domain.NewUser("svc-1", "order@example.com", "pass", domain.AccountTypeService,
+		permissions.PromotionRedeem)
+	user.ServiceName = "dupli1-order"
+	gen := &capturingTokenGenerator{capturedUserID: "svc-1"}
+	svc := NewService(&stubUserRepository{user: user}, gen)
+
+	if _, _, err := svc.Refresh(t.Context(), "any-token"); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	want := ports.Identity{Email: "order@example.com", AccountType: "service", ServiceName: "dupli1-order"}
+	if gen.capturedIdentity != want {
+		t.Fatalf("identity = %+v, want %+v", gen.capturedIdentity, want)
 	}
 }
 
@@ -277,7 +295,7 @@ func TestLogin_UnknownEmailReturnsInvalidCredentials(t *testing.T) {
 	repo := &fakeUserRepository{} // FindByEmail returns nil, nil: no such account
 	svc := NewService(repo, fakeTokenGenerator{})
 
-	if _, err := svc.Login(context.Background(), "nobody@example.com", "whatever"); !errors.Is(err, autherrors.ErrInvalidCredentials) {
+	if _, err := svc.Login(context.Background(), "nobody@example.com", "whatever", ""); !errors.Is(err, autherrors.ErrInvalidCredentials) {
 		t.Fatalf("got %v, want ErrInvalidCredentials", err)
 	}
 }
@@ -288,7 +306,7 @@ func TestLogin_LocksAccountAfterMaxFailedAttempts(t *testing.T) {
 	svc := NewService(repo, fakeTokenGenerator{})
 
 	for i := 0; i < maxFailedAttempts; i++ {
-		if _, err := svc.Login(t.Context(), "locked@example.com", "wrong"); err == nil {
+		if _, err := svc.Login(t.Context(), "locked@example.com", "wrong", ""); err == nil {
 			t.Fatalf("attempt %d: expected error", i+1)
 		}
 	}
@@ -296,7 +314,7 @@ func TestLogin_LocksAccountAfterMaxFailedAttempts(t *testing.T) {
 		t.Fatal("account should be locked after max failed attempts")
 	}
 
-	if _, err := svc.Login(t.Context(), "locked@example.com", "correct-pass"); !errors.Is(err, autherrors.ErrAccountLocked) {
+	if _, err := svc.Login(t.Context(), "locked@example.com", "correct-pass", ""); !errors.Is(err, autherrors.ErrAccountLocked) {
 		t.Fatalf("locked login: got %v, want ErrAccountLocked", err)
 	}
 }
@@ -325,7 +343,7 @@ func TestLogin_DoesNotLockAdminOrOwner(t *testing.T) {
 			svc := NewService(repo, fakeTokenGenerator{})
 
 			for i := 0; i < maxFailedAttempts+2; i++ {
-				_, err := svc.Login(t.Context(), tc.user.Email, "wrong")
+				_, err := svc.Login(t.Context(), tc.user.Email, "wrong", "")
 				if !errors.Is(err, autherrors.ErrInvalidCredentials) {
 					t.Fatalf("attempt %d: got %v, want ErrInvalidCredentials", i+1, err)
 				}
@@ -334,7 +352,7 @@ func TestLogin_DoesNotLockAdminOrOwner(t *testing.T) {
 				t.Fatal("admin/owner must not be locked after failed attempts")
 			}
 
-			token, err := svc.Login(t.Context(), tc.user.Email, "correct-pass")
+			token, err := svc.Login(t.Context(), tc.user.Email, "correct-pass", "")
 			if err != nil {
 				t.Fatalf("correct password: %v", err)
 			}
@@ -364,7 +382,7 @@ func TestLogin_RejectsDeactivatedAccount(t *testing.T) {
 	repo := &stubUserRepository{user: user}
 	svc := NewService(repo, fakeTokenGenerator{})
 
-	if _, err := svc.Login(t.Context(), "off@example.com", "pass"); !errors.Is(err, autherrors.ErrAccountDeactivated) {
+	if _, err := svc.Login(t.Context(), "off@example.com", "pass", ""); !errors.Is(err, autherrors.ErrAccountDeactivated) {
 		t.Fatalf("got %v, want ErrAccountDeactivated", err)
 	}
 }
@@ -377,7 +395,7 @@ func TestLogin_LockExpiresAndResetsAttempts(t *testing.T) {
 	repo := &mutableUserRepository{user: user}
 	svc := NewService(repo, fakeTokenGenerator{})
 
-	token, err := svc.Login(context.Background(), "stale@example.com", "correct-pass")
+	token, err := svc.Login(context.Background(), "stale@example.com", "correct-pass", "")
 	if err != nil {
 		t.Fatalf("expected expired lock to allow login, got %v", err)
 	}
@@ -397,7 +415,7 @@ func TestLogin_LockExpiresButAttemptCanStillFail(t *testing.T) {
 	repo := &mutableUserRepository{user: user}
 	svc := NewService(repo, fakeTokenGenerator{})
 
-	if _, err := svc.Login(context.Background(), "stale2@example.com", "wrong"); !errors.Is(err, autherrors.ErrInvalidCredentials) {
+	if _, err := svc.Login(context.Background(), "stale2@example.com", "wrong", ""); !errors.Is(err, autherrors.ErrInvalidCredentials) {
 		t.Fatalf("got %v, want ErrInvalidCredentials", err)
 	}
 	if repo.user.IsLocked() {
@@ -497,7 +515,7 @@ func TestLogout_RevokesRefreshSession(t *testing.T) {
 		WithSessionStore(sessions),
 	)
 
-	refreshToken, err := svc.Login(t.Context(), "user@example.com", "pass")
+	refreshToken, err := svc.Login(t.Context(), "user@example.com", "pass", "")
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -528,7 +546,7 @@ func TestRefresh_RotatesRefreshTokenAndInvalidatesTheOldOne(t *testing.T) {
 		WithSessionStore(sessions),
 	)
 
-	refreshToken, err := svc.Login(context.Background(), "user@example.com", "pass")
+	refreshToken, err := svc.Login(context.Background(), "user@example.com", "pass", "")
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -567,7 +585,7 @@ func TestRefresh_ConcurrentRefreshOnlyOneSucceeds(t *testing.T) {
 		WithSessionStore(sessions),
 	)
 
-	refreshToken, err := svc.Login(context.Background(), "user@example.com", "pass")
+	refreshToken, err := svc.Login(context.Background(), "user@example.com", "pass", "")
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -622,7 +640,7 @@ func TestRefresh_ConcurrentRefreshOnlyOneSucceeds(t *testing.T) {
 // a distinct session-store key.
 type sequentialTokenGenerator struct{}
 
-func (sequentialTokenGenerator) Generate(_ context.Context, userID string, _ []string, _ string) (string, error) {
+func (sequentialTokenGenerator) Generate(_ context.Context, userID string, _ []string, _ ports.Identity) (string, error) {
 	return userID + "-" + newID(), nil
 }
 

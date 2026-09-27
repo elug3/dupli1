@@ -20,6 +20,7 @@ import (
 	"github.com/elug3/dupli1/product/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/serviceaccount"
 )
 
 // App holds wired product service dependencies and the HTTP handler.
@@ -143,6 +144,14 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		return middleware.RequireAuth(validator, middleware.RequireAnyPermission(perm)(next))
 	}
 
+	// internalOrder guards routes only dupli1-order calls: moving the promotion
+	// ledger and holding stock. The permission alone is not enough, since
+	// promotion.* (catalog_admin) and * cover it; the token must also name the
+	// order service account.
+	internalOrder := func(perm string, next http.Handler) http.Handler {
+		return requirePerm(perm, middleware.RequireService(serviceaccount.Order)(next))
+	}
+
 	// requireAnyPerm accepts more than one permission name for the same route.
 	// The promotion routes use it to also honour the pre-rename coupon.* set,
 	// so an access token minted before the rename keeps working until that
@@ -215,10 +224,10 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	// the customer commits, exactly as redeem already was.
 	mux.Handle("POST "+handler.RouteEvaluatePromotion, throttle(http.HandlerFunc(h.EvaluatePromotion)))
 	// Reserving, consuming and releasing move the usage ledger, so they are
-	// service-to-service. Order holds promotion.redeem via its service account.
-	mux.Handle("POST "+handler.RouteReservePromotion, requirePerm(permissions.PromotionRedeem, http.HandlerFunc(h.ReservePromotion)))
-	mux.Handle("POST "+handler.RouteConsumePromotion, requirePerm(permissions.PromotionRedeem, http.HandlerFunc(h.ConsumePromotion)))
-	mux.Handle("POST "+handler.RouteReleasePromotion, requirePerm(permissions.PromotionRedeem, http.HandlerFunc(h.ReleasePromotion)))
+	// service-to-service: dupli1-order only, holding promotion.redeem.
+	mux.Handle("POST "+handler.RouteReservePromotion, internalOrder(permissions.PromotionRedeem, http.HandlerFunc(h.ReservePromotion)))
+	mux.Handle("POST "+handler.RouteConsumePromotion, internalOrder(permissions.PromotionRedeem, http.HandlerFunc(h.ConsumePromotion)))
+	mux.Handle("POST "+handler.RouteReleasePromotion, internalOrder(permissions.PromotionRedeem, http.HandlerFunc(h.ReleasePromotion)))
 
 	// The wallet is ABAC: any signed-in customer reads their own, and the
 	// customer id comes from the token rather than the request. POST because
@@ -232,9 +241,9 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	handler.Mount(mux, "POST", handler.RouteInventoryAdjust, requirePerm(permissions.InventoryStockWrite, h.AdjustInventoryItemHandler()), handler.LegacyRouteInventoryAdjust)
 	handler.Mount(mux, "PUT", handler.RouteInventoryItemBySkuID, requirePerm(permissions.InventoryStockWrite, h.UpsertInventoryItemBySkuIDHandler()), handler.LegacyRouteInventoryItemBySkuID)
 	handler.Mount(mux, "POST", handler.RouteInventoryAdjustBySkuID, requirePerm(permissions.InventoryStockWrite, h.AdjustInventoryItemBySkuIDHandler()), handler.LegacyRouteInventoryAdjustBySkuID)
-	handler.Mount(mux, "POST", handler.RouteInventoryReservations, requirePerm(permissions.InventoryReservationManage, h.CreateReservationHandler()), handler.LegacyRouteInventoryReservations)
-	handler.Mount(mux, "POST", handler.RouteInventoryReservationCommit, requirePerm(permissions.InventoryReservationManage, h.CommitReservationHandler()), handler.LegacyRouteInventoryReservationCommit)
-	handler.Mount(mux, "POST", handler.RouteInventoryReservationRelease, requirePerm(permissions.InventoryReservationManage, h.ReleaseReservationHandler()), handler.LegacyRouteInventoryReservationRelease)
+	handler.Mount(mux, "POST", handler.RouteInventoryReservations, internalOrder(permissions.InventoryReservationManage, h.CreateReservationHandler()), handler.LegacyRouteInventoryReservations)
+	handler.Mount(mux, "POST", handler.RouteInventoryReservationCommit, internalOrder(permissions.InventoryReservationManage, h.CommitReservationHandler()), handler.LegacyRouteInventoryReservationCommit)
+	handler.Mount(mux, "POST", handler.RouteInventoryReservationRelease, internalOrder(permissions.InventoryReservationManage, h.ReleaseReservationHandler()), handler.LegacyRouteInventoryReservationRelease)
 
 	return &App{
 		Handler:       mux,

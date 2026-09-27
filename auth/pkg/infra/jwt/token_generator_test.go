@@ -1,6 +1,7 @@
 package jwt_test
 
 import (
+	"github.com/elug3/dupli1/auth/pkg/ports"
 	"testing"
 
 	jwtinfra "github.com/elug3/dupli1/auth/pkg/infra/jwt"
@@ -12,7 +13,7 @@ func TestRoundtrip_UserIDAndPermissionsPreserved(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
 	ctx := t.Context()
 
-	token, err := gen.Generate(ctx, "user-1", []string{permissions.UserCreate}, "")
+	token, err := gen.Generate(ctx, "user-1", []string{permissions.UserCreate}, ports.Identity{})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -31,7 +32,7 @@ func TestRoundtrip_UserIDAndPermissionsPreserved(t *testing.T) {
 
 func TestGenerate_AccessTokenIncludesEmail(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
-	token, err := gen.Generate(t.Context(), "user-1", []string{permissions.UserCreate}, "buyer@dupli1.com")
+	token, err := gen.Generate(t.Context(), "user-1", []string{permissions.UserCreate}, ports.Identity{Email: "buyer@dupli1.com"})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestGenerate_AccessTokenIncludesEmail(t *testing.T) {
 	}
 
 	refresh := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
-	rt, err := refresh.Generate(t.Context(), "user-1", nil, "buyer@dupli1.com")
+	rt, err := refresh.Generate(t.Context(), "user-1", nil, ports.Identity{Email: "buyer@dupli1.com"})
 	if err != nil {
 		t.Fatalf("Generate refresh: %v", err)
 	}
@@ -66,12 +67,39 @@ func TestGenerate_AccessTokenIncludesEmail(t *testing.T) {
 	}
 }
 
+func TestGenerate_AccessTokenIncludesAccountTypeAndServiceName(t *testing.T) {
+	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
+	token, err := gen.Generate(t.Context(), "svc-1", []string{permissions.PromotionRedeem},
+		ports.Identity{AccountType: "service", ServiceName: "dupli1-order"})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	parsed, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		return []byte("test-secret"), nil
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	c := parsed.Claims.(jwt.MapClaims)
+	if c["account_type"] != "service" || c["service_name"] != "dupli1-order" {
+		t.Fatalf("claims = %v", c)
+	}
+
+	person, _ := gen.Generate(t.Context(), "u-1", nil, ports.Identity{AccountType: "customer"})
+	parsed, _ = jwt.Parse(person, func(token *jwt.Token) (interface{}, error) {
+		return []byte("test-secret"), nil
+	})
+	if _, ok := parsed.Claims.(jwt.MapClaims)["service_name"]; ok {
+		t.Fatal("a person's token must not carry service_name")
+	}
+}
+
 func TestGenerate_IncludesPermissionsClaim(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
 	ctx := t.Context()
 
 	perms := permissions.ExpandLegacyRoles([]string{permissions.RoleAdmin})
-	token, err := gen.Generate(ctx, "user-2", perms, "")
+	token, err := gen.Generate(ctx, "user-2", perms, ports.Identity{})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -89,7 +117,7 @@ func TestGenerate_EmptyPermissionsForCustomer(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
 	ctx := t.Context()
 
-	token, err := gen.Generate(ctx, "user-3", []string{}, "")
+	token, err := gen.Generate(ctx, "user-3", []string{}, ports.Identity{})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -107,7 +135,7 @@ func TestRefreshToken_OmitsPermissions(t *testing.T) {
 	gen := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
 	ctx := t.Context()
 
-	token, err := gen.Generate(ctx, "user-1", []string{permissions.All}, "")
+	token, err := gen.Generate(ctx, "user-1", []string{permissions.All}, ports.Identity{})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -125,7 +153,7 @@ func TestValidate_WrongSecretReturnsError(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("secret-A", 3600)
 	ctx := t.Context()
 
-	token, _ := gen.Generate(ctx, "user-1", []string{permissions.UserCreate}, "")
+	token, _ := gen.Generate(ctx, "user-1", []string{permissions.UserCreate}, ports.Identity{})
 
 	other := jwtinfra.NewTokenGenerator("secret-B", 3600)
 	if _, err := other.Validate(ctx, token); err == nil {
@@ -137,7 +165,7 @@ func TestValidate_ExpiredTokenReturnsError(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", -1)
 	ctx := t.Context()
 
-	token, err := gen.Generate(ctx, "user-1", []string{permissions.UserCreate}, "")
+	token, err := gen.Generate(ctx, "user-1", []string{permissions.UserCreate}, ports.Identity{})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -152,7 +180,7 @@ func TestValidate_RejectsWrongTokenType(t *testing.T) {
 	refresh := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
 	ctx := t.Context()
 
-	refreshToken, err := refresh.Generate(ctx, "user-1", nil, "")
+	refreshToken, err := refresh.Generate(ctx, "user-1", nil, ports.Identity{})
 	if err != nil {
 		t.Fatalf("Generate refresh: %v", err)
 	}
@@ -160,7 +188,7 @@ func TestValidate_RejectsWrongTokenType(t *testing.T) {
 		t.Fatal("expected access validator to reject refresh token, got nil")
 	}
 
-	accessToken, err := access.Generate(ctx, "user-1", []string{permissions.UserCreate}, "")
+	accessToken, err := access.Generate(ctx, "user-1", []string{permissions.UserCreate}, ports.Identity{})
 	if err != nil {
 		t.Fatalf("Generate access: %v", err)
 	}
@@ -173,7 +201,7 @@ func TestValidate_TamperedTokenReturnsError(t *testing.T) {
 	gen := jwtinfra.NewTokenGenerator("test-secret", 3600)
 	ctx := t.Context()
 
-	token, _ := gen.Generate(ctx, "user-1", []string{permissions.UserCreate}, "")
+	token, _ := gen.Generate(ctx, "user-1", []string{permissions.UserCreate}, ports.Identity{})
 
 	if _, err := gen.Validate(ctx, token+"tampered"); err == nil {
 		t.Fatal("expected error for tampered token, got nil")
@@ -187,11 +215,11 @@ func TestGenerate_TokensIssuedInSameSecondAreUnique(t *testing.T) {
 	gen := jwtinfra.NewTokenGeneratorWithType("test-secret", 3600, "refresh")
 	ctx := t.Context()
 
-	t1, err := gen.Generate(ctx, "user-1", nil, "")
+	t1, err := gen.Generate(ctx, "user-1", nil, ports.Identity{})
 	if err != nil {
 		t.Fatalf("first Generate: %v", err)
 	}
-	t2, err := gen.Generate(ctx, "user-1", nil, "")
+	t2, err := gen.Generate(ctx, "user-1", nil, ports.Identity{})
 	if err != nil {
 		t.Fatalf("second Generate: %v", err)
 	}

@@ -18,6 +18,7 @@ type userResponse struct {
 	ID                  string     `json:"user_id"`
 	Email               string     `json:"email"`
 	AccountType         string     `json:"account_type"`
+	ServiceName         string     `json:"service_name,omitempty"`
 	Permissions         []string   `json:"permissions"`
 	IsActive            bool       `json:"is_active"`
 	LockedAt            *time.Time `json:"locked_at,omitempty"`
@@ -33,6 +34,7 @@ func toUserResponse(u *domain.User) userResponse {
 		ID:                  u.ID,
 		Email:               u.Email,
 		AccountType:         u.AccountType,
+		ServiceName:         u.ServiceName,
 		Permissions:         perms,
 		IsActive:            u.IsActive,
 		LockedAt:            u.LockedAt,
@@ -76,6 +78,8 @@ func (h *Handler) respondInternalError(c *gin.Context, event string, err error) 
 type loginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+	// Client is storefront | manage | service. Optional during rollout.
+	Client string `json:"client"`
 }
 
 // Login handles user login and returns a refresh token.
@@ -94,9 +98,20 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := h.svc.Login(c.Request.Context(), req.Email, req.Password)
+	token, err := h.svc.Login(c.Request.Context(), req.Email, req.Password, req.Client)
 	if err != nil {
-		if errors.Is(err, autherrors.ErrInvalidCredentials) {
+		var notAllowed *autherrors.ClientNotAllowedError
+		if errors.Is(err, autherrors.ErrInvalidClient) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "login: invalid client: use storefront, manage, or service"})
+		} else if errors.As(err, &notAllowed) {
+			h.logger.Warn().
+				Str("event", "login_client_refused").
+				Str("email", req.Email).
+				Str("client", req.Client).
+				Str("ip", ip).
+				Msg("login refused: account type not allowed for client")
+			c.JSON(http.StatusForbidden, gin.H{"error": notAllowed.Reason, "code": "account_type_not_allowed"})
+		} else if errors.Is(err, autherrors.ErrInvalidCredentials) {
 			h.logger.Warn().
 				Str("event", "login_failed").
 				Str("email", req.Email).
@@ -133,6 +148,7 @@ func (h *Handler) Login(c *gin.Context) {
 	h.logger.Info().
 		Str("event", "login_success").
 		Str("email", req.Email).
+		Str("client", req.Client).
 		Str("ip", ip).
 		Str("user_agent", ua).
 		Msg("login successful")

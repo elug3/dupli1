@@ -144,7 +144,13 @@ func (s *Service) Register(ctx context.Context, email, password, accountType str
 }
 
 // Login validates credentials, tracks failed attempts, and returns a refresh token.
-func (s *Service) Login(ctx context.Context, email, password string) (string, error) {
+// Login verifies credentials for client (see domain.ClientStorefront etc.) and
+// returns a refresh token. The account-type check runs only after the password
+// is verified, so a refusal never reveals an account's type to a guesser.
+func (s *Service) Login(ctx context.Context, email, password, client string) (string, error) {
+	if !domain.ValidClient(client) {
+		return "", autherrors.ErrInvalidClient
+	}
 	u, err := s.userRepo.FindByEmail(ctx, email)
 	if err != nil {
 		return "", fmt.Errorf("find user: %w", err)
@@ -194,7 +200,11 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, er
 		_ = s.userRepo.Save(ctx, u)
 	}
 
-	token, err := s.refreshTokenGen.Generate(ctx, u.ID, nil, "")
+	if reason := domain.ClientRejection(client, u.AccountType); reason != "" {
+		return "", &autherrors.ClientNotAllowedError{Reason: reason}
+	}
+
+	token, err := s.refreshTokenGen.Generate(ctx, u.ID, nil, ports.Identity{})
 	if err != nil {
 		return "", fmt.Errorf("generate token: %w", err)
 	}
@@ -251,14 +261,18 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (accessToken
 		return "", "", autherrors.ErrAccountLocked
 	}
 
-	newAccessToken, err := s.tokenGen.Generate(ctx, u.ID, u.Permissions, u.Email)
+	newAccessToken, err := s.tokenGen.Generate(ctx, u.ID, u.Permissions, ports.Identity{
+		Email:       u.Email,
+		AccountType: domain.NormalizeAccountType(u.AccountType),
+		ServiceName: u.ServiceName,
+	})
 	if err != nil {
 		return "", "", fmt.Errorf("generate token: %w", err)
 	}
 
 	rotatedRefreshToken = refreshToken
 	if s.sessionStore != nil {
-		newRefreshToken, err := s.refreshTokenGen.Generate(ctx, u.ID, nil, "")
+		newRefreshToken, err := s.refreshTokenGen.Generate(ctx, u.ID, nil, ports.Identity{})
 		if err != nil {
 			return "", "", fmt.Errorf("generate refresh token: %w", err)
 		}

@@ -47,3 +47,51 @@ func ValidAccountType(t string) bool {
 
 // DefaultAccountType is used when register omits account_type.
 const DefaultAccountType = AccountTypeCustomer
+
+// Login clients name the front end a login is for. Auth decides whether an
+// account type may sign in there, so the rule holds whatever a web app does;
+// the app only shows the message it gets back.
+const (
+	// ClientStorefront is dupli1-web: customers, and managers shopping.
+	ClientStorefront = "storefront"
+	// ClientManage is manage-web: managers only.
+	ClientManage = "manage"
+	// ClientService is a machine login (no web session): service accounts only.
+	ClientService = "service"
+)
+
+// ValidClient reports whether c is a known login client. Empty is accepted
+// while callers roll over to sending one; it applies no account-type rule.
+func ValidClient(c string) bool {
+	switch c {
+	case "", ClientStorefront, ClientManage, ClientService:
+		return true
+	default:
+		return false
+	}
+}
+
+// ClientRejection returns why accountType may not sign in through client, as
+// a message fit to show the person signing in, or "" when it may.
+func ClientRejection(client, accountType string) string {
+	at := NormalizeAccountType(accountType)
+	switch client {
+	case ClientStorefront:
+		if at == AccountTypeService {
+			return "Service accounts cannot sign in to the storefront."
+		}
+	case ClientManage:
+		switch at {
+		case AccountTypeManager:
+		case AccountTypeService:
+			return "Service accounts cannot sign in to manage-web."
+		default:
+			return "Customer accounts cannot sign in to manage-web. Please sign in on the storefront."
+		}
+	case ClientService:
+		if at != AccountTypeService {
+			return "Only service accounts can sign in as a service."
+		}
+	}
+	return ""
+}

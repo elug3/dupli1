@@ -6,11 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/elug3/dupli1/auth/pkg/ports"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func buildMapClaims(userID string, tokenType string, expiry time.Time, userPermissions []string, email string) jwt.MapClaims {
+func buildMapClaims(userID string, tokenType string, expiry time.Time, userPermissions []string, id ports.Identity) jwt.MapClaims {
 	claims := jwt.MapClaims{
 		"sub": userID,
 		"exp": expiry.Unix(),
@@ -28,8 +29,14 @@ func buildMapClaims(userID string, tokenType string, expiry time.Time, userPermi
 	}
 	if tokenType != "refresh" {
 		claims["permissions"] = permissions.Dedupe(userPermissions)
-		if e := strings.TrimSpace(email); e != "" {
+		if e := strings.TrimSpace(id.Email); e != "" {
 			claims["email"] = e
+		}
+		if id.AccountType != "" {
+			claims["account_type"] = id.AccountType
+		}
+		if id.ServiceName != "" {
+			claims["service_name"] = id.ServiceName
 		}
 	}
 	return claims
