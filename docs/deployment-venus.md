@@ -33,8 +33,8 @@ VENUS  docker compose project "dupli1"  (deploy/venus/docker-compose.yml)
 - **Same images as ECS.** The running task images were pulled from ECR by digest
   and tagged `dupli1-prod/<name>:2026-09-26`; a copy is in the backup
   (`images/dupli1-prod-images-2026-09-26.tar.gz`, restore with `docker load`).
-  Deploying new code later means building images from the repos and bumping
-  `DUPLI1_IMAGE_TAG`; there is no CI deploy to VENUS yet.
+  New code comes from GHCR instead — see
+  [Deploying new code](#deploying-new-code).
 - **Same environment as ECS.** Every container has its Cloud Map name
   (`auth.dupli1.local`, …) as a Docker network alias, so the task-definition
   URLs are unchanged. Only DB URLs, S3 settings and the gateway's DNS resolver
@@ -86,6 +86,38 @@ reaches the stack directly over plain HTTP. Docker-published ports bypass the
 host firewall; don't forward port 80 on the router — public traffic belongs on
 the tunnel. Direct clients can't spoof their IP: only the tunnel listener
 (`:8080`) honours `CF-Connecting-IP`.
+
+## Deploying new code
+
+`.github/workflows/images.yml` builds every backend image on each pull request
+(build only) and publishes on pushes to `main`, `v*` tags and manual runs:
+
+| Tag | Meaning |
+|-----|---------|
+| `ghcr.io/elug3/dupli1-<service>:sha-<short>` | every published build — pin these |
+| `ghcr.io/elug3/dupli1-<service>:main` | latest `main` |
+| `ghcr.io/elug3/dupli1-<service>:v1.2.3` | release tags |
+
+There is no automatic deploy: VENUS pulls. The compose file still points at the
+local `dupli1-prod/<name>` images, so for now retag what you pull and bump
+`DUPLI1_IMAGE_TAG` in `/opt/dupli1/.env`:
+
+```bash
+TAG=sha-abc1234
+for s in auth product order cart payment profile notification proxy; do
+  docker pull ghcr.io/elug3/dupli1-$s:$TAG
+  docker tag  ghcr.io/elug3/dupli1-$s:$TAG dupli1-prod/$s:$TAG
+done
+# set DUPLI1_IMAGE_TAG=$TAG in /opt/dupli1/.env, then
+$DC up -d
+```
+
+Every service shares one tag, so `redis`, `nats`, `web` and `manage-web-container`
+(not built here) need a `dupli1-prod/<name>:$TAG` tag too — `docker tag` the
+current ones. New GHCR packages are private: either make them public (package
+settings → visibility) or `docker login ghcr.io` on VENUS with a token that has
+only `read:packages`. Roll back by setting the previous tag and running
+`$DC up -d` again.
 
 ## Before cutover — checklist
 
