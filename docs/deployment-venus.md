@@ -22,7 +22,7 @@ VENUS  docker compose project "dupli1"  (deploy/venus/docker-compose.yml)
     :8080 cloudflared only (trusts CF-Connecting-IP), not published
     :80   direct HTTP, published on 0.0.0.0 for the home network
     manage.dupli1.com  ──▶ manage-web
-    /api/*, /gateway/* ──▶ proxy :80 (API gateway = production's nginx.ecs.conf)
+    /api/*, /gateway/* ──▶ proxy :80 (API gateway: nginx-gateway.conf + api/gateway/*.conf)
                              internal APIs answer 404 here; order uses proxy :8081
     /product-images/*  ──▶ s3 (SeaweedFS, anonymous read-only on product-images)
     everything else    ──▶ web
@@ -114,8 +114,11 @@ moves the deploy checkout `/opt/dupli1/repo` to the pushed commit and runs
    (`:8081`) to answer, then holds 15 s;
 4. otherwise puts the previous tag back and restarts on it, failing the job.
 
-The gateway config `nginx-gateway.conf` is mounted, not baked into the proxy
-image, so it is only read when the proxy container is created. A deploy always
+The gateway config — the small `nginx-gateway.conf` wrapper plus the shared
+`api/gateway/routes.conf` and `hosts.dupli1.local.conf` it includes — is mounted
+from the deploy checkout, not taken from the proxy image, so the config and its
+includes always match, including when a rollback runs an older image. It is
+only read when the proxy container is created. A deploy always
 recreates it (its image tag changes), and step 3 also checks the internal
 listener (`proxy.dupli1.local:8081`, where order sends the internal APIs). After
 editing the file by hand, recreate the proxy yourself:

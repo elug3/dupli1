@@ -175,8 +175,9 @@ See [service-layout.md](service-layout.md) for details.
 ### dupli1-proxy
 
 - **Host ports:** 8080 and 80 (HTTP), 443 exposed but TLS not configured in nginx
-- **Config:** [api/nginx.conf](../api/nginx.conf) locally, [api/nginx.prod.conf](../api/nginx.prod.conf) for the single-EC2 Compose overlay, [api/nginx.ecs.conf](../api/nginx.ecs.conf) for production ECS (baked into `api/Dockerfile.ecs`). All three route the same API prefixes
-- **Health:** `GET /gateway/health` → `ok`
+- **Config:** one route table, [api/gateway/routes.conf](../api/gateway/routes.conf), included by a thin wrapper per environment: [api/nginx.conf](../api/nginx.conf) locally, [deploy/venus/nginx-gateway.conf](../deploy/venus/nginx-gateway.conf) in production on VENUS, [api/nginx.ecs.conf](../api/nginx.ecs.conf) in the proxy image (ECS), [api/nginx.prod.conf](../api/nginx.prod.conf) for the single-EC2 Compose overlay. [api/gateway/test.sh](../api/gateway/test.sh) runs every wrapper through real nginx (CI job `gateway`)
+- **Listeners:** `:80` public; `:8081` internal (product's internal APIs answer `404` on `:80`)
+- **Health:** `GET /gateway/health` → `{"status":"ok"}`
 
 ## Data stores
 
