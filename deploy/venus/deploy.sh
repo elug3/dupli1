@@ -1,18 +1,28 @@
 #!/usr/bin/env bash
 # Deploy images from GHCR to the VENUS stack, rolling back if the new images
-# don't come up healthy. Run by the self-hosted runners from the deploy
-# checkout (/opt/dupli1/repo); see docs/deployment-venus.md → "Deploying new code".
+# don't come up healthy. Run by the self-hosted runners; see
+# docs/deployment-venus.md → "Deploying new code".
 #
-#   deploy/venus/deploy.sh sha-abc1234                # backend (this repo)
+#   deploy/venus/deploy.sh --ref <sha> sha-abc1234    # backend (this repo's CI)
+#   deploy/venus/deploy.sh sha-abc1234                # backend, checkout as is
 #   deploy/venus/deploy.sh web sha-abc1234            # dupli1-web
 #   deploy/venus/deploy.sh manage-web sha-abc1234     # dupli1-manage-web
 #
 # Each target moves only its own services and its own tag variable in
 # /opt/dupli1/.env; redis and nats keep DUPLI1_IMAGE_TAG. Deploys from the
-# three repos take a shared lock, so they never edit .env at the same time.
+# three repos take a shared lock. The deploy checkout (/opt/dupli1/repo, which
+# holds the compose file and gateway config) moves to --ref only while that
+# lock is held, so a frontend deploy never reads the compose file while a
+# backend deploy is changing it. A rollback puts the checkout back too.
 set -euo pipefail
 
-usage() { echo "usage: deploy.sh [backend|web|manage-web] <tag, e.g. sha-abc1234>" >&2; exit 2; }
+usage() { echo "usage: deploy.sh [--ref <commit>] [backend|web|manage-web] <tag, e.g. sha-abc1234>" >&2; exit 2; }
+REF=""
+if [[ ${1:-} == --ref ]]; then
+  [[ $# -ge 2 && -n $2 ]] || usage
+  REF=$2
+  shift 2
+fi
 case $# in
   1) TARGET=backend; TAG=$1 ;;
   2) TARGET=$1; TAG=$2 ;;
@@ -25,6 +35,9 @@ OWNER=${GHCR_OWNER:-elug3}
 ENV_FILE=${ENV_FILE:-/opt/dupli1/.env}
 LOCK_FILE=${LOCK_FILE:-$(dirname "$ENV_FILE")/.deploy.lock}
 HERE=$(cd "$(dirname "$0")" && pwd)
+# The checkout the stack runs from. CI runs a copy of this script from its own
+# workspace, so it names the checkout; by hand it's the repo holding the script.
+DEPLOY_DIR=${DEPLOY_DIR:-$(cd "$HERE/../.." && pwd)}
 
 # Per target: services, their GHCR and local image names, the .env variable
 # holding their tag, and "host path" pairs that must answer 200 via the edge.
@@ -57,7 +70,13 @@ case $TARGET in
   *) echo "unknown target: $TARGET (backend, web or manage-web)" >&2; exit 2 ;;
 esac
 
-dc() { docker compose -f "$HERE/docker-compose.yml" --env-file "$ENV_FILE" "$@"; }
+dc() { docker compose -f "$DEPLOY_DIR/deploy/venus/docker-compose.yml" --env-file "$ENV_FILE" "$@"; }
+
+# Moves the deploy checkout to a commit. Only called with the lock held.
+checkout_ref() {
+  git -C "$DEPLOY_DIR" fetch -q --depth 1 origin "$1"
+  git -C "$DEPLOY_DIR" checkout -q --detach FETCH_HEAD
+}
 
 env_value() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d "'\""; }
 
@@ -127,7 +146,11 @@ if ! flock -n 9; then
 fi
 
 PREV=$(current_tag)
-echo "deploying $TARGET $TAG (current $PREV)"
+PREV_COMMIT=$(git -C "$DEPLOY_DIR" rev-parse HEAD)
+if [[ -n $REF ]]; then
+  checkout_ref "$REF"
+fi
+echo "deploying $TARGET $TAG from $(git -C "$DEPLOY_DIR" rev-parse --short HEAD) (current $PREV, ${PREV_COMMIT::7})"
 
 for s in "${SERVICES[@]}"; do
   docker pull -q "ghcr.io/$OWNER/${GHCR[$s]}:$TAG"
@@ -142,8 +165,10 @@ if healthy; then
   exit 0
 fi
 
-echo "rolling back $TARGET to $PREV" >&2
+echo "rolling back $TARGET to $PREV (checkout ${PREV_COMMIT::7})" >&2
 dc logs --tail 50 "${SERVICES[@]}" >&2 || true
+# The previous images with the compose file and gateway config they ran with.
+git -C "$DEPLOY_DIR" checkout -q --detach "$PREV_COMMIT"
 set_tag "$PREV"
 dc up -d "${SERVICES[@]}"
 healthy || echo "rollback to $PREV is unhealthy too — check the stack by hand" >&2
