@@ -4,9 +4,11 @@ Runbook for moving Dupli1 production off AWS onto **VENUS** (Debian 13, 16 cores
 12 GB RAM, on the home network) and exposing it through a Cloudflare Tunnel.
 Config lives in [`deploy/venus/`](../deploy/venus/); secrets never enter git.
 
-Status (2026-09-26): **prepared and rehearsed, not cut over.** AWS still serves
-production. VENUS runs a full copy loaded from a fresh production dump, reachable
-over plain HTTP on port 80 from the home network (`http://192.168.0.69`).
+Status (2026-09-27): **cut over.** VENUS serves production through the tunnel
+(`cutover.sh cutover` 07:04–07:11 UTC; site back at ~08:10 after the stray-connector
+502s described under [Troubleshooting](#troubleshooting)). AWS is scaled to 0 but
+not yet deleted. The stack is also reachable over plain HTTP on port 80 from the
+home network (`http://192.168.0.69`).
 
 ## Architecture
 
@@ -100,8 +102,11 @@ the tunnel. Direct clients can't spoof their IP: only the tunnel listener
    restricted by source IP, so the switch from the AWS NAT gateway to the home
    connection's dynamic public IP doesn't affect card payments.
 3. **Create the tunnel** (Cloudflare dashboard → Zero Trust → Networks →
-   Tunnels → Create → Cloudflared). Copy the token into `/opt/dupli1/.env` as
-   `CLOUDFLARE_TUNNEL_TOKEN='…'`. Do **not** add public hostnames yet — adding
+   Tunnels → Create → Cloudflared). Copy only the token into `/opt/dupli1/.env` as
+   `CLOUDFLARE_TUNNEL_TOKEN='…'`. **Don't run the install command the dashboard
+   shows** (`docker run … cloudflared`, `cloudflared service install`): it starts an
+   extra connector outside the stack's network — see
+   [Troubleshooting](#troubleshooting). Do **not** add public hostnames yet — adding
    `dupli1.com` replaces the live DNS record and is the actual switch (step 4 below).
 4. **Keep the temporary AWS backup resources** (bucket
    `dupli1-migration-backup-20260926`, role `dupli1-migration-backup-task`,
@@ -115,16 +120,20 @@ the tunnel. Direct clients can't spoof their IP: only the tunnel listener
 
 ## Cutover
 
-Downtime ≈ ECS scale-down + 4½ min + DNS switch.
+Downtime ≈ ECS scale-down + 4½ min + DNS switch (the script took 7 min on
+2026-09-27).
 
 1. `deploy/venus/cutover.sh cutover` — type `CUTOVER`. It records ECS desired
    counts, scales all 12 ECS services to 0, takes the final in-VPC dump, syncs
    images, reimports with `--replace`, moves the Telegram ops-bot values into
    place (they stay empty until then so AWS and VENUS never poll the same bot),
    and starts the stack with `cloudflared`.
-2. Check `docker logs dupli1-cloudflared-1` shows registered connections.
+2. Check `docker logs dupli1-cloudflared-1` shows registered connections, and
+   that it is the **only** connector: `docker ps -a | grep cloudflared` lists just
+   `dupli1-cloudflared-1`, `pgrep -a cloudflared` shows one process, and the
+   tunnel's page in the dashboard lists one connector (4 connections).
 3. Verify locally: `curl -H Host:dupli1.com http://127.0.0.1/gateway/health`.
-4. **Switch DNS:** in the tunnel's *Public Hostname* tab add
+4. **Switch DNS:** in the tunnel's *Published application routes* tab add
    `dupli1.com` → `http://edge:8080` and `manage.dupli1.com` → `http://edge:8080`,
    accepting the replacement of the existing records (those pointed at the ALB).
 5. Verify publicly: storefront, sign-in (existing sessions should survive),
@@ -140,6 +149,32 @@ scale ECS back to the counts saved in
 Anything written on VENUS after the cutover is **not** on RDS — copy it back
 before rolling back if it matters. Clear the `TELEGRAM_*` values in
 `/opt/dupli1/.env` and restart `notification` on VENUS so the bot isn't polled twice.
+
+### Troubleshooting
+
+**Cloudflare `502` ("error code: 502", `text/plain`) after the switch, while
+`curl -H Host:dupli1.com http://127.0.0.1/gateway/health` works locally.** Another
+connector is attached to the tunnel. Cloudflare spreads requests across every
+connector, and one outside the compose network can't resolve `edge:8080`. Signs:
+nothing but local traffic in `docker logs dupli1-edge-1`, and
+`cloudflared_tunnel_total_requests` not rising on the stack's connector
+(`docker run --rm --network container:dupli1-cloudflared-1 curlimages/curl -s
+localhost:20241/metrics`). On 2026-09-27 this caused ~1 h of downtime: the
+dashboard's `docker run cloudflare/cloudflared:latest … --token …` had been run
+again after rotating the token, leaving a container with a random name.
+
+Find and remove every connector but `dupli1-cloudflared-1`:
+
+```bash
+docker ps -a --format '{{.Names}} {{.Image}}' | grep cloudflared
+pgrep -a cloudflared                     # host processes
+systemctl is-active cloudflared          # sudo cloudflared service uninstall
+```
+
+The tunnel page in the dashboard (or the API's `cfd_tunnel/<id>/connections`)
+lists each connector with its start time; a connector on another machine on the
+home network shows the same origin IP. Rotating the tunnel token also cuts off
+every connector that isn't using the new one.
 
 ## After cutover (separate, later)
 
