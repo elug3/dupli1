@@ -1,0 +1,3 @@
+self-hosted-runner:
+  # VENUS production host (deploy job in images.yml)
+  labels: [venus]
