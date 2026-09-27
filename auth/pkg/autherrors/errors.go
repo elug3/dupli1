@@ -32,6 +32,10 @@ var (
 	ErrNotServiceAccount = errors.New("api keys are for service accounts only")
 	// ErrScopeExceedsAccount: a key's scope names a permission its account lacks.
 	ErrScopeExceedsAccount = errors.New("api key scope exceeds the account's permissions")
+	// ErrServiceAccountPassword: service accounts have no password — they
+	// authenticate with API keys — so one can be neither set at registration
+	// nor reset later.
+	ErrServiceAccountPassword = errors.New("service accounts do not use passwords; use api keys")
 )
 
 // ClientNotAllowedError is a login refused because the account type does not

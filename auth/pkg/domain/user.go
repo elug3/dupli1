@@ -48,6 +48,20 @@ func NewUser(id, email, password, accountType string, perms ...string) (*User, e
 	}, nil
 }
 
+// NewPasswordlessUser creates an account with no password at all — a service
+// account, which authenticates only with API keys. Nothing is hashed, so no
+// password ever existed to leak or reset.
+func NewPasswordlessUser(id, email, accountType string, perms ...string) *User {
+	return &User{
+		ID:          id,
+		Email:       NormalizeEmail(email),
+		Password:    retiredPasswordHash,
+		AccountType: accountType,
+		Permissions: permissions.Dedupe(perms),
+		IsActive:    true,
+	}
+}
+
 // AccountLockDuration is how long a failed-login lockout lasts before it
 // automatically lifts. There is no unlock endpoint, so a permanent lock would
 // leave a customer's account (or one an attacker deliberately locks, knowing

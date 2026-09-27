@@ -107,7 +107,7 @@ Create a new user account. Requires `user.create`.
 | Field | Type | Constraints |
 |-------|------|-------------|
 | `email` | string | required, valid email |
-| `password` | string | required, min 8 chars |
+| `password` | string | required, min 8 chars — except for `account_type: service`, where it must be **omitted**: service accounts have no password and authenticate with API keys ([Service account API keys](#service-account-api-keys)) |
 | `account_type` | string | optional; one of `customer`, `manager`, `service`; defaults to `customer`. Do not send `admin` (permission tier — use `manager`). Callers with only `user.create` (no `admin.*` or `*`) may register `customer` only |
 
 **Response `201`**
@@ -122,7 +122,7 @@ Create a new user account. Requires `user.create`.
 | `401` | Missing or invalid access token |
 | `403` | Caller lacks `user.create`, or attempted a disallowed `account_type` / management target |
 | `409` | Email already registered |
-| `422` | Invalid email, weak password, or invalid `account_type` |
+| `422` | Invalid email, weak password, invalid `account_type`, or a password sent for a service account |
 
 ---
 
@@ -199,7 +199,8 @@ Return the currently authenticated user's **account** (credentials tier — not 
   "permissions": [],
   "is_active": true,
   "locked_at": null,
-  "failed_login_attempts": 0
+  "failed_login_attempts": 0,
+  "has_password": true
 }
 ```
 
@@ -304,11 +305,14 @@ List all users. Requires `user.read`. Results are filtered by auth ABAC hierarch
       "permissions": ["*"],
       "is_active": true,
       "locked_at": null,
-      "failed_login_attempts": 0
+      "failed_login_attempts": 0,
+      "has_password": true
     }
   ]
 }
 ```
+
+`has_password` is `false` for service accounts, which authenticate with API keys only.
 
 **Errors**
 | Status | Meaning |
@@ -333,7 +337,7 @@ Replace the permission list for a user. Requires `user.permissions.update`. Subj
 | Field | Type | Constraints |
 |-------|------|-------------|
 | `permissions` | string[] | required |
-| `account_type` | string | optional; one of `customer`, `manager`, `service`. Do not send `admin` (permission tier — use `manager`) |
+| `account_type` | string | optional; one of `customer`, `manager`, `service`. Do not send `admin` (permission tier — use `manager`). Changing an account **to** `service` removes its password |
 
 **Response `200`** — updated user object (includes `account_type`, `permissions`)
 
@@ -366,7 +370,7 @@ Set a new password for a user. Requires `user.password.update`.
 | `401` | Missing or invalid access token |
 | `403` | Caller lacks `user.password.update` or may not manage this user |
 | `404` | User not found |
-| `422` | Password too short (min 8 chars) |
+| `422` | Password too short (min 8 chars), or the target is a service account — they have no password; mint an API key instead |
 
 ---
 

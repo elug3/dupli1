@@ -117,9 +117,6 @@ func (s *Service) Register(ctx context.Context, email, password, accountType str
 	if !strings.Contains(email, "@") || strings.HasPrefix(email, "@") || strings.HasSuffix(email, "@") {
 		return nil, autherrors.ErrInvalidEmail
 	}
-	if len(password) < 8 {
-		return nil, autherrors.ErrWeakPassword
-	}
 	if accountType == "" {
 		accountType = domain.DefaultAccountType
 	}
@@ -128,9 +125,21 @@ func (s *Service) Register(ctx context.Context, email, password, accountType str
 		return nil, autherrors.ErrInvalidAccountType
 	}
 	perms := permissions.Dedupe(userPermissions)
-	u, err := domain.NewUser(newID(), email, password, accountType, perms...)
-	if err != nil {
-		return nil, fmt.Errorf("hash password: %w", err)
+	var u *domain.User
+	if accountType == domain.AccountTypeService {
+		// Service accounts authenticate with API keys only.
+		if password != "" {
+			return nil, autherrors.ErrServiceAccountPassword
+		}
+		u = domain.NewPasswordlessUser(newID(), email, accountType, perms...)
+	} else {
+		if len(password) < 8 {
+			return nil, autherrors.ErrWeakPassword
+		}
+		var err error
+		if u, err = domain.NewUser(newID(), email, password, accountType, perms...); err != nil {
+			return nil, fmt.Errorf("hash password: %w", err)
+		}
 	}
 	if err := s.userRepo.Save(ctx, u); err != nil {
 		return nil, fmt.Errorf("save user: %w", err)
@@ -363,6 +372,11 @@ func (s *Service) SetUserPermissions(ctx context.Context, userID string, perms [
 		if !domain.ValidAccountType(accountType) {
 			return nil, autherrors.ErrInvalidAccountType
 		}
+		if accountType == domain.AccountTypeService && u.AccountType != domain.AccountTypeService {
+			// Becoming a service account drops password login: from here on
+			// it authenticates with API keys only.
+			u.RetirePassword()
+		}
 		u.AccountType = accountType
 	}
 	u.SetPermissions(perms)
@@ -383,6 +397,9 @@ func (s *Service) UpdateUserPassword(ctx context.Context, userID, newPassword st
 	}
 	if u == nil {
 		return autherrors.ErrUserNotFound
+	}
+	if u.AccountType == domain.AccountTypeService {
+		return autherrors.ErrServiceAccountPassword
 	}
 	if err := u.UpdatePassword(newPassword); err != nil {
 		return fmt.Errorf("hash password: %w", err)
