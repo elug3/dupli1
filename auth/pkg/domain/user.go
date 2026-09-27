@@ -112,16 +112,16 @@ func (u *User) ValidatePassword(pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(pw)) == nil
 }
 
-// retiredPasswordHash is stored instead of a bcrypt hash for an account that
-// has no password — a service account that authenticates with an API key
-// only. No input matches it.
-const retiredPasswordHash = "!"
+// RetiredPasswordHash is stored instead of a bcrypt hash for an account that
+// has no password — every service account, which authenticates with an API
+// key only. No input matches it.
+const RetiredPasswordHash = "!"
 
 // RetirePassword removes password login from the account.
-func (u *User) RetirePassword() { u.Password = retiredPasswordHash }
+func (u *User) RetirePassword() { u.Password = RetiredPasswordHash }
 
 // PasswordRetired reports whether the account has no password.
-func (u *User) PasswordRetired() bool { return u.Password == retiredPasswordHash }
+func (u *User) PasswordRetired() bool { return u.Password == RetiredPasswordHash }
 
 // dummyPasswordHash is a bcrypt hash (at bcrypt.DefaultCost, same as every
 // real account) of a placeholder password nobody's account uses.

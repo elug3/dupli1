@@ -201,12 +201,12 @@ services:
       OWNER_EMAIL: admin@dupli1.com
       OWNER_PASSWORD: password
       DUPLI1_WEB_SERVICE_EMAIL: dupli1-web@web.dupli1.com
-      DUPLI1_WEB_SERVICE_PASSWORD: dupli1-web-dev-secret
       DUPLI1_ORDER_SERVICE_EMAIL: dupli1-order@order.dupli1.com
-      DUPLI1_ORDER_SERVICE_PASSWORD: dupli1-order-dev-secret
-      # Order authenticates with this key, not the password
-      # (docs/auth-service-api-keys.md). Dev-only value; must match order's.
+      # Service accounts have no password; each authenticates with its API key
+      # (docs/auth-service-api-keys.md). Dev-only values: order below uses the
+      # first, a locally run dupli1-web the second.
       DUPLI1_ORDER_SERVICE_API_KEY: dk_test_local-dev-order-service-key-not-a-secretxxx
+      DUPLI1_WEB_SERVICE_API_KEY: dk_test_local-dev-web-service-key-not-a-secretxxxxx
       DUPLI1_API_KEY_ENV: test
     depends_on:
       postgres-auth:

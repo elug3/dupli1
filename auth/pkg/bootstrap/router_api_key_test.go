@@ -214,3 +214,25 @@ func TestAPIKeyRoutes_AccessRules(t *testing.T) {
 		t.Fatalf("revoke env key: %d %s, want 409", w.Code, w.Body.String())
 	}
 }
+
+func TestServiceAccountPasswordRoutes(t *testing.T) {
+	f := newAPIKeyRouterFixture(t)
+	owner := "Bearer " + f.tokens["owner"]
+
+	if w := f.do(http.MethodPatch, "/api/v1/auth/users/svc-order/password", owner,
+		map[string]string{"password": "brand-new-password"}); w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("setting a service account's password: %d %s, want 422", w.Code, w.Body.String())
+	}
+	if w := f.do(http.MethodPost, "/api/v1/auth/register", owner,
+		map[string]string{"email": "bot@example.com", "password": "some-password", "account_type": "service"}); w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("registering a service account with a password: %d %s, want 422", w.Code, w.Body.String())
+	}
+	if w := f.do(http.MethodPost, "/api/v1/auth/register", owner,
+		map[string]string{"email": "bot@example.com", "account_type": "service"}); w.Code != http.StatusCreated {
+		t.Fatalf("registering a service account without one: %d %s, want 201", w.Code, w.Body.String())
+	}
+	if w := f.do(http.MethodPost, "/api/v1/auth/register", owner,
+		map[string]string{"email": "person@example.com", "account_type": "manager"}); w.Code != http.StatusBadRequest {
+		t.Fatalf("a person still needs a password: %d %s, want 400", w.Code, w.Body.String())
+	}
+}

@@ -107,7 +107,7 @@ Create a new user account. Requires `user.create`.
 | Field | Type | Constraints |
 |-------|------|-------------|
 | `email` | string | required, valid email |
-| `password` | string | required, min 8 chars |
+| `password` | string | required, min 8 chars — except for `account_type: service`, which must omit it (`422` if sent): service accounts have no password and authenticate with an API key |
 | `account_type` | string | optional; one of `customer`, `manager`, `service`; defaults to `customer`. Do not send `admin` (permission tier — use `manager`). Callers with only `user.create` (no `admin.*` or `*`) may register `customer` only |
 
 **Response `201`**
@@ -135,7 +135,7 @@ Configure on `dupli1-auth` startup:
 | Variable | Purpose |
 |----------|---------|
 | `DUPLI1_WEB_SERVICE_EMAIL` | Service account email (skip seeding when empty) |
-| `DUPLI1_WEB_SERVICE_PASSWORD` | Service account password (required when email is set) |
+| `DUPLI1_WEB_SERVICE_API_KEY` | Its API key, required when the email is set — service accounts have no password ([auth-service-api-keys.md](auth-service-api-keys.md)) |
 
 `dupli1-web` should log in with these credentials server-side, cache/refresh the access token, and call register from the backend only — never expose the service password to browsers.
 
@@ -160,7 +160,9 @@ Authenticate and receive a refresh token.
 |----------|-----------------------|
 | `storefront` (dupli1-web) | `customer`, `manager` |
 | `manage` (manage-web) | `manager` |
-| `service` (machine login, no web session) | `service` |
+| `service` (was the machine login) | nobody |
+
+Service accounts are refused through every client, including none: they have no password and authenticate with an API key ([`POST /api/v1/auth/token`](#post-apiv1authtoken)).
 
 The check runs only after the password is verified, so a wrong password is still `401` whatever the account type. `client` is optional for one release while callers roll over; omitted, no account-type rule applies. An unknown value is `400`.
 
@@ -366,7 +368,7 @@ Set a new password for a user. Requires `user.password.update`.
 | `401` | Missing or invalid access token |
 | `403` | Caller lacks `user.password.update` or may not manage this user |
 | `404` | User not found |
-| `422` | Password too short (min 8 chars) |
+| `422` | Password too short (min 8 chars), or the user is a service account (they have no password) |
 
 ---
 

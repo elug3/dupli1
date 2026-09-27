@@ -109,7 +109,7 @@ func (c *Client) doJSONOnce(ctx context.Context, method, path string, body any, 
 		}
 	} else if req.Header.Get("Authorization") == "" {
 		// No token source configured — product reservation routes require auth.
-		return fmt.Errorf("product stock request failed: %w (no service-account token configured; set DUPLI1_ORDER_SERVICE_EMAIL/PASSWORD and DUPLI1_AUTH_URL)", ErrUnauthorized)
+		return fmt.Errorf("product stock request failed: %w (no service-account token configured; set DUPLI1_ORDER_SERVICE_API_KEY and DUPLI1_AUTH_URL)", ErrUnauthorized)
 	}
 
 	resp, err := c.httpClient.Do(req)

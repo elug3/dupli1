@@ -155,6 +155,7 @@ This logic (and its logging) no longer lives in `auth` — it was extracted to t
 | `web_service_account_synced` | Info | Web service account credentials/permissions updated |
 | `order_service_account_seeded` | Info | `dupli1-order` service account created |
 | `order_service_account_synced` | Info | Order service account credentials/permissions updated |
+| `web_service_password_ignored` / `order_service_password_ignored` | Warn | A `*_SERVICE_PASSWORD` env var is still set; service accounts have no password, so it is ignored — remove it |
 
 ---
 

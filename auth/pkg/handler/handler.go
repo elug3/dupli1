@@ -158,7 +158,9 @@ func (h *Handler) Login(c *gin.Context) {
 
 type registerRequest struct {
 	Email       string `json:"email" binding:"required,email"`
-	Password    string `json:"password" binding:"required,min=8"`
+	// Password is required for people and refused for service accounts,
+	// which authenticate with an API key (Service.Register enforces both).
+	Password    string `json:"password"`
 	AccountType string `json:"account_type"`
 }
 
@@ -194,6 +196,12 @@ func (h *Handler) Register(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "management forbidden: cannot register this account type"})
 		return
 	}
+	// People need a password (the old binding rule, still a 400); a service
+	// account must not have one, which Register refuses with a 422.
+	if accountType != domain.AccountTypeService && len(req.Password) < 8 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "register: parse request: password is required and must be at least 8 characters"})
+		return
+	}
 	if domain.ClassFromNewUser(accountType, nil) == domain.ClassOwner {
 		hasOwner, err := h.svc.HasOwner(c.Request.Context())
 		if err != nil {
@@ -215,7 +223,8 @@ func (h *Handler) Register(c *gin.Context) {
 				Str("ip", ip).
 				Msg("register failed: user already exists")
 			c.JSON(http.StatusConflict, gin.H{"error": fmt.Errorf("register: %w", err).Error()})
-		} else if errors.Is(err, autherrors.ErrInvalidEmail) || errors.Is(err, autherrors.ErrWeakPassword) || errors.Is(err, autherrors.ErrInvalidAccountType) {
+		} else if errors.Is(err, autherrors.ErrInvalidEmail) || errors.Is(err, autherrors.ErrWeakPassword) ||
+			errors.Is(err, autherrors.ErrInvalidAccountType) || errors.Is(err, autherrors.ErrServiceAccountNoPassword) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("register: %w", err).Error()})
 		} else {
 			h.logger.Error().
@@ -383,7 +392,7 @@ func (h *Handler) UpdateUserPassword(c *gin.Context) {
 	if err := h.svc.UpdateUserPassword(c.Request.Context(), userID, body.Password); err != nil {
 		if errors.Is(err, autherrors.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		} else if errors.Is(err, autherrors.ErrWeakPassword) {
+		} else if errors.Is(err, autherrors.ErrWeakPassword) || errors.Is(err, autherrors.ErrServiceAccountNoPassword) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Errorf("update password: %w", err).Error()})
 		} else {
 			h.respondInternalError(c, "update_password_error", err)

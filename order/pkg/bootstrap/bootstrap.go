@@ -31,14 +31,11 @@ type Config struct {
 	ProductURL   string
 	InventoryURL string
 
-	AuthURL              string
-	OrderServiceEmail    string
-	OrderServicePassword string
-	// OrderServiceAPIKey authenticates the order service account by API key
-	// (docs/auth-service-api-keys.md). When set it is used instead of the
-	// email/password login.
+	AuthURL string
+	// OrderServiceAPIKey authenticates the order service account
+	// (docs/auth-service-api-keys.md); service accounts have no password.
 	OrderServiceAPIKey string
-	// StockBearerToken overrides the service-account login (static token).
+	// StockBearerToken overrides the API key with a static token (dev/tests).
 	StockBearerToken string
 
 	DatabaseConnString string
@@ -220,7 +217,8 @@ func resolveStockTokenSource(ctx context.Context, cfg Config) (httpauth.TokenSou
 	}
 	authBase := strings.TrimSpace(cfg.AuthURL)
 	if authBase == "" {
-		// Fall back to gateway for login/refresh when AuthURL is unset.
+		// Fall back to the gateway for the key exchange when AuthURL is unset;
+		// order's gateway URL is the internal listener, which serves it.
 		authBase = strings.TrimSpace(cfg.GatewayURL)
 	}
 	var src httpauth.TokenSource
@@ -229,8 +227,6 @@ func resolveStockTokenSource(ctx context.Context, cfg Config) (httpauth.TokenSou
 		return nil, nil
 	case cfg.OrderServiceAPIKey != "":
 		src = httpauth.NewAPIKeyTokenSource(authBase, cfg.OrderServiceAPIKey, cfg.HTTPClient)
-	case cfg.OrderServiceEmail != "" && cfg.OrderServicePassword != "":
-		src = httpauth.NewServiceAccountTokenSource(authBase, cfg.OrderServiceEmail, cfg.OrderServicePassword, cfg.HTTPClient)
 	default:
 		return nil, nil
 	}

@@ -30,6 +30,9 @@ var (
 	ErrEnvManagedKey = errors.New("api key is managed by an environment variable")
 	// ErrNotServiceAccount: API keys attach to service accounts only.
 	ErrNotServiceAccount = errors.New("api keys are for service accounts only")
+	// ErrServiceAccountNoPassword: service accounts authenticate with API keys
+	// only, so they cannot sign in with, be given, or be reset to a password.
+	ErrServiceAccountNoPassword = errors.New("service accounts have no password; they authenticate with an API key")
 	// ErrScopeExceedsAccount: a key's scope names a permission its account lacks.
 	ErrScopeExceedsAccount = errors.New("api key scope exceeds the account's permissions")
 )

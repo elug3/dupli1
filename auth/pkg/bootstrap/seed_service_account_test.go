@@ -41,100 +41,92 @@ func (r *seedFakeRepo) Delete(context.Context, string) error {
 
 var _ ports.UserRepository = (*seedFakeRepo)(nil)
 
-func TestSeedWebServiceAccount_CreatesCustomerRegistrar(t *testing.T) {
-	repo := newSeedFakeRepo()
-	cfg := Config{
-		WebServiceEmail:    "dupli1-web@internal.dupli1",
-		WebServicePassword: "service-secret",
-		Logger:             zerolog.Nop(),
+func testKey(t *testing.T) string {
+	t.Helper()
+	k, err := domain.GenerateAPIKey(domain.APIKeyEnvTest)
+	if err != nil {
+		t.Fatal(err)
 	}
+	return k
+}
 
-	if err := seedWebServiceAccount(t.Context(), cfg, repo, nil); err != nil {
+func webCfg(t *testing.T) Config {
+	return Config{
+		WebServiceEmail:  "dupli1-web@internal.dupli1",
+		WebServiceAPIKey: testKey(t),
+		Logger:           zerolog.Nop(),
+	}
+}
+
+func TestSeedWebServiceAccount_CreatesKeyOnlyRegistrar(t *testing.T) {
+	repo := newSeedFakeRepo()
+	cfg := webCfg(t)
+	keys := &recordingKeySyncer{}
+	if err := seedWebServiceAccount(t.Context(), cfg, repo, keys); err != nil {
 		t.Fatalf("seedWebServiceAccount: %v", err)
 	}
-
 	u := repo.byEmail["dupli1-web@internal.dupli1"]
 	if u == nil {
 		t.Fatal("service account was not created")
 	}
-	if !u.HasPermission(permissions.UserCreate) {
-		t.Fatalf("permissions = %v, want [%s]", u.Permissions, permissions.UserCreate)
+	if !u.HasPermission(permissions.UserCreate) || u.AccountType != domain.AccountTypeService || u.ServiceName != "dupli1-web" {
+		t.Fatalf("account = %+v", u)
 	}
-	if !u.ValidatePassword("service-secret") {
-		t.Fatal("stored password does not match configured password")
+	if !u.PasswordRetired() {
+		t.Fatal("a service account must have no password")
+	}
+	if len(keys.calls) != 1 || keys.calls[0] != u.ID+"="+cfg.WebServiceAPIKey {
+		t.Fatalf("key sync calls = %v", keys.calls)
 	}
 }
 
 func TestSeedWebServiceAccount_Idempotent(t *testing.T) {
 	repo := newSeedFakeRepo()
-	cfg := Config{
-		WebServiceEmail:    "dupli1-web@internal.dupli1",
-		WebServicePassword: "service-secret",
-		Logger:             zerolog.Nop(),
-	}
-
+	cfg := webCfg(t)
 	if err := seedWebServiceAccount(t.Context(), cfg, repo, nil); err != nil {
 		t.Fatalf("first seed: %v", err)
 	}
-	firstID := repo.byEmail["dupli1-web@internal.dupli1"].ID
-
+	first := repo.byEmail["dupli1-web@internal.dupli1"].ID
 	if err := seedWebServiceAccount(t.Context(), cfg, repo, nil); err != nil {
 		t.Fatalf("second seed: %v", err)
 	}
-	if got := repo.byEmail["dupli1-web@internal.dupli1"].ID; got != firstID {
-		t.Fatalf("second seed changed user id: %s -> %s", firstID, got)
+	if got := repo.byEmail["dupli1-web@internal.dupli1"].ID; got != first {
+		t.Fatalf("user id changed: %s -> %s", first, got)
 	}
 }
 
-func TestSeedWebServiceAccount_SyncsPasswordAndPermissions(t *testing.T) {
+func TestSeedWebServiceAccount_SyncsAccountAndDropsPassword(t *testing.T) {
 	repo := newSeedFakeRepo()
-	cfg := Config{
-		WebServiceEmail:    "dupli1-web@internal.dupli1",
-		WebServicePassword: "service-secret",
-		Logger:             zerolog.Nop(),
-	}
+	cfg := webCfg(t)
 	if err := seedWebServiceAccount(t.Context(), cfg, repo, nil); err != nil {
 		t.Fatalf("first seed: %v", err)
 	}
-
+	// Drift: permissions cleared, deactivated, wrong type, and a password set
+	// (as an account created before keys would have).
 	u := repo.byEmail["dupli1-web@internal.dupli1"]
 	u.SetPermissions(nil)
 	u.SetActive(false)
 	u.AccountType = domain.AccountTypeCustomer
 	_ = u.UpdatePassword("old-password")
-	repo.byEmail[u.Email] = u
 
-	cfg.WebServicePassword = "rotated-secret"
 	if err := seedWebServiceAccount(t.Context(), cfg, repo, nil); err != nil {
 		t.Fatalf("sync seed: %v", err)
 	}
-
 	got := repo.byEmail["dupli1-web@internal.dupli1"]
-	if got.ID != u.ID {
-		t.Fatalf("sync changed user id: %s -> %s", u.ID, got.ID)
-	}
-	if !got.ValidatePassword("rotated-secret") {
-		t.Fatal("password was not rotated")
+	if got.ID != u.ID || !got.IsActive || got.AccountType != domain.AccountTypeService {
+		t.Fatalf("account = %+v", got)
 	}
 	if !got.HasPermission(permissions.UserCreate) || len(got.Permissions) != 1 {
-		t.Fatalf("permissions = %v, want [%s]", got.Permissions, permissions.UserCreate)
+		t.Fatalf("permissions = %v", got.Permissions)
 	}
-	if got.AccountType != domain.AccountTypeService {
-		t.Fatalf("account_type = %q, want %q", got.AccountType, domain.AccountTypeService)
-	}
-	if !got.IsActive {
-		t.Fatal("expected account to be reactivated")
+	if !got.PasswordRetired() || got.ValidatePassword("old-password") {
+		t.Fatal("the old password must stop working")
 	}
 }
 
 func TestSeedWebServiceAccount_SkipsWhenEmailEmpty(t *testing.T) {
 	repo := newSeedFakeRepo()
-	cfg := Config{
-		WebServicePassword: "service-secret",
-		Logger:             zerolog.Nop(),
-	}
-
-	if err := seedWebServiceAccount(t.Context(), cfg, repo, nil); err != nil {
+	if err := seedWebServiceAccount(t.Context(), Config{WebServiceAPIKey: testKey(t), Logger: zerolog.Nop()}, repo, nil); err != nil {
 		t.Fatalf("seedWebServiceAccount: %v", err)
 	}
 	if len(repo.byEmail) != 0 {
@@ -142,57 +134,39 @@ func TestSeedWebServiceAccount_SkipsWhenEmailEmpty(t *testing.T) {
 	}
 }
 
-func TestSeedWebServiceAccount_RequiresPassword(t *testing.T) {
-	repo := newSeedFakeRepo()
+func TestSeedWebServiceAccount_RequiresAPIKey(t *testing.T) {
 	cfg := Config{
-		WebServiceEmail: "dupli1-web@internal.dupli1",
-		Logger:          zerolog.Nop(),
+		WebServiceEmail:    "dupli1-web@internal.dupli1",
+		WebServicePassword: "service-secret", // no longer enough
+		Logger:             zerolog.Nop(),
 	}
-
-	if err := seedWebServiceAccount(t.Context(), cfg, repo, nil); err == nil {
-		t.Fatal("expected error when password is missing")
+	if err := seedWebServiceAccount(t.Context(), cfg, newSeedFakeRepo(), nil); err == nil {
+		t.Fatal("expected an error without an API key")
 	}
 }
 
 func TestSeedOrderServiceAccount_CreatesAndSyncs(t *testing.T) {
 	repo := newSeedFakeRepo()
 	cfg := Config{
-		OrderServiceEmail:    "dupli1-order@order.dupli1.com",
-		OrderServicePassword: "order-secret",
-		Logger:               zerolog.Nop(),
+		OrderServiceEmail:  "dupli1-order@order.dupli1.com",
+		OrderServiceAPIKey: testKey(t),
+		Logger:             zerolog.Nop(),
 	}
-
 	if err := seedOrderServiceAccount(t.Context(), cfg, repo, nil); err != nil {
 		t.Fatalf("seedOrderServiceAccount: %v", err)
 	}
 	u := repo.byEmail["dupli1-order@order.dupli1.com"]
-	if u == nil {
-		t.Fatal("order service account was not created")
+	if u == nil || !hasExactPermissions(u, orderServicePermissions) || u.ServiceName != "dupli1-order" || !u.PasswordRetired() {
+		t.Fatalf("order service account = %+v", u)
 	}
-	for _, p := range orderServicePermissions {
-		if !u.HasPermission(p) {
-			t.Fatalf("missing permission %s in %v", p, u.Permissions)
-		}
-	}
-
 	firstID := u.ID
 	u.SetPermissions(nil)
-	_ = u.UpdatePassword("old-password")
-	repo.byEmail[u.Email] = u
-
-	cfg.OrderServicePassword = "rotated-order-secret"
 	if err := seedOrderServiceAccount(t.Context(), cfg, repo, nil); err != nil {
 		t.Fatalf("sync seed: %v", err)
 	}
 	got := repo.byEmail["dupli1-order@order.dupli1.com"]
-	if got.ID != firstID {
-		t.Fatalf("sync changed user id: %s -> %s", firstID, got.ID)
-	}
-	if !got.ValidatePassword("rotated-order-secret") {
-		t.Fatal("password was not rotated")
-	}
-	if !hasExactPermissions(got, orderServicePermissions) {
-		t.Fatalf("permissions = %v", got.Permissions)
+	if got.ID != firstID || !hasExactPermissions(got, orderServicePermissions) {
+		t.Fatalf("after sync: id %s -> %s, permissions %v", firstID, got.ID, got.Permissions)
 	}
 }
 
@@ -206,63 +180,30 @@ func (s *recordingKeySyncer) SyncEnvAPIKey(_ context.Context, userID, plaintext 
 	return "", s.err
 }
 
-func TestSeedOrderServiceAccount_KeyOnlyHasNoPassword(t *testing.T) {
+func TestSeedOrderServiceAccount_PasswordEnvIsIgnored(t *testing.T) {
 	repo := newSeedFakeRepo()
-	keys := &recordingKeySyncer{}
-	key, _ := domain.GenerateAPIKey(domain.APIKeyEnvLive)
-	cfg := Config{
-		OrderServiceEmail:  "dupli1-order@order.dupli1.com",
-		OrderServiceAPIKey: key,
-		Logger:             zerolog.Nop(),
-	}
-	if err := seedOrderServiceAccount(t.Context(), cfg, repo, keys); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	u := repo.byEmail["dupli1-order@order.dupli1.com"]
-	if u == nil || !u.PasswordRetired() || u.ServiceName != "dupli1-order" {
-		t.Fatalf("account = %+v, want a service account with no password", u)
-	}
-	if len(keys.calls) != 1 || keys.calls[0] != u.ID+"="+key {
-		t.Fatalf("key sync calls = %v", keys.calls)
-	}
-}
-
-func TestSeedOrderServiceAccount_UnsettingPasswordRetiresIt(t *testing.T) {
-	repo := newSeedFakeRepo()
-	key, _ := domain.GenerateAPIKey(domain.APIKeyEnvLive)
 	cfg := Config{
 		OrderServiceEmail:    "dupli1-order@order.dupli1.com",
 		OrderServicePassword: "order-secret",
-		OrderServiceAPIKey:   key,
+		OrderServiceAPIKey:   testKey(t),
 		Logger:               zerolog.Nop(),
 	}
 	if err := seedOrderServiceAccount(t.Context(), cfg, repo, &recordingKeySyncer{}); err != nil {
 		t.Fatal(err)
 	}
-	if !repo.byEmail[cfg.OrderServiceEmail].ValidatePassword("order-secret") {
-		t.Fatal("password login should work while the password is configured")
-	}
-	cfg.OrderServicePassword = ""
-	if err := seedOrderServiceAccount(t.Context(), cfg, repo, &recordingKeySyncer{}); err != nil {
-		t.Fatal(err)
-	}
 	if u := repo.byEmail[cfg.OrderServiceEmail]; !u.PasswordRetired() || u.ValidatePassword("order-secret") {
-		t.Fatal("removing the password from the environment must end password login")
+		t.Fatal("a leftover *_SERVICE_PASSWORD must not become a password")
 	}
 }
 
 func TestSeedServiceAccount_KeySyncFailureStopsBoot(t *testing.T) {
 	repo := newSeedFakeRepo()
-	cfg := Config{
-		WebServiceEmail:    "dupli1-web@internal.dupli1",
-		WebServicePassword: "service-secret",
-		Logger:             zerolog.Nop(),
-	}
+	cfg := webCfg(t)
 	keys := &recordingKeySyncer{err: context.DeadlineExceeded}
 	if err := seedWebServiceAccount(t.Context(), cfg, repo, keys); err == nil {
 		t.Fatal("a failed key sync must fail the boot, not leave a stale key working")
 	}
-	if len(keys.calls) != 1 || keys.calls[0] != repo.byEmail[cfg.WebServiceEmail].ID+"=" {
-		t.Fatalf("with no key configured the syncer is still asked to revoke: %v", keys.calls)
+	if len(keys.calls) != 1 {
+		t.Fatalf("key sync calls = %v", keys.calls)
 	}
 }

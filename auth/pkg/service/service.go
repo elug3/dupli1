@@ -117,9 +117,6 @@ func (s *Service) Register(ctx context.Context, email, password, accountType str
 	if !strings.Contains(email, "@") || strings.HasPrefix(email, "@") || strings.HasSuffix(email, "@") {
 		return nil, autherrors.ErrInvalidEmail
 	}
-	if len(password) < 8 {
-		return nil, autherrors.ErrWeakPassword
-	}
 	if accountType == "" {
 		accountType = domain.DefaultAccountType
 	}
@@ -127,10 +124,26 @@ func (s *Service) Register(ctx context.Context, email, password, accountType str
 	if !domain.ValidAccountType(accountType) {
 		return nil, autherrors.ErrInvalidAccountType
 	}
+	service := accountType == domain.AccountTypeService
+	switch {
+	case service && password != "":
+		// A service account authenticates with an API key minted after it
+		// exists; accepting a password here would create one nobody uses.
+		return nil, autherrors.ErrServiceAccountNoPassword
+	case !service && len(password) < 8:
+		return nil, autherrors.ErrWeakPassword
+	}
+	if service {
+		// NewUser needs something to hash; the password is retired below.
+		password = newID() + newID()
+	}
 	perms := permissions.Dedupe(userPermissions)
 	u, err := domain.NewUser(newID(), email, password, accountType, perms...)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
+	}
+	if service {
+		u.RetirePassword()
 	}
 	if err := s.userRepo.Save(ctx, u); err != nil {
 		return nil, fmt.Errorf("save user: %w", err)
@@ -264,6 +277,11 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (accessToken
 	if u.IsLocked() {
 		return "", "", autherrors.ErrAccountLocked
 	}
+	if domain.NormalizeAccountType(u.AccountType) == domain.AccountTypeService {
+		// A refresh token issued to a service account before it moved to API
+		// keys; it no longer holds a session.
+		return "", "", autherrors.ErrInvalidToken
+	}
 
 	newAccessToken, err := s.tokenGen.Generate(ctx, u.ID, u.Permissions, ports.Identity{
 		Email:       u.Email,
@@ -365,6 +383,11 @@ func (s *Service) SetUserPermissions(ctx context.Context, userID string, perms [
 		}
 		u.AccountType = accountType
 	}
+	if domain.NormalizeAccountType(u.AccountType) == domain.AccountTypeService {
+		// Turning an account into a service account removes its password:
+		// from here on it authenticates with an API key only.
+		u.RetirePassword()
+	}
 	u.SetPermissions(perms)
 	if err := s.userRepo.Save(ctx, u); err != nil {
 		return nil, fmt.Errorf("save user: %w", err)
@@ -383,6 +406,9 @@ func (s *Service) UpdateUserPassword(ctx context.Context, userID, newPassword st
 	}
 	if u == nil {
 		return autherrors.ErrUserNotFound
+	}
+	if domain.NormalizeAccountType(u.AccountType) == domain.AccountTypeService {
+		return autherrors.ErrServiceAccountNoPassword
 	}
 	if err := u.UpdatePassword(newPassword); err != nil {
 		return fmt.Errorf("hash password: %w", err)

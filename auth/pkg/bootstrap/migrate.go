@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/elug3/dupli1/auth/pkg/domain"
 	"log"
 
 	"github.com/elug3/dupli1/shared/pkg/permissions"
@@ -92,6 +93,10 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		`UPDATE users SET account_type = 'service'
 		 WHERE account_type = 'customer'
 		   AND (permissions && ARRAY['customer_registrar','order_manager','user.create'])`,
+		// Service accounts authenticate with API keys only: drop any password
+		// one still has (seeded or created before keys existed).
+		`UPDATE users SET password = '` + domain.RetiredPasswordHash + `'
+		 WHERE account_type = 'service' AND password <> '` + domain.RetiredPasswordHash + `'`,
 	}
 	for _, stmt := range backfill {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {

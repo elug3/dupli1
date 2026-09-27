@@ -150,7 +150,7 @@ func (c *Client) bearer(ctx context.Context) (string, error) {
 		return token, nil
 	}
 	if c.tokenSource == nil {
-		return "", fmt.Errorf("%w: no payment auth token (set DUPLI1_ORDER_SERVICE_EMAIL/PASSWORD)", ports.ErrPaymentUnauthorized)
+		return "", fmt.Errorf("%w: no payment auth token (set DUPLI1_ORDER_SERVICE_API_KEY)", ports.ErrPaymentUnauthorized)
 	}
 	token, err := c.tokenSource.Token(ctx)
 	if err != nil {

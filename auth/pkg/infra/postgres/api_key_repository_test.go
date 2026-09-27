@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/elug3/dupli1/auth/pkg/bootstrap"
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/infra/postgres"
 	"github.com/google/uuid"
@@ -104,5 +105,31 @@ func TestAPIKeyRepository_HashIsUniqueAndDeleteCascades(t *testing.T) {
 	}
 	if gone, _ := keys.FindByID(ctx, k.ID); gone != nil {
 		t.Fatal("deleting the account must delete its keys")
+	}
+}
+
+// Service accounts authenticate with API keys only: the startup migration
+// drops a password one still has.
+func TestMigrateSchema_RetiresServiceAccountPasswords(t *testing.T) {
+	_, db := newAPIKeyRepo(t)
+	ctx := t.Context()
+	svc := newTestUser(t)
+	svc.AccountType = domain.AccountTypeService
+	person := newTestUser(t)
+	for _, u := range []*domain.User{svc, person} {
+		if err := repo.Save(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := bootstrap.MigrateSchema(ctx, db); err != nil {
+		t.Fatalf("MigrateSchema: %v", err)
+	}
+	gotSvc, _ := repo.FindByID(ctx, svc.ID)
+	gotPerson, _ := repo.FindByID(ctx, person.ID)
+	if !gotSvc.PasswordRetired() {
+		t.Fatal("service account kept its password")
+	}
+	if gotPerson.PasswordRetired() || !gotPerson.ValidatePassword("hunter2") {
+		t.Fatal("a person's password must be untouched")
 	}
 }

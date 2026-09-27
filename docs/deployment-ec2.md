@@ -55,8 +55,8 @@ sudo nano /opt/dupli1/app/.env.prod
 Set at minimum:
 
 - `OWNER_PASSWORD`
-- `DUPLI1_WEB_SERVICE_PASSWORD`
-- `DUPLI1_ORDER_SERVICE_PASSWORD`
+- `DUPLI1_WEB_SERVICE_API_KEY`
+- `DUPLI1_ORDER_SERVICE_API_KEY` (service accounts have no password — [auth-service-api-keys.md](auth-service-api-keys.md))
 - `MINIO_SECRET_KEY`
 
 `POSTGRES_PASSWORD` and `JWT_SECRET` are auto-generated on first bootstrap.
