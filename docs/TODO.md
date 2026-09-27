@@ -46,6 +46,16 @@ Open highlights:
     [dupli1-web#108](https://github.com/elug3/dupli1-web/pull/108) is independent.
     of NANO's answer.
 
+## VENUS migration (AWS exit) — [deployment-venus.md](deployment-venus.md)
+
+- [ ] **Off-machine backup before deleting RDS** — every copy of production data is on
+  VENUS's own disk. Copy `~/backups/dupli1-2026-09-26/` (full: DBs, images, config,
+  encrypted secrets, container images) and the latest DB + images backup
+  (`~/backups/dupli1-backup-20260927T0651Z/` or the cutover's final dump) somewhere off
+  the machine. Keep the age key separate from the backup.
+- [ ] **Nightly backups on VENUS** — `pg_dump` of every database + the `dupli1_s3data`
+  image volume, shipped off the machine on a schedule, with a tested restore.
+
 ## v1.1 (post-launch — logging, sessions, access control, deployment, automation)
 
 See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criteria.
