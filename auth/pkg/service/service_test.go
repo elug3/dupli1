@@ -153,7 +153,7 @@ func TestRegisterPublishesUserRegisteredEvent(t *testing.T) {
 }
 
 func TestLogin_RefreshTokenOmitsPermissions(t *testing.T) {
-	user, _ := domain.NewUser("u-1", "user@example.com", "pass", domain.AccountTypeService,
+	user, _ := domain.NewUser("u-1", "user@example.com", "pass", domain.AccountTypeManager,
 		permissions.OrderShip, permissions.OrderStatusUpdate)
 	repo := &stubUserRepository{user: user}
 	gen := &capturingTokenGenerator{}
@@ -187,19 +187,54 @@ func TestRefresh_FetchesFreshPermissionsFromDB(t *testing.T) {
 	}
 }
 
-func TestRefresh_StampsAccountTypeAndServiceName(t *testing.T) {
-	user, _ := domain.NewUser("svc-1", "order@example.com", "pass", domain.AccountTypeService,
-		permissions.PromotionRedeem)
-	user.ServiceName = "dupli1-order"
-	gen := &capturingTokenGenerator{capturedUserID: "svc-1"}
+func TestRefresh_StampsAccountType(t *testing.T) {
+	user, _ := domain.NewUser("m-1", "ops@example.com", "pass", domain.AccountTypeManager, permissions.OrderShip)
+	gen := &capturingTokenGenerator{capturedUserID: "m-1"}
 	svc := NewService(&stubUserRepository{user: user}, gen)
 
 	if _, _, err := svc.Refresh(t.Context(), "any-token"); err != nil {
 		t.Fatalf("Refresh: %v", err)
 	}
-	want := ports.Identity{Email: "order@example.com", AccountType: "service", ServiceName: "dupli1-order"}
+	want := ports.Identity{Email: "ops@example.com", AccountType: "manager"}
 	if gen.capturedIdentity != want {
 		t.Fatalf("identity = %+v, want %+v", gen.capturedIdentity, want)
+	}
+}
+
+// A service account holds no session: a refresh token issued to one before it
+// moved to API keys stops working.
+func TestRefresh_RefusesServiceAccounts(t *testing.T) {
+	user, _ := domain.NewUser("svc-1", "order@example.com", "pass", domain.AccountTypeService, permissions.PromotionRedeem)
+	svc := NewService(&stubUserRepository{user: user}, &capturingTokenGenerator{capturedUserID: "svc-1"})
+	if _, _, err := svc.Refresh(t.Context(), "any-token"); !errors.Is(err, autherrors.ErrInvalidToken) {
+		t.Fatalf("Refresh = %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestServiceAccounts_HaveNoPassword(t *testing.T) {
+	repo := &mapUserRepo{users: map[string]*domain.User{}}
+	svc := NewService(repo, &capturingTokenGenerator{})
+	ctx := t.Context()
+
+	if _, err := svc.Register(ctx, "bot@example.com", "a-password", domain.AccountTypeService); !errors.Is(err, autherrors.ErrServiceAccountNoPassword) {
+		t.Fatalf("register with a password: %v, want ErrServiceAccountNoPassword", err)
+	}
+	bot, err := svc.Register(ctx, "bot@example.com", "", domain.AccountTypeService)
+	if err != nil || !bot.PasswordRetired() {
+		t.Fatalf("register without a password: %v, retired=%v", err, bot != nil && bot.PasswordRetired())
+	}
+	if _, err := svc.Register(ctx, "person@example.com", "", domain.AccountTypeCustomer); !errors.Is(err, autherrors.ErrWeakPassword) {
+		t.Fatalf("a person still needs a password: %v", err)
+	}
+	if err := svc.UpdateUserPassword(ctx, bot.ID, "new-password"); !errors.Is(err, autherrors.ErrServiceAccountNoPassword) {
+		t.Fatalf("setting a service account's password: %v", err)
+	}
+
+	person, _ := domain.NewUser("p-1", "p@example.com", "password12", domain.AccountTypeManager)
+	repo.users[person.ID] = person
+	u, err := svc.SetUserPermissions(ctx, person.ID, []string{permissions.OrderShip}, domain.AccountTypeService)
+	if err != nil || !u.PasswordRetired() || u.ValidatePassword("password12") {
+		t.Fatalf("turning an account into a service account must drop its password: %v", err)
 	}
 }
 

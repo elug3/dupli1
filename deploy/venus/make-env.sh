@@ -5,8 +5,9 @@
 #   deploy/venus/make-env.sh <backup-dir> <age-identity-file>
 #
 # Carried over from AWS: JWT secret + RS256 key (existing sessions stay valid),
-# service-account credentials, Nano Pay, Telegram. Newly generated: Postgres
-# superuser, app role, S3 (SeaweedFS) key. Re-running keeps generated values.
+# the order service account's email, Nano Pay, Telegram. Newly generated:
+# Postgres superuser, app role, S3 (SeaweedFS) key, and the two service-account
+# API keys (service accounts have no password). Re-running keeps generated values.
 set -euo pipefail
 BACKUP=${1:?backup dir, e.g. ~/backups/dupli1-2026-09-26}
 IDENTITY=${2:?age identity file}
@@ -45,9 +46,7 @@ def generated_api_key(k):
     # (docs/auth-service-api-keys.md). Kept across re-runs.
     return old.get(k) or "dk_live_" + secrets.token_urlsafe(32)
 
-auth_td = json.load(open(f"{backup}/config/taskdef-dupli1-auth_7.json"))["taskDefinition"]
-auth_env = {e["name"]: e["value"] for c in auth_td["containerDefinitions"] for e in c.get("environment", [])}
-order_acct, web_acct = secret("order-service-account"), secret("web-service-account")
+order_acct = secret("order-service-account")
 nano, telegram = secret("nano-payment"), secret("telegram")
 
 env = {
@@ -55,11 +54,8 @@ env = {
     "DB_APP_PASSWORD": generated("DB_APP_PASSWORD"),
     "S3_SECRET_KEY": generated("S3_SECRET_KEY"),
     "JWT_SECRET": secret("jwt-secret"),
-    "AUTH_WEB_SERVICE_PASSWORD": auth_env["DUPLI1_WEB_SERVICE_PASSWORD"],
     "DUPLI1_ORDER_SERVICE_EMAIL": order_acct["DUPLI1_ORDER_SERVICE_EMAIL"],
-    "DUPLI1_ORDER_SERVICE_PASSWORD": order_acct["DUPLI1_ORDER_SERVICE_PASSWORD"],
-    "WEB_SERVICE_EMAIL": web_acct["DUPLI1_WEB_SERVICE_EMAIL"],
-    "WEB_SERVICE_PASSWORD": web_acct["DUPLI1_WEB_SERVICE_PASSWORD"],
+    # Service accounts have no password; each has an API key instead.
     "DUPLI1_ORDER_SERVICE_API_KEY": generated_api_key("DUPLI1_ORDER_SERVICE_API_KEY"),
     "DUPLI1_WEB_SERVICE_API_KEY": generated_api_key("DUPLI1_WEB_SERVICE_API_KEY"),
     **{k: nano[k] for k in ("NANO_API_KEY", "NANO_LOGIN_ID", "NANO_SHOPCODE", "NANO_VER")},

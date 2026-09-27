@@ -32,8 +32,10 @@ type envKeySyncer interface {
 
 // serviceAccountSpec is one machine account auth seeds at boot.
 type serviceAccountSpec struct {
-	label       string // for logs and errors: "web", "order"
-	email       string
+	label string // for logs and errors: "web", "order"
+	email string
+	// password is only checked so a leftover *_SERVICE_PASSWORD can be
+	// reported as ignored: service accounts have no password.
 	password    string
 	apiKey      string
 	name        string // service_name claim
@@ -59,20 +61,22 @@ func seedOrderServiceAccount(ctx context.Context, cfg Config, repo ports.UserRep
 
 // seedServiceAccount creates or updates a service account and its env API
 // key. It is idempotent: repeated boots keep the same user id and re-sync the
-// password, permissions, account type, service name, active status and API
-// key, so a rotated secret takes effect on the next auth boot.
+// permissions, account type, service name, active status and API key, so a
+// rotated key takes effect on the next auth boot.
 //
-// The account authenticates with its API key, its password, or both while
-// callers move to keys. With no password configured the account has none at
-// all (User.RetirePassword) — so unsetting *_SERVICE_PASSWORD retires
-// password login for it.
+// A service account authenticates with its API key only; it has no password
+// (User.RetirePassword), so it can sign in to neither web app.
 func seedServiceAccount(ctx context.Context, log zerolog.Logger, repo ports.UserRepository, keys envKeySyncer, spec serviceAccountSpec) error {
 	if spec.email == "" {
 		return nil
 	}
-	if spec.password == "" && spec.apiKey == "" {
-		return fmt.Errorf("seed %s service account: %s_API_KEY (or, during the move to keys, %s_PASSWORD) is required when %s_EMAIL is set",
-			spec.label, spec.envPrefix, spec.envPrefix, spec.envPrefix)
+	if spec.apiKey == "" {
+		return fmt.Errorf("seed %s service account: %s_API_KEY is required when %s_EMAIL is set (service accounts authenticate with an API key; see docs/auth-service-api-keys.md)",
+			spec.label, spec.envPrefix, spec.envPrefix)
+	}
+	if spec.password != "" {
+		log.Warn().Str("event", spec.label+"_service_password_ignored").
+			Msgf("%s_PASSWORD is ignored: service accounts have no password; remove it", spec.envPrefix)
 	}
 
 	u, err := repo.FindByEmail(ctx, spec.email)
@@ -81,20 +85,16 @@ func seedServiceAccount(ctx context.Context, log zerolog.Logger, repo ports.User
 	}
 	event := ""
 	if u == nil {
-		password := spec.password
-		if password == "" {
-			// NewUser needs something to hash; it is replaced right below.
-			if password, err = unusablePassword(); err != nil {
-				return fmt.Errorf("seed %s service account: %w", spec.label, err)
-			}
+		// NewUser needs something to hash; the password is retired below.
+		placeholder, err := unusablePassword()
+		if err != nil {
+			return fmt.Errorf("seed %s service account: %w", spec.label, err)
 		}
-		u, err = domain.NewUser(uuid.New().String(), spec.email, password, domain.AccountTypeService, spec.permissions...)
+		u, err = domain.NewUser(uuid.New().String(), spec.email, placeholder, domain.AccountTypeService, spec.permissions...)
 		if err != nil {
 			return fmt.Errorf("seed %s service account: create: %w", spec.label, err)
 		}
-		if spec.password == "" {
-			u.RetirePassword()
-		}
+		u.RetirePassword()
 		u.ServiceName = spec.name
 		event = "seeded"
 	} else if changed, err := syncServiceAccount(u, spec); err != nil {
@@ -107,7 +107,7 @@ func seedServiceAccount(ctx context.Context, log zerolog.Logger, repo ports.User
 			return fmt.Errorf("seed %s service account: save: %w", spec.label, err)
 		}
 		log.Info().Str("event", spec.label+"_service_account_"+event).Str("email", spec.email).
-			Bool("password_login", spec.password != "").Msgf("dupli1-%s service account %s", spec.label, event)
+			Msgf("dupli1-%s service account %s", spec.label, event)
 	}
 
 	if keys == nil {
@@ -128,15 +128,7 @@ func seedServiceAccount(ctx context.Context, log zerolog.Logger, repo ports.User
 // reports whether anything changed.
 func syncServiceAccount(u *domain.User, spec serviceAccountSpec) (bool, error) {
 	changed := false
-	if spec.password != "" && !u.ValidatePassword(spec.password) {
-		if err := u.UpdatePassword(spec.password); err != nil {
-			return false, fmt.Errorf("update password: %w", err)
-		}
-		changed = true
-	}
-	// No password configured: drop whatever was set before, so a password
-	// removed from the environment stops working.
-	if spec.password == "" && !u.PasswordRetired() {
+	if !u.PasswordRetired() {
 		u.RetirePassword()
 		changed = true
 	}

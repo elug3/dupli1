@@ -56,7 +56,9 @@ const (
 	ClientStorefront = "storefront"
 	// ClientManage is manage-web: managers only.
 	ClientManage = "manage"
-	// ClientService is a machine login (no web session): service accounts only.
+	// ClientService was the machine password login. Service accounts now use
+	// API keys, so it admits nobody; it stays a known value so an old caller
+	// gets the explanatory 403 rather than a 400.
 	ClientService = "service"
 )
 
@@ -72,9 +74,14 @@ func ValidClient(c string) bool {
 }
 
 // ClientRejection returns why accountType may not sign in through client, as
-// a message fit to show the person signing in, or "" when it may.
+// a message fit to show the person signing in, or "" when it may. A service
+// account never signs in with a password, through any client: it has none,
+// and authenticates with an API key (docs/auth-service-api-keys.md).
 func ClientRejection(client, accountType string) string {
 	at := NormalizeAccountType(accountType)
+	if at == AccountTypeService {
+		return "Service accounts don't sign in with a password; they use an API key."
+	}
 	switch client {
 	case ClientStorefront:
 		if at == AccountTypeService {
@@ -89,9 +96,7 @@ func ClientRejection(client, accountType string) string {
 			return "Customer accounts cannot sign in to manage-web. Please sign in on the storefront."
 		}
 	case ClientService:
-		if at != AccountTypeService {
-			return "Only service accounts can sign in as a service."
-		}
+		return "Only service accounts could sign in as a service, and they now use an API key."
 	}
 	return ""
 }

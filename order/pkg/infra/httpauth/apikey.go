@@ -10,10 +10,9 @@ import (
 )
 
 // APIKeyTokenSource exchanges a service-account API key for access tokens at
-// auth's POST /api/v1/auth/token (docs/auth-service-api-keys.md). Simpler than
-// ServiceAccountTokenSource: there is no refresh token to rotate or persist —
-// the key is the long-lived credential, so when the access token nears expiry
-// it just exchanges again.
+// auth's POST /api/v1/auth/token (docs/auth-service-api-keys.md). There is no
+// refresh token to rotate or persist — the key is the long-lived credential,
+// so when the access token nears expiry it just exchanges again.
 type APIKeyTokenSource struct {
 	authBaseURL string
 	apiKey      string

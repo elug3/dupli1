@@ -117,7 +117,7 @@ Phase 1 introduces `shared/pkg/permissions` (Go module `github.com/elug3/dupli1/
 
 Tiers are derived inside auth only. Other services continue to use fine-grained permissions without this hierarchy.
 
-A target account's tier is the **higher** of what its `account_type` implies and what its permissions confer, so a `customer`-typed account holding `admin.*` is admin tier. `account_type: service` is its own tier that only the owner manages (register, reset password, change status or permissions): a service account holds cross-service permissions such as `payment.cancel` and `promotion.redeem`, and a password reset on it would hand those over.
+A target account's tier is the **higher** of what its `account_type` implies and what its permissions confer, so a `customer`-typed account holding `admin.*` is admin tier. `account_type: service` is its own tier that only the owner manages (register, mint or revoke API keys, change status or permissions): a service account holds cross-service permissions such as `payment.cancel` and `promotion.redeem`. It has no password at all — it authenticates with an API key and cannot sign in to either web app ([auth-service-api-keys.md](auth-service-api-keys.md)).
 
 **Grant only what you hold.** Registering or assigning permissions requires the caller to hold every permission granted (wildcards count — a `product.*` holder may grant `product.create`). An admin without `support.read` cannot grant the `support_agent` bundle; the owner can.
 

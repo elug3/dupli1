@@ -248,7 +248,8 @@ curl -X POST "http://localhost:8080/api/v1/products/{parentId}/images" \
 | `OWNER_EMAIL` | — | Seed owner email (skips seeding if empty) |
 | `OWNER_PASSWORD` | — | Seed owner password |
 | `DUPLI1_WEB_SERVICE_EMAIL` | — | Seed dupli1-web service account email |
-| `DUPLI1_WEB_SERVICE_PASSWORD` | — | Seed dupli1-web service account password |
+| `DUPLI1_WEB_SERVICE_API_KEY` | — | Its API key; required with the email (service accounts have no password — [docs/auth-service-api-keys.md](docs/auth-service-api-keys.md)) |
+| `DUPLI1_ORDER_SERVICE_EMAIL` / `DUPLI1_ORDER_SERVICE_API_KEY` | — | Same for dupli1-order |
 
 ### Product service
 

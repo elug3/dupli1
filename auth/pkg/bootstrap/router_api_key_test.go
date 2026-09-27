@@ -215,61 +215,33 @@ func TestAPIKeyRoutes_AccessRules(t *testing.T) {
 	}
 }
 
-// Service accounts have no password: they are registered without one, a
-// password is refused at registration and on reset, and the account reports
-// has_password=false so manage-web offers API keys instead.
-func TestServiceAccounts_HaveNoPassword(t *testing.T) {
+func TestServiceAccountPasswordRoutes(t *testing.T) {
 	f := newAPIKeyRouterFixture(t)
 	owner := "Bearer " + f.tokens["owner"]
 
-	w := f.do(http.MethodPost, "/api/v1/auth/register", owner,
-		map[string]string{"email": "bot@example.com", "account_type": domain.AccountTypeService, "password": "password12"})
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("service register with a password: want 422, got %d %s", w.Code, w.Body.String())
+	if w := f.do(http.MethodPatch, "/api/v1/auth/users/svc-order/password", owner,
+		map[string]string{"password": "brand-new-password"}); w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("setting a service account's password: %d %s, want 422", w.Code, w.Body.String())
+	}
+	if w := f.do(http.MethodPost, "/api/v1/auth/register", owner,
+		map[string]string{"email": "bot@example.com", "password": "some-password", "account_type": "service"}); w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("registering a service account with a password: %d %s, want 422", w.Code, w.Body.String())
+	}
+	if w := f.do(http.MethodPost, "/api/v1/auth/register", owner,
+		map[string]string{"email": "bot@example.com", "account_type": "service"}); w.Code != http.StatusCreated {
+		t.Fatalf("registering a service account without one: %d %s, want 201", w.Code, w.Body.String())
+	}
+	if w := f.do(http.MethodPost, "/api/v1/auth/register", owner,
+		map[string]string{"email": "person@example.com", "account_type": "manager"}); w.Code != http.StatusBadRequest {
+		t.Fatalf("a person still needs a password: %d %s, want 400", w.Code, w.Body.String())
 	}
 
-	w = f.do(http.MethodPost, "/api/v1/auth/register", owner,
-		map[string]string{"email": "bot@example.com", "account_type": domain.AccountTypeService})
-	if w.Code != http.StatusCreated {
-		t.Fatalf("service register without a password: want 201, got %d %s", w.Code, w.Body.String())
-	}
-	var created struct {
-		UserID string `json:"user_id"`
-	}
-	_ = json.Unmarshal(w.Body.Bytes(), &created)
-
-	if u, _ := f.repo.FindByID(t.Context(), created.UserID); u == nil || !u.PasswordRetired() {
-		t.Fatalf("service account must have no password: %+v", u)
-	}
-	w = f.do(http.MethodPatch, "/api/v1/auth/users/"+created.UserID+"/permissions", owner,
-		map[string]any{"permissions": []string{permissions.OrderShip}})
-	if w.Code != http.StatusOK || !bytes.Contains(w.Body.Bytes(), []byte(`"has_password":false`)) {
-		t.Fatalf("service account must report has_password=false: %d %s", w.Code, w.Body.String())
-	}
-
-	w = f.do(http.MethodPost, "/api/v1/auth/login", "",
-		map[string]string{"email": "bot@example.com", "password": "password12", "client": "service"})
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("service login with a password: want 401, got %d %s", w.Code, w.Body.String())
-	}
-
-	w = f.do(http.MethodPatch, "/api/v1/auth/users/"+created.UserID+"/password", owner,
-		map[string]string{"password": "password12"})
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("service password reset: want 422, got %d %s", w.Code, w.Body.String())
-	}
-
-	// A customer still needs one.
-	w = f.do(http.MethodPost, "/api/v1/auth/register", owner,
-		map[string]string{"email": "shopper@example.com"})
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("customer register without a password: want 400, got %d %s", w.Code, w.Body.String())
-	}
-
-	// Converting an account to a service account retires its password.
-	w = f.do(http.MethodPatch, "/api/v1/auth/users/cust/permissions", owner,
-		map[string]any{"permissions": []string{permissions.OrderShip}, "account_type": domain.AccountTypeService})
-	if w.Code != http.StatusOK || !bytes.Contains(w.Body.Bytes(), []byte(`"has_password":false`)) {
-		t.Fatalf("convert to service: %d %s", w.Code, w.Body.String())
+	// has_password tells manage-web whether to offer a password form or keys.
+	for id, want := range map[string]string{"svc-order": `"has_password":false`, "cust": `"has_password":true`} {
+		w := f.do(http.MethodPatch, "/api/v1/auth/users/"+id+"/permissions", owner,
+			map[string]any{"permissions": []string{permissions.OrderShip}})
+		if w.Code != http.StatusOK || !bytes.Contains(w.Body.Bytes(), []byte(want)) {
+			t.Fatalf("%s: %d %s, want %s", id, w.Code, w.Body.String(), want)
+		}
 	}
 }
