@@ -23,9 +23,10 @@ const (
 	mockEcoBagStock     = 50
 )
 
-// SeedMockEcoBag ensures the Dupli1 Studio mock eco-bag exists at 100 KRW
-// with sellable stock. Idempotent: DUP/ECO01 is created once, then price,
-// status, and stock are reconciled on later boots.
+// SeedMockEcoBag creates the Dupli1 Studio mock eco-bag (DUP/ECO01, one
+// variant DUP_ECO01_BLK_OS) with sellable stock, as a fixture for the pg
+// tests. Idempotent. Production startup no longer seeds it: it reappeared,
+// active with stock reset to 50, on every product restart.
 func (s *ProductSearchStore) SeedMockEcoBag(ctx context.Context, stock *InventoryStore) error {
 	if s == nil || s.pool == nil {
 		return fmt.Errorf("product store not initialized")

@@ -98,10 +98,6 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		store.Close()
 		return nil, err
 	}
-	if err := store.SeedMockEcoBag(context.Background(), inventoryStore); err != nil {
-		store.Close()
-		return nil, fmt.Errorf("seed mock eco-bag: %w", err)
-	}
 	inventorySvc := service.NewInventoryService(inventoryStore, store)
 	svc.WithInventory(inventoryStore)
 
