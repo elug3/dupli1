@@ -94,6 +94,25 @@ func TestSave_And_FindByEmail(t *testing.T) {
 	}
 }
 
+func TestSave_ServiceNameRoundTrips(t *testing.T) {
+	requirePostgres(t)
+	ctx := t.Context()
+	u := newTestUser(t)
+	u.AccountType = domain.AccountTypeService
+	u.ServiceName = "dupli1-order"
+
+	if err := repo.Save(ctx, u); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := repo.FindByID(ctx, u.ID)
+	if err != nil || got == nil {
+		t.Fatalf("FindByID: %v, %v", got, err)
+	}
+	if got.ServiceName != "dupli1-order" {
+		t.Errorf("ServiceName: got %q, want dupli1-order", got.ServiceName)
+	}
+}
+
 func TestFindByEmail_NotFound(t *testing.T) {
 	requirePostgres(t)
 	ctx := t.Context()

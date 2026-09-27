@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/serviceaccount"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/sync/singleflight"
 )
@@ -24,6 +25,35 @@ type Claims struct {
 	UserID      string
 	Email       string
 	Permissions []string
+	// AccountType is customer | manager | service. Empty only on a token
+	// minted before auth began stamping it.
+	AccountType string
+	// ServiceName names the calling service account (e.g. dupli1-order).
+	ServiceName string
+}
+
+// CalledBy reports whether the token belongs to one of the named service
+// accounts. Internal APIs use it on top of their permission check, so a
+// person holding the permission (or a wildcard that covers it) is still
+// refused.
+//
+// A token with no account_type claim was minted before auth stamped one and
+// is judged on its permission alone. Access tokens live 15 minutes, so this
+// only bridges a rollout in which product ships before auth; remove it the
+// release after both carry the claim.
+func (c Claims) CalledBy(names ...string) bool {
+	if c.AccountType == "" {
+		return true
+	}
+	if c.AccountType != serviceaccount.AccountType {
+		return false
+	}
+	for _, n := range names {
+		if c.ServiceName == n {
+			return true
+		}
+	}
+	return false
 }
 
 // HasPermission reports whether any of the given permissions is granted.
@@ -240,10 +270,14 @@ func claimsFromMap(mapClaims jwt.MapClaims) (Claims, error) {
 	}
 	rawPerms := extractStringSlice(mapClaims, "permissions")
 	email, _ := mapClaims["email"].(string)
+	accountType, _ := mapClaims["account_type"].(string)
+	serviceName, _ := mapClaims["service_name"].(string)
 	return Claims{
 		UserID:      userID,
 		Email:       strings.TrimSpace(email),
 		Permissions: permissions.Dedupe(rawPerms),
+		AccountType: accountType,
+		ServiceName: serviceName,
 	}, nil
 }
 

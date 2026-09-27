@@ -7,6 +7,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/serviceaccount"
 	"github.com/google/uuid"
 )
 
@@ -14,7 +15,7 @@ var webServicePermissions = []string{permissions.UserCreate}
 
 // seedWebServiceAccount creates or updates the dupli1-web service account when configured.
 // It is idempotent: repeated calls keep the same user id and sync password, permissions,
-// account type, and active status so ECS secret rotations take effect on next auth boot.
+// account type, service name, and active status so ECS secret rotations take effect on next auth boot.
 func seedWebServiceAccount(ctx context.Context, cfg Config, repo ports.UserRepository) error {
 	if cfg.WebServiceEmail == "" {
 		return nil
@@ -41,6 +42,7 @@ func seedWebServiceAccount(ctx context.Context, cfg Config, repo ports.UserRepos
 	if err != nil {
 		return fmt.Errorf("seed web service account: create: %w", err)
 	}
+	u.ServiceName = serviceaccount.Web
 	if err := repo.Save(ctx, u); err != nil {
 		return fmt.Errorf("seed web service account: save: %w", err)
 	}
@@ -62,6 +64,10 @@ func syncWebServiceAccount(ctx context.Context, cfg Config, repo ports.UserRepos
 	}
 	if u.AccountType != domain.AccountTypeService {
 		u.AccountType = domain.AccountTypeService
+		changed = true
+	}
+	if u.ServiceName != serviceaccount.Web {
+		u.ServiceName = serviceaccount.Web
 		changed = true
 	}
 	if !u.HasPermission(permissions.UserCreate) || len(u.Permissions) != 1 {

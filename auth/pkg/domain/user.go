@@ -10,10 +10,13 @@ import (
 
 // User represents a user entity in the domain.
 type User struct {
-	ID                  string
-	Email               string
-	Password            string // hashed
-	AccountType         string
+	ID          string
+	Email       string
+	Password    string // hashed
+	AccountType string
+	// ServiceName names a service account (e.g. dupli1-order); empty for
+	// people. Internal APIs check it, so only the startup seeds set it.
+	ServiceName         string
 	Permissions         []string
 	IsActive            bool
 	LockedAt            *time.Time
@@ -69,8 +72,10 @@ func (u *User) IsLockExempt() bool {
 		return false
 	}
 	switch UserClass(u) {
-	case ClassAdmin, ClassOwner:
+	case ClassOwner:
 		return true
+	case ClassAdmin:
+		return NormalizeAccountType(u.AccountType) == AccountTypeManager
 	default:
 		return false
 	}

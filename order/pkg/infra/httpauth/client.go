@@ -103,6 +103,8 @@ func (s *ServiceAccountTokenSource) loginLocked(ctx context.Context) error {
 	if err := postJSON(ctx, s.client, s.authBaseURL+"/api/v1/auth/login", map[string]string{
 		"email":    s.email,
 		"password": s.password,
+		// A machine login: auth refuses it for anything but a service account.
+		"client": "service",
 	}, &loginResp); err != nil {
 		return fmt.Errorf("login: %w", err)
 	}

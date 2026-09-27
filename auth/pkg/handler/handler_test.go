@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/elug3/dupli1/auth/pkg/ports"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,11 +16,11 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/autherrors"
 	"github.com/elug3/dupli1/auth/pkg/bootstrap"
 	"github.com/elug3/dupli1/auth/pkg/domain"
-	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/elug3/dupli1/auth/pkg/handler"
 	jwtgen "github.com/elug3/dupli1/auth/pkg/infra/jwt"
 	"github.com/elug3/dupli1/auth/pkg/infra/memory"
 	"github.com/elug3/dupli1/auth/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/permissions"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -128,7 +129,7 @@ func newStack(t *testing.T) *stack {
 	if err := repo.Save(t.Context(), registrar); err != nil {
 		t.Fatalf("Save registrar: %v", err)
 	}
-	registrarToken, err := accessGen.Generate(t.Context(), registrar.ID, registrar.Permissions, registrar.Email)
+	registrarToken, err := accessGen.Generate(t.Context(), registrar.ID, registrar.Permissions, ports.Identity{Email: registrar.Email})
 	if err != nil {
 		t.Fatalf("Generate registrar token: %v", err)
 	}
@@ -441,6 +442,70 @@ func TestLogin(t *testing.T) {
 	})
 }
 
+func TestLogin_ClientRules(t *testing.T) {
+	s := newStack(t)
+	save := func(email, accountType string, perms ...string) {
+		t.Helper()
+		u, err := domain.NewUser(uuid.New().String(), email, "supersecret", accountType, perms...)
+		if err != nil {
+			t.Fatalf("NewUser: %v", err)
+		}
+		if err := s.repo.Save(t.Context(), u); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+	}
+	save("shopper@example.com", domain.AccountTypeCustomer)
+	save("operator@example.com", domain.AccountTypeManager, permissions.OrderShip)
+	save("robot@dupli1.com", domain.AccountTypeService, permissions.OrderShip)
+
+	cases := []struct {
+		email, client string
+		want          int
+	}{
+		{"shopper@example.com", "storefront", http.StatusOK},
+		{"shopper@example.com", "manage", http.StatusForbidden},
+		{"shopper@example.com", "service", http.StatusForbidden},
+		{"operator@example.com", "storefront", http.StatusOK},
+		{"operator@example.com", "manage", http.StatusOK},
+		{"operator@example.com", "service", http.StatusForbidden},
+		{"robot@dupli1.com", "storefront", http.StatusForbidden},
+		{"robot@dupli1.com", "manage", http.StatusForbidden},
+		{"robot@dupli1.com", "service", http.StatusOK},
+		// No client: accepted for any account type while callers roll over.
+		{"shopper@example.com", "", http.StatusOK},
+		{"shopper@example.com", "mobile", http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		w := s.do(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+			"email": tc.email, "password": "supersecret", "client": tc.client,
+		})
+		if w.Code != tc.want {
+			t.Errorf("%s via %q: want %d, got %d: %s", tc.email, tc.client, tc.want, w.Code, w.Body.String())
+			continue
+		}
+		if w.Code == http.StatusForbidden {
+			var resp struct {
+				Error string `json:"error"`
+				Code  string `json:"code"`
+				Token string `json:"refresh_token"`
+			}
+			_ = json.NewDecoder(w.Body).Decode(&resp)
+			if resp.Code != "account_type_not_allowed" || resp.Error == "" || resp.Token != "" {
+				t.Errorf("%s via %q: body = %+v", tc.email, tc.client, resp)
+			}
+		}
+	}
+
+	// A wrong password answers 401 whatever the client, so a refusal never
+	// reveals which account type an email belongs to.
+	w := s.do(t, http.MethodPost, "/api/v1/auth/login", map[string]string{
+		"email": "shopper@example.com", "password": "wrongpassword", "client": "manage",
+	})
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("wrong password via manage: want 401, got %d", w.Code)
+	}
+}
+
 // ---- GET /me ---------------------------------------------------------------
 
 func TestMe(t *testing.T) {
@@ -731,7 +796,7 @@ func (s *stack) userDeleteToken(t *testing.T) string {
 	if err := s.repo.Save(t.Context(), admin); err != nil {
 		t.Fatalf("Save admin: %v", err)
 	}
-	token, err := s.accessTokenGen.Generate(t.Context(), admin.ID, admin.Permissions, admin.Email)
+	token, err := s.accessTokenGen.Generate(t.Context(), admin.ID, admin.Permissions, ports.Identity{Email: admin.Email})
 	if err != nil {
 		t.Fatalf("Generate admin token: %v", err)
 	}
@@ -802,7 +867,7 @@ func TestDeleteUser(t *testing.T) {
 		if err := s.repo.Save(t.Context(), admin); err != nil {
 			t.Fatal(err)
 		}
-		token, err := s.accessTokenGen.Generate(t.Context(), admin.ID, admin.Permissions, admin.Email)
+		token, err := s.accessTokenGen.Generate(t.Context(), admin.ID, admin.Permissions, ports.Identity{Email: admin.Email})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -860,7 +925,7 @@ func TestRefresh_StoreOutageIsNotARejection(t *testing.T) {
 	}
 
 	// A genuinely valid, signed refresh token — nothing is wrong with it.
-	token, err := refreshGen.Generate(t.Context(), user.ID, nil, "")
+	token, err := refreshGen.Generate(t.Context(), user.ID, nil, ports.Identity{})
 	if err != nil {
 		t.Fatalf("Generate refresh token: %v", err)
 	}

@@ -24,7 +24,7 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 // LOWER(email) so callers don't need to normalize case themselves, and
 // backs onto the ux_users_email_lower index created in migrateSchema.
 func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
-	query := `SELECT id, email, password, account_type, permissions, is_active, locked_at, failed_login_attempts
+	query := `SELECT id, email, password, account_type, service_name, permissions, is_active, locked_at, failed_login_attempts
 	          FROM users WHERE LOWER(email) = LOWER($1)`
 	row := r.db.QueryRowContext(ctx, query, email)
 	return scanUser(row)
@@ -32,7 +32,7 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain
 
 // FindByID finds a user by ID.
 func (r *UserRepository) FindByID(ctx context.Context, id string) (*domain.User, error) {
-	query := `SELECT id, email, password, account_type, permissions, is_active, locked_at, failed_login_attempts
+	query := `SELECT id, email, password, account_type, service_name, permissions, is_active, locked_at, failed_login_attempts
 	          FROM users WHERE id = $1`
 	row := r.db.QueryRowContext(ctx, query, id)
 	return scanUser(row)
@@ -40,14 +40,14 @@ func (r *UserRepository) FindByID(ctx context.Context, id string) (*domain.User,
 
 // Save creates or updates a user. Returns ErrUserAlreadyExists on email conflict.
 func (r *UserRepository) Save(ctx context.Context, user *domain.User) error {
-	query := `INSERT INTO users (id, email, password, account_type, permissions, is_active, locked_at, failed_login_attempts)
-	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	query := `INSERT INTO users (id, email, password, account_type, permissions, is_active, locked_at, failed_login_attempts, service_name)
+	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	          ON CONFLICT (id) DO UPDATE
 	            SET email = $2, password = $3, account_type = $4, permissions = $5,
-	                is_active = $6, locked_at = $7, failed_login_attempts = $8`
+	                is_active = $6, locked_at = $7, failed_login_attempts = $8, service_name = $9`
 	_, err := r.db.ExecContext(ctx, query,
 		user.ID, user.Email, user.Password, user.AccountType, pq.Array(user.Permissions),
-		user.IsActive, user.LockedAt, user.FailedLoginAttempts,
+		user.IsActive, user.LockedAt, user.FailedLoginAttempts, user.ServiceName,
 	)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
@@ -69,7 +69,7 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 
 // ListAll returns all users ordered by email.
 func (r *UserRepository) ListAll(ctx context.Context) ([]*domain.User, error) {
-	query := `SELECT id, email, password, account_type, permissions, is_active, locked_at, failed_login_attempts
+	query := `SELECT id, email, password, account_type, service_name, permissions, is_active, locked_at, failed_login_attempts
 	          FROM users ORDER BY email`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
@@ -99,7 +99,7 @@ func scanUser(s scanner) (*domain.User, error) {
 	var u domain.User
 	var lockedAt sql.NullTime
 	err := s.Scan(
-		&u.ID, &u.Email, &u.Password, &u.AccountType, pq.Array(&u.Permissions),
+		&u.ID, &u.Email, &u.Password, &u.AccountType, &u.ServiceName, pq.Array(&u.Permissions),
 		&u.IsActive, &lockedAt, &u.FailedLoginAttempts,
 	)
 	if err == sql.ErrNoRows {

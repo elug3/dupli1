@@ -149,9 +149,20 @@ Authenticate and receive a refresh token.
 ```json
 {
   "email": "user@example.com",
-  "password": "minlen8"
+  "password": "minlen8",
+  "client": "storefront"
 }
 ```
+
+`client` names the front end the login is for, and auth refuses an account type that does not belong there:
+
+| `client` | Account types allowed |
+|----------|-----------------------|
+| `storefront` (dupli1-web) | `customer`, `manager` |
+| `manage` (manage-web) | `manager` |
+| `service` (machine login, no web session) | `service` |
+
+The check runs only after the password is verified, so a wrong password is still `401` whatever the account type. `client` is optional for one release while callers roll over; omitted, no account-type rule applies. An unknown value is `400`.
 
 **Response `200`**
 ```json
@@ -164,8 +175,10 @@ Authenticate and receive a refresh token.
 | Status | Meaning |
 |--------|---------|
 | `400` | Missing or malformed body |
+| `400` | Unknown `client` |
 | `401` | Invalid credentials |
 | `403` | Account locked (customers/managers after 5 failed attempts) or deactivated |
+| `403` | `{"error": "<message to show>", "code": "account_type_not_allowed"}` — account type not allowed for `client`; web apps show `error` as is |
 
 **Lockout:** after **5** consecutive failed logins, `customer` and manager-tier accounts set `locked_at` and further logins return `403` for **15 minutes**, after which the lock auto-expires and failed-attempt counting starts fresh. **Admin** and **owner** accounts are never locked (failed attempts do not set `locked_at`; a stale lock is cleared on the next login attempt). See [permissions.md](permissions.md).
 

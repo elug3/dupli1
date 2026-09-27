@@ -43,6 +43,25 @@ func RequireAnyPermission(perms ...string) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireService rejects callers that are not one of the named service
+// accounts (authjwt.Claims.CalledBy). Internal APIs stack it on their
+// permission check, so a person holding the permission — or a wildcard
+// covering it — is refused too. Must run after RequireAuth.
+func RequireService(names ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := authjwt.FromContext(r.Context())
+			if !ok || !claims.CalledBy(names...) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "forbidden: internal API, service callers only", "code": 403})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // respondError preserves product's existing wire format: a fixed
 // "unauthorized" message regardless of the specific failure (missing
 // header, invalid token, or — new via the shared middleware — an

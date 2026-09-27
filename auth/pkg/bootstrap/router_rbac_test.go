@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/elug3/dupli1/auth/pkg/ports"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -78,7 +79,7 @@ func TestOwnerCanRegisterAndListUsers(t *testing.T) {
 		t.Fatalf("Save owner: %v", err)
 	}
 
-	accessToken, err := accessGen.Generate(t.Context(), owner.ID, owner.Permissions, owner.Email)
+	accessToken, err := accessGen.Generate(t.Context(), owner.ID, owner.Permissions, ports.Identity{Email: owner.Email})
 	if err != nil {
 		t.Fatalf("Generate token: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestCustomerRegistrarCanRegisterButNotManageUsers(t *testing.T) {
 		t.Fatalf("Save registrar: %v", err)
 	}
 
-	accessToken, err := accessGen.Generate(t.Context(), registrar.ID, registrar.Permissions, registrar.Email)
+	accessToken, err := accessGen.Generate(t.Context(), registrar.ID, registrar.Permissions, ports.Identity{Email: registrar.Email})
 	if err != nil {
 		t.Fatalf("Generate token: %v", err)
 	}

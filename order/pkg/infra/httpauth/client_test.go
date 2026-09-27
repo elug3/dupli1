@@ -21,6 +21,11 @@ func TestServiceAccountTokenSource_CachesAndRefreshes(t *testing.T) {
 		switch {
 		case r.URL.Path == "/api/v1/auth/login" && r.Method == http.MethodPost:
 			logins.Add(1)
+			var body map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["client"] != "service" {
+				t.Errorf("login client = %q, want service", body["client"])
+			}
 			_ = json.NewEncoder(w).Encode(map[string]string{"refresh_token": "refresh-1"})
 		case r.URL.Path == "/api/v1/auth/refresh" && r.Method == http.MethodPost:
 			n := refreshes.Add(1)

@@ -7,6 +7,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/ports"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/serviceaccount"
 	"github.com/google/uuid"
 )
 
@@ -14,13 +15,13 @@ var orderServicePermissions = []string{
 	permissions.OrderShip,
 	permissions.OrderStatusUpdate,
 	permissions.InventoryReservationManage,
-	permissions.PaymentCancel, // paid-order cancel refunds via the payment service
+	permissions.PaymentCancel,   // paid-order cancel refunds via the payment service
 	permissions.PromotionRedeem, // checkout reserve/consume/release on product ledger
 }
 
 // seedOrderServiceAccount creates or updates the dupli1-order service account when configured.
 // It is idempotent: repeated calls keep the same user id and sync password, permissions,
-// account type, and active status so ECS secret rotations take effect on next auth boot.
+// account type, service name, and active status so ECS secret rotations take effect on next auth boot.
 func seedOrderServiceAccount(ctx context.Context, cfg Config, repo ports.UserRepository) error {
 	if cfg.OrderServiceEmail == "" {
 		return nil
@@ -47,6 +48,7 @@ func seedOrderServiceAccount(ctx context.Context, cfg Config, repo ports.UserRep
 	if err != nil {
 		return fmt.Errorf("seed order service account: create: %w", err)
 	}
+	u.ServiceName = serviceaccount.Order
 	if err := repo.Save(ctx, u); err != nil {
 		return fmt.Errorf("seed order service account: save: %w", err)
 	}
@@ -68,6 +70,10 @@ func syncOrderServiceAccount(ctx context.Context, cfg Config, repo ports.UserRep
 	}
 	if u.AccountType != domain.AccountTypeService {
 		u.AccountType = domain.AccountTypeService
+		changed = true
+	}
+	if u.ServiceName != serviceaccount.Order {
+		u.ServiceName = serviceaccount.Order
 		changed = true
 	}
 	if !hasExactPermissions(u, orderServicePermissions) {

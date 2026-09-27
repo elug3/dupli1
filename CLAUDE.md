@@ -83,6 +83,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/natspublisher` | JSON-marshaling NATS event publisher (`New`, `Publish`, `Close`), used by `auth`, `order`, `product`, and `payment` |
 | `shared/pkg/authmiddleware` | Bearer-token HTTP middleware (`RequireAuth`, `OptionalAuth`) parameterized by `authjwt.AccessTokenValidator` and a per-service error-response callback, so each service keeps its own error body shape; used by `cart`, `order`, `payment`, `notification`, `product` |
 | `shared/pkg/telegram` | Telegram Bot API client — `Client` (send/reply with retry, backoff and bot-token redaction in errors), wire types (`Update`, `Message`, `Chat`, `User`, `CallbackQuery`), inline-keyboard menus (`ReplyMenu`, `EditMessageText`, `AnswerCallback`), `SendSilent` for an alert that should queue rather than interrupt, webhook registration (`WithAllowedUpdates` opts a bot into `callback_query`; the default stays `message` only), `GetUpdates` polling (`RunPoller`/`DrainUpdates` over a `Handler`), HTML escaping and 4096-char-safe truncation. The `AccessPolicy` interface is the client's only view of who may be messaged, so each bot keeps its own policy; used by `notification` (ops alerts) |
+| `shared/pkg/serviceaccount` | Service account names (`dupli1-order`, `dupli1-web`) auth stamps into the `service_name` claim and internal routes allowlist via `authjwt.Claims.CalledBy`. No dependencies, so auth imports it without the JWKS validator |
 | `shared/pkg/productclient` | HTTP client for product's variant-lookup endpoint, returning a superset `Variant`; used by `cart` and `order`, each mapping only the display field it needs (`Color` vs `ProductName`) into its own local `ports.VariantInfo` |
 
 ### Service ownership
@@ -130,7 +131,9 @@ Both order and payment use a **transactional outbox** pattern: event rows are wr
 
 ### Auth token flow
 
-`POST /login` → `{ "refresh_token": "..." }`. Call `POST /refresh` with that token → `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`. Send as `Authorization: Bearer <token>` on protected routes. Access tokens carry a `permissions` string array claim (no `roles`).
+`POST /login` → `{ "refresh_token": "..." }`. Call `POST /refresh` with that token → `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`. Send as `Authorization: Bearer <token>` on protected routes. Access tokens carry a `permissions` string array claim (no `roles`), plus `account_type` and, for service accounts, `service_name`.
+
+`POST /login` takes a `client` — `storefront` (dupli1-web: customer, manager), `manage` (manage-web: manager only) or `service` (machine login: service accounts only) — and answers `403 account_type_not_allowed` with a message to show when the account type does not belong there. The web apps only display it; the rule lives in auth. Optional for one release while callers roll over.
 
 Refresh tokens rotate on every use: `/refresh` invalidates the token it was given and returns a new one, which the caller must store and use next time. Reusing an already-rotated refresh token fails with `401`.
 
@@ -139,6 +142,8 @@ Refresh tokens rotate on every use: `/refresh` invalidates the token it was give
 ### Authorization
 
 Fine-grained permissions (`{resource}.{action}`, e.g. `product.create`, `order.ship`). Wildcards: `*` (owner), `admin.*`, `{resource}.*`. Storefront customers use ABAC (JWT `sub` must match resource owner) with no explicit permission required.
+
+Internal APIs (product's promotion `reserve|consume|release` and inventory reservations) also require the caller to be the named service account (`dupli1-order`), so no wildcard or owner token reaches them. See `docs/permissions.md` → Internal APIs.
 
 Key bundles: `catalog_editor`, `catalog_admin`, `fulfillment`, `user_admin`, `support_agent`. See `docs/permissions.md` for the full catalog.
 
