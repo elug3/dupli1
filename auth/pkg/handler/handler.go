@@ -23,6 +23,10 @@ type userResponse struct {
 	IsActive            bool       `json:"is_active"`
 	LockedAt            *time.Time `json:"locked_at,omitempty"`
 	FailedLoginAttempts int        `json:"failed_login_attempts"`
+	// HasPassword is false for an account that cannot sign in with a
+	// password — every service account, which uses API keys — so manage-web
+	// can offer keys instead of a password form.
+	HasPassword bool `json:"has_password"`
 }
 
 func toUserResponse(u *domain.User) userResponse {
@@ -39,6 +43,7 @@ func toUserResponse(u *domain.User) userResponse {
 		IsActive:            u.IsActive,
 		LockedAt:            u.LockedAt,
 		FailedLoginAttempts: u.FailedLoginAttempts,
+		HasPassword:         !u.PasswordRetired(),
 	}
 }
 
@@ -157,7 +162,7 @@ func (h *Handler) Login(c *gin.Context) {
 }
 
 type registerRequest struct {
-	Email       string `json:"email" binding:"required,email"`
+	Email string `json:"email" binding:"required,email"`
 	// Password is required for people and refused for service accounts,
 	// which authenticate with an API key (Service.Register enforces both).
 	Password    string `json:"password"`

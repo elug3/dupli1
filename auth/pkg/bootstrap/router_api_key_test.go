@@ -235,4 +235,13 @@ func TestServiceAccountPasswordRoutes(t *testing.T) {
 		map[string]string{"email": "person@example.com", "account_type": "manager"}); w.Code != http.StatusBadRequest {
 		t.Fatalf("a person still needs a password: %d %s, want 400", w.Code, w.Body.String())
 	}
+
+	// has_password tells manage-web whether to offer a password form or keys.
+	for id, want := range map[string]string{"svc-order": `"has_password":false`, "cust": `"has_password":true`} {
+		w := f.do(http.MethodPatch, "/api/v1/auth/users/"+id+"/permissions", owner,
+			map[string]any{"permissions": []string{permissions.OrderShip}})
+		if w.Code != http.StatusOK || !bytes.Contains(w.Body.Bytes(), []byte(want)) {
+			t.Fatalf("%s: %d %s, want %s", id, w.Code, w.Body.String(), want)
+		}
+	}
 }

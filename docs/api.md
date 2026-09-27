@@ -201,7 +201,8 @@ Return the currently authenticated user's **account** (credentials tier — not 
   "permissions": [],
   "is_active": true,
   "locked_at": null,
-  "failed_login_attempts": 0
+  "failed_login_attempts": 0,
+  "has_password": true
 }
 ```
 
@@ -306,11 +307,14 @@ List all users. Requires `user.read`. Results are filtered by auth ABAC hierarch
       "permissions": ["*"],
       "is_active": true,
       "locked_at": null,
-      "failed_login_attempts": 0
+      "failed_login_attempts": 0,
+      "has_password": true
     }
   ]
 }
 ```
+
+`has_password` is `false` for service accounts, which authenticate with API keys only.
 
 **Errors**
 | Status | Meaning |
