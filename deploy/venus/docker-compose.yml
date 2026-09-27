@@ -3,7 +3,8 @@
 #
 # Started from the exact images production ran on ECS (pulled by digest, tagged
 # dupli1-prod/<name>:<date>) with the ECS task-definition environment. Backend
-# services built by CI follow DUPLI1_BACKEND_TAG, which deploy.sh sets. Each
+# services, web and manage-web built by CI follow DUPLI1_BACKEND_TAG,
+# DUPLI1_WEB_TAG and DUPLI1_MANAGE_WEB_TAG, which deploy.sh sets. Each
 # container carries its Cloud Map name (auth.dupli1.local, …) as a network
 # alias, so service-to-service URLs are unchanged from ECS.
 #
@@ -212,7 +213,7 @@ services:
 
   web:
     <<: *service
-    image: dupli1-prod/web:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    image: dupli1-prod/web:${DUPLI1_WEB_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
       HOST: 0.0.0.0
       PORT: "3000"
@@ -222,7 +223,7 @@ services:
 
   manage-web:
     <<: *service
-    image: dupli1-prod/manage-web-container:${DUPLI1_IMAGE_TAG:-2026-09-26}
+    image: dupli1-prod/manage-web-container:${DUPLI1_MANAGE_WEB_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
       PORT: "80"
       DUPLI1_API_BASE_URL: http://proxy.dupli1.local
