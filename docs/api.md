@@ -730,6 +730,12 @@ Each route also accepts the pre-rename `coupon.*` permission and answers on `/ap
 
 `PUT /api/v1/products/{id}` and variant updates **merge**: omitted JSON fields keep their current value, so a partial body cannot blank out data. The trade-off is that a zero value is indistinguishable from an omitted one — sending `price: 0` or `officialPrice: 0` is ignored rather than clearing the price. See [product-price-on-parent.md](product-price-on-parent.md).
 
+**Deletes are permanent and refuse while stock is still in play** (`409`):
+
+- `DELETE /api/v1/products/{id}` removes the parent, every variant and their stock rows. It is refused while any of those SKUs has stock **reserved** for an open order, since that order could then neither ship nor release its hold. Unreserved stock on hand is deleted with the product.
+- `DELETE /api/v1/products/{id}/variants/{sku}` needs the SKU's stock row empty: set its quantity to `0` first, and wait for reserved stock to ship or be released. The empty row goes with the variant.
+- Product delete publishes `product.deleted` (a Telegram ops alert for chats with `alert_product`) and cascades the product's wishlist entries and view counts; variant delete publishes `product.variant_deleted`. Past orders keep their own snapshot (`product_name`, image), uploaded images stay in object storage, and cart lines naming a removed SKU come back as unavailable.
+
 New parent `id`s are ULIDs (`domain.NewProductID()`); legacy brand-prefixed ids (e.g. `BOT-001`) remain valid. Human identity is `brandCode` + `styleCode`. Dual variant identity and master dictionaries: [product-sku-system.md](product-sku-system.md) — ULID `skuId` (canonical) + human `sku` (`Brand_Style_Color[_Edition]_Size`). Catalog CRUD at `/api/v1/products/catalog/…` (legacy alias `/api/v1/catalog/…`). Product/variant create requires existing master codes (Phase C). See also [product-variants-plan.md](product-variants-plan.md).
 
 ---

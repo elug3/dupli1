@@ -317,6 +317,12 @@ func (s *ProductSearchService) DeleteProduct(ctx context.Context, id string) err
 	if err != nil {
 		return err
 	}
+	// Deleting a product drops its stock rows. A row still holding a
+	// reservation belongs to an open order, which could then neither ship
+	// nor release its hold, so refuse until those orders move on.
+	if err := s.refuseReservedStock(ctx, existing.Variants); err != nil {
+		return err
+	}
 	if err := s.store.DeleteProduct(ctx, id); err != nil {
 		return err
 	}
@@ -401,11 +407,54 @@ func (s *ProductSearchService) DeleteVariant(ctx context.Context, productID, sku
 	if existing.ProductID != productID {
 		return fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
 	}
+	// A SKU is deletable only with an empty stock row: stock on hand must be
+	// zeroed first, and stock reserved for an open order would strand it.
+	if err := s.refuseReservedStock(ctx, []domain.Variant{*existing}); err != nil {
+		return err
+	}
+	if s.inventory != nil && existing.SkuID != "" {
+		item, err := s.inventory.GetItem(ctx, existing.SkuID)
+		if err != nil && !errors.Is(err, ports.ErrInventoryItemNotFound) {
+			return err
+		}
+		if item != nil && item.Quantity > 0 {
+			return ports.Conflict(fmt.Sprintf(
+				"cannot delete variant %s: %d in stock; set its stock to 0 first", sku, item.Quantity))
+		}
+	}
 	parent, _ := s.store.GetProduct(ctx, productID)
 	if err := s.store.DeleteVariant(ctx, sku); err != nil {
 		return err
 	}
 	return s.publish(ctx, variantDeletedSubject, parent, sku, "")
+}
+
+// refuseReservedStock answers a conflict when any of the variants has stock
+// reserved for an order that has not shipped or released it yet.
+func (s *ProductSearchService) refuseReservedStock(ctx context.Context, variants []domain.Variant) error {
+	if s.inventory == nil || len(variants) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(variants))
+	for _, v := range variants {
+		if v.SkuID != "" {
+			ids = append(ids, v.SkuID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	items, err := s.inventory.GetItems(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for _, v := range variants {
+		if item := items[v.SkuID]; item != nil && item.Reserved > 0 {
+			return ports.Conflict(fmt.Sprintf(
+				"cannot delete: %d of %s reserved for open orders; ship or cancel them first", item.Reserved, v.SKU))
+		}
+	}
+	return nil
 }
 
 // UploadImage appends an image to the default variant (sku == productID, else first variant).

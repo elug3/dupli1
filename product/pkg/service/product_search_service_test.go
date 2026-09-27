@@ -1,11 +1,13 @@
 package service_test
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/infra/memory"
+	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
 )
 
@@ -394,5 +396,51 @@ func TestGetPublicVariantsBySkuIDs(t *testing.T) {
 	}
 	if _, _, err := svc.GetPublicVariantsBySkuIDs(t.Context(), tooMany); err == nil {
 		t.Fatal("oversized batch should be invalid")
+	}
+}
+
+func deleteFixture(t *testing.T) (*service.ProductSearchService, *memory.InventoryStore) {
+	t.Helper()
+	store := memory.NewProductStore()
+	inv := memory.NewInventoryStore()
+	store.WithInventory(inv)
+	store.Products = []domain.Product{{ID: "BOT-001", Name: "Cassette", Status: "active", Price: 2500}}
+	store.Variants = []domain.Variant{
+		{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", ProductID: "BOT-001", Status: "active"},
+		{SkuID: "SKUID-BLK", SKU: "BOT-001-BLK", ProductID: "BOT-001", Status: "active"},
+	}
+	_ = inv.SaveItem(t.Context(), &domain.StockItem{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN"})
+	_ = inv.SaveItem(t.Context(), &domain.StockItem{SkuID: "SKUID-BLK", SKU: "BOT-001-BLK"})
+	return service.NewProductSearchService(store, nil).WithInventory(inv), inv
+}
+
+// A SKU is deletable only with an empty stock row; stock on hand or reserved
+// for an open order refuses with a conflict.
+func TestDeleteVariant_StockRules(t *testing.T) {
+	svc, inv := deleteFixture(t)
+	_ = inv.SaveItem(t.Context(), &domain.StockItem{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", Quantity: 2})
+	if err := svc.DeleteVariant(t.Context(), "BOT-001", "BOT-001-GRN"); !errors.Is(err, ports.ErrConflict) {
+		t.Fatalf("stock on hand: want conflict, got %v", err)
+	}
+	_ = inv.SaveItem(t.Context(), &domain.StockItem{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", Reserved: 1})
+	if err := svc.DeleteVariant(t.Context(), "BOT-001", "BOT-001-GRN"); !errors.Is(err, ports.ErrConflict) {
+		t.Fatalf("stock reserved: want conflict, got %v", err)
+	}
+	if err := svc.DeleteVariant(t.Context(), "BOT-001", "BOT-001-BLK"); err != nil {
+		t.Fatalf("empty stock row: want delete, got %v", err)
+	}
+}
+
+// Deleting a product drops its stock rows, so a reservation held by an open
+// order refuses it; unreserved stock does not.
+func TestDeleteProduct_RefusesReservedStock(t *testing.T) {
+	svc, inv := deleteFixture(t)
+	_ = inv.SaveItem(t.Context(), &domain.StockItem{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", Quantity: 3, Reserved: 1})
+	if err := svc.DeleteProduct(t.Context(), "BOT-001"); !errors.Is(err, ports.ErrConflict) {
+		t.Fatalf("reserved stock: want conflict, got %v", err)
+	}
+	_ = inv.SaveItem(t.Context(), &domain.StockItem{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", Quantity: 3})
+	if err := svc.DeleteProduct(t.Context(), "BOT-001"); err != nil {
+		t.Fatalf("unreserved stock: want delete, got %v", err)
 	}
 }
