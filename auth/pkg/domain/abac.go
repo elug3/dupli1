@@ -12,6 +12,10 @@ const (
 	ClassCustomer ManagementClass = iota
 	ClassManager
 	ClassAdmin
+	// ClassService is a machine account. Only the owner manages one: it holds
+	// cross-service permissions (refunds, ledger moves) that no operator tier
+	// is scoped to, so resetting its password would hand those over.
+	ClassService
 	ClassOwner
 )
 
@@ -34,43 +38,15 @@ func UserClass(u *User) ManagementClass {
 	if u == nil {
 		return ClassCustomer
 	}
-	if permissions.Has(u.Permissions, permissions.All) {
-		return ClassOwner
-	}
-	switch NormalizeAccountType(u.AccountType) {
-	case AccountTypeCustomer:
-		return ClassCustomer
-	case AccountTypeService:
-		return ClassCustomer
-	case AccountTypeManager:
-		if isAdminLevel(u.Permissions) {
-			return ClassAdmin
-		}
-		return ClassManager
-	default:
-		return ClassCustomer
-	}
+	return classify(u.AccountType, u.Permissions)
 }
 
 // ClassFromNewUser classifies a user that would be created with accountType and permissions.
 func ClassFromNewUser(accountType string, perms []string) ManagementClass {
-	if permissions.Has(perms, permissions.All) {
-		return ClassOwner
-	}
 	if accountType == "" {
 		accountType = DefaultAccountType
 	}
-	switch NormalizeAccountType(accountType) {
-	case AccountTypeCustomer, AccountTypeService:
-		return ClassCustomer
-	case AccountTypeManager:
-		if isAdminLevel(perms) {
-			return ClassAdmin
-		}
-		return ClassManager
-	default:
-		return ClassCustomer
-	}
+	return classify(accountType, perms)
 }
 
 // ClassFromPermissions classifies a user after a permission assignment.
@@ -78,10 +54,30 @@ func ClassFromPermissions(accountType string, perms []string) ManagementClass {
 	return ClassFromNewUser(accountType, perms)
 }
 
+// classify is the higher of the tier the account type implies and the tier
+// the permissions confer, so a customer-typed account holding admin.* is
+// classified admin — account_type alone never lowers a tier.
+func classify(accountType string, perms []string) ManagementClass {
+	if permissions.Has(perms, permissions.All) {
+		return ClassOwner
+	}
+	base := ClassCustomer
+	switch NormalizeAccountType(accountType) {
+	case AccountTypeService:
+		return ClassService
+	case AccountTypeManager:
+		base = ClassManager
+	}
+	if held := CallerClass(perms); held > base {
+		return held
+	}
+	return base
+}
+
 // CanManage reports whether callerClass may administer targetClass.
 //
 // Rules:
-//   - owner manages admin, manager, and customer (not other owners)
+//   - owner manages admin, service, manager, and customer (not other owners)
 //   - admin manages manager and customer
 //   - manager manages customer only
 func CanManage(callerClass, targetClass ManagementClass) bool {
@@ -107,6 +103,7 @@ func IsRegistrarOnly(perms []string) bool {
 }
 
 // CanRegister reports whether caller may create a user with the given account type and permissions.
+// The caller must itself hold every permission in newPerms.
 func CanRegister(caller *User, accountType string, newPerms []string) bool {
 	if caller == nil {
 		return false
@@ -115,6 +112,9 @@ func CanRegister(caller *User, accountType string, newPerms []string) bool {
 		accountType = DefaultAccountType
 	}
 	accountType = NormalizeAccountType(accountType)
+	if !permissions.HasAll(caller.Permissions, newPerms...) {
+		return false
+	}
 	if IsRegistrarOnly(caller.Permissions) {
 		return accountType == AccountTypeCustomer && !wouldBeOwner(newPerms)
 	}
@@ -137,6 +137,8 @@ func CanManageUser(caller, target *User) bool {
 }
 
 // CanAssignPermissions reports whether caller may set newPerms on target with optional accountType change.
+// The caller must itself hold every permission in newPerms, and the resulting
+// tier (see classify) must be one the caller may manage.
 func CanAssignPermissions(caller, target *User, newPerms []string, accountType string) bool {
 	if caller == nil || target == nil {
 		return false
@@ -145,6 +147,11 @@ func CanAssignPermissions(caller, target *User, newPerms []string, accountType s
 		return false
 	}
 	if !CanManageUser(caller, target) {
+		return false
+	}
+	// A caller grants only what it holds itself; otherwise a manager with
+	// user.permissions.update could mint permissions it was never given.
+	if !permissions.HasAll(caller.Permissions, newPerms...) {
 		return false
 	}
 	at := target.AccountType

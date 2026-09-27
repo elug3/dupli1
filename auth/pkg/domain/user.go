@@ -69,8 +69,10 @@ func (u *User) IsLockExempt() bool {
 		return false
 	}
 	switch UserClass(u) {
-	case ClassAdmin, ClassOwner:
+	case ClassOwner:
 		return true
+	case ClassAdmin:
+		return NormalizeAccountType(u.AccountType) == AccountTypeManager
 	default:
 		return false
 	}

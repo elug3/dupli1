@@ -109,9 +109,13 @@ Phase 1 introduces `shared/pkg/permissions` (Go module `github.com/elug3/dupli1/
 |-------------|------------|
 | `user_manager` | `customer` accounts |
 | `admin` | `manager` and `customer` accounts |
-| `owner` (unique `*` account) | `admin`, `manager`, and `customer` accounts |
+| `owner` (unique `*` account) | `admin`, `service`, `manager`, and `customer` accounts |
 
-Tiers are derived from permissions inside auth only. Other services continue to use fine-grained permissions without this hierarchy.
+Tiers are derived inside auth only. Other services continue to use fine-grained permissions without this hierarchy.
+
+A target account's tier is the **higher** of what its `account_type` implies and what its permissions confer, so a `customer`-typed account holding `admin.*` is admin tier. `account_type: service` is its own tier that only the owner manages (register, reset password, change status or permissions): a service account holds cross-service permissions such as `payment.cancel` and `promotion.redeem`, and a password reset on it would hand those over.
+
+**Grant only what you hold.** Registering or assigning permissions requires the caller to hold every permission granted (wildcards count — a `product.*` holder may grant `product.create`). An admin without `support.read` cannot grant the `support_agent` bundle; the owner can.
 
 **Account types vs tiers:** stored `account_type` values are `customer` | `manager` | `service` only. The ABAC labels `admin` / `manager` / `owner` above are **permission-derived tiers** (`ClassAdmin`, etc.), not `account_type` strings. A human operator uses `account_type: manager`; whether they are ClassAdmin vs ClassManager depends on permissions (`admin.*`, …). Write APIs **reject** `account_type: "admin"`.
 
