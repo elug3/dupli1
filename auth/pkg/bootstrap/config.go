@@ -34,6 +34,18 @@ type Config struct {
 	OrderServiceEmail    string
 	OrderServicePassword string
 
+	// WebServiceAPIKey and OrderServiceAPIKey seed each service account's
+	// API key (docs/auth-service-api-keys.md), re-synced on every boot:
+	// changing one rotates the key, unsetting it revokes it. Required when the
+	// matching *ServiceEmail is set: service accounts have no password, so
+	// the *ServicePassword fields above are ignored (with a warning).
+	WebServiceAPIKey   string
+	OrderServiceAPIKey string
+
+	// APIKeyEnv is the environment marker on minted keys: "live" (default)
+	// or "test", so a leaked key says where it works.
+	APIKeyEnv string
+
 	// OpenRegister temporarily allows unauthenticated customer signup
 	// (no user.create). Set false to restore gated register.
 	OpenRegister bool

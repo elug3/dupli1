@@ -17,18 +17,17 @@ import (
 // option added to both structs but forgotten in the mapping fails here.
 func TestBootstrapConfig_CarriesEveryMatchingOption(t *testing.T) {
 	opts := order.ServerOptions{
-		Addr:                 ":8083",
-		GatewayURL:           "http://gateway.test",
-		ProductURL:           "http://product.test",
-		InventoryURL:         "http://inventory.test",
-		AuthURL:              "http://auth.test",
-		OrderServiceEmail:    "svc@order.test",
-		OrderServicePassword: "svc-secret",
-		StockBearerToken:     "stock-token",
-		DatabaseConnString:   "postgres://user:pass@db.test/orders",
-		JWTSecret:            "jwt-secret",
-		JWKSURL:              "http://auth.test/jwks.json",
-		NATSURL:              "nats://nats.test:4222",
+		Addr:               ":8083",
+		GatewayURL:         "http://gateway.test",
+		ProductURL:         "http://product.test",
+		InventoryURL:       "http://inventory.test",
+		AuthURL:            "http://auth.test",
+		OrderServiceAPIKey: "dk_test_svc-key",
+		StockBearerToken:   "stock-token",
+		DatabaseConnString: "postgres://user:pass@db.test/orders",
+		JWTSecret:          "jwt-secret",
+		JWKSURL:            "http://auth.test/jwks.json",
+		NATSURL:            "nats://nats.test:4222",
 		ShippingFeeWon:     30000,
 	}
 
@@ -53,7 +52,7 @@ func TestBootstrapConfig_CarriesEveryMatchingOption(t *testing.T) {
 		}
 		checked++
 	}
-	if checked < 12 {
+	if checked < 11 {
 		t.Fatalf("only %d fields compared; the mapping test is not covering the struct", checked)
 	}
 }

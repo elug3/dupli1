@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/handler"
 	jwtinfra "github.com/elug3/dupli1/auth/pkg/infra/jwt"
 	memoryinfra "github.com/elug3/dupli1/auth/pkg/infra/memory"
@@ -87,6 +88,11 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	}
 
 	userRepo := postgres.NewUserRepository(db)
+	apiKeyRepo := postgres.NewAPIKeyRepository(db)
+	if cfg.APIKeyEnv != "" && !domain.ValidAPIKeyEnv(cfg.APIKeyEnv) {
+		_ = db.Close()
+		return nil, fmt.Errorf("DUPLI1_API_KEY_ENV must be %q or %q, got %q", domain.APIKeyEnvLive, domain.APIKeyEnvTest, cfg.APIKeyEnv)
+	}
 	outboxDrainer := outbox.NewDrainer(userRepo, eventPublisher, "auth outbox drain")
 
 	var sessionStore ports.SessionStore
@@ -114,6 +120,9 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		service.WithEventPublisher(eventPublisher),
 		service.WithOutboxDrainer(outboxDrainer),
 		service.WithLogger(cfg.Logger),
+		service.WithAPIKeyRepo(apiKeyRepo),
+		service.WithAccessTokenTTL(cfg.TokenExpiry),
+		service.WithAPIKeyEnv(cfg.APIKeyEnv),
 	)
 
 	// Long-lived worker root; cancelled on process shutdown.
@@ -149,11 +158,11 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		_ = app.Close()
 		return nil, err
 	}
-	if err := seedWebServiceAccount(ctx, cfg, userRepo); err != nil {
+	if err := seedWebServiceAccount(ctx, cfg, userRepo, svc); err != nil {
 		_ = app.Close()
 		return nil, err
 	}
-	if err := seedOrderServiceAccount(ctx, cfg, userRepo); err != nil {
+	if err := seedOrderServiceAccount(ctx, cfg, userRepo, svc); err != nil {
 		_ = app.Close()
 		return nil, err
 	}

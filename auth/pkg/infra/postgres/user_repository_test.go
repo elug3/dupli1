@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	_, _ = db.Exec("DROP TABLE IF EXISTS users")
+	_, _ = db.Exec("DROP TABLE IF EXISTS service_api_keys, users")
 	db.Close()
 
 	os.Exit(code)

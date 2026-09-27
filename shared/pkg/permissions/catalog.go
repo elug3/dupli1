@@ -24,6 +24,11 @@ const (
 	UserPasswordUpdate    = "user.password.update"
 	UserStatusUpdate      = "user.status.update"
 	UserDelete            = "user.delete"
+	// UserAPIKeyRead lists a service account's API keys (metadata only);
+	// UserAPIKeyManage mints and revokes them. The account hierarchy still
+	// applies, so only the owner reaches service accounts.
+	UserAPIKeyRead   = "user.apikey.read"
+	UserAPIKeyManage = "user.apikey.manage"
 )
 
 // Product catalog permissions (product service).
@@ -115,6 +120,8 @@ var Catalog = []string{
 	UserPasswordUpdate,
 	UserStatusUpdate,
 	UserDelete,
+	UserAPIKeyRead,
+	UserAPIKeyManage,
 	ProductCreate,
 	ProductUpdate,
 	ProductDelete,

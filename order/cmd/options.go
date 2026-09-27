@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	order "github.com/elug3/dupli1/order/pkg"
@@ -84,12 +85,7 @@ func applyEnv(opts *order.ServerOptions) {
 	if v := os.Getenv("DUPLI1_AUTH_URL"); v != "" {
 		opts.AuthURL = v
 	}
-	if v := os.Getenv("DUPLI1_ORDER_SERVICE_EMAIL"); v != "" {
-		opts.OrderServiceEmail = v
-	}
-	if v := os.Getenv("DUPLI1_ORDER_SERVICE_PASSWORD"); v != "" {
-		opts.OrderServicePassword = v
-	}
+	opts.OrderServiceAPIKey = strings.TrimSpace(os.Getenv("DUPLI1_ORDER_SERVICE_API_KEY"))
 	if v := os.Getenv("DUPLI1_ORDER_STOCK_BEARER_TOKEN"); v != "" {
 		opts.StockBearerToken = v
 	} else if v := os.Getenv("DUPLI1_INVENTORY_BEARER_TOKEN"); v != "" {

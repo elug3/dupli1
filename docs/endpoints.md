@@ -51,7 +51,7 @@ Each service also registers `/health` and `/settings` directly for internal/side
 
 **Temporary open register:** when `AUTH_OPEN_REGISTER=true` (current default), `POST /register` accepts unauthenticated requests and always creates `account_type: customer` with empty permissions. Set `AUTH_OPEN_REGISTER=false` to require Bearer + `user.create` again.
 
-**dupli1-web service account:** set `DUPLI1_WEB_SERVICE_EMAIL` and `DUPLI1_WEB_SERVICE_PASSWORD` on `dupli1-auth` to seed a machine user with `permissions: ["user.create"]` and `account_type` `service`. That account may register customers only (`account_type` `customer`).
+**dupli1-web service account:** set `DUPLI1_WEB_SERVICE_EMAIL` and `DUPLI1_WEB_SERVICE_API_KEY` on `dupli1-auth` to seed a machine user (no password; it authenticates with the API key) with `permissions: ["user.create"]` and `account_type` `service`. That account may register customers only (`account_type` `customer`).
 
 **Account types:** `customer`, `manager`, `service` — returned on user objects as `account_type`. Distinct from **permissions** (fine-grained authorization strings). `admin` is a permission (`admin.*`), not an `account_type` — use `manager` for operators.
 

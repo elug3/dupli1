@@ -18,6 +18,23 @@ var (
 	ErrManagementForbidden = errors.New("management forbidden")
 	ErrInvalidClient       = errors.New("invalid client")
 	ErrClientNotAllowed    = errors.New("account type not allowed for this client")
+	// ErrInvalidAPIKey covers every failed key exchange — unknown, revoked,
+	// expired, inactive or non-service account — so the caller cannot tell
+	// which. The reason is logged.
+	ErrInvalidAPIKey  = errors.New("invalid api key")
+	ErrAPIKeyNotFound = errors.New("api key not found")
+	// ErrInvalidAPIKeyRequest: a create request with a bad name or expiry.
+	ErrInvalidAPIKeyRequest = errors.New("invalid api key request")
+	// ErrEnvManagedKey refuses to revoke a key seeded from an env var: it
+	// would reappear on the next auth boot. Rotate the env var instead.
+	ErrEnvManagedKey = errors.New("api key is managed by an environment variable")
+	// ErrNotServiceAccount: API keys attach to service accounts only.
+	ErrNotServiceAccount = errors.New("api keys are for service accounts only")
+	// ErrServiceAccountNoPassword: service accounts authenticate with API keys
+	// only, so they cannot sign in with, be given, or be reset to a password.
+	ErrServiceAccountNoPassword = errors.New("service accounts have no password; they authenticate with an API key")
+	// ErrScopeExceedsAccount: a key's scope names a permission its account lacks.
+	ErrScopeExceedsAccount = errors.New("api key scope exceeds the account's permissions")
 )
 
 // ClientNotAllowedError is a login refused because the account type does not

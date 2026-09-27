@@ -1,7 +1,50 @@
 # Service account API keys
 
-**Status:** design (not implemented). Supersedes password-based machine login for
-`account_type: service` accounts.
+**Status:** phases 1–3 and 5 implemented — **service accounts have no
+password.** They authenticate with an API key only and cannot sign in to the
+storefront or manage-web. Phase 4 (a manage-web keys panel) is open; the owner
+manages keys through the API meanwhile.
+
+### As built — where it differs from the design below
+
+- **Only the owner mints keys.** The design assumed service accounts sat at
+  customer tier; since #301 they are their own tier that only the owner
+  manages, so `CanManageUser` limits the key routes to the owner.
+- **The exchange is internal-only.** `/api/v1/auth/token` answers `404` on the
+  gateway's public listener and is served on `:8081`
+  (`api/gateway/routes.conf`), beside product's internal APIs.
+- **Minted tokens carry `service_name` and `account_type`** as well as
+  `token_use`/`akid`, so product's internal routes (`Claims.CalledBy`) accept
+  a key-minted token exactly like a password-minted one.
+- **Env keys follow their env var.** Changing `DUPLI1_*_SERVICE_API_KEY`
+  rotates the key; unsetting it revokes it on the next boot. A malformed value
+  fails the boot rather than seeding a weak credential.
+- **Phase 5 is folded in: service accounts have no password.**
+  - Stored as `User.RetirePassword` (no input matches, checked in constant
+    time); a startup migration retires any service account's password.
+  - `POST /login` refuses a service account through every client (`403
+    account_type_not_allowed`), and `/refresh` refuses a service account's
+    old refresh token (`401`).
+  - Registering a service account with a password, or setting one via
+    `PATCH /users/{id}/password`, is a `422`; switching an account to
+    `service` drops its password.
+  - Seeding needs `*_SERVICE_API_KEY` whenever `*_SERVICE_EMAIL` is set; a
+    leftover `*_SERVICE_PASSWORD` is ignored with a
+    `<service>_service_password_ignored` warning.
+  - Order and dupli1-web have no password path any more.
+- **`DUPLI1_API_KEY_ENV`** (`live`, default, or `test`) sets the marker on
+  minted keys.
+- **dupli1-web** exchanges at `DUPLI1_WEB_SERVICE_AUTH_URL` (VENUS:
+  `http://proxy.dupli1.local:8081`), separate from the shopper auth URL.
+
+**Generating a key** for an env var:
+
+```bash
+python3 -c 'import secrets; print("dk_live_" + secrets.token_urlsafe(32))'
+```
+
+`deploy/venus/make-env.sh` generates both service keys on its next run and
+keeps them on later runs.
 
 Today every machine caller — the `dupli1-web` BFF, the `dupli1-order` service —
 authenticates with an **email and password**, exactly like a human operator

@@ -19,10 +19,11 @@ type ServerOptions struct {
 	// InventoryURL is a deprecated alias for ProductURL.
 	InventoryURL string
 
-	AuthURL              string
-	OrderServiceEmail    string
-	OrderServicePassword string
-	StockBearerToken     string
+	AuthURL string
+	// OrderServiceAPIKey is the order service account's API key
+	// (docs/auth-service-api-keys.md); service accounts have no password.
+	OrderServiceAPIKey string
+	StockBearerToken   string
 
 	DatabaseConnString string
 	JWTSecret          string

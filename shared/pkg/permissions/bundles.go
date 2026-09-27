@@ -45,6 +45,8 @@ var bundles = map[string][]string{
 		UserPasswordUpdate,
 		UserStatusUpdate,
 		UserDelete,
+		UserAPIKeyRead,
+		UserAPIKeyManage,
 	},
 	BundleCustomerRegistrar: {
 		UserCreate,

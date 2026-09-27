@@ -18,6 +18,10 @@ type Identity struct {
 	// ServiceName names a service account (e.g. dupli1-order) so internal
 	// APIs can check which service is calling. Empty for people.
 	ServiceName string
+	// APIKeyID is set when the token was minted from an API key, and is
+	// stamped as the akid claim (with token_use=api_key) so a request can be
+	// traced to the key that authorized it. An identifier, not a secret.
+	APIKeyID string
 }
 
 // TokenGenerator defines the interface for token generation and validation.

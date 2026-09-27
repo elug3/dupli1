@@ -201,9 +201,13 @@ services:
       OWNER_EMAIL: admin@dupli1.com
       OWNER_PASSWORD: password
       DUPLI1_WEB_SERVICE_EMAIL: dupli1-web@web.dupli1.com
-      DUPLI1_WEB_SERVICE_PASSWORD: dupli1-web-dev-secret
       DUPLI1_ORDER_SERVICE_EMAIL: dupli1-order@order.dupli1.com
-      DUPLI1_ORDER_SERVICE_PASSWORD: dupli1-order-dev-secret
+      # Service accounts have no password; each authenticates with its API key
+      # (docs/auth-service-api-keys.md). Dev-only values: order below uses the
+      # first, a locally run dupli1-web the second.
+      DUPLI1_ORDER_SERVICE_API_KEY: dk_test_local-dev-order-service-key-not-a-secretxxx
+      DUPLI1_WEB_SERVICE_API_KEY: dk_test_local-dev-web-service-key-not-a-secretxxxxx
+      DUPLI1_API_KEY_ENV: test
     depends_on:
       postgres-auth:
         condition: service_healthy
@@ -279,8 +283,9 @@ services:
       # Auth login stays direct so bootstrap does not wait on the proxy
       # (proxy depends_on order health — would deadlock if auth went via gateway at startup).
       DUPLI1_AUTH_URL: http://dupli1-auth:8080
-      DUPLI1_ORDER_SERVICE_EMAIL: dupli1-order@order.dupli1.com
-      DUPLI1_ORDER_SERVICE_PASSWORD: dupli1-order-dev-secret
+      # Service-account API key (dev-only value, same as auth's), exchanged at
+      # auth's /api/v1/auth/token — no password needed.
+      DUPLI1_ORDER_SERVICE_API_KEY: dk_test_local-dev-order-service-key-not-a-secretxxx
       DUPLI1_ORDER_DB: postgres://dupli1:dupli1_dev@postgres-order:5432/orders?sslmode=disable
       # Flat per-order delivery charge in whole KRW. Unset uses 30000; 0 is free.
       # DUPLI1_ORDER_SHIPPING_FEE_KRW and DUPLI1_ORDER_SHIPPING_FEE_CENTS are deprecated aliases.

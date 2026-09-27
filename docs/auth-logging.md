@@ -106,6 +106,20 @@ Auth middleware (`RequireAuth`, `OptionalAuth`, `RequirePermission`) and the Red
 | `refresh_error` | Error | Unexpected failure (HTTP still `401`) | `ip`, `err` |
 | `refresh_success` | Info | Access token issued | `ip` |
 
+### API keys — `POST /api/v1/auth/token` and `/api-keys`
+
+The plaintext key and its hash are never logged; `prefix` (`dk_live_A1b2`) and `key_id` identify it.
+
+| `event` | Level | When | Typical fields |
+|---------|-------|------|----------------|
+| `api_key_exchanged` | Info | Key traded for an access token | `key_id`, `prefix`, `user_id`, `ip` |
+| `api_key_rejected` | Warn | Exchange refused (the caller always gets the same `401`) | `reason` (`missing`/`unknown`/`revoked`/`expired`/`inactive`/`not_service`), `ip`, and `key_id`/`prefix`/`user_id` when the key was found |
+| `api_key_exchange_error` | Error | Key store unreachable (HTTP `503`) | `ip`, `err` |
+| `api_key_touch_failed` | Warn | `last_used_at` write failed (exchange still succeeds) | `key_id` |
+| `api_key_created` | Info | Key minted | `key_id`, `prefix`, `user_id`, `created_by`, `scope_count` |
+| `api_key_revoked` | Info | Key revoked | `key_id`, `prefix`, `revoked_by` |
+| `api_key_env_seeded` / `api_key_env_rotated` / `api_key_env_revoked` | Info | Boot: env key created, replaced, or revoked because its env var was unset | `user_id`, `service` |
+
 ### User admin — `/api/v1/auth/users…`
 
 Only unexpected failures are logged (via `respondInternalError`):
@@ -140,6 +154,8 @@ This logic (and its logging) no longer lives in `auth` — it was extracted to t
 | `web_service_account_seeded` | Info | `dupli1-web` service account created |
 | `web_service_account_synced` | Info | Web service account credentials/permissions updated |
 | `order_service_account_seeded` | Info | `dupli1-order` service account created |
+| `order_service_account_synced` | Info | Order service account credentials/permissions updated |
+| `web_service_password_ignored` / `order_service_password_ignored` | Warn | A `*_SERVICE_PASSWORD` env var is still set; service accounts have no password, so it is ignored — remove it |
 
 ---
 

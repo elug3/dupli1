@@ -468,9 +468,12 @@ func TestLogin_ClientRules(t *testing.T) {
 		{"operator@example.com", "storefront", http.StatusOK},
 		{"operator@example.com", "manage", http.StatusOK},
 		{"operator@example.com", "service", http.StatusForbidden},
+		// Service accounts have no password login through any client — they
+		// authenticate with an API key.
 		{"robot@dupli1.com", "storefront", http.StatusForbidden},
 		{"robot@dupli1.com", "manage", http.StatusForbidden},
-		{"robot@dupli1.com", "service", http.StatusOK},
+		{"robot@dupli1.com", "service", http.StatusForbidden},
+		{"robot@dupli1.com", "", http.StatusForbidden},
 		// No client: accepted for any account type while callers roll over.
 		{"shopper@example.com", "", http.StatusOK},
 		{"shopper@example.com", "mobile", http.StatusBadRequest},

@@ -58,6 +58,9 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 
 	loginLimiter := redisinfra.NewIPRateLimiter(redisClient, "login", 10, 60)
 	refreshLimiter := redisinfra.NewIPRateLimiter(redisClient, "refresh", 30, 60)
+	// A service exchanges about every 14 minutes, so 60/min is far above
+	// legitimate use; guessing a 256-bit key is hopeless anyway.
+	tokenLimiter := redisinfra.NewIPRateLimiter(redisClient, "token", 60, 60)
 
 	v1 := r.Group("/api/v1/auth")
 	{
@@ -71,6 +74,9 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 		v1.POST("/login", loginLimiter.Middleware(), h.Login)
 		v1.POST("/refresh", refreshLimiter.Middleware(), h.Refresh)
 		v1.POST("/logout", h.Logout)
+		// Service-account API key → access token. The gateway serves it only
+		// on its internal listener (api/gateway/routes.conf).
+		v1.POST("/token", tokenLimiter.Middleware(), h.ExchangeAPIKey)
 
 		authed := v1.Group("", h.RequireAuth())
 		{
@@ -100,6 +106,17 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 		userDelete := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserDelete))
 		{
 			userDelete.DELETE("/users/:id", h.DeleteUser)
+		}
+
+		apiKeyRead := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserAPIKeyRead))
+		{
+			apiKeyRead.GET("/users/:id/api-keys", h.ListAPIKeys)
+		}
+
+		apiKeyManage := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserAPIKeyManage))
+		{
+			apiKeyManage.POST("/users/:id/api-keys", h.CreateAPIKey)
+			apiKeyManage.DELETE("/api-keys/:keyId", h.RevokeAPIKey)
 		}
 	}
 

@@ -104,6 +104,8 @@ Phase 1 introduces `shared/pkg/permissions` (Go module `github.com/elug3/dupli1/
 | `user.password.update` | Set another user's password |
 | `user.status.update` | Activate or deactivate a user |
 | `user.delete` | Permanently delete a user (publishes `user.deleted` for profile cleanup) |
+| `user.apikey.read` | List a service account's API keys (metadata only) |
+| `user.apikey.manage` | Mint and revoke service-account API keys ([auth-service-api-keys.md](auth-service-api-keys.md)) |
 
 **ABAC (auth service only):** user management follows a role hierarchy independent of downstream services:
 
@@ -115,7 +117,7 @@ Phase 1 introduces `shared/pkg/permissions` (Go module `github.com/elug3/dupli1/
 
 Tiers are derived inside auth only. Other services continue to use fine-grained permissions without this hierarchy.
 
-A target account's tier is the **higher** of what its `account_type` implies and what its permissions confer, so a `customer`-typed account holding `admin.*` is admin tier. `account_type: service` is its own tier that only the owner manages (register, reset password, change status or permissions): a service account holds cross-service permissions such as `payment.cancel` and `promotion.redeem`, and a password reset on it would hand those over.
+A target account's tier is the **higher** of what its `account_type` implies and what its permissions confer, so a `customer`-typed account holding `admin.*` is admin tier. `account_type: service` is its own tier that only the owner manages (register, mint or revoke API keys, change status or permissions): a service account holds cross-service permissions such as `payment.cancel` and `promotion.redeem`. It has no password at all — it authenticates with an API key and cannot sign in to either web app ([auth-service-api-keys.md](auth-service-api-keys.md)).
 
 **Grant only what you hold.** Registering or assigning permissions requires the caller to hold every permission granted (wildcards count — a `product.*` holder may grant `product.create`). An admin without `support.read` cannot grant the `support_agent` bundle; the owner can.
 
@@ -240,6 +242,10 @@ See [notification-telegram-bot.md](notification-telegram-bot.md).
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `user.status.update` |
 | `DELETE` | `/api/v1/auth/users/:id` | `user.delete` |
+| `GET` | `/api/v1/auth/users/:id/api-keys` | `user.apikey.read` |
+| `POST` | `/api/v1/auth/users/:id/api-keys` | `user.apikey.manage` |
+| `DELETE` | `/api/v1/auth/api-keys/:keyId` | `user.apikey.manage` |
+| `POST` | `/api/v1/auth/token` | — (the API key is the credential; internal listener only) |
 
 **Temporary:** `AUTH_OPEN_REGISTER=true` allows unauthenticated customer signup (empty permissions). Re-lock with `AUTH_OPEN_REGISTER=false`.
 
@@ -386,6 +392,7 @@ Some routes exist only for one service to call. A permission is not enough to re
 |-------|----------------|
 | `POST /api/v1/products/promotions/reserve\|consume\|release` | `dupli1-order` |
 | `POST /api/v1/products/inventory/reservations`, `…/{id}/commit`, `…/{id}/release` (and the legacy `/api/v1/inventory/…` aliases) | `dupli1-order` |
+| `POST /api/v1/auth/token` (API key exchange) | any service account holding a key — the key is the credential; gateway internal listener only |
 
 **Not reachable from outside.** The API gateway listens twice: `:80`, which is what the public entry reaches (the `edge` on VENUS, the ALB on AWS), and `:8081`, which nothing public routes to. On `:80` the routes above answer `404`; only `:8081` passes them to product, and order's `DUPLI1_GATEWAY_URL` points there. The check is a regex location on nginx's decoded, normalized URI, so `%`-encoding, `//` or `../` do not get past it. It lives once, in the shared route table `api/gateway/routes.conf` that every gateway config includes, and `api/gateway/test.sh` (CI job `gateway`) checks it in each; a new internal route must be added to that regex as well as allowlisted in product.
 
@@ -404,7 +411,7 @@ Code-defined sets for common job functions. Assigning a bundle expands to explic
 | `catalog_editor` | `product.create`, `product.update`, `product.read`, `product.variant.create`, `product.variant.update`, `product.image.upload`, `product.master.read`, `product.master.write` |
 | `catalog_admin` | `product.*`, `promotion.*`, `coupon.*` |
 | `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass`, `payment.cancel` |
-| `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update`, `user.delete` |
+| `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update`, `user.delete`, `user.apikey.read`, `user.apikey.manage` |
 | `customer_registrar` | `user.create` |
 | `support_agent` | `support.read`, `support.reply` |
 

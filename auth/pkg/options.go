@@ -64,6 +64,18 @@ type ServerOptions struct {
 	OrderServiceEmail    string
 	OrderServicePassword string
 
+	// WebServiceAPIKey and OrderServiceAPIKey seed each service account's
+	// API key (docs/auth-service-api-keys.md), re-synced on every boot:
+	// changing one rotates the key, unsetting it revokes it. Required when the
+	// matching *ServiceEmail is set: service accounts have no password, so
+	// the *ServicePassword fields above are ignored (with a warning).
+	WebServiceAPIKey   string
+	OrderServiceAPIKey string
+
+	// APIKeyEnv is the environment marker on minted keys: "live" (default)
+	// or "test", so a leaked key says where it works.
+	APIKeyEnv string
+
 	// OpenRegister temporarily allows POST /register without auth / user.create
 	// (customer accounts only). Default true until re-locked; set AUTH_OPEN_REGISTER=false.
 	OpenRegister bool

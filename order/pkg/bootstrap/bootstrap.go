@@ -10,9 +10,9 @@ import (
 
 	"github.com/elug3/dupli1/order/pkg/handler"
 	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
-	"github.com/elug3/dupli1/order/pkg/infra/httppromotion"
 	"github.com/elug3/dupli1/order/pkg/infra/httppayment"
 	"github.com/elug3/dupli1/order/pkg/infra/httpproduct"
+	"github.com/elug3/dupli1/order/pkg/infra/httppromotion"
 	"github.com/elug3/dupli1/order/pkg/infra/httpstock"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
 	natsinfra "github.com/elug3/dupli1/order/pkg/infra/nats"
@@ -31,10 +31,11 @@ type Config struct {
 	ProductURL   string
 	InventoryURL string
 
-	AuthURL              string
-	OrderServiceEmail    string
-	OrderServicePassword string
-	// StockBearerToken overrides the service-account login (static token).
+	AuthURL string
+	// OrderServiceAPIKey authenticates the order service account
+	// (docs/auth-service-api-keys.md); service accounts have no password.
+	OrderServiceAPIKey string
+	// StockBearerToken overrides the API key with a static token (dev/tests).
 	StockBearerToken string
 
 	DatabaseConnString string
@@ -216,13 +217,19 @@ func resolveStockTokenSource(ctx context.Context, cfg Config) (httpauth.TokenSou
 	}
 	authBase := strings.TrimSpace(cfg.AuthURL)
 	if authBase == "" {
-		// Fall back to gateway for login/refresh when AuthURL is unset.
+		// Fall back to the gateway for the key exchange when AuthURL is unset;
+		// order's gateway URL is the internal listener, which serves it.
 		authBase = strings.TrimSpace(cfg.GatewayURL)
 	}
-	if authBase == "" || cfg.OrderServiceEmail == "" || cfg.OrderServicePassword == "" {
+	var src httpauth.TokenSource
+	switch {
+	case authBase == "":
+		return nil, nil
+	case cfg.OrderServiceAPIKey != "":
+		src = httpauth.NewAPIKeyTokenSource(authBase, cfg.OrderServiceAPIKey, cfg.HTTPClient)
+	default:
 		return nil, nil
 	}
-	src := httpauth.NewServiceAccountTokenSource(authBase, cfg.OrderServiceEmail, cfg.OrderServicePassword, cfg.HTTPClient)
 	// Prime the cache at startup so misconfigured credentials fail fast.
 	// Prefer a direct AuthURL in Compose so bootstrap does not depend on the
 	// proxy (proxy itself waits for order health).
