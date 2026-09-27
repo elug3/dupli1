@@ -490,6 +490,9 @@ services:
       dockerfile: api/Dockerfile
     ports:
       - "8080:80"
+      # Internal listener (internal APIs), loopback only: for running order on
+      # the host with DUPLI1_GATEWAY_URL=http://localhost:8091 (.env.example).
+      - "127.0.0.1:8091:8081"
       - "80:80"
       - "443:443"
     volumes:
