@@ -209,3 +209,16 @@ jobs:
       - name: Test shared module
         working-directory: shared
         run: go test ./... -count=1
+
+  # Every API gateway config (api/nginx*.conf, deploy/venus/nginx-gateway.conf)
+  # through real nginx: nginx -t, each route to the right service, and
+  # product's internal APIs refused on the public listener.
+  gateway:
+    name: gateway
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test gateway routes
+        run: api/gateway/test.sh

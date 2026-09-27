@@ -204,6 +204,10 @@ services:
     image: dupli1-prod/proxy:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     volumes:
       - ./nginx-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+      # The shared route table and upstream names it includes, from the same
+      # checkout, so the config and its includes always match — even when a
+      # rollback runs an older proxy image.
+      - ../../api/gateway:/etc/nginx/dupli1:ro
     networks: { default: { aliases: [proxy.dupli1.local] } }
 
   web:

@@ -396,7 +396,7 @@ bot token, so it is an operator's work, not a commit.
 | Log group | `infra/terraform/logs.tf` | Same retention as every other service |
 | Cloud Map `support.dupli1.local` | `infra/terraform/ecs_services.tf` | Registered with the namespace the gateway resolves |
 | Task definition + service | `infra/terraform/ecs_services.tf` | 256 CPU / 512 MB, depends on auth and nats |
-| Gateway route `/api/v1/support/` | `api/nginx.ecs.conf`, `api/nginx.ecs.conf.template`, `api/nginx.prod.conf` | Telegram posts the webhook through the ALB, so a missing block here is a dead bot, not just a dead admin tab |
+| Gateway route `/api/v1/support/` | `api/gateway/routes.conf` (shared by every gateway config) | Telegram posts the webhook through the ALB, so a missing block here is a dead bot, not just a dead admin tab |
 | Build + deploy rows | `.github/workflows/aws.yml` | `dupli1-support` in both matrices |
 | Retention purge | `support/pkg/service/inbox.go`, wired in `bootstrap` | Sweeps at start, then every 24h |
 

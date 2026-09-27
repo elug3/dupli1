@@ -45,9 +45,14 @@ BASE=http://localhost:8080 scripts/smoke-promotion-campaign.sh
 
 **Docker note:** all `docker`/`docker compose` commands need `sudo` on this VM. The `fuse-overlayfs` storage driver is configured; standard overlayfs does not work here.
 
-After editing `api/nginx.conf`, rebuild the proxy only:
+After editing `api/nginx.conf` or `api/gateway/*.conf`, rebuild the proxy only:
 ```bash
 sudo docker compose up -d --build dupli1-proxy
+```
+
+Gateway route test (every nginx config through real nginx, needs Docker; CI job `gateway`):
+```bash
+DOCKER="sudo docker" api/gateway/test.sh
 ```
 
 ## Architecture
@@ -143,7 +148,7 @@ Refresh tokens rotate on every use: `/refresh` invalidates the token it was give
 
 Fine-grained permissions (`{resource}.{action}`, e.g. `product.create`, `order.ship`). Wildcards: `*` (owner), `admin.*`, `{resource}.*`. Storefront customers use ABAC (JWT `sub` must match resource owner) with no explicit permission required.
 
-Internal APIs (product's promotion `reserve|consume|release` and inventory reservations) also require the caller to be the named service account (`dupli1-order`), so no wildcard or owner token reaches them. They are also off the public path: the gateway answers `404` for them on `:80` (what the edge/ALB reaches) and serves them only on its internal `:8081` listener, where order's `DUPLI1_GATEWAY_URL` points. A new internal route goes in the regex in every `api/nginx*.conf` too. See `docs/permissions.md` → Internal APIs.
+Internal APIs (product's promotion `reserve|consume|release` and inventory reservations) also require the caller to be the named service account (`dupli1-order`), so no wildcard or owner token reaches them. They are also off the public path: the gateway answers `404` for them on `:80` (what the edge/ALB reaches) and serves them only on its internal `:8081` listener, where order's `DUPLI1_GATEWAY_URL` points. A new internal route goes in that regex too, in `api/gateway/routes.conf`. See `docs/permissions.md` → Internal APIs.
 
 Key bundles: `catalog_editor`, `catalog_admin`, `fulfillment`, `user_admin`, `support_agent`. See `docs/permissions.md` for the full catalog.
 
@@ -160,6 +165,7 @@ Order, cart, payment, and support use PostgreSQL when their `DUPLI1_*_DB` env va
 - **Currency: KRW only.** All `*_won` fields are whole Korean won. No fractional amounts.
 - **Money fields are `*_won`** — in JSON, Go identifiers, and Postgres columns. Never `*_krw` (canonical only from 2026-09-09 to 09-14) or `*_cents`. Nothing emits the old names, but a few decoders still *accept* them, so writing one fails silently rather than loudly. Branches and docs cut in that window still say `*_krw`; treat them as stale. See `shared/pkg/money`.
 - **No `go.work`.** Run and test from each service module directory.
+- **Gateway routes live in one file.** `api/gateway/routes.conf` is the route table every environment shares; `api/nginx.conf` (local), `api/nginx.ecs.conf` (the proxy image), `deploy/venus/nginx-gateway.conf` (VENUS) and `api/nginx.prod.conf` (single-EC2) are thin wrappers holding only the resolver, listeners, extra locations and each service's upstream as a `$gw_<service>` variable (ECS and VENUS share `api/gateway/hosts.dupli1.local.conf`). Add or change a route in `routes.conf`, never in a wrapper; a new service also needs its `$gw_` variable in each wrapper. `api/gateway/test.sh` checks them all.
 - **nginx resolver:** `api/nginx.conf` must list only Docker's embedded DNS `127.0.0.11` in its `resolver` directive. Adding `10.0.0.2` (AWS VPC) causes ~50% of local requests to fail with `502`.
 - **Promotional codes, not coupons.** Canonical everywhere: table `promotions`, `promotion_code`, `promotion.*` permissions, `/api/v1/products/promotions`, `domain.Promotion`. `discount_won` keeps its name. Definitions carry `benefit` and `conditions` JSONB and an enforced `expires_at`; `promotion_redemptions` is the usage ledger (reserve at checkout complete → consume on paid → release on a cancel before shipment, mirroring the stock rule). Order asks product to price a code against the cart rather than computing a discount itself, and sends only each line's `{sku_id, sku, quantity, unit_price_won}` — conditions on a line's category, brand, parent or sale state are resolved by the evaluator from product's own catalog, so they cannot be claimed by a caller. `single_user` codes need a `customer_promotions` entitlement, issued automatically on `user.registered` (the campaign is `domain.WelcomeCode`, a constant — there is no env var, because both stores seed the definition and `active` is the switch), by a manager, or by `product/cmd/backfill-welcome-promotion`; the entitlement grants access while the ledger still decides whether it has been spent. The sign-up campaign `WELCOME50` is seeded **inactive** — enabling it is a manager action, not a deploy. Renamed from `coupon` on 2026-09-16; for **one release** the old spellings are still accepted — the `coupon.*` permissions, the `/api/v1/products/coupons` and `/api/v1/coupons` routes, the `…/sessions/{id}/coupon` sub-route, and a `coupon_code` key that order still emits alongside `promotion_code`. Write only the new names; every remaining `coupon` in the tree is deliberate compatibility scaffolding listed in [docs/product-promotion-rename.md](docs/product-promotion-rename.md), which also says how to remove it.
 - **Legacy API aliases.** Canonical paths are `/api/v1/{service}/…`; legacy top-level prefixes (`/api/v1/inventory/`, `/api/v1/checkout/`, `/api/v1/carts/`, etc.) are still registered. New code uses canonical paths only.

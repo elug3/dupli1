@@ -172,7 +172,7 @@ Direct host ports (bypass gateway): auth **18080**, profile **8088**, product **
 2. Add `<service>/go.mod` and ensure the root build includes `SERVICE=<service>` in [Dockerfile](../Dockerfile).
 3. Add `<service>/cmd/main.go`.
 4. Add the service to `docker-compose.yml`.
-5. Add nginx `location` blocks in [api/nginx.conf](../api/nginx.conf).
+5. Add its nginx `location` blocks to [api/gateway/routes.conf](../api/gateway/routes.conf) (`proxy_pass $gw_<service>;`), and set `$gw_<service>` in each gateway wrapper — [api/nginx.conf](../api/nginx.conf), [api/nginx.prod.conf](../api/nginx.prod.conf) and [api/gateway/hosts.dupli1.local.conf](../api/gateway/hosts.dupli1.local.conf) (ECS and VENUS). Add the route to `ROUTES` in [api/gateway/test.sh](../api/gateway/test.sh).
 6. Update [docs/api.md](api.md), [docs/current-state.md](current-state.md), and [README.md](../README.md).
 
 ## Testing
