@@ -166,9 +166,18 @@ again after rotating the token, leaving a container with a random name.
 Find and remove every connector but `dupli1-cloudflared-1`:
 
 ```bash
+# find
 docker ps -a --format '{{.Names}} {{.Image}}' | grep cloudflared
 pgrep -a cloudflared                     # host processes
-systemctl is-active cloudflared          # sudo cloudflared service uninstall
+systemctl is-active cloudflared          # host service
+
+# remove (each container listed above except dupli1-cloudflared-1)
+docker rm -f <container-name>
+sudo cloudflared service uninstall       # if the host service is active
+
+# confirm: one container, one process, requests reaching the edge
+docker ps -a --format '{{.Names}}' | grep cloudflared
+curl -s -o /dev/null -w '%{http_code}\n' https://dupli1.com/gateway/health
 ```
 
 The tunnel page in the dashboard (or the API's `cfd_tunnel/<id>/connections`)
