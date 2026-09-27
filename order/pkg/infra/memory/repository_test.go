@@ -1,6 +1,7 @@
 package memory_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -290,5 +291,32 @@ func TestSavePaidIfCanceledRejectsPending(t *testing.T) {
 	}
 	if saved {
 		t.Fatal("expected no save via SavePaidIfCanceled when order is pending")
+	}
+}
+
+// Pending outbox rows come back oldest first, as Postgres returns them, so a
+// payment's order.paid is published before its order.status_updated.
+func TestListPendingOutboxIsOldestFirst(t *testing.T) {
+	repo := memory.NewRepository()
+	for i := 0; i < 20; i++ {
+		order := &domain.Order{ID: fmt.Sprintf("o-%d", i), Status: domain.StatusPending}
+		if err := repo.SaveWithOutbox(t.Context(), order, nil, []ports.OutboxEvent{{AggregateID: order.ID, Subject: "order.created", Payload: []byte("{}")}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	msgs, err := repo.ListPendingOutbox(t.Context(), 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 5 {
+		t.Fatalf("got %d, want the limit of 5", len(msgs))
+	}
+	for i := 1; i < len(msgs); i++ {
+		if msgs[i].ID <= msgs[i-1].ID {
+			t.Fatalf("not oldest first: %d after %d", msgs[i].ID, msgs[i-1].ID)
+		}
+	}
+	if msgs[0].AggregateID != "o-0" {
+		t.Fatalf("first = %s, want the oldest row (o-0)", msgs[0].AggregateID)
 	}
 }

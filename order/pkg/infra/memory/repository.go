@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -148,7 +149,10 @@ func (r *Repository) ListPendingOutbox(ctx context.Context, limit int) ([]ports.
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	out := make([]ports.OutboxMessage, 0, limit)
+	// Oldest first, like Postgres (ORDER BY id): the outbox is a map, and
+	// ranging over it published an order's events in random order — a
+	// payment's order.paid could reach subscribers after its status update.
+	out := make([]ports.OutboxMessage, 0, len(r.outbox))
 	for _, e := range r.outbox {
 		if e.published {
 			continue
@@ -156,9 +160,10 @@ func (r *Repository) ListPendingOutbox(ctx context.Context, limit int) ([]ports.
 		msg := e.msg
 		msg.Payload = append([]byte(nil), e.msg.Payload...)
 		out = append(out, msg)
-		if len(out) >= limit {
-			break
-		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	if len(out) > limit {
+		out = out[:limit]
 	}
 	return out, nil
 }

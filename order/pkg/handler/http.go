@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
+	"github.com/elug3/dupli1/order/pkg/livefeed"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
@@ -20,6 +21,7 @@ type Handler struct {
 	svc          *service.Service
 	jwtValidator authjwt.AccessTokenValidator
 	settings     settings.Response
+	feed         *livefeed.Hub // nil: GET /api/v1/orders/events answers 503
 }
 
 func New(svc *service.Service, jwtValidator authjwt.AccessTokenValidator) *Handler {
@@ -46,6 +48,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/orders/checkout/sessions/", h.requireAuth(h.checkoutSession))
 	mux.HandleFunc("/api/v1/checkout/sessions", h.requireAuth(h.checkoutSessions))
 	mux.HandleFunc("/api/v1/checkout/sessions/", h.requireAuth(h.checkoutSession))
+	// An exact pattern outranks the /api/v1/orders/ subtree below, which
+	// would otherwise read "events" as an order id.
+	mux.HandleFunc("/api/v1/orders/events", h.requireAuth(h.orderEvents))
 	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
 	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
 }

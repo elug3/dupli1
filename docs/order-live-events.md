@@ -1,6 +1,6 @@
 # Order live events (admin SSE)
 
-**Status:** Client + mock gateway implemented (`dupli1-manage-web`); **backend route not yet registered** in `dupli1-order` as of 2026-09-14. Production admin reconnects will 404 until the order service ships the hub.
+**Status:** implemented (2026-09-27) — `order/pkg/livefeed` (hub) and `order/pkg/handler/events.go` (endpoint); the client (`dupli1-manage-web`, `app/lib/order-events.tsx`) and its mock gateway came first. Until this shipped, production streams 404'd and manage-web fell back to re-reading orders every 30s.
 
 ## Goal
 
@@ -16,7 +16,7 @@ Give operators a **single long-lived stream** of order changes so the manage das
 
 Server-Sent Events over `GET /api/v1/orders/events` reuse the same gateway path as REST calls (`/auth/session/gateway/order/api/v1/orders/events` in manage-web).
 
-## Planned endpoint
+## Endpoint
 
 ```
 GET /api/v1/orders/events
@@ -30,6 +30,9 @@ Last-Event-ID: <opaque>                # optional resume cursor
 | `200` `text/event-stream` | Stream open |
 | `401` | Missing/invalid token |
 | `403` | Caller lacks `order.read.all` |
+| `503` | Stream not configured in this process |
+
+The stream **ends when the access token that opened it expires** (or after 15 minutes if it carries no `exp`): the token is checked only when the stream opens, so this bounds how long a revoked permission keeps receiving orders to one access-token lifetime, like every other API. The browser reconnects by itself with `Last-Event-ID`; manage-web's BFF attaches a fresh token (it refreshes 30s before `exp`), so the operator sees nothing but a replay.
 
 ### SSE frames
 
@@ -70,10 +73,12 @@ The outer SSE `event` name is always `order` for snapshots; `type` inside the JS
 
 ### Resume semantics
 
-When the client reconnects with `Last-Event-ID`, the server should either:
+When the client reconnects with `Last-Event-ID`, the server either:
 
-1. Replay missed events after that id, or
-2. Emit `event: reset` if history is unavailable (task restart, cold start, cursor too old).
+1. Replays the frames after that id, from a ring of the last 512 held in memory, or
+2. Emits `event: reset` when it cannot vouch for the cursor — older than the ring, or issued before this process started (ids begin at the process start time, so an earlier process's cursor is always recognised as foreign).
+
+A fresh connection (no `Last-Event-ID`) gets neither: the client has just loaded the list over REST.
 
 Manage-web treats `reset` as “call `GET /api/v1/orders` again” — see `useOrderEvents` in `dupli1-manage-web/app/lib/order-events.tsx`.
 
@@ -97,16 +102,22 @@ Browser tests: `npm run test:orders:browser` against `npm run mock:gateway`.
 
 The mock keeps **no event history**; presenting `Last-Event-ID` always yields `reset` — the same behavior expected after an ECS task replacement.
 
-## Backend implementation checklist (open)
+## Backend implementation
 
-When adding the hub to `dupli1-order`:
+**Source: the outbox.** Every order state change — manual, customer, or an SLA sweep (auto-confirm, auto-approve, auto-fulfill, payment expiry) — writes an `order.*` outbox row in the same transaction. The stream relays those, so it cannot miss a change the rest of the platform hears about. `order.created`, `order.paid` and `order.status_updated` are relayed; a payment emits both `order.paid` and `order.status_updated`.
 
-1. Register `GET /api/v1/orders/events` in `order/pkg/handler` **before** the `/api/v1/orders/` catch-all.
-2. Require `order.read.all` (same as list-all).
-3. Subscribe to outbox drain or in-process bus after successful commits — publish `{ type, order }` JSON matching `GET /orders/{id}`.
-4. Support `Last-Event-ID` with bounded in-memory buffer or “reset on gap” for v1.
-5. Set `X-Accel-Buffering: no` and disable response buffering on nginx for this location.
-6. Document in [endpoints.md](endpoints.md), [openapi.yaml](openapi.yaml), and [permissions.md](permissions.md).
+**Fan-out: `livefeed.Hub`.** For each event it loads the order through `Service.GetOrder` — the presented order, with `confirmation_due_at` and the other SLA fields the console's badge needs — and sends one frame to every open stream. A stream that falls 64 frames behind is dropped rather than allowed to stall the others; its reconnect replays from the ring.
+
+**Feeding the hub** (`order/pkg/bootstrap`):
+
+- **With NATS** (production): every replica makes a *broadcast* subscription to `order.*` (`Subscriber.SubscribeAll`, no queue group — unlike the payment consumers, where one replica must do the work once). A console's stream lives on whichever replica it reached, and each replica relays every change, including those another replica committed.
+- **Without NATS** (local dev, tests): `livefeed.Publisher` wraps the outbox drainer's publisher and feeds the hub as rows drain.
+
+**HTTP** (`handler/events.go`): the server-wide `WriteTimeout` (25s) would cut every stream, so the handler lifts it for this response and sets a 10s deadline per write instead. `X-Accel-Buffering: no`, a `: ping` every 20s (under nginx's 60s read timeout), and the exact route `/api/v1/orders/events` registered ahead of the `/api/v1/orders/` subtree, which would otherwise read `events` as an order id.
+
+**Gateway** (`api/gateway/routes.conf`): `location = /api/v1/orders/events` with `proxy_buffering off`. It sets no `proxy_set_header` — one there would drop every header inherited from the server block.
+
+**Tests:** `order/pkg/livefeed` (replay, reset, slow stream dropped), `order/pkg/handler/events_test.go` (a real server with a 1s `WriteTimeout`: snapshots per change, replay/reset, 403, ending at token expiry), `order/pkg/infra/nats` (a broadcast subscription reaches both of two replicas; the queue group reaches one), and `api/gateway/test.sh` for the route.
 
 ## Related docs
 

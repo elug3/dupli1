@@ -17,6 +17,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
 	natsinfra "github.com/elug3/dupli1/order/pkg/infra/nats"
 	"github.com/elug3/dupli1/order/pkg/infra/pg"
+	"github.com/elug3/dupli1/order/pkg/livefeed"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
@@ -123,7 +124,21 @@ func Bootstrap(cfg Config) (*App, error) {
 		}
 	}
 
-	svc := service.NewWithCheckout(repo, stock, promotionClient, 0, eventPublisher).
+	// The live order stream (GET /api/v1/orders/events). It loads each
+	// changed order through the service, so svc is captured once built.
+	var svc *service.Service
+	orderFeed := livefeed.NewHub(func(ctx context.Context, id string) (any, error) {
+		return svc.GetOrder(ctx, id)
+	}, livefeed.DefaultBufferSize)
+	if natsSubscriber == nil {
+		// No broker: the drainer's publish step is the only place a change
+		// surfaces, so feed the stream from there. With NATS, every replica
+		// subscribes below instead (a change committed on another replica
+		// never passes through this one's drainer).
+		eventPublisher = livefeed.Publisher{Inner: eventPublisher, Hub: orderFeed}
+	}
+
+	svc = service.NewWithCheckout(repo, stock, promotionClient, 0, eventPublisher).
 		WithProduct(product).
 		WithShippingFee(cfg.ShippingFeeWon).
 		WithPayment(payment)
@@ -141,6 +156,17 @@ func Bootstrap(cfg Config) (*App, error) {
 			natsPublisher.Close()
 			closeFn()
 			return nil, fmt.Errorf("payment canceled consumer: %w", err)
+		}
+		// Broadcast, not queue-group: each replica relays every order change
+		// to the streams it holds.
+		if err := natsSubscriber.SubscribeAll(context.Background(), "order.*", func(ctx context.Context, subject string, payload []byte) error {
+			orderFeed.Notify(ctx, subject, payload)
+			return nil
+		}); err != nil {
+			natsSubscriber.Close()
+			natsPublisher.Close()
+			closeFn()
+			return nil, fmt.Errorf("order event stream subscription: %w", err)
 		}
 	}
 	// Long-lived worker/subscriber root; cancelled on process shutdown.
@@ -163,7 +189,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		return nil, fmt.Errorf("auth validator: %w", err)
 	}
 
-	h := handler.New(svc, jwtValidator).WithSettings(BuildSettings(cfg))
+	h := handler.New(svc, jwtValidator).WithSettings(BuildSettings(cfg)).WithOrderFeed(orderFeed)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
