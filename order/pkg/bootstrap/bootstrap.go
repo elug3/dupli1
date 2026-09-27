@@ -10,9 +10,9 @@ import (
 
 	"github.com/elug3/dupli1/order/pkg/handler"
 	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
-	"github.com/elug3/dupli1/order/pkg/infra/httppromotion"
 	"github.com/elug3/dupli1/order/pkg/infra/httppayment"
 	"github.com/elug3/dupli1/order/pkg/infra/httpproduct"
+	"github.com/elug3/dupli1/order/pkg/infra/httppromotion"
 	"github.com/elug3/dupli1/order/pkg/infra/httpstock"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
 	natsinfra "github.com/elug3/dupli1/order/pkg/infra/nats"
@@ -34,6 +34,10 @@ type Config struct {
 	AuthURL              string
 	OrderServiceEmail    string
 	OrderServicePassword string
+	// OrderServiceAPIKey authenticates the order service account by API key
+	// (docs/auth-service-api-keys.md). When set it is used instead of the
+	// email/password login.
+	OrderServiceAPIKey string
 	// StockBearerToken overrides the service-account login (static token).
 	StockBearerToken string
 
@@ -219,10 +223,17 @@ func resolveStockTokenSource(ctx context.Context, cfg Config) (httpauth.TokenSou
 		// Fall back to gateway for login/refresh when AuthURL is unset.
 		authBase = strings.TrimSpace(cfg.GatewayURL)
 	}
-	if authBase == "" || cfg.OrderServiceEmail == "" || cfg.OrderServicePassword == "" {
+	var src httpauth.TokenSource
+	switch {
+	case authBase == "":
+		return nil, nil
+	case cfg.OrderServiceAPIKey != "":
+		src = httpauth.NewAPIKeyTokenSource(authBase, cfg.OrderServiceAPIKey, cfg.HTTPClient)
+	case cfg.OrderServiceEmail != "" && cfg.OrderServicePassword != "":
+		src = httpauth.NewServiceAccountTokenSource(authBase, cfg.OrderServiceEmail, cfg.OrderServicePassword, cfg.HTTPClient)
+	default:
 		return nil, nil
 	}
-	src := httpauth.NewServiceAccountTokenSource(authBase, cfg.OrderServiceEmail, cfg.OrderServicePassword, cfg.HTTPClient)
 	// Prime the cache at startup so misconfigured credentials fail fast.
 	// Prefer a direct AuthURL in Compose so bootstrap does not depend on the
 	// proxy (proxy itself waits for order health).

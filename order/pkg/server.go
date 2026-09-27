@@ -29,6 +29,7 @@ func BootstrapConfig(opts ServerOptions) bootstrap.Config {
 		AuthURL:              opts.AuthURL,
 		OrderServiceEmail:    opts.OrderServiceEmail,
 		OrderServicePassword: opts.OrderServicePassword,
+		OrderServiceAPIKey:   opts.OrderServiceAPIKey,
 		StockBearerToken:     opts.StockBearerToken,
 		DatabaseConnString:   opts.DatabaseConnString,
 		JWTSecret:            opts.JWTSecret,

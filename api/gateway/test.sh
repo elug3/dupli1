@@ -70,6 +70,8 @@ check() { # container label port path want-status want-body-substring
 # path → service, on the public listener. The same table must hold on :8081.
 ROUTES=(
   /api/v1/auth/login=auth
+  /api/v1/auth/refresh=auth
+  /api/v1/auth/tokens=auth
   /api/v1/auth/me/profile=profile
   /api/v1/auth/me/addresses=profile
   /api/v1/profile/me=profile
@@ -111,6 +113,15 @@ INTERNAL=(
   /API/V1/PRODUCTS/PROMOTIONS/RESERVE
 )
 
+# Auth's API key exchange: internal only too, but served by auth.
+INTERNAL_AUTH=(
+  /api/v1/auth/token
+  /api/v1/auth/%74oken
+  //api/v1/auth//token
+  /api/v1/auth/x/../token
+  /API/V1/AUTH/TOKEN
+)
+
 run_suite() { # label wrapper-file [extra checks: "path=service" ...]
   local label=$1 wrapper=$2 name="gw-$1-$NET" r path svc port
   shift 2
@@ -134,6 +145,10 @@ run_suite() { # label wrapper-file [extra checks: "path=service" ...]
   for path in "${INTERNAL[@]}"; do
     check "$name" "$label" 80 "$path" 404 '{"error":"not found"}'
     check "$name" "$label" 8081 "$path" 200 "SVC=product"
+  done
+  for path in "${INTERNAL_AUTH[@]}"; do
+    check "$name" "$label" 80 "$path" 404 '{"error":"not found"}'
+    check "$name" "$label" 8081 "$path" 200 "SVC=auth"
   done
   echo "ok   [$label]"
 }

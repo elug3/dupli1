@@ -22,7 +22,9 @@ type ServerOptions struct {
 	AuthURL              string
 	OrderServiceEmail    string
 	OrderServicePassword string
-	StockBearerToken     string
+	// OrderServiceAPIKey, when set, replaces the email/password login.
+	OrderServiceAPIKey string
+	StockBearerToken   string
 
 	DatabaseConnString string
 	JWTSecret          string

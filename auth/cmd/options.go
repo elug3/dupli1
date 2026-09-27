@@ -238,6 +238,11 @@ func applyEnv(opts *auth.ServerOptions) {
 	if v := os.Getenv("DUPLI1_ORDER_SERVICE_PASSWORD"); v != "" {
 		opts.OrderServicePassword = v
 	}
+	opts.WebServiceAPIKey = strings.TrimSpace(os.Getenv("DUPLI1_WEB_SERVICE_API_KEY"))
+	opts.OrderServiceAPIKey = strings.TrimSpace(os.Getenv("DUPLI1_ORDER_SERVICE_API_KEY"))
+	if v := os.Getenv("DUPLI1_API_KEY_ENV"); v != "" {
+		opts.APIKeyEnv = v
+	}
 	// AUTH_OPEN_REGISTER / DUPLI1_AUTH_OPEN_REGISTER — temporary public customer signup.
 	// Default is true (see NewServerOptions); set false/0/no to re-lock behind user.create.
 	if v := os.Getenv("AUTH_OPEN_REGISTER"); v != "" {

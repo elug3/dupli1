@@ -41,6 +41,10 @@ type Service struct {
 	eventPublisher     ports.EventPublisher
 	outboxDrainer      *outbox.Drainer
 	logger             zerolog.Logger
+	apiKeyRepo         ports.APIKeyRepository
+	accessTokenTTL     time.Duration
+	apiKeyEnv          string
+	now                func() time.Time
 }
 
 // ServiceOption configures a Service.

@@ -38,6 +38,10 @@ func buildMapClaims(userID string, tokenType string, expiry time.Time, userPermi
 		if id.ServiceName != "" {
 			claims["service_name"] = id.ServiceName
 		}
+		if id.APIKeyID != "" {
+			claims["token_use"] = "api_key"
+			claims["akid"] = id.APIKeyID
+		}
 	}
 	return claims
 }

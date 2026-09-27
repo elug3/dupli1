@@ -59,6 +59,9 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		WebServicePassword: opts.WebServicePassword,
 		OrderServiceEmail:    opts.OrderServiceEmail,
 		OrderServicePassword: opts.OrderServicePassword,
+		WebServiceAPIKey:     opts.WebServiceAPIKey,
+		OrderServiceAPIKey:   opts.OrderServiceAPIKey,
+		APIKeyEnv:            opts.APIKeyEnv,
 		OpenRegister:         opts.OpenRegister,
 	})
 	if err != nil {

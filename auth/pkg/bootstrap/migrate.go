@@ -44,6 +44,24 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 			last_error TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_outbox_pending ON auth_outbox (created_at) WHERE published_at IS NULL`,
+		// Service-account API keys (docs/auth-service-api-keys.md). Only the
+		// SHA-256 of a key is stored; deleting the user deletes its keys.
+		`CREATE TABLE IF NOT EXISTS service_api_keys (
+			id           TEXT PRIMARY KEY,
+			user_id      TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name         TEXT        NOT NULL,
+			prefix       TEXT        NOT NULL,
+			key_hash     TEXT        NOT NULL,
+			permissions  TEXT[]      NOT NULL DEFAULT '{}',
+			source       TEXT        NOT NULL DEFAULT 'api',
+			created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			created_by   TEXT        NOT NULL DEFAULT '',
+			expires_at   TIMESTAMPTZ,
+			last_used_at TIMESTAMPTZ,
+			revoked_at   TIMESTAMPTZ
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ux_service_api_keys_hash ON service_api_keys (key_hash)`,
+		`CREATE INDEX IF NOT EXISTS idx_service_api_keys_user ON service_api_keys (user_id) WHERE revoked_at IS NULL`,
 	}
 
 	for _, stmt := range stmts {

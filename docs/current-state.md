@@ -49,6 +49,7 @@ See [service-layout.md](service-layout.md) for details.
   - Permission constants and evaluation in `shared/pkg/permissions` (`github.com/elug3/dupli1/shared`)
   - Wildcards: `*`, `admin.*`, `{resource}.*` (e.g. `product.*`)
   - Account types: `customer`, `manager`, `service` only (`account_type`). `admin` is a permission tier (`admin.*`), not an account type — write APIs reject it.
+  - **Service-account API keys** ([auth-service-api-keys.md](auth-service-api-keys.md)): `POST /api/v1/auth/token` with `Authorization: ApiKey dk_live_…` returns an access token (no refresh token), internal listener only. Keys are minted/listed/revoked by the owner (`user.apikey.*`), or seeded from `DUPLI1_{ORDER,WEB}_SERVICE_API_KEY`. Order and dupli1-web use the key when set and fall back to password login; a service account seeded with no password has none
   - Register: **temporary open customer signup** via `AUTH_OPEN_REGISTER` (default on); anonymous callers create `customer` only. Set `AUTH_OPEN_REGISTER=false` to require `user.create` again. Authenticated `user.create` still follows ABAC for other account types.
   - Auth ABAC hierarchy governs who may manage whom
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`

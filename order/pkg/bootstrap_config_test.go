@@ -24,6 +24,7 @@ func TestBootstrapConfig_CarriesEveryMatchingOption(t *testing.T) {
 		AuthURL:              "http://auth.test",
 		OrderServiceEmail:    "svc@order.test",
 		OrderServicePassword: "svc-secret",
+		OrderServiceAPIKey:   "dk_test_svc-key",
 		StockBearerToken:     "stock-token",
 		DatabaseConnString:   "postgres://user:pass@db.test/orders",
 		JWTSecret:            "jwt-secret",

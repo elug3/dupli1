@@ -92,6 +92,11 @@ services:
       DUPLI1_WEB_SERVICE_PASSWORD: ${AUTH_WEB_SERVICE_PASSWORD:?run make-env.sh}
       DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL:?run make-env.sh}
       DUPLI1_ORDER_SERVICE_PASSWORD: ${DUPLI1_ORDER_SERVICE_PASSWORD:?run make-env.sh}
+      # Service-account API keys (docs/auth-service-api-keys.md). Optional
+      # while callers move off passwords: set in .env to switch a service to
+      # its key; change to rotate, unset to revoke.
+      DUPLI1_ORDER_SERVICE_API_KEY: ${DUPLI1_ORDER_SERVICE_API_KEY:-}
+      DUPLI1_WEB_SERVICE_API_KEY: ${DUPLI1_WEB_SERVICE_API_KEY:-}
     volumes:
       - /opt/dupli1/secrets/jwt_private_key.pem:/run/secrets/jwt_private_key.pem:ro
     depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_started }, nats: { condition: service_started } }
@@ -132,6 +137,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       DUPLI1_ORDER_SERVICE_EMAIL: ${DUPLI1_ORDER_SERVICE_EMAIL}
       DUPLI1_ORDER_SERVICE_PASSWORD: ${DUPLI1_ORDER_SERVICE_PASSWORD}
+      # When set, used instead of the password (same value auth seeds).
+      DUPLI1_ORDER_SERVICE_API_KEY: ${DUPLI1_ORDER_SERVICE_API_KEY:-}
     depends_on: { postgres: { condition: service_healthy }, auth: { condition: service_started } }
     networks: { default: { aliases: [order.dupli1.local] } }
 
@@ -220,6 +227,10 @@ services:
       DUPLI1_API_BASE_URL: http://proxy.dupli1.local
       DUPLI1_WEB_SERVICE_EMAIL: ${WEB_SERVICE_EMAIL:?run make-env.sh}
       DUPLI1_WEB_SERVICE_PASSWORD: ${WEB_SERVICE_PASSWORD:?run make-env.sh}
+      # Used instead of the password when set (same value auth seeds). The
+      # exchange is internal-only, so it goes to the gateway's :8081.
+      DUPLI1_WEB_SERVICE_API_KEY: ${DUPLI1_WEB_SERVICE_API_KEY:-}
+      DUPLI1_WEB_SERVICE_AUTH_URL: http://proxy.dupli1.local:8081
 
   manage-web:
     <<: *service

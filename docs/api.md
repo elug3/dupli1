@@ -260,6 +260,31 @@ Revoke a refresh token. The access token remains valid until it expires.
 
 ---
 
+### `POST /api/v1/auth/token`
+
+Exchange a service-account API key for an access token ([auth-service-api-keys.md](auth-service-api-keys.md)). **Internal only:** the gateway answers `404` on its public listener and serves it on `:8081`; service callers can also reach auth directly.
+
+**Request** — no body:
+```
+Authorization: ApiKey dk_live_<43 chars>
+```
+
+**Response `200`** — no refresh token; exchange again when this one nears expiry:
+```json
+{ "token": "<access_jwt>", "token_type": "Bearer", "expires_in": 900 }
+```
+
+The token carries `sub` (the service account), `account_type: "service"`, `service_name`, `token_use: "api_key"`, `akid` (the key id) and `permissions` — the key's scope intersected with the account's current permissions.
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `401` | `{"error":"invalid_api_key"}` for every refusal — unknown, revoked or expired key, inactive or non-service account. The reason is only logged |
+| `429` | Rate limited (60/min per IP) |
+| `503` | Key store unreachable — keep the key and retry |
+
+---
+
 ## Auth Admin — `/api/v1/auth/users`
 
 Requires `Authorization: Bearer <access_token>`.
@@ -363,6 +388,26 @@ Activate or deactivate a user. Requires `user.status.update`.
 | `401` | Missing or invalid access token |
 | `403` | Caller lacks `user.status.update` or may not manage this user |
 | `404` | User not found |
+
+---
+
+### Service-account API keys
+
+Keys attach to `account_type: service` only, and the account hierarchy applies — since only the owner manages service accounts, only the owner reaches these routes in practice. Keys seeded from `DUPLI1_*_SERVICE_API_KEY` show `source: "env"`.
+
+| Method | Path | Permission | Response |
+|--------|------|------------|----------|
+| `GET` | `/api/v1/auth/users/{id}/api-keys` | `user.apikey.read` | `200 {"api_keys": [...]}` — metadata only, never the key |
+| `POST` | `/api/v1/auth/users/{id}/api-keys` | `user.apikey.manage` | `201` — the key object **plus `api_key`, the plaintext, shown this once** |
+| `DELETE` | `/api/v1/auth/api-keys/{keyId}` | `user.apikey.manage` | `204`; revoking twice is a no-op |
+
+**Create body:** `{ "name": "claude-ops", "permissions": ["order.read.all"], "expires_in_days": 90 }` — `permissions` omitted or `[]` inherits the account's; `expires_in_days` omitted never expires.
+
+**Key object:** `id`, `user_id`, `name`, `prefix` (`dk_live_A1b2`, for display), `permissions`, `source` (`api` \| `env`), `created_at`, `created_by`, `expires_at`, `last_used_at` (updated at most once a minute), `revoked_at`.
+
+**Errors:** `400` name missing, unknown permission, a scope naming a permission the account lacks, or the account is not a service account (`invalid_account_type`); `403` caller lacks the permission or may not manage the account; `404` account or key not found; `409 env_managed_key` revoking an env-seeded key — change or unset its env var and restart auth instead.
+
+Revocation stops new exchanges at once; tokens already minted live out their 15 minutes, since downstream services validate offline.
 
 ---
 

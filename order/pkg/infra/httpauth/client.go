@@ -173,7 +173,12 @@ func postJSON(ctx context.Context, client *http.Client, url string, body any, ta
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	return doJSON(client, req, target)
+}
 
+// doJSON sends req and decodes a 2xx JSON body into target; any other status
+// becomes an error carrying the response's "error" field.
+func doJSON(client *http.Client, req *http.Request, target any) error {
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

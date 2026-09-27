@@ -138,6 +138,8 @@ Both order and payment use a **transactional outbox** pattern: event rows are wr
 
 `POST /login` → `{ "refresh_token": "..." }`. Call `POST /refresh` with that token → `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`. Send as `Authorization: Bearer <token>` on protected routes. Access tokens carry a `permissions` string array claim (no `roles`), plus `account_type` and, for service accounts, `service_name`.
 
+Service accounts authenticate with an **API key** instead: `POST /api/v1/auth/token` with `Authorization: ApiKey dk_live_…` → `{ "token", "token_type", "expires_in" }`, no refresh token (exchange again near expiry). Internal listener only. Keys come from `DUPLI1_{ORDER,WEB}_SERVICE_API_KEY` (changing one rotates the key, unsetting revokes it) or are minted by the owner via `/users/{id}/api-keys`; only a SHA-256 is stored. Password login remains the fallback until the `*_SERVICE_PASSWORD` env vars are removed — a service account seeded without one has no password at all. See [docs/auth-service-api-keys.md](docs/auth-service-api-keys.md).
+
 `POST /login` takes a `client` — `storefront` (dupli1-web: customer, manager), `manage` (manage-web: manager only) or `service` (machine login: service accounts only) — and answers `403 account_type_not_allowed` with a message to show when the account type does not belong there. The web apps only display it; the rule lives in auth. Optional for one release while callers roll over.
 
 Refresh tokens rotate on every use: `/refresh` invalidates the token it was given and returns a new one, which the caller must store and use next time. Reusing an already-rotated refresh token fails with `401`.

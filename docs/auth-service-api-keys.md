@@ -1,7 +1,41 @@
 # Service account API keys
 
-**Status:** design (not implemented). Supersedes password-based machine login for
-`account_type: service` accounts.
+**Status:** phases 1–3 implemented (auth core, management API, order and
+dupli1-web callers); password login still works as the fallback. Phase 4
+(manage-web panel) and phase 5 (drop the passwords) are open. Supersedes
+password-based machine login for `account_type: service` accounts.
+
+### As built — where it differs from the design below
+
+- **Only the owner mints keys.** The design assumed service accounts sat at
+  customer tier; since #301 they are their own tier that only the owner
+  manages, so `CanManageUser` limits the key routes to the owner.
+- **The exchange is internal-only.** `/api/v1/auth/token` answers `404` on the
+  gateway's public listener and is served on `:8081`
+  (`api/gateway/routes.conf`), beside product's internal APIs.
+- **Minted tokens carry `service_name` and `account_type`** as well as
+  `token_use`/`akid`, so product's internal routes (`Claims.CalledBy`) accept
+  a key-minted token exactly like a password-minted one.
+- **Env keys follow their env var.** Changing `DUPLI1_*_SERVICE_API_KEY`
+  rotates the key; unsetting it revokes it on the next boot. A malformed value
+  fails the boot rather than seeding a weak credential.
+- **No password is a real state.** A service account seeded with a key and no
+  `*_SERVICE_PASSWORD` has no password at all (`User.RetirePassword`), and
+  unsetting the password env var retires it on the next boot — phase 5 is
+  just removing those env vars.
+- **`DUPLI1_API_KEY_ENV`** (`live`, default, or `test`) sets the marker on
+  minted keys.
+- **dupli1-web** exchanges at `DUPLI1_WEB_SERVICE_AUTH_URL` (VENUS:
+  `http://proxy.dupli1.local:8081`), separate from the shopper auth URL.
+
+**Generating a key** for an env var:
+
+```bash
+python3 -c 'import secrets; print("dk_live_" + secrets.token_urlsafe(32))'
+```
+
+`deploy/venus/make-env.sh` generates both service keys on its next run and
+keeps them on later runs.
 
 Today every machine caller — the `dupli1-web` BFF, the `dupli1-order` service —
 authenticates with an **email and password**, exactly like a human operator
