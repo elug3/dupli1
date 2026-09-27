@@ -89,10 +89,13 @@ jobs:
     env:
       DEPLOY_DIR: /opt/dupli1/repo
     steps:
-      - name: Check out ${{ github.sha }} in the deploy checkout
-        run: |
-          git -C "$DEPLOY_DIR" fetch --depth 1 origin "$GITHUB_SHA"
-          git -C "$DEPLOY_DIR" checkout --detach FETCH_HEAD
+      # Only the script, into the job's workspace. deploy.sh moves the deploy
+      # checkout itself, under the lock the frontend deploys take too, so a
+      # web deploy can't read the compose file while this one changes it.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy/venus/deploy.sh
+          sparse-checkout-cone-mode: false
 
       - name: Log in to GHCR
         env:
@@ -104,7 +107,7 @@ jobs:
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/docker
           GHCR_OWNER: ${{ github.repository_owner }}
-        run: '"$DEPLOY_DIR/deploy/venus/deploy.sh" "sha-${GITHUB_SHA::7}"'
+        run: deploy/venus/deploy.sh --ref "$GITHUB_SHA" "sha-${GITHUB_SHA::7}"
 
       - name: Log out of GHCR
         if: always()

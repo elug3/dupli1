@@ -101,17 +101,21 @@ the tunnel. Direct clients can't spoof their IP: only the tunnel listener
 
 A push to `main` then deploys: the `deploy` job runs on a self-hosted runner on
 VENUS (label `venus`, `production` environment), so nothing listens inbound. It
-moves the deploy checkout `/opt/dupli1/repo` to the pushed commit and runs
-`deploy/venus/deploy.sh sha-<short>` from there, which:
+checks out only `deploy/venus/deploy.sh` into its own workspace and runs
+`deploy.sh --ref <commit> sha-<short>`, which, holding the deploy lock:
 
-1. pulls the 8 backend images (`auth product order cart payment profile
+1. moves the deploy checkout `/opt/dupli1/repo` (the compose file and gateway
+   config the stack runs from) to the pushed commit;
+2. pulls the 8 backend images (`auth product order cart payment profile
    notification proxy`) and tags them `dupli1-prod/<name>:<tag>`;
-2. sets `DUPLI1_BACKEND_TAG=<tag>` in `/opt/dupli1/.env` and runs `up -d` for
+3. sets `DUPLI1_BACKEND_TAG=<tag>` in `/opt/dupli1/.env` and runs `up -d` for
    those services (`redis` and `nats` stay on `DUPLI1_IMAGE_TAG`);
-3. waits up to 2 min for every service to run without restarting, every
+4. waits up to 2 min for every service to run without restarting, every
    gateway health route to answer 200 and the gateway's internal listener
    (`:8081`) to answer, then holds 15 s;
-4. otherwise puts the previous tag back and restarts on it, failing the job.
+5. otherwise puts the previous tag **and the previous checkout** back and
+   restarts on them, failing the job — old images with the compose file they
+   ran with, not the new one.
 
 The gateway config — the small `nginx-gateway.conf` wrapper plus the shared
 `api/gateway/routes.conf` and `hosts.dupli1.local.conf` it includes — is mounted
@@ -134,7 +138,16 @@ service and its own tag (`DUPLI1_WEB_TAG`, `DUPLI1_MANAGE_WEB_TAG`, both falling
 back to `DUPLI1_IMAGE_TAG`) and checks `/` and `/login` on its host through the
 edge. The frontend repos don't update `/opt/dupli1/repo`; they use whatever
 `deploy.sh` and compose file the last backend deploy left there. All three
-repos take the lock `/opt/dupli1/.deploy.lock`, so deploys run one at a time.
+repos take the lock `/opt/dupli1/.deploy.lock`, so deploys run one at a time,
+and the checkout only moves while the backend deploy holds it — a frontend
+deploy never reads the compose file halfway through a backend deploy.
+
+A change that needs a new `/opt/dupli1/.env` value in the compose file of both
+the backend and a frontend (the service API keys, for example) reaches the
+frontend only after the backend deploy has moved the checkout. Merge the
+backend change first and let its deploy finish; a frontend deploy that ran
+earlier reads the old compose file and fails without touching anything, and
+re-running it afterwards is enough.
 
 | Repo | Runner (`~/…`) | systemd unit |
 |------|----------------|--------------|
