@@ -7,6 +7,8 @@ resolver 10.0.0.2 valid=10s ipv6=off;
 
 server {
     listen 80 default_server;
+    # Internal listener: service-to-service only (order → product internal APIs).
+    listen 8081;
     client_max_body_size 20m;
 
     proxy_set_header Host              $$host;
@@ -43,6 +45,21 @@ server {
     location = /gateway/health {
         default_type application/json;
         return 200 '{"status":"ok"}';
+    }
+
+    # Internal APIs — only dupli1-order calls these, and only on the internal
+    # listener (8081), which nothing public routes to. The public listener
+    # (80: the edge on VENUS, the ALB on AWS) answers 404, so they are not
+    # reachable from outside at all; product still checks the caller is
+    # dupli1-order (docs/permissions.md → Internal APIs). A regex location wins
+    # over the prefix locations below and matches nginx's decoded, normalized
+    # URI, so %-encoding, // or ../ cannot slip past it.
+    location ~* ^/api/v1/((products/)?inventory/reservations|products/promotions/(reserve|consume|release))(/|$) {
+        if ($$server_port != 8081) {
+            return 404;
+        }
+        set $$upstream http://product.${SERVICE_DOMAIN}:8080;
+        proxy_pass $$upstream;
     }
 
     location /api/v1/auth/ {

@@ -36,10 +36,18 @@ set_tag() {
   fi
 }
 
+# The gateway's internal listener, where order sends product's internal APIs
+# (reservations, promotion ledger). The health routes above only go through
+# :80, so without this a proxy missing :8081 would pass while checkout fails.
+internal_gateway_ok() {
+  dc exec -T proxy wget -q -O /dev/null -T 5 http://proxy.dupli1.local:8081/gateway/health >/dev/null 2>&1
+}
+
 state_of() { docker inspect -f '{{.State.Status}}/{{.RestartCount}}' "dupli1-$1-1" 2>/dev/null || echo missing; }
 
-# Every service running with the restart count it had right after `up`, and
-# every health route answering 200, held for 15 s.
+# Every service running with the restart count it had right after `up`, every
+# health route answering 200 and the internal gateway listener answering,
+# held for 15 s.
 healthy() {
   local -A base
   local s p code deadline=$((SECONDS + 120)) bad=""
@@ -54,6 +62,9 @@ healthy() {
         code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' -H Host:dupli1.com "http://127.0.0.1$p" || true)
         [[ $code == 200 ]] || { bad="$p → $code"; break; }
       done
+    fi
+    if [[ -z $bad ]] && ! internal_gateway_ok; then
+      bad="gateway internal listener :8081 not answering"
     fi
     if [[ -z $bad ]]; then
       sleep 15

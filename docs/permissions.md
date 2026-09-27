@@ -387,6 +387,8 @@ Some routes exist only for one service to call. A permission is not enough to re
 | `POST /api/v1/products/promotions/reserve\|consume\|release` | `dupli1-order` |
 | `POST /api/v1/products/inventory/reservations`, `…/{id}/commit`, `…/{id}/release` (and the legacy `/api/v1/inventory/…` aliases) | `dupli1-order` |
 
+**Not reachable from outside.** The API gateway listens twice: `:80`, which is what the public entry reaches (the `edge` on VENUS, the ALB on AWS), and `:8081`, which nothing public routes to. On `:80` the routes above answer `404`; only `:8081` passes them to product, and order's `DUPLI1_GATEWAY_URL` points there. The check is a regex location on nginx's decoded, normalized URI, so `%`-encoding, `//` or `../` do not get past it. It is in every gateway config — `api/nginx.conf` (local), `api/nginx.ecs.conf` (the proxy image, and `deploy/venus/nginx-gateway.conf` generated from it), `api/nginx.prod.conf` and `api/nginx.ecs.conf.template` — and a new internal route must be added to that regex as well as allowlisted in product.
+
 `service_name` is set only by auth's startup seeds (`DUPLI1_ORDER_SERVICE_*` → `dupli1-order`, `DUPLI1_WEB_SERVICE_*` → `dupli1-web`); no API writes it.
 
 **Rollout:** a token with no `account_type` claim was minted before auth stamped one and is judged on its permission alone. Access tokens live 15 minutes, so this only bridges a deploy in which product ships before auth; remove the fallback in `CalledBy` the release after.

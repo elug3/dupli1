@@ -122,7 +122,9 @@ services:
       DUPLI1_ORDER_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/orders?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
       DUPLI1_AUTH_URL: http://auth.dupli1.local:8080
-      DUPLI1_GATEWAY_URL: http://proxy.dupli1.local
+      # The gateway's internal listener: :80 (what the edge reaches) refuses
+      # the internal APIs order calls (nginx-gateway.conf).
+      DUPLI1_GATEWAY_URL: http://proxy.dupli1.local:8081
       DUPLI1_INVENTORY_URL: http://product.dupli1.local:8080
       DUPLI1_PRODUCT_URL: http://product.dupli1.local:8080
       NATS_URL: nats://nats.dupli1.local:4222

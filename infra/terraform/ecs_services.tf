@@ -454,7 +454,9 @@ resource "aws_ecs_task_definition" "order" {
         { name = "DUPLI1_ORDER_ADDR", value = ":8080" },
         { name = "AUTH_JWKS_URL", value = "http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json" },
         { name = "NATS_URL", value = "nats://nats.dupli1.local:4222" },
-        { name = "DUPLI1_GATEWAY_URL", value = "http://proxy.dupli1.local" },
+        # The proxy's internal listener: :80 (the ALB's target) refuses the
+        # internal APIs order calls (api/nginx.ecs.conf).
+        { name = "DUPLI1_GATEWAY_URL", value = "http://proxy.dupli1.local:8081" },
         { name = "DUPLI1_AUTH_URL", value = "http://auth.dupli1.local:8080" },
       ]
       secrets = [
@@ -837,6 +839,13 @@ resource "aws_ecs_task_definition" "proxy" {
         {
           containerPort = 80
           hostPort      = 80
+          protocol      = "tcp"
+        },
+        # Internal listener for service-to-service calls; not a target of the
+        # ALB. The ecs_tasks security group already allows it within itself.
+        {
+          containerPort = 8081
+          hostPort      = 8081
           protocol      = "tcp"
         }
       ]
