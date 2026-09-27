@@ -180,6 +180,9 @@ services:
     image: dupli1-prod/notification:${DUPLI1_IMAGE_TAG:-2026-09-26}
     environment:
       DUPLI1_NOTIFICATION_ADDR: ":8080"
+      # Telegram chat subscriptions (accepted in manage-web). VENUS-only DB:
+      # AWS ran notification in-memory, so approvals were lost on restart.
+      DUPLI1_NOTIFICATION_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/notifications?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
       MANAGE_WEB_URL: https://manage.dupli1.com
       NATS_URL: nats://nats.dupli1.local:4222
@@ -188,6 +191,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_ORDER_CHAT_ID: ${TELEGRAM_ORDER_CHAT_ID:-}
       TELEGRAM_PRODUCT_CHAT_ID: ${TELEGRAM_PRODUCT_CHAT_ID:-}
+    depends_on: { postgres: { condition: service_healthy } }
     networks: { default: { aliases: [notification.dupli1.local] } }
 
   # ── HTTP ─────────────────────────────────────────────────────────────────
