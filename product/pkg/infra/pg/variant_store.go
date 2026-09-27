@@ -301,16 +301,38 @@ func (s *ProductSearchStore) UpdateVariant(ctx context.Context, v domain.Variant
 }
 
 func (s *ProductSearchStore) DeleteVariant(ctx context.Context, sku string) error {
-	cmd, err := s.pool.Exec(ctx, `DELETE FROM product_variants WHERE sku = $1`, sku)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return wrapDB("delete variant: begin tx", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Every variant gets a stock row at creation, and stock_items restricts
+	// deleting the variant it points at. Drop the row only while it is empty
+	// (nothing on hand, nothing reserved); a non-empty row stays and the FK
+	// refuses the delete below.
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM stock_items
+		 WHERE sku_id = (SELECT sku_id FROM product_variants WHERE sku = $1)
+		   AND quantity = 0 AND reserved = 0`,
+		sku,
+	); err != nil {
+		return wrapDB("delete variant stock", err)
+	}
+
+	cmd, err := tx.Exec(ctx, `DELETE FROM product_variants WHERE sku = $1`, sku)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			return ports.Conflict(fmt.Sprintf("cannot delete variant %s: stock exists for it in inventory", sku))
+			return ports.Conflict(fmt.Sprintf("cannot delete variant %s: it still has stock on hand or reserved", sku))
 		}
 		return wrapDB("delete variant", err)
 	}
 	if cmd.RowsAffected() == 0 {
 		return fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return wrapDB("delete variant: commit", err)
 	}
 	return nil
 }
