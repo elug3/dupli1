@@ -33,6 +33,8 @@ P=$(set -a; . "$ENV_FILE"; echo "$DB_APP_PASSWORD") \
   "${DC[@]}" exec -T -e P postgres sh -c 'psql -X -q -v ON_ERROR_STOP=1 -U postgres -v pw="$P" -f -' <<'SQL'
 SELECT 'CREATE ROLE schick LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'schick') \gexec
 ALTER ROLE schick PASSWORD :'pw';
+-- VENUS-only (not in the AWS dumps, so --replace leaves it alone).
+SELECT 'CREATE DATABASE notifications OWNER schick' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'notifications') \gexec
 SQL
 
 fail=0
