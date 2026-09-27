@@ -107,8 +107,7 @@ moves the deploy checkout `/opt/dupli1/repo` to the pushed commit and runs
 1. pulls the 8 backend images (`auth product order cart payment profile
    notification proxy`) and tags them `dupli1-prod/<name>:<tag>`;
 2. sets `DUPLI1_BACKEND_TAG=<tag>` in `/opt/dupli1/.env` and runs `up -d` for
-   those services (`redis`, `nats`, `web`, `manage-web` stay on
-   `DUPLI1_IMAGE_TAG`);
+   those services (`redis` and `nats` stay on `DUPLI1_IMAGE_TAG`);
 3. waits up to 2 min for every service to run without restarting, every
    gateway health route to answer 200 and the gateway's internal listener
    (`:8081`) to answer, then holds 15 s;
@@ -124,19 +123,38 @@ listener (`proxy.dupli1.local:8081`, where order sends the internal APIs). After
 editing the file by hand, recreate the proxy yourself:
 `$DC up -d --force-recreate proxy`.
 
+### Frontends
+
+`dupli1-web` and `dupli1-manage-web` work the same way from their own repos:
+their `images.yml` publishes `ghcr.io/elug3/dupli1-web` /
+`ghcr.io/elug3/dupli1-manage-web` (`sha-<short>`, `master`) and, on pushes to
+`master`, runs `deploy.sh web sha-<short>` / `deploy.sh manage-web sha-<short>`
+from `/opt/dupli1/repo` on their own VENUS runner. Each target moves only its
+service and its own tag (`DUPLI1_WEB_TAG`, `DUPLI1_MANAGE_WEB_TAG`, both falling
+back to `DUPLI1_IMAGE_TAG`) and checks `/` and `/login` on its host through the
+edge. The frontend repos don't update `/opt/dupli1/repo`; they use whatever
+`deploy.sh` and compose file the last backend deploy left there. All three
+repos take the lock `/opt/dupli1/.deploy.lock`, so deploys run one at a time.
+
+| Repo | Runner (`~/…`) | systemd unit |
+|------|----------------|--------------|
+| `dupli1` | `actions-runner` | `actions.runner.elug3-dupli1.venus.service` |
+| `dupli1-web` | `actions-runner-web` | `actions.runner.elug3-dupli1-web.venus-web.service` |
+| `dupli1-manage-web` | `actions-runner-manage-web` | `actions.runner.elug3-dupli1-manage-web.venus-manage-web.service` |
+
 After the first CI deploy the stack runs from `/opt/dupli1/repo`, so use
 `DC="docker compose -f /opt/dupli1/repo/deploy/venus/docker-compose.yml --env-file /opt/dupli1/.env"`
 rather than a development checkout. Deploy or roll back by hand with the same
-script: `/opt/dupli1/repo/deploy/venus/deploy.sh sha-abc1234` (needs
+script: `/opt/dupli1/repo/deploy/venus/deploy.sh [web|manage-web] sha-abc1234` (needs
 `docker login ghcr.io` with a `read:packages` token while the packages are
 private).
 
-**Runner safety.** The repo is public and pull-request workflows run code from
-the PR, so a fork PR must never reach this runner. Required settings: Actions →
-*Approval for running fork pull request workflows* = **all external
-contributors**, and the `production` environment limited to the `main` branch.
-The runner runs as `serial` (in the `docker` group, i.e. root-equivalent), as
-the systemd unit `actions.runner.elug3-dupli1.venus.service`.
+**Runner safety.** The repos are public and pull-request workflows run code
+from the PR, so a fork PR must never reach these runners. Required settings in
+each of the three repos: Actions → *Approval for running fork pull request
+workflows* = **all external contributors**, and the `production` environment
+limited to the default branch (`main` / `master`). The runners run as `serial`
+(in the `docker` group, i.e. root-equivalent).
 
 ## Before cutover — checklist
 
