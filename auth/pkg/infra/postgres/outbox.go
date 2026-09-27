@@ -30,6 +30,10 @@ func (r *UserRepository) DeleteAndEnqueue(ctx context.Context, userID, subject s
 		return autherrors.ErrUserNotFound
 	}
 
+	if _, err := tx.ExecContext(ctx, `DELETE FROM service_api_keys WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("delete user api keys: %w", err)
+	}
+
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO auth_outbox (aggregate_id, subject, payload)
 		VALUES ($1, $2, $3)

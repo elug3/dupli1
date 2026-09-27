@@ -58,11 +58,21 @@ func (r *UserRepository) Save(ctx context.Context, user *domain.User) error {
 	return nil
 }
 
-// Delete removes a user by ID.
+// Delete removes a user by ID, and its API keys with it.
 func (r *UserRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, "DELETE FROM users WHERE id = $1", id)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("delete: begin: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, "DELETE FROM users WHERE id = $1", id); err != nil {
 		return fmt.Errorf("delete: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM service_api_keys WHERE user_id = $1", id); err != nil {
+		return fmt.Errorf("delete api keys: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete: commit: %w", err)
 	}
 	return nil
 }
