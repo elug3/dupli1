@@ -60,6 +60,28 @@ func TestHMACValidatorExtractsEmail(t *testing.T) {
 	}
 }
 
+// ExpiresAt is what a long-lived response (order's event stream) uses to end
+// itself when the token that opened it runs out.
+func TestHMACValidatorReportsExpiry(t *testing.T) {
+	exp := time.Now().Add(15 * time.Minute).Truncate(time.Second)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":  "user-1",
+		"type": "access",
+		"exp":  exp.Unix(),
+	})
+	signed, err := token.SignedString([]byte("test-secret"))
+	if err != nil {
+		t.Fatalf("SignedString: %v", err)
+	}
+	claims, err := NewHMACValidator("test-secret").ValidateAccessToken(signed)
+	if err != nil {
+		t.Fatalf("ValidateAccessToken: %v", err)
+	}
+	if !claims.ExpiresAt.Equal(exp) {
+		t.Fatalf("ExpiresAt = %v, want %v", claims.ExpiresAt, exp)
+	}
+}
+
 func TestHMACValidatorRejectsRefreshType(t *testing.T) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":  "user-1",

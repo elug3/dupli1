@@ -516,6 +516,7 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | `POST` | `/api/v1/orders/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout (`422` + `unavailable_items` when variants invalid) |
 | `POST` | `/api/v1/orders` | ABAC / `order.create` | Create a new order |
 | `GET` | `/api/v1/orders` | `order.read.all` | List all orders |
+| `GET` | `/api/v1/orders/events` | `order.read.all` | Live order stream (SSE): a snapshot per change, `Last-Event-ID` replay, 20s heartbeat — [order-live-events.md](order-live-events.md) |
 | `GET` | `/api/v1/orders?customer_id={id}` | ABAC / `order.read.all` | List orders for a customer |
 | `GET` | `/api/v1/orders/{id}` | ABAC / `order.read.all` | Get a single order |
 | `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` | Accept paid order (`paid` → `confirmed`; 2-hour SLA) |

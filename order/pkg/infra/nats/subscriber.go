@@ -58,6 +58,29 @@ func (s *Subscriber) Subscribe(ctx context.Context, subject string, handler port
 	return nil
 }
 
+// SubscribeAll delivers every message on subject to this replica. Unlike
+// Subscribe it joins no queue group, so each replica receives each message:
+// right for fan-out (the live order stream), wrong for work that must happen
+// once.
+func (s *Subscriber) SubscribeAll(ctx context.Context, subject string, handler ports.MessageHandler) error {
+	if s == nil || s.conn == nil {
+		return fmt.Errorf("nats subscriber not initialized")
+	}
+	sub, err := s.conn.Subscribe(subject, func(msg *natsgo.Msg) {
+		if handler == nil {
+			return
+		}
+		if err := handler(ctx, msg.Subject, msg.Data); err != nil {
+			log.Printf("order nats broadcast handler subject=%s error=%v", msg.Subject, err)
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("subscribe %s: %w", subject, err)
+	}
+	s.subs = append(s.subs, sub)
+	return nil
+}
+
 func (s *Subscriber) Close() {
 	s.closeOnce.Do(func() {
 		if s == nil {

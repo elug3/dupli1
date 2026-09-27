@@ -321,6 +321,7 @@ registered as an alias.
 |--------|------|-------------------|
 | `POST` | `/api/v1/orders` | ABAC or `order.create` |
 | `GET` | `/api/v1/orders` | `order.read.all` |
+| `GET` | `/api/v1/orders/events` | `order.read.all` (live stream; ends when the token expires) |
 | `GET` | `/api/v1/orders?customer_id=` | ABAC or `order.read.all` |
 | `GET` | `/api/v1/orders/{id}` | ABAC or `order.read.all` |
 | `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` |

@@ -86,6 +86,7 @@ ROUTES=(
   /api/v1/coupons/redeem=product
   /api/v1/inventory/items/SKU1=product
   /api/v1/orders=order
+  /api/v1/orders/events=order
   /api/v1/checkout/sessions=order
   /api/v1/cart=cart
   /api/v1/carts/c1=cart

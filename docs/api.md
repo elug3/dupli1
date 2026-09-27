@@ -940,6 +940,7 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 |--------|------|-------------|
 | POST | `/api/v1/orders` | Create order directly |
 | GET | `/api/v1/orders` | List all orders (`order.read.all`) |
+| GET | `/api/v1/orders/events` | Live order stream, Server-Sent Events (`order.read.all`) — see [order-live-events.md](order-live-events.md) |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
 | POST | `/api/v1/orders/{id}/confirm` | `order.status.update` — manager accepts a paid order (`paid` → `confirmed`; 2-hour SLA from `paid_at`, auto-confirmed by the sweep otherwise) |

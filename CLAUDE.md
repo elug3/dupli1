@@ -134,6 +134,8 @@ Event flow: `payment.succeeded` (NATS, published by payment outbox) → order ma
 
 Both order and payment use a **transactional outbox** pattern: event rows are written in the same DB transaction as the state change, then a drain worker publishes to NATS. This makes state changes the source of truth — NATS failures are retried.
 
+The admin console's **live order stream** (`GET /api/v1/orders/events`, SSE, `order.read.all`) is fed from that outbox: every replica holds a *broadcast* (non-queue-group) NATS subscription to `order.*` and relays each change, as `GET /orders/{id}` presents it, to the streams it holds (`order/pkg/livefeed`). A stream ends when its token expires; the client reconnects with `Last-Event-ID` and replays. A new order subject only reaches the console once it is added to `livefeed`'s relayed set. See [docs/order-live-events.md](docs/order-live-events.md).
+
 ### Auth token flow
 
 `POST /login` → `{ "refresh_token": "..." }`. Call `POST /refresh` with that token → `{ "token": "<access_jwt>", "refresh_token": "<new_jwt>" }`. Send as `Authorization: Bearer <token>` on protected routes. Access tokens carry a `permissions` string array claim (no `roles`), plus `account_type` and, for service accounts, `service_name`.

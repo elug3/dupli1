@@ -30,6 +30,10 @@ type Claims struct {
 	AccountType string
 	// ServiceName names the calling service account (e.g. dupli1-order).
 	ServiceName string
+	// ExpiresAt is the token's `exp`; zero when the token carries none. A
+	// long-lived response (order's event stream) ends here, since the token
+	// is only checked when the request starts.
+	ExpiresAt time.Time
 }
 
 // CalledBy reports whether the token belongs to one of the named service
@@ -272,12 +276,17 @@ func claimsFromMap(mapClaims jwt.MapClaims) (Claims, error) {
 	email, _ := mapClaims["email"].(string)
 	accountType, _ := mapClaims["account_type"].(string)
 	serviceName, _ := mapClaims["service_name"].(string)
+	var expiresAt time.Time
+	if exp, err := mapClaims.GetExpirationTime(); err == nil && exp != nil {
+		expiresAt = exp.Time
+	}
 	return Claims{
 		UserID:      userID,
 		Email:       strings.TrimSpace(email),
 		Permissions: permissions.Dedupe(rawPerms),
 		AccountType: accountType,
 		ServiceName: serviceName,
+		ExpiresAt:   expiresAt,
 	}, nil
 }
 
