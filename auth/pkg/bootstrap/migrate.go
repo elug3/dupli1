@@ -46,10 +46,13 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_outbox_pending ON auth_outbox (created_at) WHERE published_at IS NULL`,
 		// Service-account API keys (docs/auth-service-api-keys.md). Only the
-		// SHA-256 of a key is stored; deleting the user deletes its keys.
+		// SHA-256 of a key is stored. No foreign key to users: users.id is
+		// UUID on older databases and TEXT on newer ones, and a TEXT column
+		// cannot reference a UUID one (42804), so the user repository deletes
+		// a user's keys itself.
 		`CREATE TABLE IF NOT EXISTS service_api_keys (
 			id           TEXT PRIMARY KEY,
-			user_id      TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			user_id      TEXT        NOT NULL,
 			name         TEXT        NOT NULL,
 			prefix       TEXT        NOT NULL,
 			key_hash     TEXT        NOT NULL,
