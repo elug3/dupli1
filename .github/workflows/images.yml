@@ -1,8 +1,9 @@
 name: Images
 
 # Builds every service image. Pull requests only build (a Dockerfile check);
-# pushes to main, v* tags and manual runs publish to GHCR, where VENUS pulls
-# them (docs/deployment-venus.md → "Deploying new code").
+# pushes to main, v* tags and manual runs publish to GHCR. Pushes to main then
+# deploy to VENUS through the self-hosted runner there
+# (docs/deployment-venus.md → "Deploying new code").
 #
 #   ghcr.io/elug3/dupli1-<service>:sha-<short>   every published build
 #   ghcr.io/elug3/dupli1-<service>:main          latest main
@@ -69,3 +70,44 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # Runs on VENUS itself (self-hosted runner, label "venus"), so nothing needs
+  # an inbound port. main pushes only — never pull requests: this repo is
+  # public, and fork PRs need maintainer approval before any job runs.
+  deploy:
+    name: Deploy to VENUS
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, venus]
+    environment: production
+    concurrency:
+      group: venus-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DEPLOY_DIR: /opt/dupli1/repo
+    steps:
+      - name: Check out ${{ github.sha }} in the deploy checkout
+        run: |
+          git -C "$DEPLOY_DIR" fetch --depth 1 origin "$GITHUB_SHA"
+          git -C "$DEPLOY_DIR" checkout --detach FETCH_HEAD
+
+      - name: Log in to GHCR
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Deploy
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker
+          GHCR_OWNER: ${{ github.repository_owner }}
+        run: '"$DEPLOY_DIR/deploy/venus/deploy.sh" "sha-${GITHUB_SHA::7}"'
+
+      - name: Log out of GHCR
+        if: always()
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker
+        run: rm -rf "$DOCKER_CONFIG"
