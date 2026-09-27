@@ -22,7 +22,8 @@ VENUS  docker compose project "dupli1"  (deploy/venus/docker-compose.yml)
     :8080 cloudflared only (trusts CF-Connecting-IP), not published
     :80   direct HTTP, published on 0.0.0.0 for the home network
     manage.dupli1.com  ──▶ manage-web
-    /api/*, /gateway/* ──▶ proxy (API gateway = production's nginx.ecs.conf)
+    /api/*, /gateway/* ──▶ proxy :80 (API gateway = production's nginx.ecs.conf)
+                             internal APIs answer 404 here; order uses proxy :8081
     /product-images/*  ──▶ s3 (SeaweedFS, anonymous read-only on product-images)
     everything else    ──▶ web
   auth product order cart payment profile notification     ← exact ECS images
@@ -109,6 +110,16 @@ for s in auth product order cart payment profile notification proxy; do
   docker tag  ghcr.io/elug3/dupli1-$s:$TAG dupli1-prod/$s:$TAG
 done
 # set DUPLI1_IMAGE_TAG=$TAG in /opt/dupli1/.env, then
+$DC up -d
+```
+
+`nginx-gateway.conf` is mounted, not baked into an image, so `$DC up -d` does
+not notice when it changes. After pulling a change to it, recreate the proxy
+**before** anything that depends on the new config — e.g. order's
+`DUPLI1_GATEWAY_URL` on `:8081` needs the proxy listening there first:
+
+```bash
+$DC up -d --force-recreate proxy
 $DC up -d
 ```
 

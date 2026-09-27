@@ -143,7 +143,7 @@ Refresh tokens rotate on every use: `/refresh` invalidates the token it was give
 
 Fine-grained permissions (`{resource}.{action}`, e.g. `product.create`, `order.ship`). Wildcards: `*` (owner), `admin.*`, `{resource}.*`. Storefront customers use ABAC (JWT `sub` must match resource owner) with no explicit permission required.
 
-Internal APIs (product's promotion `reserve|consume|release` and inventory reservations) also require the caller to be the named service account (`dupli1-order`), so no wildcard or owner token reaches them. See `docs/permissions.md` → Internal APIs.
+Internal APIs (product's promotion `reserve|consume|release` and inventory reservations) also require the caller to be the named service account (`dupli1-order`), so no wildcard or owner token reaches them. They are also off the public path: the gateway answers `404` for them on `:80` (what the edge/ALB reaches) and serves them only on its internal `:8081` listener, where order's `DUPLI1_GATEWAY_URL` points. A new internal route goes in the regex in every `api/nginx*.conf` too. See `docs/permissions.md` → Internal APIs.
 
 Key bundles: `catalog_editor`, `catalog_admin`, `fulfillment`, `user_admin`, `support_agent`. See `docs/permissions.md` for the full catalog.
 

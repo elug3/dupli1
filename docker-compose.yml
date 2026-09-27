@@ -273,8 +273,9 @@ services:
       - "8083:8080"
     environment:
       DUPLI1_ORDER_ADDR: :8080
-      # Stock/coupons go through the internal nginx gateway (not direct product DNS).
-      DUPLI1_GATEWAY_URL: http://dupli1-proxy
+      # Stock/coupons go through the internal nginx gateway (not direct product DNS),
+      # on its internal listener: :80 refuses the internal APIs (api/nginx.conf).
+      DUPLI1_GATEWAY_URL: http://dupli1-proxy:8081
       # Auth login stays direct so bootstrap does not wait on the proxy
       # (proxy depends_on order health — would deadlock if auth went via gateway at startup).
       DUPLI1_AUTH_URL: http://dupli1-auth:8080
