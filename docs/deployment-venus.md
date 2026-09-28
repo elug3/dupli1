@@ -50,9 +50,13 @@ VENUS  docker compose project "dupli1"  (deploy/venus/docker-compose.yml)
   same S3 API the product service's minio-go client uses. Note the repo's
   local `docker-compose.yml` still points at `minio/minio:latest` and will fail
   to pull on a fresh machine.
-- **Kept as production had it:** `profile` and `notification` run without a
-  database (in-memory), `support` is not deployed, redis and NATS JetStream
-  have no volumes. These are pre-existing gaps, not migration changes.
+- **Kept as production had it:** `support` is not deployed, redis and NATS
+  JetStream have no volumes. These are pre-existing gaps, not migration
+  changes. `profile` and `notification` also started in memory, as on ECS;
+  both now have a database (`profiles`, `notifications`), which the one-shot
+  `db-init` service creates if missing before either starts. In memory,
+  profile lost every saved shipping address on each restart and deploy, so
+  shoppers retyped their address at every checkout.
 
 ## Files and locations
 
@@ -275,5 +279,4 @@ every connector that isn't using the new one.
 - Rotate the `Agent` IAM access key, then close the IAM user/role access.
 - Set up backups **on VENUS** (nightly `pg_dump` + image volume) to somewhere
   off the machine; there is no RDS/S3 durability any more.
-- Consider giving `profile` and `notification` databases, and deploying
-  `support` — both gaps predate the migration.
+- Consider deploying `support` — the gap predates the migration.

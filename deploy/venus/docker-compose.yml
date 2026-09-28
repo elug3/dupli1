@@ -34,6 +34,31 @@ services:
       timeout: 5s
       retries: 20
 
+  # Creates the VENUS-only databases (not in the AWS dumps) if missing, then
+  # exits. Services that need one depend on it, so `deploy.sh` (which runs
+  # `compose up` with dependencies) creates a new database before the first
+  # container that uses it starts — no manual psql step to forget.
+  db-init:
+    image: postgres:16
+    restart: "no"
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+    environment:
+      PGPASSWORD: ${PG_SUPERUSER_PASSWORD:?run make-env.sh}
+      APP_PASSWORD: ${DB_APP_PASSWORD}
+    entrypoint: ["sh", "-c"]
+    # The services connect as schick. On VENUS it came with the AWS import;
+    # a fresh host gets it here. An existing role is never altered.
+    command:
+      - |
+        psql -h postgres -U postgres -X -q -v ON_ERROR_STOP=1 -v pw="$$APP_PASSWORD" <<'SQL'
+        SELECT format('CREATE ROLE schick LOGIN PASSWORD %L', :'pw') WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'schick') \gexec
+        SELECT 'CREATE DATABASE notifications OWNER schick' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'notifications') \gexec
+        SELECT 'CREATE DATABASE profiles OWNER schick' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'profiles') \gexec
+        SQL
+    depends_on: { postgres: { condition: service_healthy } }
+
   # S3-compatible object store for product images (was S3 + CloudFront).
   # SeaweedFS because MinIO stopped publishing community images. Identities:
   # dupli1 (the product service) is full access; anonymous may only read
@@ -177,9 +202,14 @@ services:
     image: dupli1-prod/profile:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
       DUPLI1_PROFILE_ADDR: ":8080"
+      # Customer profiles and saved shipping addresses. Without it profile ran
+      # in memory (as it did on ECS) and lost every address on each restart
+      # and deploy, so shoppers retyped their address at every checkout.
+      DUPLI1_PROFILE_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/profiles?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
       NATS_URL: nats://nats.dupli1.local:4222
       JWT_SECRET: ${JWT_SECRET}
+    depends_on: { db-init: { condition: service_completed_successfully } }
     networks: { default: { aliases: [profile.dupli1.local] } }
 
   notification:
@@ -198,7 +228,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_ORDER_CHAT_ID: ${TELEGRAM_ORDER_CHAT_ID:-}
       TELEGRAM_PRODUCT_CHAT_ID: ${TELEGRAM_PRODUCT_CHAT_ID:-}
-    depends_on: { postgres: { condition: service_healthy } }
+    depends_on: { db-init: { condition: service_completed_successfully } }
     networks: { default: { aliases: [notification.dupli1.local] } }
 
   # ── HTTP ─────────────────────────────────────────────────────────────────
