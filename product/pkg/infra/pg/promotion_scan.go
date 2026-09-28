@@ -13,7 +13,7 @@ import (
 // new field cannot be added to some queries and forgotten in others.
 const promotionColumns = `code, scope, discount, description, expires, active, ` +
 	`conditions, benefit, expires_at, max_redemptions, max_per_customer, terms, ` +
-	`redemption_count, updated_at, entitlement_ttl_days`
+	`redemption_count, updated_at, entitlement_ttl_days, auto_issue`
 
 // scanner is satisfied by both pgx.Row and pgx.Rows.
 type scanner interface {
@@ -29,11 +29,12 @@ func scanPromotion(row scanner) (*domain.Promotion, error) {
 		expiresAt  *time.Time
 		maxRedeem  *int
 		updatedAt  time.Time
+		autoIssue  string
 	)
 	if err := row.Scan(
 		&p.Code, &scope, &p.Discount, &p.Description, &p.Expires, &p.Active,
 		&conditions, &benefit, &expiresAt, &maxRedeem, &p.MaxPerCustomer, &p.Terms,
-		&p.RedemptionCount, &updatedAt, &p.EntitlementTTLDays,
+		&p.RedemptionCount, &updatedAt, &p.EntitlementTTLDays, &autoIssue,
 	); err != nil {
 		return nil, err
 	}
@@ -41,6 +42,7 @@ func scanPromotion(row scanner) (*domain.Promotion, error) {
 	p.ExpiresAt = expiresAt
 	p.MaxRedemptions = maxRedeem
 	p.UpdatedAt = updatedAt
+	p.AutoIssue = domain.AutoIssue(autoIssue)
 
 	// A document that will not parse must not be treated as "no rules": that
 	// would turn a restricted code into an unrestricted one. Fail the read.
@@ -102,6 +104,9 @@ func applyPromotionPatch(p *domain.Promotion, patch ports.PromotionPatch) {
 	}
 	if patch.EntitlementTTLDays != nil {
 		p.EntitlementTTLDays = *patch.EntitlementTTLDays
+	}
+	if patch.AutoIssue != nil {
+		p.AutoIssue = *patch.AutoIssue
 	}
 	if patch.ClearExpiresAt {
 		p.ExpiresAt = nil

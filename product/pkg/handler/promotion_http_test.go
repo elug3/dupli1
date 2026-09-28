@@ -9,7 +9,6 @@ import (
 	"github.com/elug3/dupli1/product/pkg/handler"
 	"github.com/elug3/dupli1/product/pkg/infra/memory"
 	"github.com/elug3/dupli1/product/pkg/middleware"
-	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
@@ -105,9 +104,11 @@ func TestPromotionWalletRequiresAuth(t *testing.T) {
 
 func TestPromotionWalletListsEntitlementsForTokenSubject(t *testing.T) {
 	mux, svc := newPromotionHTTPMux(t)
-	active := true
-	if _, err := svc.Update(t.Context(), "WELCOME50", ports.PromotionPatch{Active: &active}); err != nil {
-		t.Fatalf("enable WELCOME50: %v", err)
+	welcome := fixedGlobalPromotion("WELCOME50", 50000)
+	welcome.Scope = domain.ScopeSingleUser
+	welcome.AutoIssue = domain.AutoIssueUserRegistered
+	if _, err := svc.Create(t.Context(), welcome); err != nil {
+		t.Fatalf("create WELCOME50: %v", err)
 	}
 	if _, err := svc.Issue(t.Context(), "WELCOME50", "cust-wallet", "system", "k1", ""); err != nil {
 		t.Fatalf("Issue: %v", err)

@@ -1,6 +1,6 @@
 # Promotional code plan (discount + sales-trackable referral)
 
-**Status:** **Phases 1–3 implemented (2026-09-16). The sign-up campaign is built and seeded inactive — enable `WELCOME50` in the admin to go live.** Supersedes the earlier "Planning / not started, target v1.2+" status.
+**Status:** **Phases 1–3 implemented (2026-09-16). The sign-up campaign is built and inactive — enable `WELCOME50` in the admin to go live. Campaigns are registered at runtime (`auto_issue`), not seeded.** Supersedes the earlier "Planning / not started, target v1.2+" status.
 Plan 2026-08-31; types + flexible conditions + policy decisions 2026-09-13; **terminology, sign-up campaign scope and resequencing 2026-09-16.**
 **Repos:** `dupli1` (product, order, auth), `dupli1-web`, `dupli1-manage-web`.
 **Related:** [product-promotion-rename.md](product-promotion-rename.md) (the `coupon` → `promotion` cutover), [checkout-session.md](checkout-session.md), [api.md](api.md), [payment-service.md](payment-service.md) (refund policy), [permissions.md](permissions.md), [product-multi-category-design.md](product-multi-category-design.md), [product-attributes.md](product-attributes.md), [product-guest-views-plan.md](product-guest-views-plan.md), [TODO.md](TODO.md).
@@ -86,8 +86,15 @@ Percent-off, shipping benefits, category/brand predicates and referral attributi
 a decision two others already owned: both stores seed the definition, so it
 always exists, and `active` decides whether customers can spend it — a
 manager's call, as decided above. Unset, the issuer never subscribed and no
-registration got a code, with nothing on any screen to say so. The code is now
-`domain.WelcomeCode`, and a test pins it to what the stores seed.
+registration got a code, with nothing on any screen to say so.
+
+**No compiled-in code either (2026-09-28).** The env var was first replaced by
+a `domain.WelcomeCode` constant the stores seeded. That constant and the seed
+are gone too: which codes a sign-up is issued is the definitions' own
+`auto_issue` field (`user_registered`), set through the admin API like every
+other campaign setting. The existing `WELCOME50` row was marked once, when the
+column was added, so production behaves as before. With no code marked, a
+sign-up is issued nothing and product logs that it was.
 
 **Auto-issue input already exists.** `auth` publishes `user.registered` today (`auth/pkg/service/service.go:454`, covered by `TestRegisterPublishesUserRegisteredEvent`) with `{event_type, user_id, email, account_type, occurred_at}`. It is declared as a **local subject string** in auth, not in `shared/pkg/events`. Phase 3 promotes it to the shared contract alongside `UserDeleted`, per the one-canonical-contract-per-pair rule in the repo guide, then subscribes product to it. Issuing must be **idempotent** on `(code, customer_id, trigger_key)` so a redelivered event cannot mint duplicates, and must only fire for `account_type` customers — never managers or service accounts.
 

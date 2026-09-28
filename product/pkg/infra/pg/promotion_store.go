@@ -18,9 +18,6 @@ func NewPromotionStore(pool *pgxpool.Pool) (*PromotionStore, error) {
 	if err := store.migrate(); err != nil {
 		return nil, err
 	}
-	if err := store.seedDefaults(); err != nil {
-		return nil, err
-	}
 	return store, nil
 }
 
@@ -72,6 +69,9 @@ func (s *PromotionStore) migrateFreshSchema() error {
 		return err
 	}
 	if err := s.migrateEntitlements(); err != nil {
+		return err
+	}
+	if err := s.migrateAutoIssue(); err != nil {
 		return err
 	}
 	return s.backfillLegacyBenefit()
@@ -190,47 +190,42 @@ func (s *PromotionStore) renameCouponsTableIfNeeded() error {
 	return nil
 }
 
-func (s *PromotionStore) seedDefaults() error {
-	// Bootstrap seed data at process start; no request context available.
-	if _, err := s.pool.Exec(context.Background(), `
-		INSERT INTO promotions (code, discount, description, expires, active)
-		VALUES ('SUMMER30', 0.30, 'Summer sale — all items', 'Aug 31, 2026', TRUE)
-		ON CONFLICT (code) DO NOTHING
-	`); err != nil {
-		return err
+// migrateAutoIssue adds the auto_issue column.
+//
+// The sign-up campaign used to be a constant, WELCOME50, that the
+// registration issuer always granted. Now the issuer grants whatever codes a
+// manager marked auto_issue, so an environment that already has that row is
+// marked once, the first time the column appears, and new sign-ups keep
+// getting it. Only then: a manager who later clears the flag must not see it
+// come back on the next deploy.
+func (s *PromotionStore) migrateAutoIssue() error {
+	ctx := context.Background()
+	var exists bool
+	if err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = current_schema()
+			  AND table_name = 'promotions' AND column_name = 'auto_issue'
+		)
+	`).Scan(&exists); err != nil {
+		return fmt.Errorf("inspect promotions.auto_issue: %w", err)
 	}
-
-	// The sign-up campaign's definition, seeded so the registration issuer and
-	// the backfill have something to issue against in every environment.
-	//
-	// It is seeded INACTIVE on purpose. Creating a live 50,000원 discount on
-	// every environment the moment this deploys is not a decision a migration
-	// should make — a manager enables it when marketing is ready. Entitlements
-	// issued while it is inactive are not wasted: flipping active makes every
-	// one of them work, and each keeps the expiry it was issued with.
-	//
-	// ON CONFLICT DO NOTHING, so enabling it (or editing it) is never undone
-	// by the next deploy.
-	_, err := s.pool.Exec(context.Background(), `
-		INSERT INTO promotions (
-			code, scope, discount, description, expires, active,
-			conditions, benefit, max_per_customer, entitlement_ttl_days, terms
-		)
-		VALUES (
-			$1, 'single_user', 0, 'First-purchase discount', '', FALSE,
-			$2::jsonb, $3::jsonb, 1, 30, '100,000원 이상 구매 시 50,000원 할인'
-		)
-		ON CONFLICT (code) DO NOTHING
-	`, domain.WelcomeCode, welcome50Conditions, welcome50Benefit)
-	return err
+	if exists {
+		return nil
+	}
+	if _, err := s.pool.Exec(ctx,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS auto_issue TEXT NOT NULL DEFAULT ''`,
+	); err != nil {
+		return fmt.Errorf("migrate promotions.auto_issue: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE promotions SET auto_issue = $1, updated_at = now()
+		WHERE code = 'WELCOME50' AND scope = 'single_user'
+	`, string(domain.AutoIssueUserRegistered)); err != nil {
+		return fmt.Errorf("carry over the sign-up campaign: %w", err)
+	}
+	return nil
 }
-
-// The sign-up campaign's rules, written once here so the seed and the docs
-// cannot disagree: 50,000원 off goods, on orders of 100,000원 or more.
-const (
-	welcome50Conditions = `{"version":1,"all":[{"attr":"subtotal_won","op":"gte","value":100000}]}`
-	welcome50Benefit    = `{"target":"goods","discount_type":"fixed","discount_fixed_won":50000,"apply_to":"entire_subtotal"}`
-)
 
 func (s *PromotionStore) List(ctx context.Context) ([]domain.Promotion, error) {
 	rows, err := s.pool.Query(ctx, `SELECT `+promotionColumns+` FROM promotions ORDER BY code`)
@@ -263,11 +258,11 @@ func (s *PromotionStore) Create(ctx context.Context, c domain.Promotion) error {
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO promotions (code, scope, discount, description, expires, active,
 			conditions, benefit, expires_at, max_redemptions, max_per_customer, terms,
-			entitlement_ttl_days, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
+			entitlement_ttl_days, auto_issue, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())
 	`, c.Code, string(c.EffectiveScope()), c.Discount, c.Description, c.Expires, c.Active,
 		conditions, benefit, c.ExpiresAt, c.MaxRedemptions, c.EffectiveMaxPerCustomer(), c.Terms,
-		c.EntitlementTTLDays)
+		c.EntitlementTTLDays, string(c.AutoIssue))
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ports.Conflict("promotion already exists")
@@ -292,12 +287,13 @@ func (s *PromotionStore) Update(ctx context.Context, code string, patch ports.Pr
 	_, err = s.pool.Exec(ctx, `
 		UPDATE promotions SET scope = $2, discount = $3, description = $4, expires = $5,
 			active = $6, conditions = $7, benefit = $8, expires_at = $9, max_redemptions = $10,
-			max_per_customer = $11, terms = $12, entitlement_ttl_days = $13, updated_at = now()
+			max_per_customer = $11, terms = $12, entitlement_ttl_days = $13, auto_issue = $14,
+			updated_at = now()
 		WHERE code = $1
 	`, current.Code, string(current.EffectiveScope()), current.Discount, current.Description,
 		current.Expires, current.Active, conditions, benefit, current.ExpiresAt,
 		current.MaxRedemptions, current.EffectiveMaxPerCustomer(), current.Terms,
-		current.EntitlementTTLDays)
+		current.EntitlementTTLDays, string(current.AutoIssue))
 	if err != nil {
 		return nil, wrapDB("update promotion", err)
 	}

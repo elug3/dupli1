@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -101,6 +102,33 @@ func (s *PromotionService) Update(ctx context.Context, code string, patch ports.
 // the right scope before it starts issuing, say.
 func (s *PromotionService) Get(ctx context.Context, code string) (*domain.Promotion, error) {
 	return s.store.Get(ctx, domain.NormalizedCode(code))
+}
+
+// AutoIssued returns the single-user codes set to be issued on trigger,
+// ordered by code. Definitions past their expiry are left out: an entitlement
+// to a code that can no longer be used would only clutter a wallet. Inactive
+// ones are kept, so a campaign can collect sign-ups before it is switched on.
+func (s *PromotionService) AutoIssued(ctx context.Context, trigger domain.AutoIssue) ([]domain.Promotion, error) {
+	if trigger == domain.AutoIssueNone {
+		return nil, nil
+	}
+	all, err := s.store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	now := s.now()
+	var out []domain.Promotion
+	for _, p := range all {
+		if p.AutoIssue != trigger || p.EffectiveScope() != domain.ScopeSingleUser {
+			continue
+		}
+		if p.IsExpired(now) {
+			continue
+		}
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Code < out[j].Code })
+	return out, nil
 }
 
 func (s *PromotionService) Delete(ctx context.Context, code string) error {
@@ -301,6 +329,17 @@ func validateDefinition(p domain.Promotion) error {
 	if err := p.Conditions.Validate(); err != nil {
 		return ports.Invalid(err.Error())
 	}
+	if p.EntitlementTTLDays < 0 {
+		return ports.Invalid("entitlement_ttl_days cannot be negative")
+	}
+	if !p.AutoIssue.Valid() {
+		return ports.Invalid(fmt.Sprintf("auto_issue %q is not one of user_registered", p.AutoIssue))
+	}
+	// Only an entitlement can carry a code to one account; a global code is
+	// already open to everyone, so auto-issuing it would mean nothing.
+	if p.AutoIssue != domain.AutoIssueNone && p.EffectiveScope() != domain.ScopeSingleUser {
+		return ports.Invalid("auto_issue is only for single_user promotional codes")
+	}
 	// A definition may carry no benefit document only while the legacy
 	// percentage column is still meaningful; otherwise it must be explicit.
 	if p.Benefit.IsZero() {
@@ -335,6 +374,12 @@ func applyPatchForValidation(p *domain.Promotion, patch ports.PromotionPatch) {
 	}
 	if patch.MaxPerCustomer != nil {
 		p.MaxPerCustomer = *patch.MaxPerCustomer
+	}
+	if patch.EntitlementTTLDays != nil {
+		p.EntitlementTTLDays = *patch.EntitlementTTLDays
+	}
+	if patch.AutoIssue != nil {
+		p.AutoIssue = *patch.AutoIssue
 	}
 	if patch.ClearMaxRedemptions {
 		p.MaxRedemptions = nil

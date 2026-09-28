@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -12,17 +13,18 @@ import (
 	"github.com/elug3/dupli1/shared/pkg/events"
 )
 
-// WelcomePromotionIssuer grants a new customer their welcome promotional code
-// when auth publishes user.registered.
+// WelcomePromotionIssuer grants a new customer every promotional code a manager
+// marked auto_issue = user_registered, when auth publishes user.registered.
 //
 // Everything about it is built to survive redelivery. Core NATS does not
 // redeliver on its own, but a republish after a failed publish does reach the
 // subscriber twice, and issuing is keyed on the event's user id so the second
 // delivery mints nothing.
-// The code it issues is domain.WelcomeCode, which both stores seed, so the
-// issuer always has a definition to work against. Whether customers can spend
-// what it grants is the definition's `active` flag: entitlements minted while
-// the campaign is off all start working the moment a manager enables it.
+// Which codes it issues is data, set at runtime through the promotions admin
+// API: nothing is compiled in or seeded. Whether customers can spend what it
+// grants is each definition's `active` flag, so entitlements minted while a
+// campaign is off all start working the moment a manager enables it. To stop
+// issuing a campaign, clear its auto_issue.
 type WelcomePromotionIssuer struct {
 	promotions *PromotionService
 }
@@ -65,13 +67,30 @@ func (i *WelcomePromotionIssuer) Handle(ctx context.Context, subject string, pay
 		return nil
 	}
 
-	// The trigger key is the event's own identity, so a redelivery of the same
-	// registration is a no-op rather than a second entitlement.
-	triggerKey := events.UserRegistered + ":" + event.UserID
-	entitlement, err := i.promotions.Issue(ctx, domain.WelcomeCode, event.UserID, "system", triggerKey, "")
+	codes, err := i.promotions.AutoIssued(ctx, domain.AutoIssueUserRegistered)
 	if err != nil {
-		return fmt.Errorf("issue %s to %s: %w", domain.WelcomeCode, event.UserID, err)
+		return fmt.Errorf("list sign-up promotions for %s: %w", event.UserID, err)
 	}
-	log.Printf("promotion %s issued to %s (entitlement %s)", domain.WelcomeCode, event.UserID, entitlement.ID)
-	return nil
+	if len(codes) == 0 {
+		// Not an error — a shop may run no sign-up campaign — but say so,
+		// because a campaign someone expected to be running looks the same.
+		log.Printf("no promotional code is set to auto-issue on sign-up; %s was issued nothing", event.UserID)
+		return nil
+	}
+
+	// The trigger key is the event's own identity, so a redelivery of the same
+	// registration is a no-op rather than a second entitlement. It is shared
+	// across codes; issuing is idempotent per (code, customer, key).
+	triggerKey := events.UserRegistered + ":" + event.UserID
+	var failed []error
+	for _, promotion := range codes {
+		entitlement, err := i.promotions.Issue(ctx, promotion.Code, event.UserID, "system", triggerKey, "")
+		if err != nil {
+			// One broken campaign must not cost the customer the others.
+			failed = append(failed, fmt.Errorf("issue %s to %s: %w", promotion.Code, event.UserID, err))
+			continue
+		}
+		log.Printf("promotion %s issued to %s (entitlement %s)", promotion.Code, event.UserID, entitlement.ID)
+	}
+	return errors.Join(failed...)
 }

@@ -540,7 +540,26 @@ func TestUploadImageNoStore(t *testing.T) {
 }
 
 func TestRedeemPromotion(t *testing.T) {
-	mux := newMux(memory.NewProductStore())
+	store := memory.NewProductStore()
+	store.Catalog = memory.NewCatalogStore()
+	// Nothing is seeded: register the code the way a manager would.
+	promotionSvc := service.NewPromotionService(memory.NewPromotionStore())
+	if _, err := promotionSvc.Create(t.Context(), domain.Promotion{
+		Code:   "SUMMER30",
+		Active: true,
+		Benefit: domain.Benefit{
+			Target:           domain.BenefitTargetGoods,
+			DiscountType:     domain.DiscountTypePercent,
+			DiscountFraction: 0.30,
+			ApplyTo:          domain.ApplyToEntireSubtotal,
+		},
+	}); err != nil {
+		t.Fatalf("create SUMMER30: %v", err)
+	}
+	h := handler.NewHandler(service.NewProductSearchService(store, nil), promotionSvc, nil,
+		service.NewCatalogService(store.Catalog))
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
 
 	body, _ := json.Marshal(map[string]string{"code": "SUMMER30"})
 	rec := httptest.NewRecorder()

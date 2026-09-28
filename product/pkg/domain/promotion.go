@@ -16,6 +16,28 @@ const (
 	ScopeSingleUser Scope = "single_user"
 )
 
+// AutoIssue names an event that grants a single-user code to an account
+// without a manager issuing it by hand. Empty means the code is only issued
+// by a manager or the backfill.
+type AutoIssue string
+
+const (
+	// AutoIssueNone is the default: nothing issues the code on its own.
+	AutoIssueNone AutoIssue = ""
+	// AutoIssueUserRegistered grants the code to every new customer when auth
+	// publishes user.registered — how a sign-up campaign is set up.
+	AutoIssueUserRegistered AutoIssue = "user_registered"
+)
+
+// Valid reports whether a is a trigger the product service acts on.
+func (a AutoIssue) Valid() bool {
+	switch a {
+	case AutoIssueNone, AutoIssueUserRegistered:
+		return true
+	}
+	return false
+}
+
 // KST is Asia/Seoul. Fixed rather than loaded from the tz database: Korea has
 // had no DST since 1988, and a fixed zone works in a scratch container with no
 // tzdata installed.
@@ -51,6 +73,12 @@ type Promotion struct {
 	// own (the definition's ExpiresAt, if any, still applies).
 	EntitlementTTLDays int `json:"entitlement_ttl_days,omitempty"`
 
+	// AutoIssue is the event that grants this code to accounts on its own.
+	// Only meaningful for single_user codes. It decides who is handed the
+	// code; Active still decides whether what was handed out can be spent,
+	// so a campaign can collect sign-ups before it is switched on.
+	AutoIssue AutoIssue `json:"auto_issue,omitempty"`
+
 	// Terms is customer-facing copy stating what the code requires, shown at
 	// redeem, in the wallet and in the checkout summary. A campaign with a
 	// minimum spend or an expiry should say so here.
@@ -65,18 +93,6 @@ type Promotion struct {
 	Discount float64 `json:"discount"`
 	Expires  string  `json:"expires"`
 }
-
-// WelcomeCode is the sign-up campaign: the single-user code every new
-// customer is issued when auth publishes user.registered.
-//
-// It is a constant rather than configuration because nothing about it is
-// per-environment. Both stores seed the definition, so it always exists, and
-// whether customers can spend it is the definition's own `active` flag — a
-// manager's switch, not a deploy's. A third switch in the environment could
-// only ever disagree with those two, and did: unset, the issuer never
-// subscribed and no registration got a code, with nothing on any screen to
-// say so.
-const WelcomeCode = "WELCOME50"
 
 // NormalizedCode is the storage and lookup form of a code.
 func NormalizedCode(code string) string {

@@ -24,6 +24,9 @@ type PromotionPatch struct {
 	MaxPerCustomer *int
 	// EntitlementTTLDays is how long an issued single-user entitlement lasts.
 	EntitlementTTLDays *int
+	// AutoIssue is the event that grants the code on its own; set it to
+	// domain.AutoIssueNone to stop.
+	AutoIssue *domain.AutoIssue
 
 	ExpiresAt      *time.Time
 	ClearExpiresAt bool
