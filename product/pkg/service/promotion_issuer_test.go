@@ -8,6 +8,7 @@ import (
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/infra/memory"
+	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/events"
 )
@@ -29,7 +30,7 @@ func registrationPayload(t *testing.T, userID, accountType string) []byte {
 
 func newIssuer(t *testing.T) (*service.WelcomePromotionIssuer, *service.PromotionService) {
 	t.Helper()
-	svc, _ := newPromotionSvc(t)
+	svc, _ := newWelcomeSvc(t)
 	enableWelcomePromotion(t, svc)
 	return service.NewWelcomePromotionIssuer(svc), svc
 }
@@ -123,30 +124,88 @@ func TestMalformedRegistrationEventIsReportedNotSwallowed(t *testing.T) {
 	}
 }
 
-// The issuer is no longer configurable, so what has to hold is that the code
-// it issues is the one the stores seed. If the constant and the seed drifted
-// apart, every registration would log a not-found and no customer would get a
-// code — which is exactly the silent failure removing the env var was meant to
-// end.
-func TestIssuerIssuesTheSeededCampaign(t *testing.T) {
+// Registration issues against whatever a manager registered, even while the
+// campaign is off: enabling it later makes every entitlement already minted
+// work.
+func TestIssuerIssuesAnInactiveCampaign(t *testing.T) {
 	ctx := context.Background()
-	svc, store := newPromotionSvc(t)
-	if _, err := store.Get(ctx, domain.WelcomeCode); err != nil {
-		t.Fatalf("the stores must seed %s: %v", domain.WelcomeCode, err)
-	}
+	svc, _ := newWelcomeSvc(t)
 
 	issuer := service.NewWelcomePromotionIssuer(svc)
 	if err := issuer.Handle(ctx, events.UserRegistered, registrationPayload(t, "cust-1", "customer")); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	// Issued against the seeded definition even while the campaign is off:
-	// enabling it later makes every entitlement already minted work.
 	wallet, err := svc.Wallet(ctx, "cust-1", cartFor("cust-1", 150000))
 	if err != nil {
 		t.Fatalf("Wallet: %v", err)
 	}
-	if len(wallet) != 1 || wallet[0].Entitlement.Code != domain.WelcomeCode {
-		t.Fatalf("wallet = %+v, want one %s entitlement", wallet, domain.WelcomeCode)
+	if len(wallet) != 1 || wallet[0].Entitlement.Code != "WELCOME50" {
+		t.Fatalf("wallet = %+v, want one WELCOME50 entitlement", wallet)
+	}
+}
+
+// With no campaign registered, a sign-up is not an error — the shop simply
+// runs none — and nobody is issued anything.
+func TestNoRegisteredCampaignIssuesNothing(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newPromotionSvc(t)
+
+	issuer := service.NewWelcomePromotionIssuer(svc)
+	if err := issuer.Handle(ctx, events.UserRegistered, registrationPayload(t, "cust-1", "customer")); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	wallet, err := svc.Wallet(ctx, "cust-1", cartFor("cust-1", 150000))
+	if err != nil {
+		t.Fatalf("Wallet: %v", err)
+	}
+	if len(wallet) != 0 {
+		t.Fatalf("wallet = %+v, want empty", wallet)
+	}
+}
+
+// Clearing auto_issue is how a manager ends a sign-up campaign without a deploy.
+func TestClearingAutoIssueStopsIssuing(t *testing.T) {
+	ctx := context.Background()
+	issuer, svc := newIssuer(t)
+
+	none := domain.AutoIssueNone
+	if _, err := svc.Update(ctx, "WELCOME50", ports.PromotionPatch{AutoIssue: &none}); err != nil {
+		t.Fatalf("clear auto_issue: %v", err)
+	}
+	if err := issuer.Handle(ctx, events.UserRegistered, registrationPayload(t, "cust-1", "customer")); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	wallet, err := svc.Wallet(ctx, "cust-1", cartFor("cust-1", 150000))
+	if err != nil {
+		t.Fatalf("Wallet: %v", err)
+	}
+	if len(wallet) != 0 {
+		t.Fatalf("wallet = %+v, want empty once auto_issue is cleared", wallet)
+	}
+}
+
+// A shop may run more than one sign-up campaign; each is issued once.
+func TestEveryAutoIssuedCampaignIsIssued(t *testing.T) {
+	ctx := context.Background()
+	issuer, svc := newIssuer(t)
+
+	second := welcomeCampaign()
+	second.Code = "WELCOMESHIP"
+	second.Active = true
+	if _, err := svc.Create(ctx, second); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := issuer.Handle(ctx, events.UserRegistered, registrationPayload(t, "cust-1", "customer")); err != nil {
+			t.Fatalf("Handle %d: %v", i, err)
+		}
+	}
+	wallet, err := svc.Wallet(ctx, "cust-1", cartFor("cust-1", 150000))
+	if err != nil {
+		t.Fatalf("Wallet: %v", err)
+	}
+	if len(wallet) != 2 {
+		t.Fatalf("wallet holds %d entitlements, want one per campaign (2)", len(wallet))
 	}
 }
 

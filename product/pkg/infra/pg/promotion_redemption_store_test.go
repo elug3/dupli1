@@ -169,3 +169,69 @@ func TestPromotionRedemptionReleaseFreesCampaignSlotInPostgres(t *testing.T) {
 		t.Fatalf("redemption_count = %d, want 1 after release + re-reserve", got.RedemptionCount)
 	}
 }
+
+// The sign-up campaign used to be a compiled-in constant. An environment that
+// already has its row is marked auto_issue once, when the column first
+// appears, so sign-ups keep getting it; a manager clearing the flag afterwards
+// must not see a later deploy put it back.
+func TestAutoIssueMigrationCarriesTheSignUpCampaignOverOnce(t *testing.T) {
+	store, _ := newPromotionStores(t)
+	ctx := t.Context()
+
+	// Rewind to the shape before auto_issue existed, holding the old campaign.
+	if _, err := store.pool.Exec(ctx, `ALTER TABLE promotions DROP COLUMN auto_issue`); err != nil {
+		t.Fatalf("drop auto_issue: %v", err)
+	}
+	if _, err := store.pool.Exec(ctx, `
+		INSERT INTO promotions (code, scope, discount, active) VALUES
+			('WELCOME50', 'single_user', 0, FALSE),
+			('SUMMER30', 'global', 0.30, TRUE)
+	`); err != nil {
+		t.Fatalf("insert pre-migration rows: %v", err)
+	}
+	if err := store.migrateFreshSchema(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	welcome, err := store.Get(ctx, "WELCOME50")
+	if err != nil {
+		t.Fatalf("Get WELCOME50: %v", err)
+	}
+	if welcome.AutoIssue != domain.AutoIssueUserRegistered {
+		t.Fatalf("WELCOME50 auto_issue = %q, want user_registered", welcome.AutoIssue)
+	}
+	summer, err := store.Get(ctx, "SUMMER30")
+	if err != nil {
+		t.Fatalf("Get SUMMER30: %v", err)
+	}
+	if summer.AutoIssue != domain.AutoIssueNone {
+		t.Fatalf("SUMMER30 auto_issue = %q, want none", summer.AutoIssue)
+	}
+
+	none := domain.AutoIssueNone
+	if _, err := store.Update(ctx, "WELCOME50", ports.PromotionPatch{AutoIssue: &none}); err != nil {
+		t.Fatalf("clear auto_issue: %v", err)
+	}
+	if err := store.migrateFreshSchema(); err != nil {
+		t.Fatalf("re-migrate: %v", err)
+	}
+	welcome, err = store.Get(ctx, "WELCOME50")
+	if err != nil {
+		t.Fatalf("Get WELCOME50: %v", err)
+	}
+	if welcome.AutoIssue != domain.AutoIssueNone {
+		t.Fatalf("a redeploy set auto_issue back to %q", welcome.AutoIssue)
+	}
+}
+
+// Nothing is seeded any more: a new database starts with no codes.
+func TestFreshPromotionSchemaHasNoCodes(t *testing.T) {
+	store, _ := newPromotionStores(t)
+	got, err := store.List(t.Context())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("fresh schema lists %d codes, want 0", len(got))
+	}
+}

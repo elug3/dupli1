@@ -17,47 +17,7 @@ type PromotionStore struct {
 }
 
 func NewPromotionStore() *PromotionStore {
-	s := &PromotionStore{promotions: make(map[string]domain.Promotion)}
-	s.promotions["SUMMER30"] = domain.Promotion{
-		Code:        "SUMMER30",
-		Scope:       domain.ScopeGlobal,
-		Discount:    0.30,
-		Description: "Summer sale — all items",
-		Expires:     "Aug 31, 2026",
-		Active:      true,
-		Benefit: domain.Benefit{
-			Target:           domain.BenefitTargetGoods,
-			DiscountType:     domain.DiscountTypePercent,
-			DiscountFraction: 0.30,
-			ApplyTo:          domain.ApplyToEntireSubtotal,
-		},
-		MaxPerCustomer: 1,
-	}
-	// The sign-up campaign, mirroring the Postgres seed: 50,000원 off orders
-	// of 100,000원 or more, one per account, 30-day window. Seeded inactive —
-	// a manager enables it when marketing is ready.
-	s.promotions[domain.WelcomeCode] = domain.Promotion{
-		Code:        domain.WelcomeCode,
-		Scope:       domain.ScopeSingleUser,
-		Description: "First-purchase discount",
-		Terms:       "100,000원 이상 구매 시 50,000원 할인",
-		Active:      false,
-		Benefit: domain.Benefit{
-			Target:           domain.BenefitTargetGoods,
-			DiscountType:     domain.DiscountTypeFixed,
-			DiscountFixedWon: 50000,
-			ApplyTo:          domain.ApplyToEntireSubtotal,
-		},
-		Conditions: domain.Conditions{
-			Version: domain.ConditionsVersion,
-			All: []domain.Predicate{
-				{Attr: domain.AttrSubtotalWon, Op: domain.OpGte, Value: 100000.0},
-			},
-		},
-		MaxPerCustomer:     1,
-		EntitlementTTLDays: 30,
-	}
-	return s
+	return &PromotionStore{promotions: make(map[string]domain.Promotion)}
 }
 
 func (s *PromotionStore) List(ctx context.Context) ([]domain.Promotion, error) {
@@ -196,6 +156,9 @@ func applyPromotionPatch(p *domain.Promotion, patch ports.PromotionPatch) {
 	}
 	if patch.EntitlementTTLDays != nil {
 		p.EntitlementTTLDays = *patch.EntitlementTTLDays
+	}
+	if patch.AutoIssue != nil {
+		p.AutoIssue = *patch.AutoIssue
 	}
 	if patch.ClearExpiresAt {
 		p.ExpiresAt = nil

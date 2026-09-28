@@ -193,7 +193,8 @@ Full write-up: [quality-performance-review.md](quality-performance-review.md).
   - [ ] **Phase 4** — richer condition attrs, shipping benefit + `shipping_discount_won`, referral attribution, campaign stats endpoint
   - [x] Campaign parameters from marketing — `WELCOME50`, 50,000원 off, 100,000원 minimum, 30-day entitlement window, no budget cap
   - [x] Existing accounts are backfilled — `product/cmd/backfill-welcome-promotion`
-  - [ ] **Enable `WELCOME50` in the admin** when marketing is ready; it is seeded inactive on purpose
+  - [x] Sign-up campaigns are registered at runtime (`auto_issue: "user_registered"` on a `single_user` code) instead of a compiled-in `WELCOME50` constant and startup seed; the existing row is carried over once on migration
+  - [ ] **Enable `WELCOME50` in the admin** when marketing is ready; it is inactive on purpose. On an environment that never had the row, create it in the admin first (`single_user`, `auto_issue: user_registered`, 30-day `entitlement_ttl_days`)
   - [ ] **Run the backfill in production** — `backfill-welcome-promotion -code WELCOME50 -confirm` (dry-runs without `-confirm`)
   - [x] Set `REDIS_URL` on the product ECS task so the promotional-code rate limit is shared across tasks — `infra/terraform/ecs_services.tf`; takes effect on the next `terraform apply`
   - [ ] **Close the rename window** one release after Phase 1 — drop the `coupon.*` permissions, the pre-rename routes, the dual JSON key and the nginx `/api/v1/coupons` locations ([product-promotion-rename.md](product-promotion-rename.md) § Closing the window)

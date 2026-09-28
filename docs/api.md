@@ -642,8 +642,13 @@ campaigns.
 
 **Single-user codes.** A `single_user` definition is unusable without an
 entitlement in `customer_promotions`. Entitlements are issued automatically to
-new customer accounts when auth publishes `user.registered`, by a manager, or
-in bulk by `product/cmd/backfill-welcome-promotion`. Each carries its own
+new customer accounts when auth publishes `user.registered` — for every
+definition whose `auto_issue` is `user_registered` — by a manager, or in bulk
+by `product/cmd/backfill-welcome-promotion -code <CODE>`. No code is built in
+or seeded: a sign-up campaign is a definition a manager creates with
+`scope: "single_user"` and `auto_issue: "user_registered"`, and ends by
+clearing `auto_issue` (to `""`). Inactive definitions are still issued, so a
+campaign can collect sign-ups before it goes live; expired ones are not. Each carries its own
 `expires_at`, computed from the definition's `entitlement_ttl_days` at issue
 time, so an account issued late in a campaign gets the same window as one
 issued at launch. An account that holds no entitlement is refused with
@@ -655,7 +660,8 @@ ledger's answer, not the entitlement's.
 (`{target, discount_type, discount_fraction | discount_fixed_won,
 max_discount_won, apply_to}`), `conditions` (versioned predicate document over
 an allowlist of attributes), `expires_at`, `max_redemptions`,
-`max_per_customer`, `entitlement_ttl_days`, `terms`, `redemption_count`. On create/update, send
+`max_per_customer`, `entitlement_ttl_days`, `auto_issue` (`""` | `user_registered`;
+`single_user` only), `terms`, `redemption_count`. On create/update, send
 `expires_on` as a date (`2026-08-31`) to mean the end of that day in Seoul.
 The legacy `discount` fraction and free-text `expires` are still accepted and
 read, but are not enforced — a definition needs a real `expires_at` to expire.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -328,5 +329,58 @@ func TestPromotionPermissionDoesNotLeakToOtherResources(t *testing.T) {
 	w := serve(t, mux, http.MethodPost, handler.RouteProducts, token, body)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("create product with promotion.*: status = %d, want 403", w.Code)
+	}
+}
+
+// A sign-up campaign is registered at runtime through the admin API — its
+// entitlement window and auto-issue trigger included — and can be turned off
+// the same way.
+func TestSignUpCampaignIsRegisteredThroughTheAdminAPI(t *testing.T) {
+	mux := newAccessControlMux(memory.NewProductStore())
+	token := makeAccessToken(t, "owner", []string{"*"})
+
+	body := map[string]any{
+		"code":                 "WELCOME50",
+		"scope":                "single_user",
+		"active":               false,
+		"entitlement_ttl_days": 30,
+		"auto_issue":           "user_registered",
+		"benefit": map[string]any{
+			"target": "goods", "discount_type": "fixed",
+			"discount_fixed_won": 50000, "apply_to": "entire_subtotal",
+		},
+	}
+	w := serve(t, mux, http.MethodPost, handler.RoutePromotions, token, body)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+	var created domain.Promotion
+	if err := json.NewDecoder(w.Body).Decode(&created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if created.EntitlementTTLDays != 30 || created.AutoIssue != domain.AutoIssueUserRegistered {
+		t.Fatalf("created ttl=%d auto_issue=%q, want 30/user_registered",
+			created.EntitlementTTLDays, created.AutoIssue)
+	}
+
+	path := strings.Replace(handler.RoutePromotionByCode, "{code}", "WELCOME50", 1)
+	w = serve(t, mux, http.MethodPut, path, token, map[string]any{"auto_issue": "", "entitlement_ttl_days": 14})
+	if w.Code != http.StatusOK {
+		t.Fatalf("update: status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var updated domain.Promotion
+	if err := json.NewDecoder(w.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if updated.EntitlementTTLDays != 14 || updated.AutoIssue != domain.AutoIssueNone {
+		t.Fatalf("updated ttl=%d auto_issue=%q, want 14/none", updated.EntitlementTTLDays, updated.AutoIssue)
+	}
+
+	w = serve(t, mux, http.MethodPost, handler.RoutePromotions, token, map[string]any{
+		"code": "OPEN10", "auto_issue": "user_registered",
+		"benefit": map[string]any{"target": "goods", "discount_type": "fixed", "discount_fixed_won": 10000, "apply_to": "entire_subtotal"},
+	})
+	if w.Code != http.StatusBadRequest && w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("auto_issue on a global code: status = %d, want a validation error", w.Code)
 	}
 }

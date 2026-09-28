@@ -5,7 +5,8 @@
 # This is the dry run the promotional-code plan asks for before the marketing
 # date, written as a script so it is repeatable rather than a checklist:
 #
-#   seeded inactive -> register -> auto-issued entitlement -> enable campaign
+#   registered through the admin API (or found) -> register a customer
+#   -> auto-issued entitlement -> enable campaign
 #   -> below minimum spend refused with a reason -> above it discounts
 #   -> order carries the code -> paid consumes the use -> a second use refused
 #   -> cancel releases it -> usable again
@@ -25,6 +26,11 @@
 #   CODE            campaign to exercise (default WELCOME50)
 #   MIN_SPEND_WON   the campaign's minimum spend (default 100000)
 #   DISCOUNT_WON    the campaign's fixed discount (default 50000)
+#
+# Nothing is seeded any more: promotional codes are registered at runtime. If
+# CODE does not exist yet, the run registers it the way a manager would —
+# single_user, auto_issue=user_registered, inactive — and deletes it again on
+# the way out.
 #
 # THE CAMPAIGN IS ENABLED AND THEN RESTORED. The run switches the code on,
 # because that is the state being tested, and puts `active` back to whatever it
@@ -50,6 +56,7 @@ UNIT_PRICE_WON=$(( (MIN_SPEND_WON / 2) + 10000 ))
 
 failures=0
 CAMPAIGN_WAS_ACTIVE=""
+CAMPAIGN_CREATED=""
 OWNER=""
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
@@ -116,8 +123,13 @@ set_campaign_active() { # set_campaign_active <true|false>
 
 # Put the campaign back however it was found, whatever happens after this point.
 restore_campaign() {
-  [ -n "$CAMPAIGN_WAS_ACTIVE" ] || return 0
   [ -n "$OWNER" ] || return 0
+  if [ -n "$CAMPAIGN_CREATED" ]; then
+    api DELETE "/api/v1/products/promotions/by-code/$CODE" "$OWNER" >/dev/null
+    printf '\n  campaign %s registered by this run, deleted again\n' "$CODE"
+    return 0
+  fi
+  [ -n "$CAMPAIGN_WAS_ACTIVE" ] || return 0
   set_campaign_active "$CAMPAIGN_WAS_ACTIVE"
   printf '\n  campaign %s restored to active=%s\n' "$CODE" "$CAMPAIGN_WAS_ACTIVE"
 }
@@ -143,17 +155,29 @@ OWNER=$(access_token "$OWNER_EMAIL" "$OWNER_PASSWORD")
 [ -n "$OWNER" ] || { fail "manager login as $OWNER_EMAIL"; exit 1; }
 pass "manager access token acquired"
 
-step "The campaign is seeded, and seeded off"
+step "The campaign is registered at runtime"
 CAMPAIGN_WAS_ACTIVE=$(campaign_field 'str(d["active"]).lower()')
-[ -n "$CAMPAIGN_WAS_ACTIVE" ] || { fail "$CODE is not seeded — the issuer has nothing to issue"; exit 1; }
-pass "$CODE exists (active=$CAMPAIGN_WAS_ACTIVE)"
+if [ -z "$CAMPAIGN_WAS_ACTIVE" ]; then
+  created=$(status_of POST /api/v1/products/promotions "$OWNER" "{
+    \"code\":\"$CODE\",\"scope\":\"single_user\",\"active\":false,
+    \"description\":\"First-purchase discount (smoke test)\",
+    \"auto_issue\":\"user_registered\",\"entitlement_ttl_days\":30,\"max_per_customer\":1,
+    \"conditions\":{\"version\":1,\"all\":[{\"attr\":\"subtotal_won\",\"op\":\"gte\",\"value\":$MIN_SPEND_WON}]},
+    \"benefit\":{\"target\":\"goods\",\"discount_type\":\"fixed\",\"discount_fixed_won\":$DISCOUNT_WON,\"apply_to\":\"entire_subtotal\"}
+  }")
+  check "register $CODE through the admin API" "$created" 201
+  [ "$created" = 201 ] || exit 1
+  CAMPAIGN_CREATED=1
+  CAMPAIGN_WAS_ACTIVE=false
+else
+  pass "$CODE already registered (active=$CAMPAIGN_WAS_ACTIVE)"
+fi
 check "scope" "$(campaign_field 'd["scope"]')" single_user
+check "auto-issued on sign-up" "$(campaign_field 'd.get("auto_issue", "")')" user_registered
 check "benefit is a fixed amount" "$(campaign_field 'str(d["benefit"]["discount_fixed_won"])')" "$DISCOUNT_WON"
 check "minimum spend" \
   "$(campaign_field 'str(d["conditions"]["all"][0]["value"])')" "$MIN_SPEND_WON"
-if [ "$CAMPAIGN_WAS_ACTIVE" = "false" ]; then
-  pass "seeded inactive — enabling it is a manager action, not a deploy"
-else
+if [ "$CAMPAIGN_WAS_ACTIVE" = "true" ]; then
   printf '  note  %s was already active on this environment\n' "$CODE"
 fi
 

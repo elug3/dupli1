@@ -511,6 +511,12 @@ type promotionBody struct {
 	MaxRedemptions *int `json:"max_redemptions"`
 	MaxPerCustomer *int `json:"max_per_customer"`
 
+	// EntitlementTTLDays and AutoIssue only matter for single_user codes:
+	// how long an issued entitlement lasts, and which event issues it on its
+	// own ("user_registered" for a sign-up campaign, "" for none).
+	EntitlementTTLDays *int    `json:"entitlement_ttl_days"`
+	AutoIssue          *string `json:"auto_issue"`
+
 	// Legacy fields, still accepted while clients migrate.
 	Discount *float64 `json:"discount"`
 	Expires  *string  `json:"expires"`
@@ -571,6 +577,12 @@ func (h *Handler) CreatePromotion(w http.ResponseWriter, r *http.Request) {
 	if body.MaxPerCustomer != nil {
 		promotion.MaxPerCustomer = *body.MaxPerCustomer
 	}
+	if body.EntitlementTTLDays != nil {
+		promotion.EntitlementTTLDays = *body.EntitlementTTLDays
+	}
+	if body.AutoIssue != nil {
+		promotion.AutoIssue = domain.AutoIssue(*body.AutoIssue)
+	}
 
 	created, err := h.promotionSvc.Create(r.Context(), promotion)
 	if err != nil {
@@ -623,10 +635,16 @@ func (h *Handler) UpdatePromotion(w http.ResponseWriter, r *http.Request) {
 		MaxRedemptions: body.MaxRedemptions,
 		Discount:       body.Discount,
 		Expires:        body.Expires,
+
+		EntitlementTTLDays: body.EntitlementTTLDays,
 	}
 	if body.Scope != nil {
 		scope := domain.Scope(*body.Scope)
 		patch.Scope = &scope
+	}
+	if body.AutoIssue != nil {
+		autoIssue := domain.AutoIssue(*body.AutoIssue)
+		patch.AutoIssue = &autoIssue
 	}
 	updated, err := h.promotionSvc.Update(r.Context(), code, patch)
 	if err != nil {
