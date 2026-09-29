@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/shared/pkg/authjwt"
 )
 
 // EvaluatePromotion judges a code against a specific checkout and returns the
@@ -66,6 +67,35 @@ func (h *Handler) EvaluateTier(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.promotionSvc.EvaluateTier(r.Context(), domain.EvaluationContext{
 		CustomerID:     body.CustomerID,
+		ShippingFeeWon: body.ShippingFeeWon,
+		Lines:          body.Lines,
+	})
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	h.respondJSON(w, http.StatusOK, result)
+}
+
+// MyTier is EvaluateTier for the signed-in customer, taken from the token,
+// never the body — so one account cannot learn another's tier. The storefront
+// calls it to show a member's discount before the order exists.
+func (h *Handler) MyTier(w http.ResponseWriter, r *http.Request) {
+	claims, ok := authjwt.FromContext(r.Context())
+	if !ok || claims.UserID == "" {
+		h.respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var body struct {
+		ShippingFeeWon int64                   `json:"shipping_fee_won"`
+		Lines          []domain.EvaluationLine `json:"lines"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	result, err := h.promotionSvc.EvaluateTier(r.Context(), domain.EvaluationContext{
+		CustomerID:     claims.UserID,
 		ShippingFeeWon: body.ShippingFeeWon,
 		Lines:          body.Lines,
 	})

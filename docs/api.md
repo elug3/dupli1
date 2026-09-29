@@ -628,6 +628,7 @@ Being replaced by a cart-aware evaluation call as part of [product-promo-referra
 | `POST` | `/api/v1/products/promotions/consume` | `promotion.redeem` | Mark an order's reservation paid. Idempotent | **live** |
 | `POST` | `/api/v1/products/promotions/release` | `promotion.redeem` | Hand a use back, for a cancel before shipment | **live** |
 | `POST` | `/api/v1/products/promotions/tier` | `promotion.redeem` | The customer's automatic tier discount on a cart (`apply_mode: auto`), the best one if they hold several → `{ ok, code, discount_won, … }`. Internal (the customer id is in the body); order calls it on every session read and at complete | **live** |
+| `POST` | `/api/v1/products/promotions/me/tier` | Bearer (ABAC) | The same answer for the signed-in customer (id from the token, never the body), so the storefront can show a member's tier before checkout | **live** |
 | `GET`/`POST` | `/api/v1/products/promotions/me` | Bearer (ABAC) | Current customer's wallet. POST a cart to have each entitlement judged against it; the customer id comes from the token, never the body | **live** |
 | `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` | Issue a single-user entitlement, idempotent on `trigger_key` | **live** |
 | `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` | Revoke an entitlement; never rewrites an order that used it | **live** |

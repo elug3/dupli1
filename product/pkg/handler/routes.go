@@ -45,6 +45,9 @@ const (
 	// RouteEvaluateTier returns the automatic tier discount a customer earns
 	// on a cart. Internal: it answers for any customer_id it is given.
 	RouteEvaluateTier = "/api/v1/products/promotions/tier"
+	// RouteMyTier is the same answer for the signed-in customer, so the
+	// storefront can show a member's tier discount before checkout.
+	RouteMyTier = "/api/v1/products/promotions/me/tier"
 	// Single-user entitlements: the customer's own wallet (ABAC), and manager
 	// issue / revoke.
 	RoutePromotionWallet      = "/api/v1/products/promotions/me"

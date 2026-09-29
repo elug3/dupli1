@@ -79,6 +79,7 @@ ROUTES=(
   /api/v1/products/p1=product
   /api/v1/products/promotions/evaluate=product
   /api/v1/products/promotions/reserved=product
+  /api/v1/products/promotions/me/tier=product
   /api/v1/products/inventory/items/SKU1=product
   /api/v1/catalog/brands=product
   /api/v1/variants/by-sku/X=product

@@ -40,6 +40,7 @@ func newPromotionHTTPMux(t *testing.T) (*http.ServeMux, *service.PromotionServic
 	mux.Handle("POST "+handler.RouteReleasePromotion, requirePerm(permissions.PromotionRedeem, http.HandlerFunc(h.ReleasePromotion)))
 	mux.Handle("POST "+handler.RoutePromotionWallet, middleware.RequireAuth(validator, http.HandlerFunc(h.PromotionWallet)))
 	mux.Handle("GET "+handler.RoutePromotionWallet, middleware.RequireAuth(validator, http.HandlerFunc(h.PromotionWallet)))
+	mux.Handle("POST "+handler.RouteMyTier, middleware.RequireAuth(validator, http.HandlerFunc(h.MyTier)))
 	mux.Handle("POST "+handler.RoutePromotionIssue, requirePerm(permissions.PromotionIssue, http.HandlerFunc(h.IssuePromotion)))
 	mux.Handle("DELETE "+handler.RoutePromotionEntitlement, requirePerm(permissions.PromotionIssue, http.HandlerFunc(h.RevokePromotionEntitlement)))
 	return mux, promotionSvc

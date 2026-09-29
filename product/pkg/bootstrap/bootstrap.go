@@ -232,6 +232,7 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	// the cart travels in the body to be judged against.
 	mux.Handle("POST "+handler.RoutePromotionWallet, middleware.RequireAuth(validator, http.HandlerFunc(h.PromotionWallet)))
 	mux.Handle("GET "+handler.RoutePromotionWallet, middleware.RequireAuth(validator, http.HandlerFunc(h.PromotionWallet)))
+	mux.Handle("POST "+handler.RouteMyTier, middleware.RequireAuth(validator, http.HandlerFunc(h.MyTier)))
 	mux.Handle("POST "+handler.RoutePromotionIssue, requirePerm(permissions.PromotionIssue, http.HandlerFunc(h.IssuePromotion)))
 	mux.Handle("DELETE "+handler.RoutePromotionEntitlement, requirePerm(permissions.PromotionIssue, http.HandlerFunc(h.RevokePromotionEntitlement)))
 
