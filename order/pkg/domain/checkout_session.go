@@ -32,6 +32,12 @@ type CheckoutSession struct {
 	PromotionCode       string                `json:"promotion_code,omitempty"`
 	SubtotalWon      int64                 `json:"subtotal_won"`
 	DiscountWon      int64                 `json:"discount_won"`
+	// TierPromotionCode and TierDiscountWon are the automatic customer tier
+	// (VIP, a private tier) this cart earns without a code. They are worked
+	// out each time the session is read and never stored; complete asks again.
+	// DiscountWon includes TierDiscountWon.
+	TierPromotionCode string `json:"tier_promotion_code,omitempty"`
+	TierDiscountWon   int64  `json:"tier_discount_won"`
 	// ShippingFeeWon is the delivery charge quoted for this session, in whole
 	// KRW. It is fixed when the session opens so a mid-session config change
 	// cannot move the price the customer was shown.
@@ -220,6 +226,28 @@ func (s *CheckoutSession) ClearPromotion(now time.Time) error {
 	s.recalculateTotals()
 	s.UpdatedAt = now
 	return nil
+}
+
+// ApplyTier adds an automatic tier discount on top of any code's. The two
+// together never exceed the goods subtotal, so delivery is still paid for.
+// It is for the session a caller is about to show, not one about to be saved.
+func (s *CheckoutSession) ApplyTier(code string, discountWon int64) {
+	s.TierPromotionCode = ""
+	s.TierDiscountWon = 0
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" || discountWon <= 0 {
+		return
+	}
+	if room := s.SubtotalWon - s.DiscountWon; discountWon > room {
+		discountWon = room
+	}
+	if discountWon <= 0 {
+		return
+	}
+	s.TierPromotionCode = code
+	s.TierDiscountWon = discountWon
+	s.DiscountWon += discountWon
+	s.TotalWon = s.SubtotalWon - s.DiscountWon + s.shippingFeeForTotal()
 }
 
 func (s *CheckoutSession) Complete(orderID string, now time.Time) error {

@@ -164,7 +164,7 @@ Redeem is **public** (checkout flow) — no permission.
 
 **`coupon.read|create|update|delete` and `coupon.*` are deprecated but still accepted.** Every promotion route asks for either name, so an access token minted before the rename keeps authorizing; the bundles and legacy role expansions grant both. The `coupon.*` set is dropped one release later. See [product-promotion-rename.md](product-promotion-rename.md).
 
-| `promotion.redeem` | Move the usage ledger — reserve, consume, release. **Service-to-service**: order's service account holds it; managers do not need it, and the public redeem/evaluate endpoints require no permission |
+| `promotion.redeem` | Move the usage ledger — reserve, consume, release — and look up a customer's automatic tier (`POST …/promotions/tier`). **Service-to-service**: order's service account holds it; managers do not need it, and the public redeem/evaluate endpoints require no permission |
 
 | `promotion.issue` | Issue a single-user entitlement to a customer, and revoke one |
 
@@ -294,7 +294,7 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `DELETE` | `/api/v1/products/promotions/by-code/{code}` | `promotion.delete` (or `coupon.delete`) |
 | `POST` | `/api/v1/products/promotions/redeem` | — (public, rate-limited) |
 | `POST` | `/api/v1/products/promotions/evaluate` | — (public, rate-limited) |
-| `POST` | `/api/v1/products/promotions/reserve\|consume\|release` | `promotion.redeem` + caller `dupli1-order` ([internal](#internal-apis)) |
+| `POST` | `/api/v1/products/promotions/reserve\|consume\|release\|tier` | `promotion.redeem` + caller `dupli1-order` ([internal](#internal-apis)) |
 
 Legacy top-level aliases (`/api/v1/variants/…`, `/api/v1/catalog/…`, `/api/v1/coupons/…`) are still registered with the same permissions; see [TODO.md](TODO.md) for the migration table. The promotion routes additionally answer on the pre-rename `/api/v1/products/coupons…` spelling ([product-promotion-rename.md](product-promotion-rename.md)).
 
@@ -391,7 +391,7 @@ Some routes exist only for one service to call. A permission is not enough to re
 
 | Route | Allowed caller |
 |-------|----------------|
-| `POST /api/v1/products/promotions/reserve\|consume\|release` | `dupli1-order` |
+| `POST /api/v1/products/promotions/reserve\|consume\|release\|tier` | `dupli1-order` |
 | `POST /api/v1/products/inventory/reservations`, `…/{id}/commit`, `…/{id}/release` (and the legacy `/api/v1/inventory/…` aliases) | `dupli1-order` |
 | `POST /api/v1/auth/token` (API key exchange) | any service account holding a key — the key is the credential; gateway internal listener only |
 

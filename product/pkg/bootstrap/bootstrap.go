@@ -224,6 +224,8 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	mux.Handle("POST "+handler.RouteReservePromotion, internalOrder(permissions.PromotionRedeem, http.HandlerFunc(h.ReservePromotion)))
 	mux.Handle("POST "+handler.RouteConsumePromotion, internalOrder(permissions.PromotionRedeem, http.HandlerFunc(h.ConsumePromotion)))
 	mux.Handle("POST "+handler.RouteReleasePromotion, internalOrder(permissions.PromotionRedeem, http.HandlerFunc(h.ReleasePromotion)))
+	// The tier lookup names a customer in its body, so it is internal too.
+	mux.Handle("POST "+handler.RouteEvaluateTier, internalOrder(permissions.PromotionRedeem, http.HandlerFunc(h.EvaluateTier)))
 
 	// The wallet is ABAC: any signed-in customer reads their own, and the
 	// customer id comes from the token rather than the request. POST because

@@ -86,6 +86,12 @@ type Order struct {
 	PromotionCode    string      `json:"promotion_code,omitempty"`
 	SubtotalWon   int64       `json:"subtotal_won"`
 	DiscountWon   int64       `json:"discount_won"`
+	// TierPromotionCode and TierDiscountWon are the automatic customer tier
+	// (VIP, a private tier) this order earned without a code. DiscountWon
+	// already includes TierDiscountWon, so totals read as before; the code's
+	// own share is DiscountWon - TierDiscountWon.
+	TierPromotionCode string `json:"tier_promotion_code,omitempty"`
+	TierDiscountWon   int64  `json:"tier_discount_won"`
 	// ShippingFeeWon is the delivery charge in whole KRW, captured at order
 	// creation so a later config change never re-prices a placed order.
 	ShippingFeeWon  int64           `json:"shipping_fee_won"`
@@ -187,6 +193,21 @@ func NewOrder(id, customerID, reservationID string, items []OrderItem, promotion
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}, nil
+}
+
+// SetTier records the tier share of an order's discount. The share is part of
+// DiscountWon, never added on top of it, so it cannot exceed it.
+func (o *Order) SetTier(code string, discountWon int64) error {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if discountWon < 0 || discountWon > o.DiscountWon || (discountWon > 0 && code == "") {
+		return ErrInvalidOrder
+	}
+	if discountWon == 0 {
+		code = ""
+	}
+	o.TierPromotionCode = code
+	o.TierDiscountWon = discountWon
+	return nil
 }
 
 func (o *Order) MarkPaid(paymentID string, amountKRW int64, now time.Time) error {

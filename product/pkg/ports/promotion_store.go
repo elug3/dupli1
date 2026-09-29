@@ -27,6 +27,9 @@ type PromotionPatch struct {
 	// AutoIssue is the event that grants the code on its own; set it to
 	// domain.AutoIssueNone to stop.
 	AutoIssue *domain.AutoIssue
+	// ApplyMode switches a definition between an entered code and an
+	// automatic customer tier.
+	ApplyMode *domain.ApplyMode
 
 	ExpiresAt      *time.Time
 	ClearExpiresAt bool

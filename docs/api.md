@@ -627,6 +627,7 @@ Being replaced by a cart-aware evaluation call as part of [product-promo-referra
 | `POST` | `/api/v1/products/promotions/reserve` | `promotion.redeem` | Re-evaluate and record a pending use against an order. Idempotent per order | **live** |
 | `POST` | `/api/v1/products/promotions/consume` | `promotion.redeem` | Mark an order's reservation paid. Idempotent | **live** |
 | `POST` | `/api/v1/products/promotions/release` | `promotion.redeem` | Hand a use back, for a cancel before shipment | **live** |
+| `POST` | `/api/v1/products/promotions/tier` | `promotion.redeem` | The customer's automatic tier discount on a cart (`apply_mode: auto`), the best one if they hold several → `{ ok, code, discount_won, … }`. Internal (the customer id is in the body); order calls it on every session read and at complete | **live** |
 | `GET`/`POST` | `/api/v1/products/promotions/me` | Bearer (ABAC) | Current customer's wallet. POST a cart to have each entitlement judged against it; the customer id comes from the token, never the body | **live** |
 | `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` | Issue a single-user entitlement, idempotent on `trigger_key` | **live** |
 | `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` | Revoke an entitlement; never rewrites an order that used it | **live** |
@@ -661,7 +662,16 @@ ledger's answer, not the entitlement's.
 max_discount_won, apply_to}`), `conditions` (versioned predicate document over
 an allowlist of attributes), `expires_at`, `max_redemptions`,
 `max_per_customer`, `entitlement_ttl_days`, `auto_issue` (`""` | `user_registered`;
-`single_user` only), `terms`, `redemption_count`. On create/update, send
+`single_user` only), `apply_mode` (`code` default | `auto`), `terms`, `redemption_count`.
+
+**Customer tiers (`apply_mode: auto`).** A VIP or private tier is a
+`single_user` definition with `apply_mode: auto`: issuing its code to an
+account makes that account a member, revoking the entitlement takes them out.
+Members get the discount on every order without entering anything, and it
+stacks under whatever code the order carries (code and tier together are
+capped at the goods subtotal). A member of several tiers gets the best one.
+A tier has no ledger row and no cap, so `max_redemptions` is refused; typing
+its code answers `invalid_code`, and it is left out of the wallet. On create/update, send
 `expires_on` as a date (`2026-08-31`) to mean the end of that day in Seoul.
 The legacy `discount` fraction and free-text `expires` are still accepted and
 read, but are not enforced — a definition needs a real `expires_at` to expire.
@@ -906,6 +916,13 @@ When `AUTH_JWKS_URL` or `JWT_SECRET` is set, order and checkout routes require `
 ```
 total_won = subtotal_won - discount_won + shipping_fee_won
 ```
+
+`discount_won` is the whole goods discount. When the customer belongs to an
+automatic tier, `tier_promotion_code` names it and `tier_discount_won` is its
+share of `discount_won`; the entered code's share is the rest. On a checkout
+session the tier is worked out each time it is read, and complete asks again
+(failing with `503` rather than charging a member full price if product
+cannot answer).
 
 `shipping_fee_won` is a flat per-order delivery charge in whole KRW, set by `DUPLI1_ORDER_SHIPPING_FEE_WON` on the order service (deprecated aliases: `DUPLI1_ORDER_SHIPPING_FEE_KRW`, `DUPLI1_ORDER_SHIPPING_FEE_CENTS`). It defaults to **30000** (30,000 KRW); set the variable to `0` for free delivery. JSON, Go identifiers, and Postgres columns for money use `*_won` (`shipping_fee_won`, `subtotal_won`, `discount_won`, `total_won`, `unit_price_won`, `amount_won`, …) — not `*_krw` or `*_cents`. Existing databases rename leftover `*_krw` / `*_cents` columns on migrate.
 

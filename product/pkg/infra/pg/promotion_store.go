@@ -59,6 +59,7 @@ func (s *PromotionStore) migrateFreshSchema() error {
 		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS redemption_count INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
 		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS entitlement_ttl_days INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS apply_mode TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.pool.Exec(context.Background(), stmt); err != nil {
 			return fmt.Errorf("migrate promotions columns: %w", err)
@@ -258,11 +259,11 @@ func (s *PromotionStore) Create(ctx context.Context, c domain.Promotion) error {
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO promotions (code, scope, discount, description, expires, active,
 			conditions, benefit, expires_at, max_redemptions, max_per_customer, terms,
-			entitlement_ttl_days, auto_issue, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())
+			entitlement_ttl_days, auto_issue, apply_mode, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now())
 	`, c.Code, string(c.EffectiveScope()), c.Discount, c.Description, c.Expires, c.Active,
 		conditions, benefit, c.ExpiresAt, c.MaxRedemptions, c.EffectiveMaxPerCustomer(), c.Terms,
-		c.EntitlementTTLDays, string(c.AutoIssue))
+		c.EntitlementTTLDays, string(c.AutoIssue), string(c.ApplyMode))
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ports.Conflict("promotion already exists")
@@ -288,12 +289,12 @@ func (s *PromotionStore) Update(ctx context.Context, code string, patch ports.Pr
 		UPDATE promotions SET scope = $2, discount = $3, description = $4, expires = $5,
 			active = $6, conditions = $7, benefit = $8, expires_at = $9, max_redemptions = $10,
 			max_per_customer = $11, terms = $12, entitlement_ttl_days = $13, auto_issue = $14,
-			updated_at = now()
+			apply_mode = $15, updated_at = now()
 		WHERE code = $1
 	`, current.Code, string(current.EffectiveScope()), current.Discount, current.Description,
 		current.Expires, current.Active, conditions, benefit, current.ExpiresAt,
 		current.MaxRedemptions, current.EffectiveMaxPerCustomer(), current.Terms,
-		current.EntitlementTTLDays, string(current.AutoIssue))
+		current.EntitlementTTLDays, string(current.AutoIssue), string(current.ApplyMode))
 	if err != nil {
 		return nil, wrapDB("update promotion", err)
 	}

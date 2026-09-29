@@ -61,6 +61,11 @@ type PromotionClient interface {
 	// idempotent per order, so a retried checkout complete does not burn a
 	// second use.
 	Reserve(ctx context.Context, code, orderID string, promoCtx PromotionContext) (*PromotionEvaluation, error)
+	// EvaluateTier returns the automatic tier discount (VIP, a private tier)
+	// the customer earns on this cart, the best one if they hold several. OK
+	// false means no tier applies. A tier needs no code, has no usage cap and
+	// is not reserved: it stacks under whatever code the order carries.
+	EvaluateTier(ctx context.Context, promoCtx PromotionContext) (*PromotionEvaluation, error)
 	// Consume marks an order's reservation paid.
 	Consume(ctx context.Context, orderID string) error
 	// Release hands the use back, for a cancel before shipment.

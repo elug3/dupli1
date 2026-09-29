@@ -38,6 +38,30 @@ func (a AutoIssue) Valid() bool {
 	return false
 }
 
+// ApplyMode is how a promotion reaches a checkout.
+type ApplyMode string
+
+const (
+	// ApplyModeCode is the default: the customer enters the code, or picks it
+	// from their wallet, and it takes the order's one code slot.
+	ApplyModeCode ApplyMode = "code"
+	// ApplyModeAuto is a customer tier (VIP, a private tier): every account
+	// holding an entitlement gets the discount on every order without
+	// entering anything, on top of any code. It is never typed, has no usage
+	// cap, and is not recorded in the redemption ledger.
+	ApplyModeAuto ApplyMode = "auto"
+)
+
+// Valid reports whether m is a mode the service understands. Empty is the
+// default, code.
+func (m ApplyMode) Valid() bool {
+	switch m {
+	case "", ApplyModeCode, ApplyModeAuto:
+		return true
+	}
+	return false
+}
+
 // KST is Asia/Seoul. Fixed rather than loaded from the tz database: Korea has
 // had no DST since 1988, and a fixed zone works in a scratch container with no
 // tzdata installed.
@@ -78,6 +102,10 @@ type Promotion struct {
 	// code; Active still decides whether what was handed out can be spent,
 	// so a campaign can collect sign-ups before it is switched on.
 	AutoIssue AutoIssue `json:"auto_issue,omitempty"`
+
+	// ApplyMode says whether the code is entered at checkout or applied on
+	// its own as a customer tier. Empty means code.
+	ApplyMode ApplyMode `json:"apply_mode,omitempty"`
 
 	// Terms is customer-facing copy stating what the code requires, shown at
 	// redeem, in the wallet and in the checkout summary. A campaign with a
@@ -121,6 +149,10 @@ func (p Promotion) EffectiveScope() Scope {
 	}
 	return p.Scope
 }
+
+// IsTier reports whether this definition is an automatic customer tier
+// rather than a code.
+func (p Promotion) IsTier() bool { return p.ApplyMode == ApplyModeAuto }
 
 // IsExpired reports whether the code's window has closed.
 //

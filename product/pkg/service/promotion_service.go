@@ -143,7 +143,8 @@ func (s *PromotionService) Redeem(ctx context.Context, code string) (*domain.Pro
 	if !ok {
 		return nil, false
 	}
-	if promotion.IsExpired(s.now()) || promotion.IsExhausted() {
+	// A tier is never a code anyone types.
+	if promotion.IsTier() || promotion.IsExpired(s.now()) || promotion.IsExhausted() {
 		return nil, false
 	}
 	return promotion, true
@@ -171,6 +172,11 @@ func (s *PromotionService) evaluate(ctx context.Context, code string, evalCtx do
 	if err != nil {
 		// An unknown code and a soft-deleted one are reported identically, so
 		// that probing cannot enumerate live campaigns.
+		return domain.EvaluationResult{Reason: domain.ReasonInvalidCode}
+	}
+	// A tier applies on its own through EvaluateTier. Typing its code must not
+	// also spend it in the code slot, or a member would get it twice.
+	if promotion.IsTier() {
 		return domain.EvaluationResult{Reason: domain.ReasonInvalidCode}
 	}
 	if evalCtx.Now.IsZero() {
@@ -302,6 +308,57 @@ func (s *PromotionService) Reserve(ctx context.Context, code, orderID string, ev
 	return row, result, nil
 }
 
+// TierResult is the automatic tier discount a customer earns on a checkout.
+// OK false with no reason means the customer holds no tier that applies.
+type TierResult struct {
+	Code string `json:"code,omitempty"`
+	domain.EvaluationResult
+}
+
+// EvaluateTier finds the customer's automatic tiers (apply_mode auto) and
+// returns the one worth the most on this cart.
+//
+// Membership is the entitlement: a manager issues the tier's code to an
+// account and revokes it to take them out. A member holding two tiers gets the
+// better one, never both. There is no ledger row and no usage cap — a tier is
+// spent on every order — so this is safe to call as often as checkout needs.
+func (s *PromotionService) EvaluateTier(ctx context.Context, evalCtx domain.EvaluationContext) (TierResult, error) {
+	if s.entitlements == nil || evalCtx.CustomerID == "" {
+		return TierResult{}, nil
+	}
+	rows, err := s.entitlements.ListForCustomer(ctx, evalCtx.CustomerID)
+	if err != nil {
+		return TierResult{}, err
+	}
+	if evalCtx.Now.IsZero() {
+		evalCtx.Now = s.now()
+	}
+
+	var best TierResult
+	seen := map[string]bool{}
+	for _, row := range rows {
+		if seen[row.Code] || !row.Usable(evalCtx.Now) {
+			continue
+		}
+		promotion, err := s.store.Get(ctx, row.Code)
+		if err != nil || !promotion.IsTier() {
+			continue
+		}
+		seen[row.Code] = true
+		lines := s.withCatalogAttributes(ctx, *promotion, evalCtx.Lines)
+		judged := evalCtx
+		judged.Lines = lines
+		result := promotion.Evaluate(judged)
+		if !result.OK {
+			continue
+		}
+		if !best.OK || result.DiscountWon > best.DiscountWon {
+			best = TierResult{Code: promotion.Code, EvaluationResult: result}
+		}
+	}
+	return best, nil
+}
+
 // Consume marks an order's reservation paid.
 func (s *PromotionService) Consume(ctx context.Context, orderID string) error {
 	if s.ledger == nil {
@@ -339,6 +396,19 @@ func validateDefinition(p domain.Promotion) error {
 	// already open to everyone, so auto-issuing it would mean nothing.
 	if p.AutoIssue != domain.AutoIssueNone && p.EffectiveScope() != domain.ScopeSingleUser {
 		return ports.Invalid("auto_issue is only for single_user promotional codes")
+	}
+	if !p.ApplyMode.Valid() {
+		return ports.Invalid(fmt.Sprintf("apply_mode %q is not one of code, auto", p.ApplyMode))
+	}
+	// A tier is membership, not a campaign: it reaches only the accounts a
+	// manager (or auto_issue) handed it to, and it is spent on every order.
+	if p.IsTier() {
+		if p.EffectiveScope() != domain.ScopeSingleUser {
+			return ports.Invalid("an automatic tier (apply_mode auto) must be single_user: membership is the entitlement")
+		}
+		if p.MaxRedemptions != nil {
+			return ports.Invalid("an automatic tier (apply_mode auto) has no max_redemptions: it applies to every order its members place")
+		}
 	}
 	// A definition may carry no benefit document only while the legacy
 	// percentage column is still meaningful; otherwise it must be explicit.
@@ -380,6 +450,9 @@ func applyPatchForValidation(p *domain.Promotion, patch ports.PromotionPatch) {
 	}
 	if patch.AutoIssue != nil {
 		p.AutoIssue = *patch.AutoIssue
+	}
+	if patch.ApplyMode != nil {
+		p.ApplyMode = *patch.ApplyMode
 	}
 	if patch.ClearMaxRedemptions {
 		p.MaxRedemptions = nil
@@ -469,6 +542,11 @@ func (s *PromotionService) Wallet(ctx context.Context, customerID string, evalCt
 		entry := WalletEntry{Entitlement: row}
 		promotion, err := s.store.Get(ctx, row.Code)
 		if err == nil {
+			// Tier membership is not something to pick at checkout; it is
+			// applied on its own.
+			if promotion.IsTier() {
+				continue
+			}
 			entry.Promotion = promotion
 		}
 		result := s.evaluate(ctx, row.Code, evalCtx, true)

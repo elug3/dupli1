@@ -101,6 +101,7 @@ INTERNAL=(
   /api/v1/products/promotions/reserve
   /api/v1/products/promotions/consume
   /api/v1/products/promotions/release
+  /api/v1/products/promotions/tier
   /api/v1/products/inventory/reservations
   /api/v1/products/inventory/reservations/r1/commit
   /api/v1/products/inventory/reservations/r1/release

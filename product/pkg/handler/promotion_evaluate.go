@@ -43,6 +43,39 @@ func (h *Handler) EvaluatePromotion(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, result)
 }
 
+// EvaluateTier returns the automatic tier discount (apply_mode auto) the
+// customer earns on this cart, the best one when they hold several. ok false
+// with no reason means no tier applies.
+//
+// Order calls it when showing a checkout session and again at complete. It is
+// internal because the customer id comes from the body: public, it would tell
+// anyone which accounts are VIP.
+func (h *Handler) EvaluateTier(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		CustomerID     string                  `json:"customer_id"`
+		ShippingFeeWon int64                   `json:"shipping_fee_won"`
+		Lines          []domain.EvaluationLine `json:"lines"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.CustomerID == "" {
+		h.respondError(w, http.StatusBadRequest, "customer_id is required")
+		return
+	}
+	result, err := h.promotionSvc.EvaluateTier(r.Context(), domain.EvaluationContext{
+		CustomerID:     body.CustomerID,
+		ShippingFeeWon: body.ShippingFeeWon,
+		Lines:          body.Lines,
+	})
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	h.respondJSON(w, http.StatusOK, result)
+}
+
 // ReservePromotion records a pending use against an order at checkout
 // complete. It re-evaluates first, so a reservation cannot be created for a
 // cart that does not earn the discount.
