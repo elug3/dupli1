@@ -24,7 +24,6 @@ func tierPromotion(code string, fraction float64) domain.Promotion {
 	}
 }
 
-
 func TestTierAppliesToEveryOrderOfAMember(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newPromotionSvc(t)
