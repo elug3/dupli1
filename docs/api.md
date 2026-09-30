@@ -665,6 +665,14 @@ an allowlist of attributes), `expires_at`, `max_redemptions`,
 `max_per_customer`, `entitlement_ttl_days`, `auto_issue` (`""` | `user_registered`;
 `single_user` only), `apply_mode` (`code` default | `auto`), `terms`, `redemption_count`.
 
+**Every promotion discounts the whole order.** The discount base is always the
+goods subtotal (selling price, before shipping). `conditions` on brand,
+category or SKU decide only whether a code applies; once one line matches, the
+discount covers every line. `apply_to` accepts only `entire_subtotal` (or
+empty); `eligible_lines` answers `400` since 2026-09-30, and stored definitions
+still carrying it are rewritten to `entire_subtotal` on startup. Shipping is
+never discounted.
+
 **Customer tiers (`apply_mode: auto`).** A VIP or private tier is a
 `single_user` definition with `apply_mode: auto`: issuing its code to an
 account makes that account a member, revoking the entitlement takes them out.

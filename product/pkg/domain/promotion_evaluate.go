@@ -121,7 +121,7 @@ func (p Promotion) Evaluate(ctx EvaluationContext) EvaluationResult {
 	}
 
 	benefit := p.EffectiveBenefit()
-	base := benefit.base(ctx, eligible)
+	base := benefit.base(ctx)
 	discount := benefit.discountFor(base)
 
 	return EvaluationResult{

@@ -162,6 +162,16 @@ func (s *PromotionStore) backfillLegacyBenefit() error {
 	if err != nil {
 		return fmt.Errorf("backfill promotion benefit: %w", err)
 	}
+	// eligible_lines was retired on 2026-09-30: every promotion discounts the
+	// whole order. Rewriting stored rows keeps them editable, since a save
+	// re-validates the whole benefit and would otherwise refuse it.
+	if _, err := s.pool.Exec(context.Background(), `
+		UPDATE promotions
+		SET benefit = jsonb_set(benefit, '{apply_to}', '"entire_subtotal"')
+		WHERE benefit->>'apply_to' = 'eligible_lines'
+	`); err != nil {
+		return fmt.Errorf("retire eligible_lines: %w", err)
+	}
 	return nil
 }
 

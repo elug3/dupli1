@@ -155,7 +155,7 @@ Built from the checkout session / order draft:
 | `goods_and_shipping` | Apply configured discount across both per rule | 4 |
 | `none` | Track-only / referral (`discount_won = 0`, no fee change) | 4 |
 
-Eligible lines for `goods` are those matching **include** rules (category/brand/price band/…); non-matching lines stay full price. If no line matches, apply fails with `not_eligible`.
+Eligible lines for `goods` are those matching **include** rules (category/brand/price band/…). They decide only **whether** the code applies: if no line matches, apply fails with `not_eligible`. The discount itself always covers the **whole goods subtotal**, matching lines or not (decided 2026-09-30; `eligible_lines` retired).
 
 ### Condition document (sketch)
 
@@ -183,7 +183,7 @@ benefit: {
   discount_fraction: 0.3,          -- when percent
   discount_fixed_won: 5000,        -- when fixed (whole KRW) — sign-up campaign shape
   max_discount_won: null,          -- optional cap
-  apply_to: "eligible_lines" | "entire_subtotal" | "shipping_fee"
+  apply_to: "entire_subtotal"      -- the only goods base; "eligible_lines" is refused since 2026-09-30, "shipping_fee" not implemented
 }
 ```
 
@@ -284,7 +284,7 @@ Verified against the code on 2026-09-16. Builds and tests pass in `product/pkg/{
 | **Fixed ₩ off** | `benefit.discount_type = fixed`; clamped to the eligible base so it can never exceed it (campaign shape) |
 | **Minimum spend** | `conditions.all[{ attr: "subtotal_won", op: "gte", value: N }]` — a predicate, not a bare column (campaign shape) |
 | Free / partial shipping | `benefit.target = shipping` or `goods_and_shipping`; fraction or fixed ₩ off `shipping_fee_won`, floored at 0 |
-| Brand / SKU / category scope | Predicates on `line.category`, `line.subCategory`, `line.brandCode`, `line.styleCode`, `line.skuId`; percent applies to **eligible lines only** when `benefit.apply_to = eligible_lines` |
+| Brand / SKU / category scope | Predicates on `line.category`, `line.subCategory`, `line.brandCode`, `line.styleCode`, `line.skuId`; they gate eligibility only — the discount always covers the whole order (`eligible_lines` retired 2026-09-30; stored rows are migrated to `entire_subtotal` on startup) |
 | First order only | **Not available.** Removed 2026-09-21 — see § Why there is no first-order-only rule. A new-customer campaign is delivered as a `single_user` entitlement issued at registration instead |
 | New customers only | The sign-up campaign gets this structurally (issued at registration), so the predicate is not required for it; still available for global new-customer codes |
 | Discount base | Line **selling price** (`price`), the value order already resolves server-side. `officialPrice` is display-only and never a discount base |

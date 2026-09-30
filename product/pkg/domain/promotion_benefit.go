@@ -33,12 +33,17 @@ const (
 // ApplyTo is the base the discount is computed against.
 type ApplyTo string
 
+// Every promotion discounts the whole order (decided 2026-09-30): conditions on
+// brand, category or SKU decide whether a code applies, never how much of the
+// cart it discounts.
 const (
-	// ApplyToEntireSubtotal charges the discount against the whole cart, which
-	// is what every pre-Phase-2 code did.
+	// ApplyToEntireSubtotal charges the discount against the whole goods
+	// subtotal. It is the only goods base.
 	ApplyToEntireSubtotal ApplyTo = "entire_subtotal"
-	// ApplyToEligibleLines charges it against only the lines that matched the
-	// conditions, leaving the rest at full price.
+	// ApplyToEligibleLines is retired: it discounted only the lines that
+	// matched the conditions. A write naming it is refused, and a stored
+	// definition still carrying it is migrated to entire_subtotal and, until
+	// then, evaluated as the whole cart.
 	ApplyToEligibleLines ApplyTo = "eligible_lines"
 	ApplyToShippingFee   ApplyTo = "shipping_fee"
 )
@@ -99,24 +104,20 @@ func (b Benefit) Validate() error {
 		return fmt.Errorf("max_discount_won must be greater than 0 when set, got %d", *b.MaxDiscountWon)
 	}
 	switch b.ApplyTo {
-	case "", ApplyToEntireSubtotal, ApplyToEligibleLines:
+	case "", ApplyToEntireSubtotal:
+	case ApplyToEligibleLines:
+		return fmt.Errorf("apply_to %q is retired: every promotion discounts the whole order; use entire_subtotal and let conditions decide eligibility", b.ApplyTo)
 	case ApplyToShippingFee:
 		return fmt.Errorf("apply_to %q needs a shipping benefit target, which is not implemented yet", b.ApplyTo)
 	default:
-		return fmt.Errorf("apply_to %q is not one of entire_subtotal, eligible_lines", b.ApplyTo)
+		return fmt.Errorf("apply_to %q is not entire_subtotal", b.ApplyTo)
 	}
 	return nil
 }
 
-// base picks the money the discount is computed against.
-func (b Benefit) base(ctx EvaluationContext, eligible []EvaluationLine) int64 {
-	if b.ApplyTo == ApplyToEligibleLines {
-		var total int64
-		for _, line := range eligible {
-			total += line.ExtendedWon()
-		}
-		return total
-	}
+// base picks the money the discount is computed against: always the whole
+// goods subtotal, whatever apply_to a legacy row still carries.
+func (b Benefit) base(ctx EvaluationContext) int64 {
 	return ctx.SubtotalWon()
 }
 
