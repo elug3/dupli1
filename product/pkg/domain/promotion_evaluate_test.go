@@ -209,9 +209,8 @@ func TestEmptyCartIsNotEligible(t *testing.T) {
 
 // ── Line predicates ──────────────────────────────────────────────────────────
 
-func TestCategoryPredicateSelectsEligibleLines(t *testing.T) {
+func TestCategoryPredicateGatesButDiscountsWholeCart(t *testing.T) {
 	promo := active(percent(0.10))
-	promo.Benefit.ApplyTo = domain.ApplyToEligibleLines
 	promo.Conditions = domain.Conditions{
 		Version: domain.ConditionsVersion,
 		All: []domain.Predicate{
@@ -228,15 +227,49 @@ func TestCategoryPredicateSelectsEligibleLines(t *testing.T) {
 	if !got.OK {
 		t.Fatalf("expected eligible, got %s/%s", got.Reason, got.SubReason)
 	}
-	// Only the bag counts toward the base, so the wallet stays full price.
-	if got.EligibleSubtotalWon != 100000 {
-		t.Fatalf("eligible base = %d, want 100000", got.EligibleSubtotalWon)
+	// The bag makes the code apply; the discount covers the whole order,
+	// wallet included.
+	if got.EligibleSubtotalWon != 150000 {
+		t.Fatalf("base = %d, want 150000", got.EligibleSubtotalWon)
 	}
-	if got.DiscountWon != 10000 {
-		t.Fatalf("discount = %d, want 10000", got.DiscountWon)
+	if got.DiscountWon != 15000 {
+		t.Fatalf("discount = %d, want 15000", got.DiscountWon)
 	}
 	if len(got.EligibleSkuIDs) != 1 || got.EligibleSkuIDs[0] != "sku-bag" {
 		t.Fatalf("eligible skus = %v, want [sku-bag]", got.EligibleSkuIDs)
+	}
+}
+
+// A definition stored before eligible_lines was retired still discounts the
+// whole order until the migration rewrites it.
+func TestLegacyEligibleLinesDiscountsWholeCart(t *testing.T) {
+	promo := active(percent(0.10))
+	promo.Benefit.ApplyTo = domain.ApplyToEligibleLines
+	promo.Conditions = domain.Conditions{
+		Version: domain.ConditionsVersion,
+		All: []domain.Predicate{
+			{Attr: domain.AttrLineCategory, Op: domain.OpIn, Value: []any{"bags"}},
+		},
+	}
+	bag := line("sku-bag", 1, 100000)
+	bag.Category = "bags"
+	wallet := line("sku-wallet", 1, 50000)
+	wallet.Category = "wallets"
+
+	if got := promo.Evaluate(cart(bag, wallet)); got.DiscountWon != 15000 {
+		t.Fatalf("discount = %d, want 15000", got.DiscountWon)
+	}
+}
+
+func TestBenefitRefusesEligibleLines(t *testing.T) {
+	b := percent(0.10)
+	b.ApplyTo = domain.ApplyToEligibleLines
+	if err := b.Validate(); err == nil {
+		t.Fatal("expected eligible_lines to be refused")
+	}
+	b.ApplyTo = domain.ApplyToEntireSubtotal
+	if err := b.Validate(); err != nil {
+		t.Fatalf("entire_subtotal refused: %v", err)
 	}
 }
 
