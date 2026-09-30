@@ -79,6 +79,7 @@ ROUTES=(
   /api/v1/products/p1=product
   /api/v1/products/promotions/evaluate=product
   /api/v1/products/promotions/reserved=product
+  /api/v1/products/promotions/me/tier=product
   /api/v1/products/inventory/items/SKU1=product
   /api/v1/catalog/brands=product
   /api/v1/variants/by-sku/X=product
@@ -101,6 +102,7 @@ INTERNAL=(
   /api/v1/products/promotions/reserve
   /api/v1/products/promotions/consume
   /api/v1/products/promotions/release
+  /api/v1/products/promotions/tier
   /api/v1/products/inventory/reservations
   /api/v1/products/inventory/reservations/r1/commit
   /api/v1/products/inventory/reservations/r1/release

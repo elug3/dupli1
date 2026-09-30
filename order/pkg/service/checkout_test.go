@@ -27,6 +27,30 @@ type fakePromotionClient struct {
 
 	// refuse, when set, is returned instead of a successful evaluation.
 	refuse *ports.PromotionEvaluation
+
+	// tierCode and tierDiscount make every customer a member of one
+	// automatic tier; tierErr fails the tier lookup.
+	tierCode     string
+	tierDiscount float64
+	tierErr      error
+}
+
+func (f *fakePromotionClient) EvaluateTier(_ context.Context, promoCtx ports.PromotionContext) (*ports.PromotionEvaluation, error) {
+	if f.tierErr != nil {
+		return nil, f.tierErr
+	}
+	if f.tierCode == "" {
+		return &ports.PromotionEvaluation{}, nil
+	}
+	var subtotal int64
+	for _, line := range promoCtx.Lines {
+		subtotal += int64(line.Quantity) * line.UnitPriceWon
+	}
+	return &ports.PromotionEvaluation{
+		OK:          true,
+		Code:        f.tierCode,
+		DiscountWon: int64(float64(subtotal) * f.tierDiscount),
+	}, nil
 }
 
 func (f *fakePromotionClient) evaluate(promoCtx ports.PromotionContext) *ports.PromotionEvaluation {

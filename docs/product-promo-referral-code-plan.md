@@ -292,6 +292,7 @@ Verified against the code on 2026-09-16. Builds and tests pass in `product/pkg/{
 ### 2. Stacking and interaction with sale prices
 
 - **One promotional code per checkout session / order** stays a hard rule in v1 (single `promotion_code`).
+- **Plus at most one automatic customer tier** (added 2026-09-29): a `single_user` definition with `apply_mode: auto` (VIP, a private tier) applies to every order its members place without being entered, and stacks under the code. Code and tier together are capped at the goods subtotal; a member of several tiers gets the best one. A tier is never typed, never in the wallet, and has no ledger row or cap.
 - A promotional code **stacks on the sale price**: catalog `price` is already the post-markdown selling price, so a percent applies after markdown. No "code vs markdown, pick the better" logic.
 - Managers who do not want double discounting use a condition instead of new code: `line.on_sale = false` (derived: `officialPrice > price`) or `line.sale_discount_percent lte N`. Policy stays in data, not in the pricing path.
 - Referral/track-only codes (`benefit.target = none`) never conflict, so they may coexist with future auto-promotions.

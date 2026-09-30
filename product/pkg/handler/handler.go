@@ -516,6 +516,9 @@ type promotionBody struct {
 	// own ("user_registered" for a sign-up campaign, "" for none).
 	EntitlementTTLDays *int    `json:"entitlement_ttl_days"`
 	AutoIssue          *string `json:"auto_issue"`
+	// ApplyMode is "code" (entered at checkout, the default) or "auto" (a
+	// customer tier applied to every order its members place).
+	ApplyMode *string `json:"apply_mode"`
 
 	// Legacy fields, still accepted while clients migrate.
 	Discount *float64 `json:"discount"`
@@ -583,6 +586,9 @@ func (h *Handler) CreatePromotion(w http.ResponseWriter, r *http.Request) {
 	if body.AutoIssue != nil {
 		promotion.AutoIssue = domain.AutoIssue(*body.AutoIssue)
 	}
+	if body.ApplyMode != nil {
+		promotion.ApplyMode = domain.ApplyMode(*body.ApplyMode)
+	}
 
 	created, err := h.promotionSvc.Create(r.Context(), promotion)
 	if err != nil {
@@ -645,6 +651,10 @@ func (h *Handler) UpdatePromotion(w http.ResponseWriter, r *http.Request) {
 	if body.AutoIssue != nil {
 		autoIssue := domain.AutoIssue(*body.AutoIssue)
 		patch.AutoIssue = &autoIssue
+	}
+	if body.ApplyMode != nil {
+		applyMode := domain.ApplyMode(*body.ApplyMode)
+		patch.ApplyMode = &applyMode
 	}
 	updated, err := h.promotionSvc.Update(r.Context(), code, patch)
 	if err != nil {

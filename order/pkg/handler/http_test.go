@@ -1317,6 +1317,9 @@ func (c renameWindowPromotionClient) Reserve(_ context.Context, _, _ string, pro
 }
 
 func (renameWindowPromotionClient) Consume(context.Context, string) error { return nil }
+func (renameWindowPromotionClient) EvaluateTier(context.Context, ports.PromotionContext) (*ports.PromotionEvaluation, error) {
+	return &ports.PromotionEvaluation{}, nil
+}
 func (renameWindowPromotionClient) Release(context.Context, string) error { return nil }
 
 func newPromotionTestMux(t *testing.T) (*http.ServeMux, *service.Service) {

@@ -67,6 +67,16 @@ func (c *Client) Reserve(ctx context.Context, code, orderID string, promoCtx por
 	}, true)
 }
 
+// EvaluateTier asks product for the customer's automatic tier discount. It is
+// an internal route: the customer id travels in the body.
+func (c *Client) EvaluateTier(ctx context.Context, promoCtx ports.PromotionContext) (*ports.PromotionEvaluation, error) {
+	return c.evaluateAt(ctx, "/api/v1/products/promotions/tier", evaluateRequest{
+		CustomerID:     promoCtx.CustomerID,
+		ShippingFeeWon: promoCtx.ShippingFeeWon,
+		Lines:          promoCtx.Lines,
+	}, true)
+}
+
 func (c *Client) evaluateAt(ctx context.Context, path string, req evaluateRequest, authed bool) (*ports.PromotionEvaluation, error) {
 	resp, err := c.post(ctx, path, req, authed)
 	if err != nil {
@@ -94,7 +104,10 @@ func (c *Client) evaluateAt(ctx context.Context, path string, req evaluateReques
 	if body.Result != nil {
 		out = *body.Result
 	}
-	out.Code = req.Code
+	// A tier lookup sends no code; product names the tier that applied.
+	if req.Code != "" {
+		out.Code = req.Code
+	}
 	return &out, nil
 }
 

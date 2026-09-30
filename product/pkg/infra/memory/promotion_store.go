@@ -160,6 +160,9 @@ func applyPromotionPatch(p *domain.Promotion, patch ports.PromotionPatch) {
 	if patch.AutoIssue != nil {
 		p.AutoIssue = *patch.AutoIssue
 	}
+	if patch.ApplyMode != nil {
+		p.ApplyMode = *patch.ApplyMode
+	}
 	if patch.ClearExpiresAt {
 		p.ExpiresAt = nil
 	} else if patch.ExpiresAt != nil {

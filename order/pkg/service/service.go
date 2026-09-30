@@ -47,7 +47,12 @@ type CreateOrderInput struct {
 	CustomerID      string
 	Items           []domain.OrderItem
 	PromotionCode      string
+	// DiscountWon is the whole goods discount, the tier's share included.
 	DiscountWon     int64
+	// TierPromotionCode and TierDiscountWon are the automatic tier's share of
+	// DiscountWon; checkout complete sets them.
+	TierPromotionCode string
+	TierDiscountWon   int64
 	IdempotencyKey  string
 	RecipientName   string
 	RecipientPhone  string
@@ -194,6 +199,10 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 
 	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.PromotionCode, input.DiscountWon, shippingFee, s.now())
 	if err != nil {
+		_ = s.stock.ReleaseReservation(ctx, reservationID)
+		return nil, err
+	}
+	if err := order.SetTier(input.TierPromotionCode, input.TierDiscountWon); err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
