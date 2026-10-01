@@ -30,11 +30,12 @@ $DOCKER network create "$NET" >/dev/null
 
 # One stub per service, reachable under both naming schemes the wrappers use:
 # Compose service names (dupli1-<svc>) and Cloud Map names (<svc>.dupli1.local).
-for s in "${SERVICES[@]}" minio; do
+for s in "${SERVICES[@]}" minio s3; do
   cat >"$WORK/stub-$s.conf" <<EOF
 server {
     listen 8080;
     listen 9000;
+    listen 8333;
     location / { default_type text/plain; return 200 "SVC=$s URI=\$request_uri"; }
 }
 EOF
@@ -162,7 +163,7 @@ sed 's/^resolver 10\.0\.0\.2 /resolver 127.0.0.11 /' "$ROOT/api/nginx.ecs.conf" 
 
 run_suite local "$ROOT/api/nginx.conf" /product-images/a.jpg=minio
 run_suite ecs "$WORK/nginx.ecs.conf"
-run_suite venus "$ROOT/deploy/venus/nginx-gateway.conf"
+run_suite venus "$ROOT/deploy/venus/nginx-gateway.conf" /product-images/a.jpg=s3
 run_suite prod "$ROOT/api/nginx.prod.conf" /product-images/a.jpg=minio
 
 if ((FAILED)); then
