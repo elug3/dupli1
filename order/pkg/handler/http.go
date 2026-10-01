@@ -421,7 +421,9 @@ func (h *Handler) approveCancel(w http.ResponseWriter, r *http.Request, orderID 
 		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
 		return
 	}
-	ctx := ports.WithPaymentBearer(r.Context(), r.Header.Get("Authorization"))
+	// order.status.update is the whole check: the refund runs as the order
+	// service account, not with the manager's own token.
+	ctx := ports.WithRefundOperator(r.Context(), claims.UserID)
 	order, err := h.svc.ApproveCancelRequest(ctx, orderID)
 	if err != nil {
 		respondServiceError(w, err)
@@ -466,7 +468,7 @@ func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request, orderID s
 	)
 	switch req.Status {
 	case domain.StatusCanceled:
-		ctx := ports.WithPaymentBearer(r.Context(), r.Header.Get("Authorization"))
+		ctx := ports.WithRefundOperator(r.Context(), claims.UserID)
 		order, err = h.svc.CancelOrder(ctx, orderID)
 	case domain.StatusFulfilled:
 		order, err = h.svc.FulfillOrder(r.Context(), orderID)

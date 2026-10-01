@@ -212,7 +212,7 @@ Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
 
 NANO return/webhook endpoints are **unauthenticated** (callback / webhook secret). Bypass requires `payment.bypass`.
 
-`payment.cancel` is granted by the `fulfillment` bundle and by the `*` / `admin.*` wildcards. It is deliberately **not** added to the legacy `order_manager` role expansion, so existing legacy-role accounts do not silently gain the ability to move money; grant the `fulfillment` bundle (or the permission itself) to opt an account in.
+`payment.cancel` is granted by the `fulfillment` bundle and by the `*` / `admin.*` wildcards. It gates calling the payment service's cancel endpoint **directly**. Order cancels (`PUT /orders/{id}/status` → `canceled`, `POST /orders/{id}/cancel/approve`) need only `order.status.update`: the order service refunds as its own service account and puts the approving user's ID in the refund reason (`order canceled by <user id>`), so the payment row still shows who approved it. Anyone who can cancel an order can therefore refund it; grant `order.status.update` with that in mind.
 
 ### Notification
 
@@ -446,7 +446,7 @@ Users with multiple legacy roles receive the **union** of expanded permissions (
 | `support_agent` | `support.read`, `support.reply` |
 | dupli1-order | `DUPLI1_ORDER_SERVICE_*` | `order_manager` | `order.ship`, `order.status.update`, `inventory.reservation.manage`, `payment.cancel` |
 
-Note: `dupli1-order` does not need `cart.read` or `inventory.stock.write` for its runtime paths (reservations only). `payment.cancel` is so a paid-order cancel can refund through the gateway if the operator Bearer is missing. The legacy `order_manager` role was broader than the order service account requires.
+Note: `dupli1-order` does not need `cart.read` or `inventory.stock.write` for its runtime paths (reservations only). `payment.cancel` is how every paid-order cancel refunds: the order service always calls payment as this account, never with the operator's token. The legacy `order_manager` role was broader than the order service account requires.
 
 ---
 

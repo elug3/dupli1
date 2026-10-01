@@ -17,30 +17,24 @@ var (
 	ErrPaymentUnauthorized = errors.New("unauthorized")
 )
 
-type paymentBearerKey struct{}
+type refundOperatorKey struct{}
 
-// WithPaymentBearer stores the caller's access token so a paid-order cancel can
-// refund at the payment service as that operator (payment.cancel).
-func WithPaymentBearer(ctx context.Context, token string) context.Context {
-	token = trimBearer(token)
-	if token == "" {
+// WithRefundOperator records which staff user asked for a paid-order cancel.
+// The refund itself always runs as the order service account (payment.cancel);
+// the operator only goes into the refund reason, so the payment row still shows
+// who approved it.
+func WithRefundOperator(ctx context.Context, userID string) context.Context {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, paymentBearerKey{}, token)
+	return context.WithValue(ctx, refundOperatorKey{}, userID)
 }
 
-// PaymentBearer returns the operator access token stashed by WithPaymentBearer.
-func PaymentBearer(ctx context.Context) string {
-	token, _ := ctx.Value(paymentBearerKey{}).(string)
-	return token
-}
-
-func trimBearer(token string) string {
-	token = strings.TrimSpace(token)
-	if len(token) >= 7 && strings.EqualFold(token[:7], "bearer ") {
-		return strings.TrimSpace(token[7:])
-	}
-	return token
+// RefundOperator returns the user ID stashed by WithRefundOperator, or "".
+func RefundOperator(ctx context.Context) string {
+	userID, _ := ctx.Value(refundOperatorKey{}).(string)
+	return userID
 }
 
 // PaymentClient refunds a captured payment at the payment service (NANO / Bypass).

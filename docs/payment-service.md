@@ -61,7 +61,7 @@ Ops `PUT /orders/{id}/status` `{ "status": "canceled" }` still refunds immediate
 
 `POST /api/v1/payments/{id}/cancel` (permission `payment.cancel`, staff-only — no ABAC) refunds a `succeeded` payment through the PG.
 
-Ops **Cancel** on a paid or in-transit order (`PUT /api/v1/orders/{id}/status` `{ "status": "canceled" }`) calls that endpoint first (forwards the operator Bearer; falls back to the `dupli1-order` service account which is seeded with `payment.cancel`). A PG rejection leaves the order unchanged. Unpaid / pending cancel does not call payment. Customer cancel before manager confirmation uses the same refund path immediately.
+Ops **Cancel** on a paid or in-transit order (`PUT /api/v1/orders/{id}/status` `{ "status": "canceled" }`) calls that endpoint first (always as the `dupli1-order` service account, which is seeded with `payment.cancel`; the operator's user ID goes into the refund reason). A PG rejection leaves the order unchanged. Unpaid / pending cancel does not call payment. Customer cancel before manager confirmation uses the same refund path immediately.
 
 **Provider endpoint.** NANO `POST /api/payment/cancel.io`, documented in **[NANO] 수기결제 연동 API 안내 v2.5 §3**. The certified-payment guide (인증결제 v2.7 §4 취소) defines no cancel body of its own and defers to that section, so cert-approved card payments cancel through the same endpoint.
 

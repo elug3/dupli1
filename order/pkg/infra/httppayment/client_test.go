@@ -49,21 +49,29 @@ func TestCancelPayment_PostsFullCancel(t *testing.T) {
 	}
 }
 
-func TestCancelPayment_PrefersCallerBearer(t *testing.T) {
-	var gotAuth string
+func TestCancelPayment_RunsAsServiceAccountAndNamesOperator(t *testing.T) {
+	var gotAuth, gotReason string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
+		var body struct {
+			Reason string `json:"reason"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotReason = body.Reason
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 
 	client := httppayment.NewClientWithBearer(srv.URL, srv.Client(), "svc-token")
-	ctx := ports.WithPaymentBearer(t.Context(), "Bearer operator-token")
+	ctx := ports.WithRefundOperator(t.Context(), "user-123")
 	if err := client.CancelPayment(ctx, "pay_1", "k"); err != nil {
 		t.Fatalf("CancelPayment: %v", err)
 	}
-	if gotAuth != "Bearer operator-token" {
-		t.Fatalf("auth = %q, want the operator token rather than the service account", gotAuth)
+	if gotAuth != "Bearer svc-token" {
+		t.Fatalf("auth = %q, want the order service account", gotAuth)
+	}
+	if gotReason != "order canceled by user-123" {
+		t.Fatalf("reason = %q, want the approving operator named", gotReason)
 	}
 }
 

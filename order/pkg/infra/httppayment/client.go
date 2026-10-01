@@ -63,7 +63,11 @@ func (c *Client) CancelPayment(ctx context.Context, paymentID, idempotencyKey st
 }
 
 func (c *Client) doCancel(ctx context.Context, paymentID, idempotencyKey string) error {
-	body, err := json.Marshal(map[string]string{"reason": "order canceled"})
+	reason := "order canceled"
+	if operator := ports.RefundOperator(ctx); operator != "" {
+		reason += " by " + operator
+	}
+	body, err := json.Marshal(map[string]string{"reason": reason})
 	if err != nil {
 		return err
 	}
@@ -146,9 +150,6 @@ func (c *Client) paymentStatus(ctx context.Context, paymentID, token string) (st
 }
 
 func (c *Client) bearer(ctx context.Context) (string, error) {
-	if token := ports.PaymentBearer(ctx); token != "" {
-		return token, nil
-	}
 	if c.tokenSource == nil {
 		return "", fmt.Errorf("%w: no payment auth token (set DUPLI1_ORDER_SERVICE_API_KEY)", ports.ErrPaymentUnauthorized)
 	}
