@@ -34,6 +34,12 @@ func migrateSchema(ctx context.Context, db *sql.DB) error {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS account_type TEXT NOT NULL DEFAULT 'customer'`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS service_name TEXT NOT NULL DEFAULT ''`,
+		// Added without a default so existing accounts stay NULL (sign-up
+		// date unknown) instead of all reading as today; the default set
+		// afterwards stamps only rows inserted from now on.
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ`,
+		`ALTER TABLE users ALTER COLUMN created_at SET DEFAULT NOW()`,
+		`CREATE INDEX IF NOT EXISTS idx_users_created_at ON users (created_at) WHERE created_at IS NOT NULL`,
 		`CREATE TABLE IF NOT EXISTS auth_outbox (
 			id BIGSERIAL PRIMARY KEY,
 			aggregate_id TEXT NOT NULL,

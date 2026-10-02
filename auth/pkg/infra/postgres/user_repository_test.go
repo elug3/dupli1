@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/elug3/dupli1/auth/pkg/autherrors"
 	"github.com/elug3/dupli1/auth/pkg/bootstrap"
@@ -308,5 +309,94 @@ func TestPasswordRoundtrip(t *testing.T) {
 	}
 	if got.ValidatePassword("wrongpassword") {
 		t.Error("wrong password should not validate")
+	}
+}
+
+func TestSave_CreatedAtIsKeptAcrossUpdates(t *testing.T) {
+	requirePostgres(t)
+	ctx := t.Context()
+
+	u := newTestUser(t)
+	created := time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC)
+	u.CreatedAt = &created
+	if err := repo.Save(ctx, u); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	// An update from a copy that never loaded created_at must not clear it.
+	u.CreatedAt = nil
+	u.FailedLoginAttempts = 2
+	if err := repo.Save(ctx, u); err != nil {
+		t.Fatalf("Save update: %v", err)
+	}
+	got, err := repo.FindByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if got.CreatedAt == nil || !got.CreatedAt.Equal(created) {
+		t.Fatalf("CreatedAt = %v, want %v", got.CreatedAt, created)
+	}
+}
+
+func TestSave_CreatedAtDefaultsToNow(t *testing.T) {
+	requirePostgres(t)
+	ctx := t.Context()
+
+	before := time.Now().Add(-time.Minute)
+	u := newTestUser(t)
+	if err := repo.Save(ctx, u); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := repo.FindByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if got.CreatedAt == nil || got.CreatedAt.Before(before) {
+		t.Fatalf("CreatedAt = %v, want about now", got.CreatedAt)
+	}
+}
+
+func TestRegistrationTimes_CountsOnlyTheAccountTypeInRange(t *testing.T) {
+	requirePostgres(t)
+	ctx := t.Context()
+
+	start := time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	save := func(accountType string, at time.Time) *domain.User {
+		u := newTestUser(t)
+		u.AccountType = accountType
+		u.CreatedAt = &at
+		if err := repo.Save(ctx, u); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		return u
+	}
+	save(domain.AccountTypeCustomer, start.Add(time.Hour))
+	save(domain.AccountTypeCustomer, end.Add(-time.Second))
+	save(domain.AccountTypeCustomer, end) // outside: end is exclusive
+	save(domain.AccountTypeManager, start.Add(time.Hour))
+	undated := save(domain.AccountTypeCustomer, start.Add(time.Hour))
+
+	db, err := sql.Open("postgres", testDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.ExecContext(ctx, `UPDATE users SET created_at = NULL WHERE id = $1`, undated.ID); err != nil {
+		t.Fatal(err)
+	}
+	var wantUndated int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE account_type = 'customer' AND created_at IS NULL`).Scan(&wantUndated); err != nil {
+		t.Fatal(err)
+	}
+
+	times, gotUndated, err := repo.RegistrationTimes(ctx, domain.AccountTypeCustomer, start, end)
+	if err != nil {
+		t.Fatalf("RegistrationTimes: %v", err)
+	}
+	if len(times) != 2 {
+		t.Fatalf("times = %v, want the 2 customers inside the range", times)
+	}
+	if gotUndated != wantUndated || gotUndated < 1 {
+		t.Fatalf("undated = %d, want %d (>= 1)", gotUndated, wantUndated)
 	}
 }

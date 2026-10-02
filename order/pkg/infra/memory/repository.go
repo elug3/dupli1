@@ -262,6 +262,27 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 	return orders, nil
 }
 
+func (r *Repository) ListSalesActivity(ctx context.Context, start, end time.Time) ([]domain.Order, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	in := func(t *time.Time) bool { return t != nil && !t.Before(start) && t.Before(end) }
+	orders := make([]domain.Order, 0)
+	for _, order := range r.orders {
+		if order.PaidAt == nil {
+			continue
+		}
+		if in(order.PaidAt) || (order.Status == domain.StatusCanceled && in(order.CanceledAt)) {
+			orders = append(orders, *cloneOrder(order))
+		}
+	}
+	return orders, nil
+}
+
 func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.CheckoutSession) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -319,6 +340,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	}
 
 	order.Status = domain.StatusCanceled
+	order.CanceledAt = &now
 	order.UpdatedAt = now
 	r.orders[orderID] = cloneOrder(order)
 
@@ -357,6 +379,7 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 	}
 
 	order.Status = domain.StatusCanceled
+	order.CanceledAt = &now
 	order.UpdatedAt = now
 	r.orders[orderID] = cloneOrder(order)
 
@@ -398,6 +421,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	}
 
 	order.Status = domain.StatusCanceled
+	order.CanceledAt = &now
 	order.UpdatedAt = now
 	r.orders[orderID] = cloneOrder(order)
 

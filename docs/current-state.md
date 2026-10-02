@@ -53,6 +53,7 @@ See [service-layout.md](service-layout.md) for details.
   - Register: **temporary open customer signup** via `AUTH_OPEN_REGISTER` (default on); anonymous callers create `customer` only. Set `AUTH_OPEN_REGISTER=false` to require `user.create` again. Authenticated `user.create` still follows ABAC for other account types.
   - Auth ABAC hierarchy governs who may manage whom
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
+  - Accounts record `created_at` at registration (accounts from before it was added stay undated); `GET /api/v1/auth/reports/registrations` (`user.read`) counts customer sign-ups per KST Monday week or calendar month
   - Customer commerce profile/addresses moved to **`profile`** service (`/api/v1/profile/me/…`); one-release gateway aliases keep `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` — [auth-profile-extension-plan.md](auth-profile-extension-plan.md)
   - `DELETE /api/v1/auth/users/:id` (`user.delete`) writes `user.deleted` to a transactional **outbox** in the same Postgres transaction as the user row delete; the drain worker publishes to NATS so profile can drop owned PII. In-memory/tests publish first and refuse the delete if the broker rejects.
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `manager`)
@@ -123,6 +124,7 @@ See [service-layout.md](service-layout.md) for details.
   - **Shipping fee:** flat per-order delivery charge via `DUPLI1_ORDER_SHIPPING_FEE_WON` (deprecated alias `DUPLI1_ORDER_SHIPPING_FEE_CENTS`; whole KRW, default 30000 = 30,000 KRW; set 0 for free). JSON / DB / Go field is `shipping_fee_won`. `total = subtotal - discount + shipping`; no free-shipping threshold; promotional codes discount goods only (shipping benefits are Phase 4 of [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md)). Snapshotted on the checkout session when it opens; `complete` charges that quoted fee even if the configured amount changed mid-checkout. Direct `POST /orders` uses the current configured fee.
   - Publishes order events via transactional **outbox** (`order.created` / status updates); outbox drain worker
   - Live admin SSE at `GET /api/v1/orders/events` (`order.read.all`): each order change, as `GET /orders/{id}` presents it, reaches manage-web's stream as it commits — feeds its header badge and order lists ([order-live-events.md](order-live-events.md))
+  - Weekly / monthly sales report at `GET /api/v1/orders/reports/sales` (`order.read.all`): KST Monday weeks or calendar months, sales by `paid_at`, refunds by `canceled_at` (stamped on every cancel since this column was added; older canceled orders were backfilled from `updated_at`)
   - Optional `Idempotency-Key` on `POST /api/v1/orders` (replay-safe create)
   - Checkout `complete` snapshots recipient + shipping address (optional prefill from auth profile)
   - Checkout `complete` uses atomic session claim — concurrent completes cannot create duplicate orders

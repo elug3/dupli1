@@ -90,6 +90,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/telegram` | Telegram Bot API client — `Client` (send/reply with retry, backoff and bot-token redaction in errors), wire types (`Update`, `Message`, `Chat`, `User`, `CallbackQuery`), inline-keyboard menus (`ReplyMenu`, `EditMessageText`, `AnswerCallback`), `SendSilent` for an alert that should queue rather than interrupt, webhook registration (`WithAllowedUpdates` opts a bot into `callback_query`; the default stays `message` only), `GetUpdates` polling (`RunPoller`/`DrainUpdates` over a `Handler`), HTML escaping and 4096-char-safe truncation. The `AccessPolicy` interface is the client's only view of who may be messaged, so each bot keeps its own policy; used by `notification` (ops alerts) |
 | `shared/pkg/serviceaccount` | Service account names (`dupli1-order`, `dupli1-web`) auth stamps into the `service_name` claim and internal routes allowlist via `authjwt.Claims.CalledBy`. No dependencies, so auth imports it without the JWKS validator |
 | `shared/pkg/productclient` | HTTP client for product's variant-lookup endpoint, returning a superset `Variant`; used by `cart` and `order`, each mapping only the display field it needs (`Color` vs `ProductName`) into its own local `ports.VariantInfo` |
+| `shared/pkg/reportperiod` | KST report periods (Monday weeks, calendar months): parses `granularity`/`from`/`to`, lists periods and buckets a time into one; used by `order` (sales report) and `auth` (sign-up report) so their periods line up |
 
 ### Service ownership
 

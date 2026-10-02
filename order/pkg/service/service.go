@@ -16,6 +16,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/shared/pkg/events"
 	"github.com/elug3/dupli1/shared/pkg/outbox"
+	"github.com/elug3/dupli1/shared/pkg/reportperiod"
 )
 
 // Subject aliases of the shared event contract — see shared/pkg/events.
@@ -265,6 +266,20 @@ func (s *Service) ListAllOrders(ctx context.Context) ([]domain.Order, error) {
 		return nil, err
 	}
 	return s.presentOrders(orders), nil
+}
+
+// SalesReport buckets payments and refunds into weeks or months; see
+// reportperiod.NewRange for how granularity, from and to are read.
+func (s *Service) SalesReport(ctx context.Context, granularity, from, to string) (domain.SalesReport, error) {
+	r, err := reportperiod.NewRange(granularity, from, to, s.now())
+	if err != nil {
+		return domain.SalesReport{}, err
+	}
+	orders, err := s.repo.ListSalesActivity(ctx, r.Start, r.End)
+	if err != nil {
+		return domain.SalesReport{}, err
+	}
+	return domain.BuildSalesReport(r, orders), nil
 }
 
 func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, amountKRW int64) (*domain.Order, error) {

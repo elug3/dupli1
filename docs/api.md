@@ -308,19 +308,49 @@ List all users. Requires `user.read`. Results are filtered by auth ABAC hierarch
       "is_active": true,
       "locked_at": null,
       "failed_login_attempts": 0,
+      "created_at": "2026-10-02T03:00:00Z",
       "has_password": true
     }
   ]
 }
 ```
 
-`has_password` is `false` for service accounts, which authenticate with API keys only.
+`has_password` is `false` for service accounts, which authenticate with API keys only. `created_at` is when the account registered; it is absent for accounts created before auth recorded it.
 
 **Errors**
 | Status | Meaning |
 |--------|---------|
 | `401` | Missing or invalid access token |
 | `403` | Caller lacks `user.read` or management hierarchy forbids listing |
+
+---
+
+### `GET /api/v1/auth/reports/registrations`
+
+Customer sign-ups per week or month. Requires `user.read`. Query: `granularity=week|month` (default `week`), `from` and `to` as inclusive `YYYY-MM-DD` dates in KST, widened to whole periods (default: the last 12 weeks or 12 months up to the current one; at most 104 weeks or 36 months). Weeks run Monday to Sunday; the periods match `GET /api/v1/orders/reports/sales`. Managers and service accounts are not counted.
+
+**Response `200`**
+```json
+{
+  "granularity": "week",
+  "timezone": "Asia/Seoul",
+  "from": "2026-07-13",
+  "to": "2026-10-04",
+  "periods": [{ "period_start": "2026-09-28", "period_end": "2026-10-04", "new_customers": 5 }],
+  "total_new_customers": 41,
+  "undated_customers": 120
+}
+```
+
+`undated_customers` signed up before auth recorded sign-up times and fall in no period.
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `400` | Bad `granularity`, date, or range |
+| `401` | Missing or invalid access token |
+| `403` | Caller lacks `user.read` |
+| `503` | No user database configured |
 
 ---
 
@@ -973,6 +1003,7 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 | POST | `/api/v1/orders` | Create order directly |
 | GET | `/api/v1/orders` | List all orders (`order.read.all`) |
 | GET | `/api/v1/orders/events` | Live order stream, Server-Sent Events (`order.read.all`) — see [order-live-events.md](order-live-events.md) |
+| GET | `/api/v1/orders/reports/sales?granularity=week\|month&from=YYYY-MM-DD&to=YYYY-MM-DD` | Sales report (`order.read.all`). KST periods: weeks run Monday–Sunday, months are calendar months; `from`/`to` are inclusive and widened to whole periods (default: the last 12 weeks or 12 months up to the current one; at most 104 weeks or 36 months, else `400`). Returns `{granularity, timezone, from, to, periods[], totals}`; each period has `period_start`, `period_end`, `orders`, `gross_won`, `discount_won`, `shipping_fee_won`, `refunds`, `refunded_won`, `net_won`, `average_order_won`. A sale counts in the period of its `paid_at`; a refund (a paid order canceled) counts in the period of its `canceled_at`, so `net_won = gross_won - refunded_won` is what moved in that period. Empty periods are listed |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
 | POST | `/api/v1/orders/{id}/confirm` | `order.status.update` — manager accepts a paid order (`paid` → `confirmed`; 2-hour SLA from `paid_at`, auto-confirmed by the sweep otherwise) |
@@ -1156,6 +1187,7 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | POST | `/api/v1/auth/refresh` | — | auth |
 | POST | `/api/v1/auth/logout` | — | auth |
 | GET | `/api/v1/auth/users` | `user.read` | auth |
+| GET | `/api/v1/auth/reports/registrations` | `user.read` | auth |
 | PATCH | `/api/v1/auth/users/{id}/permissions` | `user.permissions.update` | auth |
 | PATCH | `/api/v1/auth/users/{id}/password` | `user.password.update` | auth |
 | PATCH | `/api/v1/auth/users/{id}/status` | `user.status.update` | auth |

@@ -127,6 +127,10 @@ type Order struct {
 	// confirmation, in transit, or once delivered. Cleared on reject.
 	CancelRequestedAt   *time.Time `json:"cancel_requested_at,omitempty"`
 	CancelRequestReason string     `json:"cancel_request_reason,omitempty"`
+	// CanceledAt is when the order became canceled. Cleared if a late
+	// payment reinstates it. A cancel of an order with PaidAt set is a
+	// refund, and the sales report counts it in the period of CanceledAt.
+	CanceledAt *time.Time `json:"canceled_at,omitempty"`
 	// Computed refund/delivery-policy flags — populated by ApplyRefundPolicy,
 	// not stored.
 	ConfirmationDueAt      *time.Time `json:"confirmation_due_at,omitempty"`
@@ -322,6 +326,7 @@ func (o *Order) Cancel(now time.Time) error {
 		return ErrInvalidTransition
 	}
 	o.Status = StatusCanceled
+	o.CanceledAt = &now
 	o.UpdatedAt = now
 	return nil
 }
@@ -502,6 +507,7 @@ func (o *Order) ReinstateForLatePayment(reservationID string, now time.Time) err
 		return ErrInvalidOrder
 	}
 	o.Status = StatusPending
+	o.CanceledAt = nil
 	o.ReservationID = reservationID
 	o.PaymentDueAt = now.Add(DefaultPaymentTTL)
 	o.UpdatedAt = now

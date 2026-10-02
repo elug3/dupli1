@@ -10,6 +10,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/domain"
 	"github.com/elug3/dupli1/auth/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/reportperiod"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 )
@@ -23,6 +24,9 @@ type userResponse struct {
 	IsActive            bool       `json:"is_active"`
 	LockedAt            *time.Time `json:"locked_at,omitempty"`
 	FailedLoginAttempts int        `json:"failed_login_attempts"`
+	// CreatedAt is when the account registered; absent for accounts made
+	// before auth recorded it.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
 	// HasPassword is false for an account that cannot sign in with a
 	// password — every service account, which uses API keys — so manage-web
 	// can offer keys instead of a password form.
@@ -43,6 +47,7 @@ func toUserResponse(u *domain.User) userResponse {
 		IsActive:            u.IsActive,
 		LockedAt:            u.LockedAt,
 		FailedLoginAttempts: u.FailedLoginAttempts,
+		CreatedAt:           u.CreatedAt,
 		HasPassword:         !u.PasswordRetired(),
 	}
 }
@@ -534,4 +539,23 @@ func (h *Handler) Refresh(c *gin.Context) {
 	// refresh_token is the rotated replacement for the one the caller sent;
 	// the old one no longer works and must be discarded by the client.
 	c.JSON(http.StatusOK, gin.H{"token": newToken, "refresh_token": newRefreshToken})
+}
+
+// RegistrationReport serves GET /reports/registrations?granularity=week|month
+// &from=YYYY-MM-DD&to=YYYY-MM-DD (KST, both optional): customer sign-ups per
+// period. Requires user.read.
+func (h *Handler) RegistrationReport(c *gin.Context) {
+	report, err := h.svc.RegistrationReport(c.Request.Context(), c.Query("granularity"), c.Query("from"), c.Query("to"))
+	switch {
+	case errors.Is(err, reportperiod.ErrInvalidRange):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	case errors.Is(err, service.ErrReportsUnavailable):
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	case err != nil:
+		h.respondInternalError(c, "registration_report_error", err)
+		return
+	}
+	c.JSON(http.StatusOK, report)
 }
