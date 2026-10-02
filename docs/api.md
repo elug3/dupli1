@@ -308,19 +308,49 @@ List all users. Requires `user.read`. Results are filtered by auth ABAC hierarch
       "is_active": true,
       "locked_at": null,
       "failed_login_attempts": 0,
+      "created_at": "2026-10-02T03:00:00Z",
       "has_password": true
     }
   ]
 }
 ```
 
-`has_password` is `false` for service accounts, which authenticate with API keys only.
+`has_password` is `false` for service accounts, which authenticate with API keys only. `created_at` is when the account registered; it is absent for accounts created before auth recorded it.
 
 **Errors**
 | Status | Meaning |
 |--------|---------|
 | `401` | Missing or invalid access token |
 | `403` | Caller lacks `user.read` or management hierarchy forbids listing |
+
+---
+
+### `GET /api/v1/auth/reports/registrations`
+
+Customer sign-ups per week or month. Requires `user.read`. Query: `granularity=week|month` (default `week`), `from` and `to` as inclusive `YYYY-MM-DD` dates in KST, widened to whole periods (default: the last 12 weeks or 12 months up to the current one; at most 104 weeks or 36 months). Weeks run Monday to Sunday; the periods match `GET /api/v1/orders/reports/sales`. Managers and service accounts are not counted.
+
+**Response `200`**
+```json
+{
+  "granularity": "week",
+  "timezone": "Asia/Seoul",
+  "from": "2026-07-13",
+  "to": "2026-10-04",
+  "periods": [{ "period_start": "2026-09-28", "period_end": "2026-10-04", "new_customers": 5 }],
+  "total_new_customers": 41,
+  "undated_customers": 120
+}
+```
+
+`undated_customers` signed up before auth recorded sign-up times and fall in no period.
+
+**Errors**
+| Status | Meaning |
+|--------|---------|
+| `400` | Bad `granularity`, date, or range |
+| `401` | Missing or invalid access token |
+| `403` | Caller lacks `user.read` |
+| `503` | No user database configured |
 
 ---
 
@@ -1157,6 +1187,7 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | POST | `/api/v1/auth/refresh` | — | auth |
 | POST | `/api/v1/auth/logout` | — | auth |
 | GET | `/api/v1/auth/users` | `user.read` | auth |
+| GET | `/api/v1/auth/reports/registrations` | `user.read` | auth |
 | PATCH | `/api/v1/auth/users/{id}/permissions` | `user.permissions.update` | auth |
 | PATCH | `/api/v1/auth/users/{id}/password` | `user.password.update` | auth |
 | PATCH | `/api/v1/auth/users/{id}/status` | `user.status.update` | auth |

@@ -45,6 +45,7 @@ type Service struct {
 	accessTokenTTL     time.Duration
 	apiKeyEnv          string
 	now                func() time.Time
+	registrationStats  ports.RegistrationStats
 }
 
 // ServiceOption configures a Service.
@@ -145,6 +146,8 @@ func (s *Service) Register(ctx context.Context, email, password, accountType str
 	if service {
 		u.RetirePassword()
 	}
+	createdAt := s.clock()
+	u.CreatedAt = &createdAt
 	if err := s.userRepo.Save(ctx, u); err != nil {
 		return nil, fmt.Errorf("save user: %w", err)
 	}

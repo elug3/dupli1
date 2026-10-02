@@ -86,6 +86,7 @@ func newRouter(h *handler.Handler, debug bool, jwksJSON []byte, redisClient *red
 		userRead := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserRead))
 		{
 			userRead.GET("/users", h.ListUsers)
+			userRead.GET("/reports/registrations", h.RegistrationReport)
 		}
 
 		userPermissions := v1.Group("", h.RequireAuth(), handler.RequirePermission(permissions.UserPermissionsUpdate))

@@ -14,6 +14,7 @@ import (
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/reportperiod"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 )
 
@@ -186,8 +187,8 @@ func (h *Handler) salesReport(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	report, err := h.svc.SalesReport(r.Context(), q.Get("granularity"), q.Get("from"), q.Get("to"))
-	if errors.Is(err, domain.ErrInvalidReportRange) {
-		respondError(w, http.StatusBadRequest, "granularity must be week or month, from/to must be YYYY-MM-DD with from before to, and the range at most 104 weeks or 36 months")
+	if errors.Is(err, reportperiod.ErrInvalidRange) {
+		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err != nil {

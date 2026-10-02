@@ -123,6 +123,7 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		service.WithAPIKeyRepo(apiKeyRepo),
 		service.WithAccessTokenTTL(cfg.TokenExpiry),
 		service.WithAPIKeyEnv(cfg.APIKeyEnv),
+		service.WithRegistrationStats(userRepo),
 	)
 
 	// Long-lived worker root; cancelled on process shutdown.

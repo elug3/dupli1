@@ -53,6 +53,7 @@ See [service-layout.md](service-layout.md) for details.
   - Register: **temporary open customer signup** via `AUTH_OPEN_REGISTER` (default on); anonymous callers create `customer` only. Set `AUTH_OPEN_REGISTER=false` to require `user.create` again. Authenticated `user.create` still follows ABAC for other account types.
   - Auth ABAC hierarchy governs who may manage whom
   - User admin at `/api/v1/auth/users`; update via `PATCH …/permissions`
+  - Accounts record `created_at` at registration (accounts from before it was added stay undated); `GET /api/v1/auth/reports/registrations` (`user.read`) counts customer sign-ups per KST Monday week or calendar month
   - Customer commerce profile/addresses moved to **`profile`** service (`/api/v1/profile/me/…`); one-release gateway aliases keep `/api/v1/auth/me/profile` and `/api/v1/auth/me/addresses` — [auth-profile-extension-plan.md](auth-profile-extension-plan.md)
   - `DELETE /api/v1/auth/users/:id` (`user.delete`) writes `user.deleted` to a transactional **outbox** in the same Postgres transaction as the user row delete; the drain worker publishes to NATS so profile can drop owned PII. In-memory/tests publish first and refuse the delete if the broker rejects.
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `manager`)

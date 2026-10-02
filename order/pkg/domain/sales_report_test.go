@@ -1,59 +1,19 @@
 package domain_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
+	"github.com/elug3/dupli1/shared/pkg/reportperiod"
 )
 
 func kst(y int, m time.Month, d, h int) time.Time {
-	return time.Date(y, m, d, h, 0, 0, 0, domain.ReportLocation)
-}
-
-func TestNewSalesReportRange_WeekStartsMondayKST(t *testing.T) {
-	// Thursday 2026-10-01, 23:30 UTC is Friday 2026-10-02 08:30 KST.
-	now := time.Date(2026, 10, 1, 23, 30, 0, 0, time.UTC)
-	r, err := domain.NewSalesReportRange("week", "", "", now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := kst(2026, 10, 5, 0); !r.End.Equal(want) {
-		t.Fatalf("end = %v, want %v (Monday after the current KST week)", r.End, want)
-	}
-	if want := kst(2026, 7, 13, 0); !r.Start.Equal(want) {
-		t.Fatalf("start = %v, want %v (12 weeks back)", r.Start, want)
-	}
-}
-
-func TestNewSalesReportRange_SnapsToWholeMonths(t *testing.T) {
-	r, err := domain.NewSalesReportRange("month", "2026-01-15", "2026-03-02", time.Now())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !r.Start.Equal(kst(2026, 1, 1, 0)) || !r.End.Equal(kst(2026, 4, 1, 0)) {
-		t.Fatalf("range = [%v, %v), want [2026-01-01, 2026-04-01)", r.Start, r.End)
-	}
-}
-
-func TestNewSalesReportRange_Rejects(t *testing.T) {
-	now := kst(2026, 10, 2, 12)
-	for name, args := range map[string][3]string{
-		"granularity":     {"day", "", ""},
-		"bad date":        {"week", "2026/01/01", ""},
-		"from after to":   {"week", "2026-10-01", "2026-09-01"},
-		"too many weeks":  {"week", "2023-01-01", "2026-10-01"},
-		"too many months": {"month", "2020-01-01", "2026-10-01"},
-	} {
-		if _, err := domain.NewSalesReportRange(args[0], args[1], args[2], now); !errors.Is(err, domain.ErrInvalidReportRange) {
-			t.Errorf("%s: err = %v, want ErrInvalidReportRange", name, err)
-		}
-	}
+	return time.Date(y, m, d, h, 0, 0, 0, reportperiod.Location)
 }
 
 func TestBuildSalesReport_RefundCountsInTheWeekItHappened(t *testing.T) {
-	r, err := domain.NewSalesReportRange("week", "2026-09-14", "2026-09-27", time.Now())
+	r, err := reportperiod.NewRange("week", "2026-09-14", "2026-09-27", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +54,7 @@ func TestBuildSalesReport_RefundCountsInTheWeekItHappened(t *testing.T) {
 }
 
 func TestBuildSalesReport_EmptyPeriodsAreListed(t *testing.T) {
-	r, err := domain.NewSalesReportRange("month", "2026-01-01", "2026-03-31", time.Now())
+	r, err := reportperiod.NewRange("month", "2026-01-01", "2026-03-31", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

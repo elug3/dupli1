@@ -21,6 +21,9 @@ type User struct {
 	IsActive            bool
 	LockedAt            *time.Time
 	FailedLoginAttempts int
+	// CreatedAt is when the account was registered. Nil for accounts made
+	// before auth recorded it; there is no source to recover those dates.
+	CreatedAt *time.Time
 }
 
 // NormalizeEmail trims whitespace and lowercases an email address so

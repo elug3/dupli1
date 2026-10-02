@@ -18,6 +18,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/reportperiod"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -1405,8 +1406,8 @@ func TestSalesReport_CountsPaidOrdersInTheCurrentWeek(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&rep); err != nil {
 		t.Fatal(err)
 	}
-	if len(rep.Periods) != domain.DefaultReportWeeks {
-		t.Fatalf("periods = %d, want %d", len(rep.Periods), domain.DefaultReportWeeks)
+	if len(rep.Periods) != reportperiod.DefaultWeeks {
+		t.Fatalf("periods = %d, want %d", len(rep.Periods), reportperiod.DefaultWeeks)
 	}
 	last := rep.Periods[len(rep.Periods)-1]
 	if last.Orders != 1 || last.GrossWon != 1000 || last.NetWon != 1000 {
