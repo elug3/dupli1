@@ -104,12 +104,19 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	catalogStore := pg.NewCatalogStore(store.Pool())
 	catalogSvc := service.NewCatalogService(catalogStore)
 
+	visitorStore, err := pg.NewVisitorStore(store.Pool())
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
+
 	guestCookie := handler.GuestCookieConfigFromEnv()
 	h := handler.NewHandler(svc, promotionSvc, inventorySvc, catalogSvc).
 		WithSettings(BuildSettings(cfg, guestCookie.Enabled)).
 		WithViewStore(store).
 		WithWishlistStore(store).
-		WithGuestCookie(guestCookie)
+		WithGuestCookie(guestCookie).
+		WithVisitorService(service.NewVisitorService(visitorStore))
 
 	// New customers get their welcome promotional code from auth's
 	// user.registered event. Issuing is keyed on the event's user id, so a
@@ -162,6 +169,9 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	mux.Handle("PUT "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.AddWishlist)))
 	mux.Handle("POST "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.AddWishlist)))
 	mux.Handle("DELETE "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.RemoveWishlist)))
+	// Unauthenticated like the PDP view count it shares the guest cookie with.
+	mux.HandleFunc("POST "+handler.RouteVisits, h.RecordVisit)
+	mux.Handle("GET "+handler.RouteVisitorsReport, requirePerm(permissions.ProductRead, http.HandlerFunc(h.VisitorReport)))
 	mux.Handle("POST "+handler.RouteProducts, requirePerm(permissions.ProductCreate, h.CreateProductHandler()))
 	mux.Handle("PUT "+handler.RouteProductByID, requirePerm(permissions.ProductUpdate, h.SingleProductHandler()))
 	mux.Handle("DELETE "+handler.RouteProductByID, requirePerm(permissions.ProductDelete, h.SingleProductHandler()))

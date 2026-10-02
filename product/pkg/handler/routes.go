@@ -27,6 +27,11 @@ const (
 	RouteProductWishlist        = "/api/v1/products/{id}/wishlist"
 	RouteWishlist               = "/api/v1/products/wishlist"
 
+	// Storefront visitors: the public once-per-page-load beacon and the
+	// manager report it feeds.
+	RouteVisits         = "/api/v1/products/visits"
+	RouteVisitorsReport = "/api/v1/products/reports/visitors"
+
 	// Public variant lookups (service-prefixed).
 	RoutePublicVariants       = "/api/v1/products/variants"
 	RoutePublicVariant        = "/api/v1/products/variants/by-sku/{sku}"

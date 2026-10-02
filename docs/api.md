@@ -736,6 +736,38 @@ On success, the handler ensures a `dupli1_guest` cookie and records a unique vie
 
 ---
 
+### `POST /api/v1/products/visits`
+
+Storefront visit beacon. No authentication, no body. The storefront sends it once per page load from the browser. It ensures the same `dupli1_guest` cookie as the PDP (minting it when absent) and records the browser as a visitor for the current KST day; repeat calls the same day are no-ops. Requests with a crawler/headless `User-Agent`, no `User-Agent`, or a `Sec-Purpose`/`Purpose: prefetch` header are not counted. Disabled with the PDP view count (`PRODUCT_VIEWS_ENABLED=false`).
+
+**Response `204`** — always, including when the visit was not counted or the store failed (logged).
+
+---
+
+### `GET /api/v1/products/reports/visitors`
+
+Unique storefront visitors per week or month. Requires `product.read`. Same query and periods as `GET /api/v1/orders/reports/sales`: `granularity=week|month` (default `week`), `from`/`to` inclusive `YYYY-MM-DD` KST dates widened to whole periods (default the last 12 weeks or 12 months; at most 104 weeks or 36 months, else `400`). A visitor is a browser (`dupli1_guest` cookie), so one person on two devices counts twice. Counting started when this endpoint shipped; there is no earlier history.
+
+**Response `200`**
+```json
+{
+  "granularity": "week",
+  "timezone": "Asia/Seoul",
+  "from": "2026-09-28",
+  "to": "2026-10-11",
+  "periods": [
+    { "period_start": "2026-09-28", "period_end": "2026-10-04", "unique_visitors": 2, "visitor_days": 3 },
+    { "period_start": "2026-10-05", "period_end": "2026-10-11", "unique_visitors": 1, "visitor_days": 1 }
+  ],
+  "total_unique_visitors": 3,
+  "today": { "date": "2026-10-06", "unique_visitors": 1 }
+}
+```
+
+`unique_visitors` counts each browser once per period; `visitor_days` counts it once per day it came (the sum of the period's daily uniques). `total_unique_visitors` counts each browser once across the whole range, so it is not the sum of the periods. `today` is always the current KST day.
+
+---
+
 ### `GET /api/v1/products/{id}/recommendations`
 
 Public related-product list for PDP. No authentication required. Returns ordered active **parent** cards (seed excluded). Algorithm: same-category content similarity + soft `view_count` boost — see [product-recommendations.md](product-recommendations.md).
