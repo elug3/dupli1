@@ -169,8 +169,10 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	mux.Handle("PUT "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.AddWishlist)))
 	mux.Handle("POST "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.AddWishlist)))
 	mux.Handle("DELETE "+handler.RouteProductWishlist, middleware.OptionalAuth(validator, http.HandlerFunc(h.RemoveWishlist)))
-	// Unauthenticated like the PDP view count it shares the guest cookie with.
-	mux.HandleFunc("POST "+handler.RouteVisits, h.RecordVisit)
+	// Unauthenticated like the PDP view count it shares the guest cookie with;
+	// a request without the cookie mints a new visitor, so it is capped per IP.
+	visitThrottle := newVisitRateLimiter(cfg).Middleware(nil)
+	mux.Handle("POST "+handler.RouteVisits, visitThrottle(http.HandlerFunc(h.RecordVisit)))
 	mux.Handle("GET "+handler.RouteVisitorsReport, requirePerm(permissions.ProductRead, http.HandlerFunc(h.VisitorReport)))
 	mux.Handle("POST "+handler.RouteProducts, requirePerm(permissions.ProductCreate, h.CreateProductHandler()))
 	mux.Handle("PUT "+handler.RouteProductByID, requirePerm(permissions.ProductUpdate, h.SingleProductHandler()))
@@ -278,20 +280,28 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 // the task count. See pkg/infra/ratelimit for why failing open is the right
 // default here.
 func newPromotionRateLimiter(cfg Config) *ratelimit.Limiter {
-	const (
-		maxAttempts = 20
-		window      = time.Minute
-	)
+	return newRateLimiter(cfg, "promo", 20, "promotion rate limit")
+}
+
+// newVisitRateLimiter caps the visit beacon per IP. A browser sends it once a
+// KST day, so the budget only bites on a script inventing visitors; it is
+// generous so shoppers sharing a carrier NAT are not turned away.
+func newVisitRateLimiter(cfg Config) *ratelimit.Limiter {
+	return newRateLimiter(cfg, "visit", 120, "visit rate limit")
+}
+
+func newRateLimiter(cfg Config, prefix string, maxAttempts int, name string) *ratelimit.Limiter {
+	const window = time.Minute
 	url := strings.TrimSpace(cfg.RedisURL)
 	if url == "" {
 		return ratelimit.New(ratelimit.NewMemoryCounter(), maxAttempts, window)
 	}
 	opts, err := redis.ParseURL(url)
 	if err != nil {
-		log.Printf("promotion rate limit: bad REDIS_URL, falling back to per-process window: %v", err)
+		log.Printf("%s: bad REDIS_URL, falling back to per-process window: %v", name, err)
 		return ratelimit.New(ratelimit.NewMemoryCounter(), maxAttempts, window)
 	}
-	return ratelimit.New(ratelimit.NewRedisCounter(redis.NewClient(opts), "promo"), maxAttempts, window)
+	return ratelimit.New(ratelimit.NewRedisCounter(redis.NewClient(opts), prefix), maxAttempts, window)
 }
 
 // customerIDFromRequest reads the caller's identity when the request happens to

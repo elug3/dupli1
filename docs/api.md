@@ -740,7 +740,7 @@ On success, the handler ensures a `dupli1_guest` cookie and records a unique vie
 
 Storefront visit beacon. No authentication, no body. The storefront sends it once per page load from the browser. It ensures the same `dupli1_guest` cookie as the PDP (minting it when absent) and records the browser as a visitor for the current KST day; repeat calls the same day are no-ops. Requests with a crawler/headless `User-Agent`, no `User-Agent`, or a `Sec-Purpose`/`Purpose: prefetch` header are not counted. Disabled with the PDP view count (`PRODUCT_VIEWS_ENABLED=false`).
 
-**Response `204`** — always, including when the visit was not counted or the store failed (logged).
+**Response `204`** — including when the visit was not counted or the store failed (logged). `429` past 120 requests per minute from one IP (a request without the cookie mints a new visitor, so the beacon is capped like promotion redeem; Redis-backed when `REDIS_URL` is set).
 
 ---
 
