@@ -51,6 +51,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// An exact pattern outranks the /api/v1/orders/ subtree below, which
 	// would otherwise read "events" as an order id.
 	mux.HandleFunc("/api/v1/orders/events", h.requireAuth(h.orderEvents))
+	mux.HandleFunc("/api/v1/orders/reports/sales", h.requireAuth(h.salesReport))
 	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
 	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
 }
@@ -168,6 +169,32 @@ func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {
 		"total":  len(orders),
 		"orders": orders,
 	})
+}
+
+// salesReport serves GET /api/v1/orders/reports/sales?granularity=week|month
+// &from=YYYY-MM-DD&to=YYYY-MM-DD (KST, both optional). Same permission as
+// listing every order, since it summarizes all of them.
+func (h *Handler) salesReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims, _ := authjwt.FromContext(r.Context())
+	if h.jwtValidator != nil && !permissions.BypassesOrderReadABAC(claims.Permissions) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
+		return
+	}
+	q := r.URL.Query()
+	report, err := h.svc.SalesReport(r.Context(), q.Get("granularity"), q.Get("from"), q.Get("to"))
+	if errors.Is(err, domain.ErrInvalidReportRange) {
+		respondError(w, http.StatusBadRequest, "granularity must be week or month, from/to must be YYYY-MM-DD with from before to, and the range at most 104 weeks or 36 months")
+		return
+	}
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, report)
 }
 
 func (h *Handler) order(w http.ResponseWriter, r *http.Request) {

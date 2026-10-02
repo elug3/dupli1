@@ -19,6 +19,10 @@ type Repository interface {
 	ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error)
 	ListAll(ctx context.Context) ([]domain.Order, error)
 	ListPendingPaymentExpired(ctx context.Context, now time.Time) ([]domain.Order, error)
+	// ListSalesActivity returns the orders paid in [start, end), and the paid
+	// orders canceled (refunded) in it. Only the fields the sales report reads
+	// are filled: id, status, money totals, paid_at and canceled_at; no items.
+	ListSalesActivity(ctx context.Context, start, end time.Time) ([]domain.Order, error)
 	NextCheckoutSessionID(ctx context.Context) (string, error)
 	SaveCheckoutSession(ctx context.Context, session *domain.CheckoutSession) error
 	GetCheckoutSession(ctx context.Context, id string) (*domain.CheckoutSession, error)

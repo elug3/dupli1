@@ -131,6 +131,7 @@ Beyond `status` and line items, responses carry audit timestamps and tracking:
 | `receipt_confirmed_at` | Customer confirms receipt (nil when auto-fulfilled or manager override) |
 | `disputed_at`, `dispute_reason` | Customer disputes delivery |
 | `cancel_requested_at`, `cancel_request_reason` | Customer cancel request after confirm |
+| `canceled_at` | When the order became canceled; cleared if a late payment reinstates it. With `paid_at` set it marks a refund, which the sales report counts in this period |
 
 Fulfillment snapshot on checkout complete: `recipient_name`, `recipient_phone`, `shipping_address` (immutable on the order).
 

@@ -166,6 +166,7 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier_note TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_by TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_confirmed_at TIMESTAMPTZ`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS disputed_at TIMESTAMPTZ`,
@@ -181,6 +182,9 @@ func (r *Repository) migrate() error {
 		_, _ = r.pool.Exec(ctx, stmt)
 	}
 	_, _ = r.pool.Exec(ctx, `UPDATE orders SET payment_due_at = created_at + INTERVAL '5 minutes' WHERE payment_due_at IS NULL`)
+	// Orders canceled before canceled_at existed: canceled is final (a late
+	// payment reinstates through pending), so updated_at is the cancel time.
+	_, _ = r.pool.Exec(ctx, `UPDATE orders SET canceled_at = updated_at WHERE status = 'canceled' AND canceled_at IS NULL`)
 	// Confirmed is now a real status instead of a timestamp on `paid` — a row
 	// left over from before this change (status still 'paid' but
 	// confirmed_at already set) means a manager had already confirmed it
@@ -197,6 +201,8 @@ func (r *Repository) migrate() error {
 	// tables would fail on a fresh database, where orders has no payment_due_at yet.
 	postAlterStmts := []string{
 		`CREATE INDEX IF NOT EXISTS idx_orders_pending_payment_due_at ON orders(payment_due_at) WHERE status = 'pending'`,
+		`CREATE INDEX IF NOT EXISTS idx_orders_paid_at ON orders(paid_at) WHERE paid_at IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_orders_canceled_at ON orders(canceled_at) WHERE canceled_at IS NOT NULL AND paid_at IS NOT NULL`,
 	}
 	for _, stmt := range postAlterStmts {
 		if _, err := r.pool.Exec(ctx, stmt); err != nil {
@@ -429,10 +435,10 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
-			cancel_requested_at, cancel_request_reason,
+			cancel_requested_at, cancel_request_reason, canceled_at,
 			tier_promotion_code, tier_discount_won,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			reservation_id = EXCLUDED.reservation_id,
@@ -462,6 +468,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			dispute_reason = EXCLUDED.dispute_reason,
 			cancel_requested_at = EXCLUDED.cancel_requested_at,
 			cancel_request_reason = EXCLUDED.cancel_request_reason,
+			canceled_at = EXCLUDED.canceled_at,
 			tier_promotion_code = EXCLUDED.tier_promotion_code,
 			tier_discount_won = EXCLUDED.tier_discount_won,
 			updated_at = EXCLUDED.updated_at
@@ -471,7 +478,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 		order.PaymentID, order.PaidAt, order.PaymentDueAt, order.ShippedBy, order.ShippedAt,
 		order.Carrier, order.TrackingNumber, order.CarrierNote,
 		order.ConfirmedAt, order.DeliveredAt, order.DeliveredBy, order.ReceiptConfirmedAt, order.DisputedAt, order.DisputeReason,
-		order.CancelRequestedAt, order.CancelRequestReason,
+		order.CancelRequestedAt, order.CancelRequestReason, order.CanceledAt,
 		order.TierPromotionCode, order.TierDiscountWon,
 		order.CreatedAt, order.UpdatedAt)
 	if err != nil {
@@ -600,7 +607,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	}
 
 	var order domain.Order
-	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
+	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt, canceledAt *time.Time
 	var shippingJSON []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, promotion_code,
@@ -608,7 +615,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
-			cancel_requested_at, cancel_request_reason,
+			cancel_requested_at, cancel_request_reason, canceled_at,
 			tier_promotion_code, tier_discount_won,
 			created_at, updated_at
 		FROM orders WHERE id = $1
@@ -619,7 +626,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
-		&cancelRequestedAt, &order.CancelRequestReason,
+		&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
 		&order.TierPromotionCode, &order.TierDiscountWon,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
@@ -639,6 +646,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	order.ReceiptConfirmedAt = receiptConfirmedAt
 	order.DisputedAt = disputedAt
 	order.CancelRequestedAt = cancelRequestedAt
+	order.CanceledAt = canceledAt
 
 	items, err := r.loadOrderItems(ctx, id)
 	if err != nil {
@@ -710,7 +718,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
-			cancel_requested_at, cancel_request_reason,
+			cancel_requested_at, cancel_request_reason, canceled_at,
 			tier_promotion_code, tier_discount_won,
 			created_at, updated_at
 		FROM orders WHERE customer_id = $1 ORDER BY created_at DESC
@@ -724,7 +732,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	var ids []string
 	for rows.Next() {
 		var order domain.Order
-		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
+		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt, canceledAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.PromotionCode,
@@ -733,7 +741,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
-			&cancelRequestedAt, &order.CancelRequestReason,
+			&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
 			&order.TierPromotionCode, &order.TierDiscountWon,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
@@ -749,6 +757,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 		order.ReceiptConfirmedAt = receiptConfirmedAt
 		order.DisputedAt = disputedAt
 		order.CancelRequestedAt = cancelRequestedAt
+		order.CanceledAt = canceledAt
 		orders = append(orders, order)
 		ids = append(ids, order.ID)
 	}
@@ -776,7 +785,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
-			cancel_requested_at, cancel_request_reason,
+			cancel_requested_at, cancel_request_reason, canceled_at,
 			tier_promotion_code, tier_discount_won,
 			created_at, updated_at
 		FROM orders ORDER BY created_at DESC
@@ -790,7 +799,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 	var ids []string
 	for rows.Next() {
 		var order domain.Order
-		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
+		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt, canceledAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.PromotionCode,
@@ -799,7 +808,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
-			&cancelRequestedAt, &order.CancelRequestReason,
+			&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
 			&order.TierPromotionCode, &order.TierDiscountWon,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
@@ -815,6 +824,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 		order.ReceiptConfirmedAt = receiptConfirmedAt
 		order.DisputedAt = disputedAt
 		order.CancelRequestedAt = cancelRequestedAt
+		order.CanceledAt = canceledAt
 		orders = append(orders, order)
 		ids = append(ids, order.ID)
 	}
@@ -842,7 +852,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
-			cancel_requested_at, cancel_request_reason,
+			cancel_requested_at, cancel_request_reason, canceled_at,
 			tier_promotion_code, tier_discount_won,
 			created_at, updated_at
 		FROM orders
@@ -857,7 +867,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 	var ids []string
 	for rows.Next() {
 		var order domain.Order
-		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
+		var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt, canceledAt *time.Time
 		var shippingJSON []byte
 		if err := rows.Scan(
 			&order.ID, &order.CustomerID, &order.ReservationID, &order.Status, &order.PromotionCode,
@@ -866,7 +876,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 			&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
-			&cancelRequestedAt, &order.CancelRequestReason,
+			&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
 			&order.TierPromotionCode, &order.TierDiscountWon,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
@@ -882,6 +892,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 		order.ReceiptConfirmedAt = receiptConfirmedAt
 		order.DisputedAt = disputedAt
 		order.CancelRequestedAt = cancelRequestedAt
+		order.CanceledAt = canceledAt
 		orders = append(orders, order)
 		ids = append(ids, order.ID)
 	}
@@ -896,6 +907,38 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 		orders[i].Items = itemsByOrder[orders[i].ID]
 	}
 	return orders, nil
+}
+
+func (r *Repository) ListSalesActivity(ctx context.Context, start, end time.Time) ([]domain.Order, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, status, subtotal_won, discount_won, shipping_fee_won, total_won, paid_at, canceled_at
+		FROM orders
+		WHERE paid_at IS NOT NULL
+			AND ((paid_at >= $1 AND paid_at < $2)
+				OR (status = $3 AND canceled_at >= $1 AND canceled_at < $2))
+	`, start, end, domain.StatusCanceled)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	orders := make([]domain.Order, 0)
+	for rows.Next() {
+		var order domain.Order
+		var paidAt, canceledAt *time.Time
+		if err := rows.Scan(&order.ID, &order.Status, &order.SubtotalWon, &order.DiscountWon,
+			&order.ShippingFeeWon, &order.TotalWon, &paidAt, &canceledAt); err != nil {
+			return nil, err
+		}
+		order.PaidAt = paidAt
+		order.CanceledAt = canceledAt
+		orders = append(orders, order)
+	}
+	return orders, rows.Err()
 }
 
 func (r *Repository) SaveCheckoutSession(ctx context.Context, session *domain.CheckoutSession) error {
@@ -975,7 +1018,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE orders
-		SET status = $3, updated_at = $4
+		SET status = $3, updated_at = $4, canceled_at = $4
 		WHERE id = $1 AND status = $2 AND payment_due_at < $4
 	`, orderID, domain.StatusPending, domain.StatusCanceled, now)
 	if err != nil {
@@ -986,7 +1029,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	}
 
 	var order domain.Order
-	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
+	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt, canceledAt *time.Time
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, promotion_code,
@@ -994,7 +1037,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
-			cancel_requested_at, cancel_request_reason,
+			cancel_requested_at, cancel_request_reason, canceled_at,
 			tier_promotion_code, tier_discount_won,
 			created_at, updated_at
 		FROM orders WHERE id = $1
@@ -1005,7 +1048,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
-		&cancelRequestedAt, &order.CancelRequestReason,
+		&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
 		&order.TierPromotionCode, &order.TierDiscountWon,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
@@ -1022,6 +1065,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	order.ReceiptConfirmedAt = receiptConfirmedAt
 	order.DisputedAt = disputedAt
 	order.CancelRequestedAt = cancelRequestedAt
+	order.CanceledAt = canceledAt
 
 	rows, err := tx.Query(ctx, `
 		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_won
@@ -1070,7 +1114,7 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE orders
-		SET status = $3, updated_at = $4
+		SET status = $3, updated_at = $4, canceled_at = $4
 		WHERE id = $1 AND status = $2
 	`, orderID, domain.StatusPending, domain.StatusCanceled, now)
 	if err != nil {
@@ -1081,7 +1125,7 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 	}
 
 	var order domain.Order
-	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
+	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt, canceledAt *time.Time
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, promotion_code,
@@ -1089,7 +1133,7 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
-			cancel_requested_at, cancel_request_reason,
+			cancel_requested_at, cancel_request_reason, canceled_at,
 			tier_promotion_code, tier_discount_won,
 			created_at, updated_at
 		FROM orders WHERE id = $1
@@ -1100,7 +1144,7 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
-		&cancelRequestedAt, &order.CancelRequestReason,
+		&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
 		&order.TierPromotionCode, &order.TierDiscountWon,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
@@ -1117,6 +1161,7 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 	order.ReceiptConfirmedAt = receiptConfirmedAt
 	order.DisputedAt = disputedAt
 	order.CancelRequestedAt = cancelRequestedAt
+	order.CanceledAt = canceledAt
 
 	rows, err := tx.Query(ctx, `
 		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_won
@@ -1167,7 +1212,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	// refunded and canceled, never restocked.
 	tag, err := tx.Exec(ctx, `
 		UPDATE orders
-		SET status = $4, updated_at = $5
+		SET status = $4, updated_at = $5, canceled_at = $5
 		WHERE id = $1 AND status = ANY($2) AND payment_id = $3
 	`, orderID, []string{string(domain.StatusPaid), string(domain.StatusConfirmed)}, paymentID, domain.StatusCanceled, now)
 	if err != nil {
@@ -1178,7 +1223,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	}
 
 	var order domain.Order
-	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt *time.Time
+	var paidAt, shippedAt, confirmedAt, deliveredAt, receiptConfirmedAt, disputedAt, cancelRequestedAt, canceledAt *time.Time
 	var shippingJSON []byte
 	err = tx.QueryRow(ctx, `
 		SELECT id, customer_id, reservation_id, status, promotion_code,
@@ -1186,7 +1231,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 			recipient_name, recipient_phone, shipping_address, source_address_id,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
-			cancel_requested_at, cancel_request_reason,
+			cancel_requested_at, cancel_request_reason, canceled_at,
 			tier_promotion_code, tier_discount_won,
 			created_at, updated_at
 		FROM orders WHERE id = $1
@@ -1197,7 +1242,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 		&order.PaymentID, &paidAt, &order.PaymentDueAt, &order.ShippedBy, &shippedAt,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
-		&cancelRequestedAt, &order.CancelRequestReason,
+		&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
 		&order.TierPromotionCode, &order.TierDiscountWon,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
@@ -1214,6 +1259,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 	order.ReceiptConfirmedAt = receiptConfirmedAt
 	order.DisputedAt = disputedAt
 	order.CancelRequestedAt = cancelRequestedAt
+	order.CanceledAt = canceledAt
 
 	rows, err := tx.Query(ctx, `
 		SELECT sku, COALESCE(sku_id, ''), quantity, unit_price_won
@@ -1309,7 +1355,8 @@ func (r *Repository) SavePaidIfCanceled(ctx context.Context, order *domain.Order
 			paid_at = $4,
 			reservation_id = $5,
 			payment_due_at = $6,
-			updated_at = $7
+			updated_at = $7,
+			canceled_at = NULL
 		WHERE id = $1 AND status = $8
 	`, order.ID, domain.StatusPaid, order.PaymentID, order.PaidAt, order.ReservationID, order.PaymentDueAt, order.UpdatedAt, domain.StatusCanceled)
 	if err != nil {

@@ -267,6 +267,20 @@ func (s *Service) ListAllOrders(ctx context.Context) ([]domain.Order, error) {
 	return s.presentOrders(orders), nil
 }
 
+// SalesReport buckets payments and refunds into weeks or months; see
+// domain.NewSalesReportRange for how granularity, from and to are read.
+func (s *Service) SalesReport(ctx context.Context, granularity, from, to string) (domain.SalesReport, error) {
+	r, err := domain.NewSalesReportRange(granularity, from, to, s.now())
+	if err != nil {
+		return domain.SalesReport{}, err
+	}
+	orders, err := s.repo.ListSalesActivity(ctx, r.Start, r.End)
+	if err != nil {
+		return domain.SalesReport{}, err
+	}
+	return domain.BuildSalesReport(r, orders), nil
+}
+
 func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, amountKRW int64) (*domain.Order, error) {
 	order, err := s.repo.Get(ctx, strings.TrimSpace(orderID))
 	if err != nil {

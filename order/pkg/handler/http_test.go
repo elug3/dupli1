@@ -1374,3 +1374,53 @@ func TestApplyPromotionAcceptsBothRouteSpellings(t *testing.T) {
 		})
 	}
 }
+
+// ── Sales report ──────────────────────────────────────────────────────────────
+
+func TestSalesReport_CustomerForbidden(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/reports/sales", makeToken(t, "u-1", nil), nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSalesReport_CountsPaidOrdersInTheCurrentWeek(t *testing.T) {
+	h, svc := newTestHandler(t)
+	mux := newMux(h)
+	paid := seedOrder(t, svc, "u-1")
+	if _, err := svc.MarkOrderPaid(t.Context(), paid, "pay-1", 1000); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	seedOrder(t, svc, "u-2") // pending: not a sale
+
+	token := makeToken(t, "mgr-1", []string{permissions.OrderReadAll})
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/reports/sales?granularity=week", token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var rep domain.SalesReport
+	if err := json.NewDecoder(w.Body).Decode(&rep); err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Periods) != domain.DefaultReportWeeks {
+		t.Fatalf("periods = %d, want %d", len(rep.Periods), domain.DefaultReportWeeks)
+	}
+	last := rep.Periods[len(rep.Periods)-1]
+	if last.Orders != 1 || last.GrossWon != 1000 || last.NetWon != 1000 {
+		t.Fatalf("current week = %+v, want one paid order of 1000", last)
+	}
+}
+
+func TestSalesReport_RejectsBadGranularity(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+	token := makeToken(t, "mgr-1", []string{permissions.OrderReadAll})
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/reports/sales?granularity=day", token, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+}
