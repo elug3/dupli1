@@ -28,6 +28,7 @@ type Handler struct {
 	catalogSvc        *service.CatalogService
 	viewStore         ports.ProductViewStore
 	wishlistStore     ports.ProductWishlistStore
+	visitorSvc        *service.VisitorService
 	guestCookie       GuestCookieConfig
 	settings          settings.Response
 }
