@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/handler"
 	"github.com/elug3/dupli1/product/pkg/infra/memory"
+	"github.com/elug3/dupli1/product/pkg/infra/ratelimit"
 	"github.com/elug3/dupli1/product/pkg/middleware"
 	"github.com/elug3/dupli1/product/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
@@ -18,14 +20,23 @@ import (
 const browserUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"
 
 func newVisitorMux() *http.ServeMux {
+	return newVisitorMuxWithVisitLimit(0)
+}
+
+// visitLimit 0 means no throttle; otherwise mirrors bootstrap's visit beacon cap.
+func newVisitorMuxWithVisitLimit(visitLimit int) *http.ServeMux {
 	store := memory.NewProductStore()
 	store.Catalog = memory.NewCatalogStore()
 	h := handler.NewHandler(service.NewProductSearchService(store, nil), service.NewPromotionService(memory.NewPromotionStore()), nil, service.NewCatalogService(store.Catalog)).
 		WithVisitorService(service.NewVisitorService(memory.NewVisitorStore()))
 	validator := authjwt.NewHMACValidator(accessControlSecret)
 	mux := http.NewServeMux()
-	// Mirrors bootstrap.
-	mux.HandleFunc("POST "+handler.RouteVisits, h.RecordVisit)
+	record := http.Handler(http.HandlerFunc(h.RecordVisit))
+	if visitLimit > 0 {
+		limiter := ratelimit.New(ratelimit.NewMemoryCounter(), visitLimit, time.Minute)
+		record = limiter.Middleware(nil)(record)
+	}
+	mux.Handle("POST "+handler.RouteVisits, record)
 	mux.Handle("GET "+handler.RouteVisitorsReport, middleware.RequireAuth(validator, middleware.RequireAnyPermission(permissions.ProductRead)(http.HandlerFunc(h.VisitorReport))))
 	return mux
 }
@@ -103,6 +114,33 @@ func TestRecordVisit_IgnoresBotsAndPrefetch(t *testing.T) {
 
 	if got := visitorReport(t, mux).Today.UniqueVisitors; got != 0 {
 		t.Fatalf("today's unique visitors = %d, want 0", got)
+	}
+}
+
+// A script can mint a new guest on every POST /visits; the bootstrap throttle
+// stops one IP from inflating unique visitors beyond its per-minute budget.
+func TestRecordVisit_RateLimitCapsPerIP(t *testing.T) {
+	const budget = 3
+	mux := newVisitorMuxWithVisitLimit(budget)
+
+	post := func() int {
+		req := httptest.NewRequest(http.MethodPost, handler.RouteVisits, nil)
+		req.Header.Set("User-Agent", browserUA)
+		req.Header.Set("X-Forwarded-For", "203.0.113.44")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w.Code
+	}
+	for i := 0; i < budget; i++ {
+		if got := post(); got != http.StatusNoContent {
+			t.Fatalf("visit %d: status=%d, want 204", i+1, got)
+		}
+	}
+	if got := post(); got != http.StatusTooManyRequests {
+		t.Fatalf("visit over budget: status=%d, want 429", got)
+	}
+	if got := visitorReport(t, mux).Today.UniqueVisitors; got != budget {
+		t.Fatalf("unique visitors = %d, want %d (429s must not mint more guests)", got, budget)
 	}
 }
 
