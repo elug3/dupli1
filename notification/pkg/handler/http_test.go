@@ -254,6 +254,90 @@ func TestTelegramSubscriptionRejectAndDelete(t *testing.T) {
 	}
 }
 
+// An accepted subscription's alerts can still be changed: a PATCH sets only
+// the flags it sends, a reader can GET it but not change it, and a rejected
+// row is refused.
+func TestTelegramSubscriptionGetAndUpdateAlerts(t *testing.T) {
+	h, subs := newTestHandler(t, "")
+	mux := newMux(h)
+	readToken := makeToken(t, "viewer-1", []string{permissions.NotificationTelegramRead})
+	manageToken := makeToken(t, "manager-1", []string{permissions.NotificationTelegramManage})
+
+	accepted, err := subs.CreateManual(t.Context(), ports.TelegramManualInput{
+		ChatID:       "-100777",
+		ChatLabel:    "Ops",
+		AlertOrder:   true,
+		AlertProduct: true,
+		AcceptedBy:   "manager-1",
+	})
+	if err != nil {
+		t.Fatalf("create manual: %v", err)
+	}
+	path := fmt.Sprintf("/api/v1/notification/telegram/subscriptions/%s", accepted.ID)
+
+	rec := doJSON(t, mux, http.MethodGet, path, bearer(readToken), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var got domain.TelegramSubscription
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != accepted.ID || got.ChatLabel != "Ops" {
+		t.Fatalf("get = %+v", got)
+	}
+
+	if rec := doJSON(t, mux, http.MethodGet, "/api/v1/notification/telegram/subscriptions/missing", bearer(readToken), nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("get missing status = %d, want 404", rec.Code)
+	}
+
+	if rec := doJSON(t, mux, http.MethodPatch, path, bearer(readToken), map[string]any{"alert_support": true}); rec.Code != http.StatusForbidden {
+		t.Fatalf("patch with read status = %d, want 403", rec.Code)
+	}
+
+	if rec := doJSON(t, mux, http.MethodPatch, path, bearer(manageToken), map[string]any{}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty patch status = %d, want 400", rec.Code)
+	}
+
+	rec = doJSON(t, mux, http.MethodPatch, path, bearer(manageToken), map[string]any{
+		"alert_product": false,
+		"alert_support": true,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var updated domain.TelegramSubscription
+	if err := json.NewDecoder(rec.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+	if !updated.AlertOrder || updated.AlertProduct || !updated.AlertSupport {
+		t.Fatalf("flags = order %v product %v support %v, want true false true",
+			updated.AlertOrder, updated.AlertProduct, updated.AlertSupport)
+	}
+	if updated.Status != domain.SubscriptionStatusAccepted {
+		t.Fatalf("status = %q, want accepted", updated.Status)
+	}
+
+	pending, err := subs.RegisterFromMessage(t.Context(), ports.TelegramSubscriptionInput{
+		TelegramUserID: int64Ptr(78),
+		ChatID:         "78",
+		ChatType:       "private",
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if _, err := subs.Reject(t.Context(), pending.ID, "manager-1"); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	rejectedPath := fmt.Sprintf("/api/v1/notification/telegram/subscriptions/%s", pending.ID)
+	if rec := doJSON(t, mux, http.MethodPatch, rejectedPath, bearer(manageToken), map[string]any{"alert_order": true}); rec.Code != http.StatusConflict {
+		t.Fatalf("patch rejected status = %d, want 409", rec.Code)
+	}
+	if rec := doJSON(t, mux, http.MethodPatch, "/api/v1/notification/telegram/subscriptions/missing", bearer(manageToken), map[string]any{"alert_order": true}); rec.Code != http.StatusNotFound {
+		t.Fatalf("patch missing status = %d, want 404", rec.Code)
+	}
+}
+
 func int64Ptr(v int64) *int64 { return &v }
 
 // A manual create with neither identifier is the caller's mistake, and the

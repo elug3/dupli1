@@ -237,6 +237,32 @@ func (r *TelegramRepository) Reject(ctx context.Context, id, rejectedBy string) 
 	return &copy, nil
 }
 
+func (r *TelegramRepository) UpdateAlerts(ctx context.Context, id string, in ports.TelegramAlertsInput) (*domain.TelegramSubscription, error) {
+	_ = ctx
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	sub, ok := r.byID[id]
+	if !ok {
+		return nil, pgx.ErrNoRows
+	}
+	if sub.Status == domain.SubscriptionStatusRejected {
+		return nil, ports.ErrSubscriptionRejected
+	}
+	if in.AlertOrder != nil {
+		sub.AlertOrder = *in.AlertOrder
+	}
+	if in.AlertProduct != nil {
+		sub.AlertProduct = *in.AlertProduct
+	}
+	if in.AlertSupport != nil {
+		sub.AlertSupport = *in.AlertSupport
+	}
+	sub.UpdatedAt = time.Now().UTC()
+	r.byID[id] = sub
+	copy := sub
+	return &copy, nil
+}
+
 func (r *TelegramRepository) Delete(ctx context.Context, id string) error {
 	_ = ctx
 	r.mu.Lock()

@@ -1140,6 +1140,8 @@ Health and settings (`GET /health`, `GET /api/v1/notification/health`, `GET /set
 
 `POST /api/v1/notification/telegram/subscriptions` returns `400` only when neither `telegram_user_id` nor `chat_id` is given, `409` when the chat ID or Telegram user ID already belongs to another subscription, and `500` for a store failure — it no longer returns the driver's error text.
 
+`GET /api/v1/notification/telegram/subscriptions/{id}` returns one subscription. `PATCH` on the same path changes which alerts a pending or accepted chat receives — `{ "alert_order"?, "alert_product"?, "alert_support"? }`, any flag omitted is left as it is — and takes effect on the next alert. It answers `400` when no flag is sent, `404` for an unknown id and `409` for a rejected subscription.
+
 `POST /api/v1/notification/telegram/webhook` answers `200` once the update is authenticated and parsed, **before** it is processed: processing continues in the background, so the `200` means accepted, not handled. A malformed body is `400`, a bad or missing `X-Telegram-Bot-Api-Secret-Token` is `403`, and an unconfigured secret is `503`.
 
 ---
@@ -1279,6 +1281,8 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | POST | `/api/v1/notification/telegram/webhook` | webhook secret header | notification |
 | GET | `/api/v1/notification/telegram/subscriptions` | `notification.telegram.read` | notification |
 | POST | `/api/v1/notification/telegram/subscriptions` | `notification.telegram.manage` | notification |
+| GET | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.read` | notification |
+| PATCH | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` | notification |
 | POST | `/api/v1/notification/telegram/subscriptions/{id}/accept` | `notification.telegram.manage` | notification |
 | POST | `/api/v1/notification/telegram/subscriptions/{id}/reject` | `notification.telegram.manage` | notification |
 | DELETE | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` | notification |

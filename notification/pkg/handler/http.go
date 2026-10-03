@@ -283,10 +283,6 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 		respondError(w, http.StatusServiceUnavailable, "telegram subscriptions not configured")
 		return
 	}
-	if !h.canManage(r) {
-		respondError(w, http.StatusForbidden, "forbidden")
-		return
-	}
 
 	rest := strings.TrimPrefix(r.URL.Path, "/api/v1/notification/telegram/subscriptions/")
 	parts := strings.Split(strings.Trim(rest, "/"), "/")
@@ -298,6 +294,17 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 	action := ""
 	if len(parts) > 1 {
 		action = parts[1]
+	}
+
+	// Reading one subscription needs what reading the list needs; every other
+	// call here changes it.
+	allowed := h.canManage(r)
+	if action == "" && r.Method == http.MethodGet {
+		allowed = h.canRead(r)
+	}
+	if !allowed {
+		respondError(w, http.StatusForbidden, "forbidden")
+		return
 	}
 
 	claims, _ := authjwt.FromContext(r.Context())
@@ -347,20 +354,64 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 		h.notifyChanged()
 		respondJSON(w, http.StatusOK, item)
 	case "":
-		if r.Method != http.MethodDelete {
-			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		if err := h.telegramSubs.Delete(r.Context(), id); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				respondError(w, http.StatusNotFound, "subscription not found")
+		switch r.Method {
+		case http.MethodGet:
+			item, err := h.telegramSubs.Get(r.Context(), id)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					respondError(w, http.StatusNotFound, "subscription not found")
+					return
+				}
+				respondError(w, http.StatusInternalServerError, "failed to load subscription")
 				return
 			}
-			respondError(w, http.StatusInternalServerError, "failed to delete subscription")
-			return
+			respondJSON(w, http.StatusOK, item)
+		case http.MethodPatch:
+			var req struct {
+				AlertOrder   *bool `json:"alert_order"`
+				AlertProduct *bool `json:"alert_product"`
+				AlertSupport *bool `json:"alert_support"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				respondError(w, http.StatusBadRequest, "invalid json")
+				return
+			}
+			item, err := h.telegramSubs.UpdateAlerts(r.Context(), id, ports.TelegramAlertsInput{
+				AlertOrder:   req.AlertOrder,
+				AlertProduct: req.AlertProduct,
+				AlertSupport: req.AlertSupport,
+			})
+			switch {
+			case err == nil:
+			case errors.Is(err, service.ErrNoAlertChange):
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			case errors.Is(err, pgx.ErrNoRows):
+				respondError(w, http.StatusNotFound, "subscription not found")
+				return
+			case errors.Is(err, ports.ErrSubscriptionRejected):
+				respondError(w, http.StatusConflict, "subscription is rejected")
+				return
+			default:
+				respondError(w, http.StatusInternalServerError, "failed to update subscription")
+				return
+			}
+			h.notifyChanged()
+			respondJSON(w, http.StatusOK, item)
+		case http.MethodDelete:
+			if err := h.telegramSubs.Delete(r.Context(), id); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					respondError(w, http.StatusNotFound, "subscription not found")
+					return
+				}
+				respondError(w, http.StatusInternalServerError, "failed to delete subscription")
+				return
+			}
+			h.notifyChanged()
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
-		h.notifyChanged()
-		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.NotFound(w, r)
 	}

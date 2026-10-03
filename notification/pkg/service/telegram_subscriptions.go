@@ -15,6 +15,9 @@ import (
 // user ID nor a chat ID — a bad request, distinct from a failing store.
 var ErrIdentifierRequired = errors.New("telegram_user_id or chat_id is required")
 
+// ErrNoAlertChange reports an alert update that sets no flag — a bad request.
+var ErrNoAlertChange = errors.New("at least one of alert_order, alert_product or alert_support is required")
+
 type TelegramSubscriptions struct {
 	repo ports.TelegramRepository
 }
@@ -63,6 +66,25 @@ func (s *TelegramSubscriptions) Reject(ctx context.Context, id, rejectedBy strin
 		return nil, fmt.Errorf("telegram repository not configured")
 	}
 	return s.repo.Reject(ctx, id, rejectedBy)
+}
+
+func (s *TelegramSubscriptions) Get(ctx context.Context, id string) (*domain.TelegramSubscription, error) {
+	if !s.Enabled() {
+		return nil, fmt.Errorf("telegram repository not configured")
+	}
+	return s.repo.GetByID(ctx, id)
+}
+
+// UpdateAlerts changes which alert classes a subscription receives, after it
+// was accepted as well as before.
+func (s *TelegramSubscriptions) UpdateAlerts(ctx context.Context, id string, in ports.TelegramAlertsInput) (*domain.TelegramSubscription, error) {
+	if !s.Enabled() {
+		return nil, fmt.Errorf("telegram repository not configured")
+	}
+	if in.Empty() {
+		return nil, ErrNoAlertChange
+	}
+	return s.repo.UpdateAlerts(ctx, id, in)
 }
 
 func (s *TelegramSubscriptions) Delete(ctx context.Context, id string) error {
