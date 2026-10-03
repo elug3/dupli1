@@ -92,7 +92,9 @@ Requires Bearer JWT with `notification.telegram.read` (list) or `notification.te
 |--------|------|-------------|
 | `GET` | `/api/v1/notification/telegram/subscriptions?status=pending` | List registrations |
 | `POST` | `/api/v1/notification/telegram/subscriptions` | Manually accept a user ID and/or chat ID |
-| `POST` | `/api/v1/notification/telegram/subscriptions/{id}/accept` | Accept pending registration (`alert_order`, `alert_product` in body) |
+| `GET` | `/api/v1/notification/telegram/subscriptions/{id}` | One subscription (`notification.telegram.read`) |
+| `PATCH` | `/api/v1/notification/telegram/subscriptions/{id}` | Change alert classes after accept too (`alert_order`, `alert_product`, `alert_support`; any omitted flag is kept). `400` with no flag, `409` on a rejected row |
+| `POST` | `/api/v1/notification/telegram/subscriptions/{id}/accept` | Accept pending registration (`alert_order`, `alert_product`, `alert_support` in body) |
 | `POST` | `/api/v1/notification/telegram/subscriptions/{id}/reject` | Reject pending registration |
 | `DELETE` | `/api/v1/notification/telegram/subscriptions/{id}` | Remove subscription |
 

@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/elug3/dupli1/notification/pkg/domain"
@@ -141,3 +142,33 @@ func TestTelegramAccessDeniesUnknownAfterRefresh(t *testing.T) {
 }
 
 func int64Ptr(v int64) *int64 { return &v }
+
+// Changing an accepted chat's alerts reroutes it on the next dispatch.
+func TestTelegramSubscriptionsUpdateAlertsReroutes(t *testing.T) {
+	subs := service.NewTelegramSubscriptions(memory.NewTelegramRepository())
+	ctx := t.Context()
+	item, err := subs.CreateManual(ctx, ports.TelegramManualInput{
+		ChatID:     "-100555",
+		AlertOrder: true,
+		AcceptedBy: "manager-1",
+	})
+	if err != nil {
+		t.Fatalf("create manual: %v", err)
+	}
+
+	off, on := false, true
+	if _, err := subs.UpdateAlerts(ctx, item.ID, ports.TelegramAlertsInput{AlertOrder: &off, AlertProduct: &on}); err != nil {
+		t.Fatalf("update alerts: %v", err)
+	}
+	order, product := subs.RoutingChats(ctx, &ports.TelegramEnvAllowlist{})
+	if len(order) != 0 {
+		t.Fatalf("order chats = %v, want none", order)
+	}
+	if len(product) != 1 || product[0] != "-100555" {
+		t.Fatalf("product chats = %v, want [-100555]", product)
+	}
+
+	if _, err := subs.UpdateAlerts(ctx, item.ID, ports.TelegramAlertsInput{}); !errors.Is(err, service.ErrNoAlertChange) {
+		t.Fatalf("empty update err = %v, want ErrNoAlertChange", err)
+	}
+}

@@ -289,6 +289,31 @@ func (r *TelegramRepository) Reject(ctx context.Context, id, rejectedBy string) 
 	return r.GetByID(ctx, id)
 }
 
+func (r *TelegramRepository) UpdateAlerts(ctx context.Context, id string, in ports.TelegramAlertsInput) (*domain.TelegramSubscription, error) {
+	// COALESCE keeps a flag the caller did not send; the status guard keeps a
+	// rejected row out, and the follow-up read tells "missing" from "rejected".
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE telegram_subscriptions
+		SET alert_order = COALESCE($2, alert_order),
+		    alert_product = COALESCE($3, alert_product),
+		    alert_support = COALESCE($4, alert_support),
+		    updated_at = $5
+		WHERE id = $1 AND status <> 'rejected'`,
+		id, in.AlertOrder, in.AlertProduct, in.AlertSupport, time.Now().UTC(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	sub, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ports.ErrSubscriptionRejected
+	}
+	return sub, nil
+}
+
 func (r *TelegramRepository) Delete(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM telegram_subscriptions WHERE id = $1`, id)
 	if err != nil {
