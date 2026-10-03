@@ -474,6 +474,15 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
       NATS_URL: nats://nats:4222
       NATS_TOKEN: ${NATS_TOKEN:-dupli1_nats_dev}
+      # Web chat: product and order references are checked through the
+      # gateway; reply notices link to the storefront's chat page and go out
+      # over SMTP (unset locally — no email, chat still works).
+      DUPLI1_GATEWAY_URL: http://dupli1-proxy:8081
+      DUPLI1_STOREFRONT_URL: ${DUPLI1_STOREFRONT_URL:-http://localhost:5173}
+      DUPLI1_SUPPORT_SMTP_ADDR: ${DUPLI1_SUPPORT_SMTP_ADDR:-}
+      DUPLI1_SUPPORT_SMTP_USERNAME: ${DUPLI1_SUPPORT_SMTP_USERNAME:-}
+      DUPLI1_SUPPORT_SMTP_PASSWORD: ${DUPLI1_SUPPORT_SMTP_PASSWORD:-}
+      DUPLI1_SUPPORT_SMTP_FROM: ${DUPLI1_SUPPORT_SMTP_FROM:-}
     depends_on:
       postgres-support:
         condition: service_healthy

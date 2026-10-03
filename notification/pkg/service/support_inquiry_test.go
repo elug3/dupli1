@@ -170,3 +170,24 @@ func TestAlertEscapesShopperText(t *testing.T) {
 		t.Fatalf("expected escaped markup in %q", notifier.message)
 	}
 }
+
+func TestWebInquiryAlertNamesTheChannel(t *testing.T) {
+	notifier := &recordedNotifier{}
+	dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{
+		Routing: &stubChatRouting{supportChats: []string{"-support"}},
+	})
+
+	payload := inquiryPayload(t, events.SupportInquiry{
+		InquiryID: "01HWEB", ChatID: "web:user-1", Topic: "prd", Channel: "web",
+	})
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectSupportInquiryOpened, payload); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if !strings.Contains(notifier.message, "채널: 웹") {
+		t.Fatalf("alert = %q, want the web channel named", notifier.message)
+	}
+	// The web chat id is the shopper's account id; it stays out of ops chats.
+	if strings.Contains(notifier.message, "user-1") {
+		t.Fatalf("alert leaked the account id: %q", notifier.message)
+	}
+}

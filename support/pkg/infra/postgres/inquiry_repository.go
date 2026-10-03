@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/elug3/dupli1/support/pkg/ports"
 
 	"github.com/elug3/dupli1/support/pkg/domain"
@@ -22,60 +24,45 @@ func NewInquiryRepository(db *sql.DB) *InquiryRepository {
 }
 
 func (r *InquiryRepository) FindOpenByChatID(ctx context.Context, chatID string) (*domain.Inquiry, error) {
-	const query = `
-		SELECT id, conversation_id, chat_id, topic, status, COALESCE(assigned_to, ''), opened_at, closed_at
+	query := `
+		SELECT ` + inquiryColumns + `
 		  FROM support_inquiries
 		 WHERE chat_id = $1 AND status <> $2
 		 ORDER BY opened_at DESC
 		 LIMIT 1`
 
-	var inquiry domain.Inquiry
-	err := r.db.QueryRowContext(ctx, query, chatID, domain.InquiryClosed).Scan(
-		&inquiry.ID,
-		&inquiry.ConversationID,
-		&inquiry.ChatID,
-		&inquiry.Topic,
-		&inquiry.Status,
-		&inquiry.AssignedTo,
-		&inquiry.OpenedAt,
-		&inquiry.ClosedAt,
-	)
+	inquiry, err := scanInquiry(r.db.QueryRowContext(ctx, query, chatID, domain.InquiryClosed))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find open inquiry: %w", err)
 	}
-	return &inquiry, nil
+	return inquiry, nil
 }
 
 func (r *InquiryRepository) FindByID(ctx context.Context, id string) (*domain.Inquiry, error) {
-	const query = `
-		SELECT id, conversation_id, chat_id, topic, status, COALESCE(assigned_to, ''), opened_at, closed_at
-		  FROM support_inquiries WHERE id = $1`
+	query := `SELECT ` + inquiryColumns + ` FROM support_inquiries WHERE id = $1`
 
-	var inquiry domain.Inquiry
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&inquiry.ID, &inquiry.ConversationID, &inquiry.ChatID, &inquiry.Topic,
-		&inquiry.Status, &inquiry.AssignedTo, &inquiry.OpenedAt, &inquiry.ClosedAt,
-	)
+	inquiry, err := scanInquiry(r.db.QueryRowContext(ctx, query, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find inquiry: %w", err)
 	}
-	return &inquiry, nil
+	return inquiry, nil
 }
 
 // List returns inquiries for the inbox, newest first.
 func (r *InquiryRepository) List(ctx context.Context, filter ports.InquiryFilter) ([]domain.Inquiry, error) {
 	query := `
-		SELECT id, conversation_id, chat_id, topic, status, COALESCE(assigned_to, ''), opened_at, closed_at
+		SELECT ` + inquiryColumns + `
 		  FROM support_inquiries
 		 WHERE ($1 = '' OR status = $1)
 		   AND ($2 = '' OR assigned_to = $2)
 		   AND (NOT $3::boolean OR (assigned_to IS NULL AND status <> 'closed'))
+		   AND ($5 = '' OR channel = $5)
 		 ORDER BY opened_at DESC
 		 LIMIT $4`
 
@@ -83,7 +70,7 @@ func (r *InquiryRepository) List(ctx context.Context, filter ports.InquiryFilter
 	if limit <= 0 || limit > 200 {
 		limit = 100
 	}
-	rows, err := r.db.QueryContext(ctx, query, filter.Status, filter.AssignedTo, filter.Unassigned, limit)
+	rows, err := r.db.QueryContext(ctx, query, filter.Status, filter.AssignedTo, filter.Unassigned, limit, filter.Channel)
 	if err != nil {
 		return nil, fmt.Errorf("list inquiries: %w", err)
 	}
@@ -97,9 +84,8 @@ func (r *InquiryRepository) List(ctx context.Context, filter ports.InquiryFilter
 // Quiet is measured from the last message, not from when the inquiry opened: a
 // consultation still being answered has not gone stale however long it runs.
 func (r *InquiryRepository) ListStaleOpen(ctx context.Context, quietSince time.Time) ([]domain.Inquiry, error) {
-	const query = `
-		SELECT i.id, i.conversation_id, i.chat_id, i.topic, i.status,
-		       COALESCE(i.assigned_to, ''), i.opened_at, i.closed_at
+	query := `
+		SELECT ` + inquiryColumnsAs("i") + `
 		  FROM support_inquiries i
 		 WHERE i.status <> 'closed'
 		   AND GREATEST(
@@ -117,18 +103,45 @@ func (r *InquiryRepository) ListStaleOpen(ctx context.Context, quietSince time.T
 	return scanInquiries(rows)
 }
 
+// inquiryColumns is the select list scanInquiry reads, in its order.
+var inquiryColumns = inquiryColumnsAs("")
+
+func inquiryColumnsAs(alias string) string {
+	p := ""
+	if alias != "" {
+		p = alias + "."
+	}
+	return p + "id, " + p + "conversation_id, " + p + "chat_id, " + p + "topic, " + p + "status, " +
+		"COALESCE(" + p + "assigned_to, ''), " + p + "opened_at, " + p + "closed_at, " +
+		p + "channel, COALESCE(" + p + "customer_id, ''), COALESCE(" + p + "product_id, ''), " +
+		"COALESCE(" + p + "sku_id, ''), COALESCE(" + p + "order_id, '')"
+}
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanInquiry(row rowScanner) (*domain.Inquiry, error) {
+	var inquiry domain.Inquiry
+	err := row.Scan(
+		&inquiry.ID, &inquiry.ConversationID, &inquiry.ChatID, &inquiry.Topic,
+		&inquiry.Status, &inquiry.AssignedTo, &inquiry.OpenedAt, &inquiry.ClosedAt,
+		&inquiry.Channel, &inquiry.CustomerID, &inquiry.ProductID, &inquiry.SkuID, &inquiry.OrderID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &inquiry, nil
+}
+
 func scanInquiries(rows *sql.Rows) ([]domain.Inquiry, error) {
 	var out []domain.Inquiry
 	for rows.Next() {
-		var inquiry domain.Inquiry
-		err := rows.Scan(
-			&inquiry.ID, &inquiry.ConversationID, &inquiry.ChatID, &inquiry.Topic,
-			&inquiry.Status, &inquiry.AssignedTo, &inquiry.OpenedAt, &inquiry.ClosedAt,
-		)
+		inquiry, err := scanInquiry(rows)
 		if err != nil {
 			return nil, fmt.Errorf("scan inquiry: %w", err)
 		}
-		out = append(out, inquiry)
+		out = append(out, *inquiry)
 	}
 	return out, rows.Err()
 }
@@ -139,8 +152,10 @@ func (r *InquiryRepository) Save(ctx context.Context, inquiry *domain.Inquiry) e
 	}
 	const query = `
 		INSERT INTO support_inquiries
-			(id, conversation_id, chat_id, topic, status, assigned_to, opened_at, closed_at)
-		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8)
+			(id, conversation_id, chat_id, topic, status, assigned_to, opened_at, closed_at,
+			 channel, customer_id, product_id, sku_id, order_id)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8,
+			COALESCE(NULLIF($9, ''), 'telegram'), NULLIF($10, ''), NULLIF($11, ''), NULLIF($12, ''), NULLIF($13, ''))
 		ON CONFLICT (id) DO UPDATE SET
 			status      = EXCLUDED.status,
 			assigned_to = EXCLUDED.assigned_to,
@@ -149,6 +164,7 @@ func (r *InquiryRepository) Save(ctx context.Context, inquiry *domain.Inquiry) e
 	_, err := r.db.ExecContext(ctx, query,
 		inquiry.ID, inquiry.ConversationID, inquiry.ChatID, inquiry.Topic,
 		inquiry.Status, inquiry.AssignedTo, inquiry.OpenedAt, inquiry.ClosedAt,
+		inquiry.Channel, inquiry.CustomerID, inquiry.ProductID, inquiry.SkuID, inquiry.OrderID,
 	)
 	if err != nil {
 		return fmt.Errorf("save inquiry: %w", err)
@@ -171,13 +187,20 @@ func (r *MessageRepository) Append(ctx context.Context, message *domain.Message)
 	}
 	const query = `
 		INSERT INTO support_messages
-			(id, conversation_id, inquiry_id, direction, author, body, delivery, delivery_error, created_at)
-		VALUES ($1, $2, NULLIF($3, ''), $4, NULLIF($5, ''), $6, NULLIF($7, ''), NULLIF($8, ''), $9)`
+			(id, conversation_id, inquiry_id, direction, author, body, delivery, delivery_error, created_at,
+			 kind, ref_id, ref_snapshot, notice_status)
+		VALUES ($1, $2, NULLIF($3, ''), $4, NULLIF($5, ''), $6, NULLIF($7, ''), NULLIF($8, ''), $9,
+			COALESCE(NULLIF($10, ''), 'text'), NULLIF($11, ''), $12, NULLIF($13, ''))`
 
+	var snapshot any
+	if len(message.RefSnapshot) > 0 {
+		snapshot = string(message.RefSnapshot)
+	}
 	_, err := r.db.ExecContext(ctx, query,
 		message.ID, message.ConversationID, message.InquiryID,
 		message.Direction, message.Author, message.Body,
 		message.Delivery, message.DeliveryError, message.CreatedAt,
+		message.Kind, message.RefID, snapshot, message.NoticeStatus,
 	)
 	if err != nil {
 		return fmt.Errorf("append support message: %w", err)
@@ -187,32 +210,100 @@ func (r *MessageRepository) Append(ctx context.Context, message *domain.Message)
 
 // Transcript returns a conversation's messages, oldest first.
 func (r *MessageRepository) Transcript(ctx context.Context, conversationID string) ([]domain.Message, error) {
-	const query = `
-		SELECT id, conversation_id, COALESCE(inquiry_id, ''), direction, COALESCE(author, ''),
-		       body, COALESCE(delivery, ''), COALESCE(delivery_error, ''), created_at
+	query := `
+		SELECT ` + messageColumns + `
 		  FROM support_messages
 		 WHERE conversation_id = $1
-		 ORDER BY created_at ASC`
+		 ORDER BY created_at ASC, id ASC`
 
 	rows, err := r.db.QueryContext(ctx, query, conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("load transcript: %w", err)
 	}
 	defer rows.Close()
+	return scanMessages(rows)
+}
 
+// messageColumns is the select list scanMessages reads, in its order.
+const messageColumns = `id, conversation_id, COALESCE(inquiry_id, ''), direction, COALESCE(author, ''),
+	body, COALESCE(delivery, ''), COALESCE(delivery_error, ''), created_at,
+	kind, COALESCE(ref_id, ''), ref_snapshot, COALESCE(notice_status, '')`
+
+func scanMessages(rows *sql.Rows) ([]domain.Message, error) {
 	var out []domain.Message
 	for rows.Next() {
-		var message domain.Message
+		var (
+			message  domain.Message
+			snapshot []byte
+		)
 		err := rows.Scan(
 			&message.ID, &message.ConversationID, &message.InquiryID, &message.Direction,
 			&message.Author, &message.Body, &message.Delivery, &message.DeliveryError, &message.CreatedAt,
+			&message.Kind, &message.RefID, &snapshot, &message.NoticeStatus,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
+		if len(snapshot) > 0 {
+			message.RefSnapshot = snapshot
+		}
 		out = append(out, message)
 	}
 	return out, rows.Err()
+}
+
+// PurgeConversation replaces the text of every message in one conversation,
+// for an account that was deleted.
+func (r *MessageRepository) PurgeConversation(ctx context.Context, conversationID, placeholder string) (int, error) {
+	const query = `
+		UPDATE support_messages
+		   SET body = $1, delivery_error = NULL, ref_snapshot = NULL
+		 WHERE conversation_id = $2
+		   AND body <> $1`
+
+	result, err := r.db.ExecContext(ctx, query, placeholder, conversationID)
+	if err != nil {
+		return 0, fmt.Errorf("purge support conversation: %w", err)
+	}
+	purged, err := result.RowsAffected()
+	if err != nil {
+		return 0, nil
+	}
+	return int(purged), nil
+}
+
+// DueNotices returns messages whose reply notice is still pending.
+func (r *MessageRepository) DueNotices(ctx context.Context, createdBefore time.Time, limit int) ([]domain.Message, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	query := `
+		SELECT ` + messageColumns + `
+		  FROM support_messages
+		 WHERE notice_status = $1 AND created_at < $2
+		 ORDER BY created_at ASC
+		 LIMIT $3`
+
+	rows, err := r.db.QueryContext(ctx, query, domain.NoticePending, createdBefore, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list due notices: %w", err)
+	}
+	defer rows.Close()
+	return scanMessages(rows)
+}
+
+// SetNoticeStatus records the notice outcome on the given messages.
+func (r *MessageRepository) SetNoticeStatus(ctx context.Context, messageIDs []string, status string) error {
+	if len(messageIDs) == 0 {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE support_messages SET notice_status = $1 WHERE id = ANY($2)`,
+		status, pq.Array(messageIDs))
+	if err != nil {
+		return fmt.Errorf("set notice status: %w", err)
+	}
+	return nil
 }
 
 // LastInbound returns the most recent thing the shopper typed.
@@ -243,7 +334,7 @@ func (r *MessageRepository) LastInbound(ctx context.Context, conversationID stri
 func (r *MessageRepository) PurgeBodies(ctx context.Context, olderThan time.Time, placeholder string) (int, error) {
 	const query = `
 		UPDATE support_messages
-		   SET body = $1, delivery_error = NULL
+		   SET body = $1, delivery_error = NULL, ref_snapshot = NULL
 		 WHERE created_at < $2
 		   AND body <> $1`
 

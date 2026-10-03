@@ -44,6 +44,7 @@ type Router struct {
 	inquiries     ports.InquiryRepository
 	messages      ports.MessageRepository
 	publisher     ports.InquiryPublisher
+	live          ports.LivePublisher
 	bot           ports.Bot
 	hours         domain.BusinessHours
 	newID         IDGenerator
@@ -58,10 +59,12 @@ type Deps struct {
 	Inquiries     ports.InquiryRepository
 	Messages      ports.MessageRepository
 	Publisher     ports.InquiryPublisher
-	Bot           ports.Bot
-	Hours         domain.BusinessHours
-	NewID         IDGenerator
-	Now           Clock
+	// Live keeps the manager inbox's stream current; optional.
+	Live  ports.LivePublisher
+	Bot   ports.Bot
+	Hours domain.BusinessHours
+	NewID IDGenerator
+	Now   Clock
 }
 
 func NewRouter(deps Deps) *Router {
@@ -83,6 +86,7 @@ func NewRouter(deps Deps) *Router {
 		inquiries:     deps.Inquiries,
 		messages:      deps.Messages,
 		publisher:     deps.Publisher,
+		live:          deps.Live,
 		bot:           deps.Bot,
 		hours:         hours,
 		newID:         newID,
@@ -184,6 +188,12 @@ func (r *Router) recordInbound(ctx context.Context, in Inbound, conversation *do
 	if err := r.messages.Append(ctx, message); err != nil {
 		return fmt.Errorf("record message: %w", err)
 	}
+	if r.live != nil && inquiryID != "" {
+		r.live.PublishLive(ctx, ports.LiveEvent{
+			Type: ports.LiveMessage, InquiryID: inquiryID, ConversationID: conversation.ID,
+			Channel: domain.ChannelTelegram, MessageID: message.ID,
+		})
+	}
 	return nil
 }
 
@@ -261,6 +271,12 @@ func (r *Router) escalate(ctx context.Context, conversation *domain.Conversation
 	if err := r.inquiries.Save(ctx, inquiry); err != nil {
 		return "", fmt.Errorf("save inquiry: %w", err)
 	}
+	if r.live != nil {
+		r.live.PublishLive(ctx, ports.LiveEvent{
+			Type: ports.LiveInquiry, InquiryID: inquiry.ID, ConversationID: conversation.ID,
+			Channel: domain.ChannelTelegram, Status: inquiry.Status,
+		})
+	}
 
 	if r.publisher != nil {
 		err := r.publisher.InquiryOpened(ctx, ports.InquiryOpened{
@@ -272,6 +288,7 @@ func (r *Router) escalate(ctx context.Context, conversation *domain.Conversation
 			EntryContext: conversation.EntryPayload,
 			Excerpt:      r.lastExcerpt(ctx, conversation),
 			AfterHours:   !r.hours.IsOpen(now),
+			Channel:      domain.ChannelTelegram,
 		})
 		if err != nil {
 			// The inquiry is saved and the shopper has been told someone will

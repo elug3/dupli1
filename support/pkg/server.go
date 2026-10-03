@@ -35,11 +35,19 @@ func NewServer(opts ServerOptions) (*Server, error) {
 		ManageWebURL:          opts.ManageWebURL,
 		BusinessHours:         opts.BusinessHours,
 		MessageRetention:      opts.MessageRetention,
-		JWTSecret:             opts.JWTSecret,
-		JWKSURL:               opts.JWKSURL,
-		ReadTimeout:           opts.ReadTimeout,
-		WriteTimeout:          opts.WriteTimeout,
-		IdleTimeout:           opts.IdleTimeout,
+		GatewayURL:            opts.GatewayURL,
+		StorefrontURL:         opts.StorefrontURL,
+		SMTP: bootstrap.SMTPConfig{
+			Addr:     opts.SMTPAddr,
+			Username: opts.SMTPUsername,
+			Password: opts.SMTPPassword,
+			From:     opts.SMTPFrom,
+		},
+		JWTSecret:    opts.JWTSecret,
+		JWKSURL:      opts.JWKSURL,
+		ReadTimeout:  opts.ReadTimeout,
+		WriteTimeout: opts.WriteTimeout,
+		IdleTimeout:  opts.IdleTimeout,
 	})
 	if err != nil {
 		return nil, err

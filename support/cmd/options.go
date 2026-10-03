@@ -130,6 +130,28 @@ func applyEnv(opts *support.ServerOptions) {
 			opts.MessageRetention = time.Duration(days) * 24 * time.Hour
 		}
 	}
+	// Web chat resolves product and order references through the internal
+	// gateway, like order does, never by a direct service URL.
+	if v := os.Getenv("DUPLI1_GATEWAY_URL"); v != "" {
+		opts.GatewayURL = strings.TrimRight(v, "/")
+	}
+	if v := os.Getenv("DUPLI1_STOREFRONT_URL"); v != "" {
+		opts.StorefrontURL = strings.TrimRight(v, "/")
+	}
+	// The reply notice is the first customer email the backend sends. Unset
+	// SMTP leaves web chat working and simply sends no notice.
+	if v := os.Getenv("DUPLI1_SUPPORT_SMTP_ADDR"); v != "" {
+		opts.SMTPAddr = v
+	}
+	if v := os.Getenv("DUPLI1_SUPPORT_SMTP_USERNAME"); v != "" {
+		opts.SMTPUsername = v
+	}
+	if v := os.Getenv("DUPLI1_SUPPORT_SMTP_PASSWORD"); v != "" {
+		opts.SMTPPassword = v
+	}
+	if v := os.Getenv("DUPLI1_SUPPORT_SMTP_FROM"); v != "" {
+		opts.SMTPFrom = v
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		opts.JWTSecret = v
 	}

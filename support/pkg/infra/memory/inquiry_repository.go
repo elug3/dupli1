@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -59,6 +60,9 @@ func (r *InquiryRepository) List(_ context.Context, filter ports.InquiryFilter) 
 			continue
 		}
 		if filter.Unassigned && (row.AssignedTo != "" || !row.IsOpen()) {
+			continue
+		}
+		if filter.Channel != "" && domain.ChannelOf(row.Channel) != filter.Channel {
 			continue
 		}
 		out = append(out, row)
@@ -154,8 +158,57 @@ func (r *MessageRepository) PurgeBodies(_ context.Context, olderThan time.Time, 
 		if r.rows[i].CreatedAt.Before(olderThan) && r.rows[i].Body != placeholder {
 			r.rows[i].Body = placeholder
 			r.rows[i].DeliveryError = ""
+			r.rows[i].RefSnapshot = nil
 			purged++
 		}
 	}
 	return purged, nil
+}
+
+// PurgeConversation replaces the text of every message in one conversation.
+func (r *MessageRepository) PurgeConversation(_ context.Context, conversationID, placeholder string) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	purged := 0
+	for i := range r.rows {
+		if r.rows[i].ConversationID == conversationID && r.rows[i].Body != placeholder {
+			r.rows[i].Body = placeholder
+			r.rows[i].DeliveryError = ""
+			r.rows[i].RefSnapshot = nil
+			purged++
+		}
+	}
+	return purged, nil
+}
+
+// DueNotices returns web replies still waiting on their notice decision.
+func (r *MessageRepository) DueNotices(_ context.Context, createdBefore time.Time, limit int) ([]domain.Message, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var out []domain.Message
+	for _, row := range r.rows {
+		if row.NoticeStatus == domain.NoticePending && row.CreatedAt.Before(createdBefore) {
+			out = append(out, row)
+		}
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].CreatedAt.Before(out[b].CreatedAt) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// SetNoticeStatus records the notice outcome on the given messages.
+func (r *MessageRepository) SetNoticeStatus(_ context.Context, messageIDs []string, status string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for i := range r.rows {
+		if slices.Contains(messageIDs, r.rows[i].ID) {
+			r.rows[i].NoticeStatus = status
+		}
+	}
+	return nil
 }

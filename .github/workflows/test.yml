@@ -181,6 +181,24 @@ jobs:
   support:
     name: support
     runs-on: ubuntu-latest
+    # Web chat added columns, a channel filter and notice queries that only a
+    # real database exercises; without one the pg-backed tests skip.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dupli1
+          POSTGRES_PASSWORD: dupli1_dev
+          POSTGRES_DB: support
+        ports:
+          - 5440:5432
+        options: >-
+          --health-cmd "pg_isready -U dupli1 -d support"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_URL: postgres://dupli1:dupli1_dev@localhost:5440/support?sslmode=disable
     steps:
       - name: Checkout
         uses: actions/checkout@v5

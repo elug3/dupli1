@@ -25,6 +25,20 @@ type Conversation struct {
 	EntryPayload   string
 	LastSeenAt     time.Time
 	CreatedAt      time.Time
+
+	// Channel is ChannelTelegram or ChannelWeb. An empty value reads as
+	// Telegram, which every conversation was before web chat existed.
+	Channel string
+	// CustomerID and CustomerEmail identify a signed-in web shopper, taken
+	// from their access token. Both stay empty for Telegram chats: a Telegram
+	// user id is not a Dupli1 identity.
+	CustomerID    string
+	CustomerEmail string
+	// CustomerLastReadAt is how far the shopper has read; replies after it
+	// are unread. CustomerNotifiedAt is when they were last emailed about an
+	// unread reply, so one email covers every reply until they read.
+	CustomerLastReadAt *time.Time
+	CustomerNotifiedAt *time.Time
 }
 
 // NewConversation starts a chat at the root menu.
