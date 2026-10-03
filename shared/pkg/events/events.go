@@ -3,8 +3,8 @@
 // order.* (notification subscribes), payment publishes payment.succeeded
 // (order subscribes) and payment.callback_rejected (notification
 // subscribes), product publishes product.* (notification
-// subscribes), and auth publishes user.deleted (profile subscribes, to
-// cascade-delete saved profile/address data). Each subject has exactly one
+// subscribes), and auth publishes user.deleted (profile and support subscribe, to
+// cascade-delete saved profile/address data and web chat transcripts). Each subject has exactly one
 // publisher and one or more subscribers that must agree on the exact string
 // and payload fields, so both are defined once here rather than redeclared
 // per service.
@@ -35,6 +35,12 @@ const (
 	// human. Published by support, consumed by notification, which owns where
 	// ops alerts go.
 	SupportInquiryOpened = "support.inquiry_opened"
+	// SupportMessageCreated and SupportInquiryUpdated keep open chat streams
+	// current (docs/support-web-chat.md). Published and consumed by support
+	// itself, over a broadcast (non-queue-group) subscription, so a stream held
+	// by any replica hears a change committed on any other.
+	SupportMessageCreated = "support.message_created"
+	SupportInquiryUpdated = "support.inquiry_updated"
 )
 
 // SupportInquiry is the payload for SupportInquiryOpened — published by
@@ -63,6 +69,31 @@ type SupportInquiry struct {
 	// alert can arrive without a ping and wait for the morning shift.
 	AfterHours bool      `json:"after_hours"`
 	OpenedAt   time.Time `json:"opened_at"`
+	Occurred   time.Time `json:"occurred_at"`
+	// Channel is where the shopper is writing from: "telegram" or "web".
+	// Empty on events published before web chat existed, which were Telegram.
+	//
+	// Deliberately no customer email: this event becomes a message in ops
+	// Telegram chats, which outlive the staff in them. Who is asking is read
+	// in the console, behind support.read.
+	Channel string `json:"channel,omitempty"`
+}
+
+// SupportLive is the payload for SupportMessageCreated and
+// SupportInquiryUpdated.
+//
+// Ids only, never a message body: the event tells a stream that something
+// changed, and the stream's client reloads through the authenticated API.
+// Customer words therefore never ride the bus.
+type SupportLive struct {
+	InquiryID      string `json:"inquiry_id,omitempty"`
+	ConversationID string `json:"conversation_id"`
+	// CustomerID is the web shopper's account id; empty for Telegram chats.
+	// It is what routes a frame to that shopper's own stream and no other.
+	CustomerID string    `json:"customer_id,omitempty"`
+	Channel    string    `json:"channel"`
+	MessageID  string    `json:"message_id,omitempty"`
+	Status     string    `json:"status,omitempty"`
 	Occurred   time.Time `json:"occurred_at"`
 }
 
@@ -326,7 +357,8 @@ type UserRegisteredEvent struct {
 
 // UserDeletedEvent is the payload for UserDeleted — published by auth,
 // consumed by profile (which owns no foreign key to auth's users table and
-// must clean up saved profile/address data itself).
+// must clean up saved profile/address data itself) and by support (which
+// erases the account's web consultation words).
 type UserDeletedEvent struct {
 	EventType string    `json:"event_type"`
 	UserID    string    `json:"user_id"`

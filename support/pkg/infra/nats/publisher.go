@@ -41,6 +41,7 @@ func (p *InquiryPublisher) InquiryOpened(ctx context.Context, in ports.InquiryOp
 		AfterHours:   in.AfterHours,
 		OpenedAt:     now,
 		Occurred:     now,
+		Channel:      in.Channel,
 	})
 }
 

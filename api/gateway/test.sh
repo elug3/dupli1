@@ -96,6 +96,9 @@ ROUTES=(
   /api/v1/payments/p1=payment
   /api/v1/notification/telegram/subscriptions=notification
   /api/v1/support/inquiries=support
+  /api/v1/support/inquiries/events=support
+  /api/v1/support/web/conversation=support
+  /api/v1/support/web/events=support
 )
 
 # Product's internal APIs, including spellings nginx must normalize first.

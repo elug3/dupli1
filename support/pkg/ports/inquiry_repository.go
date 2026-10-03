@@ -28,7 +28,9 @@ type InquiryFilter struct {
 	AssignedTo string
 	// Unassigned selects the 대기 queue: open and claimed by nobody.
 	Unassigned bool
-	Limit      int
+	// Channel narrows to one channel ("web", "telegram"); empty is both.
+	Channel string
+	Limit   int
 }
 
 // MessageRepository stores what was said, in both directions.
@@ -39,6 +41,14 @@ type MessageRepository interface {
 	// PurgeBodies replaces the text of messages older than the cutoff with a
 	// placeholder, keeping the row. Returns how many were purged.
 	PurgeBodies(ctx context.Context, olderThan time.Time, placeholder string) (int, error)
+	// PurgeConversation replaces the text of every message in one
+	// conversation, for an account that was deleted. Returns how many.
+	PurgeConversation(ctx context.Context, conversationID, placeholder string) (int, error)
+	// DueNotices returns messages created before the cutoff whose notice is
+	// still domain.NoticePending — oldest first.
+	DueNotices(ctx context.Context, createdBefore time.Time, limit int) ([]domain.Message, error)
+	// SetNoticeStatus records the notice outcome on the given messages.
+	SetNoticeStatus(ctx context.Context, messageIDs []string, status string) error
 }
 
 // MessageReader is implemented by message stores that can look back. It is a
@@ -69,4 +79,6 @@ type InquiryOpened struct {
 	EntryContext string
 	Excerpt      string
 	AfterHours   bool
+	// Channel is "telegram" or "web".
+	Channel string
 }

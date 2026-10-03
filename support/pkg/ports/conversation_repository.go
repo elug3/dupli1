@@ -14,6 +14,10 @@ type ConversationRepository interface {
 	FindByChatID(ctx context.Context, chatID string) (*domain.Conversation, error)
 	FindByID(ctx context.Context, id string) (*domain.Conversation, error)
 	Save(ctx context.Context, conversation *domain.Conversation) error
+	// ForgetCustomer drops the account details a web conversation holds (the
+	// email), for when the account is deleted. The row stays so inquiries
+	// keep their shape.
+	ForgetCustomer(ctx context.Context, conversationID string) error
 }
 
 // Bot is the outbound half of a Telegram conversation.

@@ -55,3 +55,17 @@ func (r *ConversationRepository) Save(_ context.Context, conversation *domain.Co
 	r.rows[conversation.ChatID] = *conversation
 	return nil
 }
+
+// ForgetCustomer drops the email a web conversation holds.
+func (r *ConversationRepository) ForgetCustomer(_ context.Context, conversationID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for key, row := range r.rows {
+		if row.ID == conversationID {
+			row.CustomerEmail = ""
+			r.rows[key] = row
+		}
+	}
+	return nil
+}

@@ -19,10 +19,13 @@ import (
 	tg "github.com/elug3/dupli1/shared/pkg/telegram"
 	"github.com/elug3/dupli1/support/pkg/domain"
 	"github.com/elug3/dupli1/support/pkg/handler"
+	emailinfra "github.com/elug3/dupli1/support/pkg/infra/email"
+	gatewayinfra "github.com/elug3/dupli1/support/pkg/infra/gateway"
 	"github.com/elug3/dupli1/support/pkg/infra/memory"
 	natsinfra "github.com/elug3/dupli1/support/pkg/infra/nats"
 	"github.com/elug3/dupli1/support/pkg/infra/postgres"
 	telegraminfra "github.com/elug3/dupli1/support/pkg/infra/telegram"
+	"github.com/elug3/dupli1/support/pkg/livefeed"
 	"github.com/elug3/dupli1/support/pkg/ports"
 	"github.com/elug3/dupli1/support/pkg/service"
 )
@@ -79,12 +82,25 @@ func Bootstrap(cfg Config) (*App, error) {
 		return nil, err
 	}
 
+	// Live changes reach this replica's streams through the hub. With NATS
+	// they go via the bus first, so a reply saved on one replica reaches a
+	// shopper streaming from another; without it the hub is fed directly.
+	hub := livefeed.NewHub()
+	live, subscriber, closeLive, err := openLive(cfg, hub)
+	if err != nil {
+		_ = closePublisher()
+		_ = store.close()
+		return nil, err
+	}
+	closePublisher = joinClose(closeLive, closePublisher)
+
 	router := service.NewRouter(service.Deps{
 		Conversations: store.conversations,
 		Answers:       store.answers,
 		Inquiries:     store.inquiries,
 		Messages:      store.messages,
 		Publisher:     publisher,
+		Live:          live,
 		Bot:           bot,
 		Hours:         cfg.BusinessHours,
 		NewID:         newULID,
@@ -97,7 +113,42 @@ func Bootstrap(cfg Config) (*App, error) {
 	// lifetime of their request.
 	workerCtx, cancelWorkers := context.WithCancel(context.Background())
 
-	inbox := service.NewInbox(store.conversations, store.inquiries, store.messages, bot, newULID, time.Now)
+	products, orders := openReferenceReaders(cfg)
+	inbox := service.NewInbox(store.conversations, store.inquiries, store.messages, bot, newULID, time.Now).
+		WithWebChat(products, orders, live)
+
+	notifier, chatURL, err := openNotifier(cfg)
+	if err != nil {
+		cancelWorkers()
+		_ = closePublisher()
+		_ = store.close()
+		return nil, err
+	}
+	webChat := service.NewWebChat(service.WebChatDeps{
+		Conversations: store.conversations,
+		Inquiries:     store.inquiries,
+		Messages:      store.messages,
+		Publisher:     publisher,
+		Live:          live,
+		Products:      products,
+		Orders:        orders,
+		Notifier:      notifier,
+		Hours:         cfg.BusinessHours,
+		ChatURL:       chatURL,
+		NewID:         newULID,
+		Now:           time.Now,
+	})
+
+	// A deleted account takes its consultation words with it. Queue-grouped,
+	// so one replica does each deletion.
+	if subscriber != nil {
+		if err := subscriber.OnUserDeleted(workerCtx, webChat.ForgetCustomer); err != nil {
+			cancelWorkers()
+			_ = closePublisher()
+			_ = store.close()
+			return nil, fmt.Errorf("subscribe user.deleted: %w", err)
+		}
+	}
 
 	// The inbox is the only authenticated surface here, and the only place a
 	// shopper's conversation can be read in full. Without a validator those
@@ -123,6 +174,8 @@ func Bootstrap(cfg Config) (*App, error) {
 		WebhookSecret: cfg.TelegramWebhookSecret,
 		Settings:      BuildSettings(cfg),
 		UpdateContext: workerCtx,
+		WebChat:       webChat,
+		Hub:           hub,
 	})
 
 	// Close what nobody has touched, so the queue shows live work rather than
@@ -138,6 +191,9 @@ func Bootstrap(cfg Config) (*App, error) {
 	}
 	go runRetentionPurge(workerCtx, inbox, retention)
 
+	// The shopper hears about a reply they have not read, by email.
+	go runReplyNotices(workerCtx, webChat, cfg.ReplyNoticeDelay)
+
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
@@ -148,6 +204,9 @@ func Bootstrap(cfg Config) (*App, error) {
 		WriteTimeout: cfg.WriteTimeout,
 		IdleTimeout:  cfg.IdleTimeout,
 	}
+	// Ends open SSE streams (they watch workerCtx) so a graceful shutdown is
+	// not held open by them.
+	httpSrv.RegisterOnShutdown(cancelWorkers)
 
 	if client.Enabled() {
 		if err := startInbound(workerCtx, client, processor, cfg); err != nil {
@@ -282,6 +341,101 @@ func openPublisher(cfg Config) (ports.InquiryPublisher, func() error, error) {
 		publisher.Close()
 		return nil
 	}, nil
+}
+
+// openLive picks how live changes travel. With NATS: publish to the bus and
+// relay the bus (every replica's events) into this replica's hub. Without it:
+// straight into the hub, which is right for a single process.
+func openLive(cfg Config, hub *livefeed.Hub) (ports.LivePublisher, *natsinfra.Subscriber, func() error, error) {
+	if strings.TrimSpace(cfg.NATSURL) == "" {
+		return hub, nil, func() error { return nil }, nil
+	}
+	publisher, err := natspublisher.New(cfg.NATSURL)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("connect nats (live): %w", err)
+	}
+	subscriber, err := natsinfra.NewSubscriber(cfg.NATSURL)
+	if err != nil {
+		publisher.Close()
+		return nil, nil, nil, err
+	}
+	if err := subscriber.RelayLive(hub); err != nil {
+		subscriber.Close()
+		publisher.Close()
+		return nil, nil, nil, fmt.Errorf("subscribe live events: %w", err)
+	}
+	return natsinfra.NewLivePublisher(publisher), subscriber, func() error {
+		subscriber.Close()
+		publisher.Close()
+		return nil
+	}, nil
+}
+
+// openReferenceReaders reads products and orders through the internal
+// gateway. Without one, interfaces stay nil (not typed-nil pointers) so the
+// chat refuses references with 503 instead of panicking.
+func openReferenceReaders(cfg Config) (ports.ProductReader, ports.OrderReader) {
+	base := strings.TrimRight(strings.TrimSpace(cfg.GatewayURL), "/")
+	if base == "" {
+		log.Println("WARNING: DUPLI1_GATEWAY_URL not set — web chat cannot attach products or orders")
+		return nil, nil
+	}
+	return gatewayinfra.NewProductReader(base, nil), gatewayinfra.NewOrderReader(base, nil)
+}
+
+// openNotifier builds the reply-notice sender. Unset SMTP or storefront URL
+// disables notices (logged); a set but unreadable SMTP config fails the boot,
+// since a typo there would otherwise silently drop every notice.
+func openNotifier(cfg Config) (ports.ShopperNotifier, string, error) {
+	storefront := strings.TrimRight(strings.TrimSpace(cfg.StorefrontURL), "/")
+	if strings.TrimSpace(cfg.SMTP.Addr) == "" || storefront == "" {
+		log.Println("WARNING: DUPLI1_SUPPORT_SMTP_ADDR or DUPLI1_STOREFRONT_URL not set — shoppers get no email about unread replies")
+		return nil, "", nil
+	}
+	notifier, err := emailinfra.NewSMTPNotifier(emailinfra.SMTPConfig{
+		Addr:     cfg.SMTP.Addr,
+		Username: cfg.SMTP.Username,
+		Password: cfg.SMTP.Password,
+		From:     cfg.SMTP.From,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("reply notice: %w", err)
+	}
+	return notifier, storefront + "/profile/support", nil
+}
+
+func joinClose(fns ...func() error) func() error {
+	return func() error {
+		var errs []error
+		for _, fn := range fns {
+			errs = append(errs, fn())
+		}
+		return errors.Join(errs...)
+	}
+}
+
+// runReplyNotices emails shoppers about replies left unread. Every minute, so
+// a notice goes out between delay and delay+1m after the reply.
+func runReplyNotices(ctx context.Context, webChat *service.WebChat, delay time.Duration) {
+	if delay <= 0 {
+		delay = DefaultReplyNoticeDelay
+	}
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sent, err := webChat.SendDueNotices(ctx, delay)
+			if err != nil {
+				log.Printf("support reply notices: %v", err)
+			}
+			if sent > 0 {
+				log.Printf("sent %d reply notice(s)", sent)
+			}
+		}
+	}
 }
 
 // runStaleCloser sweeps abandoned inquiries closed.

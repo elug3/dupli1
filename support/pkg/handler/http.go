@@ -15,6 +15,7 @@ import (
 	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 	tg "github.com/elug3/dupli1/shared/pkg/telegram"
+	"github.com/elug3/dupli1/support/pkg/livefeed"
 	"github.com/elug3/dupli1/support/pkg/ports"
 	"github.com/elug3/dupli1/support/pkg/service"
 )
@@ -44,6 +45,11 @@ type Options struct {
 	// been acknowledged; cancelled on process shutdown.
 	UpdateContext context.Context
 	HealthProbes  map[string]HealthProbe
+	// WebChat is the storefront channel; nil leaves the customer routes
+	// answering 503.
+	WebChat *service.WebChat
+	// Hub fans live changes out to the customer and inbox streams.
+	Hub *livefeed.Hub
 }
 
 // HealthProbe reports whether one dependency is reachable.
@@ -58,6 +64,8 @@ type Handler struct {
 	settings      settings.Response
 	updateCtx     context.Context
 	healthProbes  map[string]HealthProbe
+	webChat       *service.WebChat
+	hub           *livefeed.Hub
 }
 
 func New(opts Options) *Handler {
@@ -74,6 +82,8 @@ func New(opts Options) *Handler {
 		settings:      opts.Settings,
 		updateCtx:     updateCtx,
 		healthProbes:  opts.HealthProbes,
+		webChat:       opts.WebChat,
+		hub:           opts.Hub,
 	}
 }
 
@@ -87,8 +97,29 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Everything below is the manager inbox: authenticated, permission-checked,
 	// and the only place a shopper's conversation can be read in full.
 	mux.HandleFunc("/api/v1/support/inquiries", h.requireAuth(h.inquiries))
+	// Registered ahead of the /inquiries/ subtree so "events" is never read
+	// as an inquiry id.
+	mux.HandleFunc("/api/v1/support/inquiries/events", h.requireAuth(h.inboxEvents))
 	mux.HandleFunc("/api/v1/support/inquiries/", h.requireAuth(h.inquiryAction))
 	mux.HandleFunc("/api/v1/support/answers", h.requireAuth(h.answersHandler))
+
+	// The shopper's own web consultation. Every route acts on the caller's
+	// conversation only: there is no id in the path to point at someone else's.
+	mux.HandleFunc("/api/v1/support/web/conversation", h.requireAuth(h.requireWebChat(h.webConversation)))
+	mux.HandleFunc("/api/v1/support/web/messages", h.requireAuth(h.requireWebChat(h.webMessages)))
+	mux.HandleFunc("/api/v1/support/web/read", h.requireAuth(h.requireWebChat(h.webRead)))
+	mux.HandleFunc("/api/v1/support/web/inquiries/current/close", h.requireAuth(h.requireWebChat(h.webClose)))
+	mux.HandleFunc("/api/v1/support/web/events", h.requireAuth(h.requireWebChat(h.webEvents)))
+}
+
+func (h *Handler) requireWebChat(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.webChat == nil {
+			respondCode(w, http.StatusServiceUnavailable, "chat_unavailable", "web chat not configured")
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {

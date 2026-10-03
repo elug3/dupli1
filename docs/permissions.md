@@ -368,6 +368,12 @@ registered as an alias.
 | `POST` | `/api/v1/support/inquiries/{id}/reply` | `support.reply` |
 | `POST` | `/api/v1/support/inquiries/{id}/close` | `support.reply` |
 | `GET`/`PUT` | `/api/v1/support/answers` | `support.manage` |
+| `GET` | `/api/v1/support/inquiries/events` | `support.read` (SSE) |
+| `GET` | `/api/v1/support/web/conversation` | Bearer, customer or manager account (own conversation only) |
+| `POST` | `/api/v1/support/web/messages` | same |
+| `POST` | `/api/v1/support/web/read` | same |
+| `POST` | `/api/v1/support/web/inquiries/current/close` | same |
+| `GET` | `/api/v1/support/web/events` | same (SSE) |
 
 Webhook (`POST /api/v1/notification/telegram/webhook`) and NATS event dispatch require no JWT. Manager routes require Bearer + `AUTH_JWKS_URL` on the notification task in production.
 
@@ -382,6 +388,8 @@ Webhook (`POST /api/v1/notification/telegram/webhook`) and NATS event dispatch r
 `support.reply` implies read: an agent who may answer may obviously look. `support.manage` is deliberately *not* in the `support_agent` bundle — canned copy is published content, so editing it stays with `admin.*`.
 
 The bot's own webhook (`POST /api/v1/support/telegram/webhook`) is unauthenticated by necessity, since Telegram calls it; the secret header is what makes it safe, and a missing secret fails closed. Every inbox route requires Bearer, and without a validator configured they answer `503` rather than serving open.
+
+The web chat routes (`/api/v1/support/web/*`) need no permission: like the storefront's order routes they are ABAC, acting only on the conversation keyed by the token's `sub`, with no id in the path to point elsewhere. Service accounts are refused.
 
 ---
 
@@ -414,7 +422,9 @@ Code-defined sets for common job functions. Assigning a bundle expands to explic
 | `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass`, `payment.cancel` |
 | `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update`, `user.delete`, `user.apikey.read`, `user.apikey.manage` |
 | `customer_registrar` | `user.create` |
-| `support_agent` | `support.read`, `support.reply` |
+| `support_agent` | `support.read`, `support.reply`, `order.read.all` |
+
+`order.read.all` joined `support_agent` with web consultation chat (2026-10-03): the console's context panel shows the chatting shopper's orders and purchase history, and order has no endpoint scoped to "the customer I am talking to". A bundle is expanded when it is granted, so an agent granted it before then holds only the two `support.*` permissions until it is granted again ([support-web-chat.md](support-web-chat.md)).
 
 API exposure of bundles is deferred; Phase 2 seeds and migrations use these expansions directly.
 
