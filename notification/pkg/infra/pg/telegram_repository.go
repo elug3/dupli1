@@ -228,7 +228,7 @@ func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.Telegr
 		INSERT INTO telegram_subscriptions (
 			id, telegram_user_id, chat_id, chat_type, chat_label, username, status,
 			alert_order, alert_product, alert_support, created_at, updated_at, accepted_at, accepted_by
-		) VALUES ($1,$2,$3,'','',$4,'accepted',$5,$6,$7,$8,$9,$10,$11)
+		) VALUES ($1,$2,$3,'',$4,'','accepted',$5,$6,$7,$8,$9,$10,$11)
 		ON CONFLICT (chat_id) DO UPDATE SET
 			telegram_user_id = COALESCE(EXCLUDED.telegram_user_id, telegram_subscriptions.telegram_user_id),
 			chat_label = CASE WHEN EXCLUDED.chat_label <> '' THEN EXCLUDED.chat_label ELSE telegram_subscriptions.chat_label END,
