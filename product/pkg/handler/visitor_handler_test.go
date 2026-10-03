@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/handler"
 	"github.com/elug3/dupli1/product/pkg/infra/memory"
+	"github.com/elug3/dupli1/product/pkg/infra/ratelimit"
 	"github.com/elug3/dupli1/product/pkg/middleware"
 	"github.com/elug3/dupli1/product/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
@@ -103,6 +105,39 @@ func TestRecordVisit_IgnoresBotsAndPrefetch(t *testing.T) {
 
 	if got := visitorReport(t, mux).Today.UniqueVisitors; got != 0 {
 		t.Fatalf("today's unique visitors = %d, want 0", got)
+	}
+}
+
+// Bootstrap wraps POST /visits with a per-IP limiter so a script cannot mint
+// unlimited guest cookies and inflate analytics.
+func TestRecordVisit_RateLimitCapsPerIP(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Catalog = memory.NewCatalogStore()
+	h := handler.NewHandler(service.NewProductSearchService(store, nil), service.NewPromotionService(memory.NewPromotionStore()), nil, service.NewCatalogService(store.Catalog)).
+		WithVisitorService(service.NewVisitorService(memory.NewVisitorStore()))
+	throttle := ratelimit.New(ratelimit.NewMemoryCounter(), 2, time.Minute).Middleware(nil)
+	mux := http.NewServeMux()
+	mux.Handle("POST "+handler.RouteVisits, throttle(http.HandlerFunc(h.RecordVisit)))
+
+	post := func(ip string) int {
+		req := httptest.NewRequest(http.MethodPost, handler.RouteVisits, nil)
+		req.Header.Set("User-Agent", browserUA)
+		req.Header.Set("X-Forwarded-For", ip)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		return w.Code
+	}
+	if got := post("203.0.113.44"); got != http.StatusNoContent {
+		t.Fatalf("first visit = %d, want 204", got)
+	}
+	if got := post("203.0.113.44"); got != http.StatusNoContent {
+		t.Fatalf("second visit = %d, want 204", got)
+	}
+	if got := post("203.0.113.44"); got != http.StatusTooManyRequests {
+		t.Fatalf("third visit from same IP = %d, want 429", got)
+	}
+	if got := post("203.0.113.45"); got != http.StatusNoContent {
+		t.Fatalf("different IP = %d, want 204", got)
 	}
 }
 
