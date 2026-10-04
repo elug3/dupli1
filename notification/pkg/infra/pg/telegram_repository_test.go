@@ -17,7 +17,7 @@ func TestCreateAccepted_StoresManualLabelNotUsername(t *testing.T) {
 
 	repo, err := pg.NewTelegramRepository(dsn)
 	if err != nil {
-		t.Fatalf("NewTelegramRepository: %v", err)
+		t.Skipf("postgres unavailable: %v", err)
 	}
 	t.Cleanup(repo.Close)
 
