@@ -6,9 +6,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"time"
+
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/handler"
 	"github.com/elug3/dupli1/product/pkg/infra/memory"
+	"github.com/elug3/dupli1/product/pkg/infra/ratelimit"
 	"github.com/elug3/dupli1/product/pkg/middleware"
 	"github.com/elug3/dupli1/product/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
@@ -103,6 +106,39 @@ func TestRecordVisit_IgnoresBotsAndPrefetch(t *testing.T) {
 
 	if got := visitorReport(t, mux).Today.UniqueVisitors; got != 0 {
 		t.Fatalf("today's unique visitors = %d, want 0", got)
+	}
+}
+
+func TestRecordVisit_RateLimitCapsPerIP(t *testing.T) {
+	store := memory.NewProductStore()
+	store.Catalog = memory.NewCatalogStore()
+	h := handler.NewHandler(service.NewProductSearchService(store, nil), service.NewPromotionService(memory.NewPromotionStore()), nil, service.NewCatalogService(store.Catalog)).
+		WithVisitorService(service.NewVisitorService(memory.NewVisitorStore()))
+	// Same wiring as bootstrap.newVisitRateLimiter, but a tiny budget so the
+	// test finishes quickly.
+	limiter := ratelimit.New(ratelimit.NewMemoryCounter(), 2, time.Minute)
+	mux := http.NewServeMux()
+	mux.Handle("POST "+handler.RouteVisits, limiter.Middleware(nil)(http.HandlerFunc(h.RecordVisit)))
+
+	const ip = "203.0.113.55:4242"
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, handler.RouteVisits, nil)
+		req.Header.Set("User-Agent", browserUA)
+		req.RemoteAddr = ip
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("visit %d: status=%d, want 204", i, w.Code)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, handler.RouteVisits, nil)
+	req.Header.Set("User-Agent", browserUA)
+	req.RemoteAddr = ip
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("over cap: status=%d, want 429; body=%s", w.Code, w.Body.String())
 	}
 }
 

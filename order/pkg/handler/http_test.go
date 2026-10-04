@@ -912,6 +912,58 @@ func TestUpdateStatusCanceledRefundRejectedLeavesPaid(t *testing.T) {
 	}
 }
 
+func TestManagerApproveCancelUsesServiceAccountAndNamesOperator(t *testing.T) {
+	var gotAuth, gotReason string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/payments/pay_1/cancel" {
+			http.NotFound(w, r)
+			return
+		}
+		gotAuth = r.Header.Get("Authorization")
+		var body struct {
+			Reason string `json:"reason"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotReason = body.Reason
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"pay_1","status":"canceled"}`))
+	}))
+	defer srv.Close()
+
+	pay := httppayment.NewClientWithBearer(srv.URL, srv.Client(), "order-svc-token")
+	repo := memory.NewRepository()
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay)
+	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
+	mux := newMux(h)
+
+	orderID := seedOrder(t, svc, "u-1")
+	if _, err := svc.MarkOrderPaid(t.Context(), orderID, "pay_1", 1000); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	mgr := makeToken(t, "mgr-approve", []string{permissions.OrderStatusUpdate})
+	w := do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/confirm", mgr, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("confirm status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	customer := makeToken(t, "u-1", nil)
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel", customer, map[string]string{"reason": "changed mind"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("cancel status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	w = do(t, mux, http.MethodPost, "/api/v1/orders/"+orderID+"/cancel/approve", mgr, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("approve status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if gotAuth != "Bearer order-svc-token" {
+		t.Fatalf("payment auth = %q, want order service account (manager token lacks payment.cancel)", gotAuth)
+	}
+	if gotReason != "order canceled by mgr-approve" {
+		t.Fatalf("refund reason = %q, want the approving manager named", gotReason)
+	}
+}
+
 func TestCustomerCancelRefundsViaServiceAccountNotCustomerToken(t *testing.T) {
 	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
