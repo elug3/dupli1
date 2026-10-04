@@ -73,6 +73,11 @@ func (r *TelegramRepository) migrate() error {
 		// existing deployment's table predates customer inquiry handoffs.
 		`ALTER TABLE telegram_subscriptions
 		 ADD COLUMN IF NOT EXISTS alert_support BOOLEAN NOT NULL DEFAULT FALSE`,
+		// Messages muted inside a class the chat receives (order.created while
+		// keeping order.paid). Empty for every existing row: nothing changes
+		// until a manager mutes something.
+		`ALTER TABLE telegram_subscriptions
+		 ADD COLUMN IF NOT EXISTS muted_events TEXT[] NOT NULL DEFAULT '{}'`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS telegram_subscriptions_chat_id_idx
 		 ON telegram_subscriptions (chat_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS telegram_subscriptions_user_id_idx
@@ -117,6 +122,7 @@ func (r *TelegramRepository) UpsertPending(ctx context.Context, in ports.Telegra
 		ChatLabel:      strings.TrimSpace(in.ChatLabel),
 		Username:       strings.TrimSpace(in.Username),
 		Status:         domain.SubscriptionStatusPending,
+		MutedEvents:    []string{},
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -139,7 +145,7 @@ func (r *TelegramRepository) UpsertPending(ctx context.Context, in ports.Telegra
 func (r *TelegramRepository) List(ctx context.Context, status string) ([]domain.TelegramSubscription, error) {
 	status = strings.TrimSpace(status)
 	query := `SELECT id, telegram_user_id, chat_id, chat_type, chat_label, username, status,
-		alert_order, alert_product, alert_support, created_at, updated_at, accepted_at, accepted_by
+		alert_order, alert_product, alert_support, muted_events, created_at, updated_at, accepted_at, accepted_by
 		FROM telegram_subscriptions`
 	args := []any{}
 	if status != "" {
@@ -159,7 +165,7 @@ func (r *TelegramRepository) List(ctx context.Context, status string) ([]domain.
 func (r *TelegramRepository) GetByID(ctx context.Context, id string) (*domain.TelegramSubscription, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, telegram_user_id, chat_id, chat_type, chat_label, username, status,
-			alert_order, alert_product, alert_support, created_at, updated_at, accepted_at, accepted_by
+			alert_order, alert_product, alert_support, muted_events, created_at, updated_at, accepted_at, accepted_by
 		FROM telegram_subscriptions WHERE id = $1`, id)
 	return scanSubscription(row)
 }
@@ -167,7 +173,7 @@ func (r *TelegramRepository) GetByID(ctx context.Context, id string) (*domain.Te
 func (r *TelegramRepository) FindByChatID(ctx context.Context, chatID string) (*domain.TelegramSubscription, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, telegram_user_id, chat_id, chat_type, chat_label, username, status,
-			alert_order, alert_product, alert_support, created_at, updated_at, accepted_at, accepted_by
+			alert_order, alert_product, alert_support, muted_events, created_at, updated_at, accepted_at, accepted_by
 		FROM telegram_subscriptions WHERE chat_id = $1`, strings.TrimSpace(chatID))
 	return scanSubscription(row)
 }
@@ -175,7 +181,7 @@ func (r *TelegramRepository) FindByChatID(ctx context.Context, chatID string) (*
 func (r *TelegramRepository) FindByUserID(ctx context.Context, userID int64) (*domain.TelegramSubscription, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, telegram_user_id, chat_id, chat_type, chat_label, username, status,
-			alert_order, alert_product, alert_support, created_at, updated_at, accepted_at, accepted_by
+			alert_order, alert_product, alert_support, muted_events, created_at, updated_at, accepted_at, accepted_by
 		FROM telegram_subscriptions WHERE telegram_user_id = $1`, userID)
 	return scanSubscription(row)
 }
@@ -259,9 +265,10 @@ func (r *TelegramRepository) Accept(ctx context.Context, id string, in ports.Tel
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE telegram_subscriptions
 		SET status = 'accepted', alert_order = $2, alert_product = $3, alert_support = $6,
+		    muted_events = COALESCE($7, muted_events),
 		    accepted_at = $4, accepted_by = $5, updated_at = $4
 		WHERE id = $1 AND status = 'pending'`,
-		id, in.AlertOrder, in.AlertProduct, now, strings.TrimSpace(in.AcceptedBy), in.AlertSupport,
+		id, in.AlertOrder, in.AlertProduct, now, strings.TrimSpace(in.AcceptedBy), in.AlertSupport, in.MutedEvents,
 	)
 	if err != nil {
 		return nil, err
@@ -297,9 +304,10 @@ func (r *TelegramRepository) UpdateAlerts(ctx context.Context, id string, in por
 		SET alert_order = COALESCE($2, alert_order),
 		    alert_product = COALESCE($3, alert_product),
 		    alert_support = COALESCE($4, alert_support),
+		    muted_events = COALESCE($6, muted_events),
 		    updated_at = $5
 		WHERE id = $1 AND status <> 'rejected'`,
-		id, in.AlertOrder, in.AlertProduct, in.AlertSupport, time.Now().UTC(),
+		id, in.AlertOrder, in.AlertProduct, in.AlertSupport, time.Now().UTC(), in.MutedEvents,
 	)
 	if err != nil {
 		return nil, err
@@ -339,7 +347,7 @@ func scanSubscription(row scannable) (*domain.TelegramSubscription, error) {
 	var acceptedAt sql.NullTime
 	err := row.Scan(
 		&sub.ID, &userID, &sub.ChatID, &sub.ChatType, &sub.ChatLabel, &sub.Username, &sub.Status,
-		&sub.AlertOrder, &sub.AlertProduct, &sub.AlertSupport, &sub.CreatedAt, &sub.UpdatedAt, &acceptedAt, &sub.AcceptedBy,
+		&sub.AlertOrder, &sub.AlertProduct, &sub.AlertSupport, &sub.MutedEvents, &sub.CreatedAt, &sub.UpdatedAt, &acceptedAt, &sub.AcceptedBy,
 	)
 	if err != nil {
 		return nil, err
@@ -352,6 +360,9 @@ func scanSubscription(row scannable) (*domain.TelegramSubscription, error) {
 		t := acceptedAt.Time
 		sub.AcceptedAt = &t
 	}
+	if sub.MutedEvents == nil {
+		sub.MutedEvents = []string{}
+	}
 	return &sub, nil
 }
 
@@ -363,7 +374,7 @@ func scanSubscriptions(rows pgx.Rows) ([]domain.TelegramSubscription, error) {
 		var acceptedAt sql.NullTime
 		if err := rows.Scan(
 			&sub.ID, &userID, &sub.ChatID, &sub.ChatType, &sub.ChatLabel, &sub.Username, &sub.Status,
-			&sub.AlertOrder, &sub.AlertProduct, &sub.AlertSupport, &sub.CreatedAt, &sub.UpdatedAt, &acceptedAt, &sub.AcceptedBy,
+			&sub.AlertOrder, &sub.AlertProduct, &sub.AlertSupport, &sub.MutedEvents, &sub.CreatedAt, &sub.UpdatedAt, &acceptedAt, &sub.AcceptedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -374,6 +385,9 @@ func scanSubscriptions(rows pgx.Rows) ([]domain.TelegramSubscription, error) {
 		if acceptedAt.Valid {
 			t := acceptedAt.Time
 			sub.AcceptedAt = &t
+		}
+		if sub.MutedEvents == nil {
+			sub.MutedEvents = []string{}
 		}
 		out = append(out, sub)
 	}

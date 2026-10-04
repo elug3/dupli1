@@ -53,6 +53,7 @@ func (r *TelegramRepository) UpsertPending(ctx context.Context, in ports.Telegra
 		ChatLabel:      strings.TrimSpace(in.ChatLabel),
 		Username:       strings.TrimSpace(in.Username),
 		Status:         domain.SubscriptionStatusPending,
+		MutedEvents:    []string{},
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -189,6 +190,7 @@ func (r *TelegramRepository) CreateAccepted(ctx context.Context, in ports.Telegr
 		AlertOrder:     in.AlertOrder,
 		AlertSupport:   in.AlertSupport,
 		AlertProduct:   in.AlertProduct,
+		MutedEvents:    []string{},
 		CreatedAt:      now,
 		UpdatedAt:      now,
 		AcceptedAt:     &now,
@@ -212,6 +214,9 @@ func (r *TelegramRepository) Accept(ctx context.Context, id string, in ports.Tel
 	sub.AlertOrder = in.AlertOrder
 	sub.AlertSupport = in.AlertSupport
 	sub.AlertProduct = in.AlertProduct
+	if in.MutedEvents != nil {
+		sub.MutedEvents = append([]string{}, (*in.MutedEvents)...)
+	}
 	sub.AcceptedAt = &now
 	sub.AcceptedBy = strings.TrimSpace(in.AcceptedBy)
 	sub.UpdatedAt = now
@@ -256,6 +261,9 @@ func (r *TelegramRepository) UpdateAlerts(ctx context.Context, id string, in por
 	}
 	if in.AlertSupport != nil {
 		sub.AlertSupport = *in.AlertSupport
+	}
+	if in.MutedEvents != nil {
+		sub.MutedEvents = append([]string{}, (*in.MutedEvents)...)
 	}
 	sub.UpdatedAt = time.Now().UTC()
 	r.byID[id] = sub

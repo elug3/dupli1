@@ -316,18 +316,24 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		var req struct {
-			AlertOrder   bool `json:"alert_order"`
-			AlertSupport bool `json:"alert_support"`
-			AlertProduct bool `json:"alert_product"`
+			AlertOrder   bool      `json:"alert_order"`
+			AlertSupport bool      `json:"alert_support"`
+			AlertProduct bool      `json:"alert_product"`
+			MutedEvents  *[]string `json:"muted_events"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		item, err := h.telegramSubs.Accept(r.Context(), id, ports.TelegramAcceptInput{
 			AlertOrder:   req.AlertOrder,
 			AlertSupport: req.AlertSupport,
 			AlertProduct: req.AlertProduct,
+			MutedEvents:  req.MutedEvents,
 			AcceptedBy:   claims.UserID,
 		})
 		if err != nil {
+			if errors.Is(err, service.ErrUnknownEvent) {
+				respondError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 			if errors.Is(err, pgx.ErrNoRows) {
 				respondError(w, http.StatusNotFound, "subscription not found")
 				return
@@ -368,9 +374,10 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 			respondJSON(w, http.StatusOK, item)
 		case http.MethodPatch:
 			var req struct {
-				AlertOrder   *bool `json:"alert_order"`
-				AlertProduct *bool `json:"alert_product"`
-				AlertSupport *bool `json:"alert_support"`
+				AlertOrder   *bool     `json:"alert_order"`
+				AlertProduct *bool     `json:"alert_product"`
+				AlertSupport *bool     `json:"alert_support"`
+				MutedEvents  *[]string `json:"muted_events"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				respondError(w, http.StatusBadRequest, "invalid json")
@@ -380,10 +387,11 @@ func (h *Handler) telegramSubscriptionAction(w http.ResponseWriter, r *http.Requ
 				AlertOrder:   req.AlertOrder,
 				AlertProduct: req.AlertProduct,
 				AlertSupport: req.AlertSupport,
+				MutedEvents:  req.MutedEvents,
 			})
 			switch {
 			case err == nil:
-			case errors.Is(err, service.ErrNoAlertChange):
+			case errors.Is(err, service.ErrNoAlertChange), errors.Is(err, service.ErrUnknownEvent):
 				respondError(w, http.StatusBadRequest, err.Error())
 				return
 			case errors.Is(err, pgx.ErrNoRows):

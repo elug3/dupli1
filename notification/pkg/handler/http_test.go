@@ -470,3 +470,54 @@ func TestTelegramWebhookAcknowledgesBeforeProcessing(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 }
+
+// muted_events rides PATCH and accept: a known subject is stored, an unknown
+// one is a 400, and a subscription always reports the list, empty or not.
+func TestTelegramSubscriptionMutedEvents(t *testing.T) {
+	h, subs := newTestHandler(t, "")
+	mux := newMux(h)
+	manageToken := makeToken(t, "manager-1", []string{permissions.NotificationTelegramManage})
+
+	accepted, err := subs.CreateManual(t.Context(), ports.TelegramManualInput{ChatID: "-100888", AlertOrder: true})
+	if err != nil {
+		t.Fatalf("create manual: %v", err)
+	}
+	path := fmt.Sprintf("/api/v1/notification/telegram/subscriptions/%s", accepted.ID)
+
+	rec := doJSON(t, mux, http.MethodGet, path, bearer(manageToken), nil)
+	if !strings.Contains(rec.Body.String(), `"muted_events":[]`) {
+		t.Fatalf("get body = %s, want an empty muted_events array", rec.Body.String())
+	}
+
+	rec = doJSON(t, mux, http.MethodPatch, path, bearer(manageToken), map[string]any{"muted_events": []string{"order.created"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch status = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	var got domain.TelegramSubscription
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.MutedEvents) != 1 || got.MutedEvents[0] != "order.created" || !got.AlertOrder {
+		t.Fatalf("after patch = %+v, want order alerts on with order.created muted", got)
+	}
+
+	if rec := doJSON(t, mux, http.MethodPatch, path, bearer(manageToken), map[string]any{"muted_events": []string{"order.nope"}}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown event status = %d, want 400", rec.Code)
+	}
+
+	pending, err := subs.RegisterFromMessage(t.Context(), ports.TelegramSubscriptionInput{TelegramUserID: int64Ptr(91), ChatID: "91", ChatType: "private"})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	acceptPath := fmt.Sprintf("/api/v1/notification/telegram/subscriptions/%s/accept", pending.ID)
+	if rec := doJSON(t, mux, http.MethodPost, acceptPath, bearer(manageToken), map[string]any{"alert_order": true, "muted_events": []string{"bad"}}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("accept with unknown event status = %d, want 400", rec.Code)
+	}
+	rec = doJSON(t, mux, http.MethodPost, acceptPath, bearer(manageToken), map[string]any{"alert_order": true, "muted_events": []string{"order.created"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("accept status = %d; body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"muted_events":["order.created"]`) {
+		t.Fatalf("accept body = %s, want order.created muted", rec.Body.String())
+	}
+}

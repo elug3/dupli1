@@ -15,11 +15,12 @@ func NewTelegramRouting(subs *TelegramSubscriptions, env *ports.TelegramEnvAllow
 	return &TelegramRouting{subs: subs, env: env}
 }
 
-func (r *TelegramRouting) OrderChatIDs(ctx context.Context) []string {
+// OrderChatIDs returns the chats that receive event, an order-class subject.
+func (r *TelegramRouting) OrderChatIDs(ctx context.Context, event string) []string {
 	if r == nil || r.subs == nil {
 		return nil
 	}
-	order, _ := r.subs.RoutingChats(ctx, r.env)
+	order, _ := r.subs.RoutingChats(ctx, r.env, event)
 	return order
 }
 
@@ -31,10 +32,11 @@ func (r *TelegramRouting) SupportChatIDs(ctx context.Context) []string {
 	return r.subs.SupportChats(ctx)
 }
 
-func (r *TelegramRouting) ProductChatIDs(ctx context.Context) []string {
+// ProductChatIDs returns the chats that receive event, a product-class subject.
+func (r *TelegramRouting) ProductChatIDs(ctx context.Context, event string) []string {
 	if r == nil || r.subs == nil {
 		return nil
 	}
-	_, product := r.subs.RoutingChats(ctx, r.env)
+	_, product := r.subs.RoutingChats(ctx, r.env, event)
 	return product
 }
