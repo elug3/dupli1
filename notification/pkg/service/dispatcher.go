@@ -31,8 +31,10 @@ const (
 )
 
 type ChatRouting interface {
-	OrderChatIDs(ctx context.Context) []string
-	ProductChatIDs(ctx context.Context) []string
+	// OrderChatIDs and ProductChatIDs take the subject being alerted, so a
+	// chat that muted that one message is left out.
+	OrderChatIDs(ctx context.Context, event string) []string
+	ProductChatIDs(ctx context.Context, event string) []string
 	SupportChatIDs(ctx context.Context) []string
 }
 
@@ -110,7 +112,7 @@ func (d *Dispatcher) handleOrder(ctx context.Context, subject string, payload []
 		return fmt.Errorf("decode order event: %w", err)
 	}
 
-	chatIDs := d.orderChatIDs(ctx)
+	chatIDs := d.orderChatIDs(ctx, subject)
 	if len(chatIDs) == 0 {
 		log.Printf("order event %s for %s skipped: order telegram chat not configured", subject, event.OrderID)
 		return nil
@@ -130,7 +132,7 @@ func (d *Dispatcher) handlePaymentCanceled(ctx context.Context, payload []byte) 
 		return fmt.Errorf("decode payment.canceled event: %w", err)
 	}
 
-	chatIDs := d.orderChatIDs(ctx)
+	chatIDs := d.orderChatIDs(ctx, SubjectPaymentCanceled)
 	if len(chatIDs) == 0 {
 		log.Printf("payment.canceled for %s skipped: order telegram chat not configured", event.OrderID)
 		return nil
@@ -180,7 +182,7 @@ func (d *Dispatcher) handlePaymentCallbackRejected(ctx context.Context, payload 
 		return fmt.Errorf("decode payment.callback_rejected event: %w", err)
 	}
 
-	chatIDs := d.orderChatIDs(ctx)
+	chatIDs := d.orderChatIDs(ctx, SubjectPaymentCallbackRejected)
 	if len(chatIDs) == 0 {
 		log.Printf("payment.callback_rejected for %s skipped: order telegram chat not configured", event.PaymentID)
 		return nil
@@ -234,7 +236,7 @@ func (d *Dispatcher) handleProduct(ctx context.Context, subject string, payload 
 		return fmt.Errorf("decode product event: %w", err)
 	}
 
-	chatIDs := d.productChatIDs(ctx)
+	chatIDs := d.productChatIDs(ctx, subject)
 	if len(chatIDs) == 0 {
 		log.Printf("product event %s for %s skipped: product telegram chat not configured", subject, event.ProductID)
 		return nil
@@ -356,31 +358,29 @@ func (d *Dispatcher) supportChatIDs(ctx context.Context) []string {
 	return set.list()
 }
 
-func (d *Dispatcher) orderChatIDs(ctx context.Context) []string {
-	var routed []string
-	if d.cfg.Routing != nil {
-		routed = d.cfg.Routing.OrderChatIDs(ctx)
+// orderChatIDs and productChatIDs use the static chat only when no routing is
+// wired at all. Routing already includes the env chat unless that chat's own
+// subscription muted event, so adding it back here would undo the mute.
+func (d *Dispatcher) orderChatIDs(ctx context.Context, event string) []string {
+	if d.cfg.Routing == nil {
+		return staticChatIDs(d.cfg.OrderChatID)
 	}
-	return mergeChatIDs(routed, d.cfg.OrderChatID)
+	return staticChatIDs(d.cfg.Routing.OrderChatIDs(ctx, event)...)
 }
 
-func (d *Dispatcher) productChatIDs(ctx context.Context) []string {
-	var routed []string
-	if d.cfg.Routing != nil {
-		routed = d.cfg.Routing.ProductChatIDs(ctx)
+func (d *Dispatcher) productChatIDs(ctx context.Context, event string) []string {
+	if d.cfg.Routing == nil {
+		return staticChatIDs(d.cfg.ProductChatID)
 	}
-	return mergeChatIDs(routed, d.cfg.ProductChatID)
+	return staticChatIDs(d.cfg.Routing.ProductChatIDs(ctx, event)...)
 }
 
-// mergeChatIDs keeps the routed destinations and adds the static fallback for
-// the case where no routing is wired at all; routing already unions the env
-// chat IDs, so the fallback is normally a duplicate and drops out.
-func mergeChatIDs(routed []string, fallback string) []string {
+// staticChatIDs drops blanks and repeats.
+func staticChatIDs(ids ...string) []string {
 	var set chatSet
-	for _, id := range routed {
+	for _, id := range ids {
 		set.add(id)
 	}
-	set.add(fallback)
 	return set.list()
 }
 

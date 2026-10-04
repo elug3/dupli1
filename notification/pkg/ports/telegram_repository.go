@@ -50,7 +50,10 @@ type TelegramAcceptInput struct {
 	AlertOrder   bool
 	AlertProduct bool
 	AlertSupport bool
-	AcceptedBy   string
+	// MutedEvents replaces the chat's muted messages when non-nil; nil keeps
+	// whatever it already has.
+	MutedEvents *[]string
+	AcceptedBy  string
 }
 
 // TelegramAlertsInput changes the alert classes a subscription receives. A nil
@@ -60,11 +63,14 @@ type TelegramAlertsInput struct {
 	AlertOrder   *bool
 	AlertProduct *bool
 	AlertSupport *bool
+	// MutedEvents replaces the whole muted list when non-nil; an empty list
+	// unmutes everything.
+	MutedEvents *[]string
 }
 
 // Empty reports whether the input changes nothing.
 func (in TelegramAlertsInput) Empty() bool {
-	return in.AlertOrder == nil && in.AlertProduct == nil && in.AlertSupport == nil
+	return in.AlertOrder == nil && in.AlertProduct == nil && in.AlertSupport == nil && in.MutedEvents == nil
 }
 
 // TelegramRepository persists Telegram allowlist entries.

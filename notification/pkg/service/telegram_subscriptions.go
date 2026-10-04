@@ -16,7 +16,12 @@ import (
 var ErrIdentifierRequired = errors.New("telegram_user_id or chat_id is required")
 
 // ErrNoAlertChange reports an alert update that sets no flag — a bad request.
-var ErrNoAlertChange = errors.New("at least one of alert_order, alert_product or alert_support is required")
+var ErrNoAlertChange = errors.New("at least one of alert_order, alert_product, alert_support or muted_events is required")
+
+// ErrUnknownEvent reports a muted_events entry that is not a message a chat can
+// mute — a bad request, refused rather than stored as a mute that silences
+// nothing.
+var ErrUnknownEvent = errors.New("unknown event in muted_events")
 
 type TelegramSubscriptions struct {
 	repo ports.TelegramRepository
@@ -58,7 +63,25 @@ func (s *TelegramSubscriptions) Accept(ctx context.Context, id string, in ports.
 	if !s.Enabled() {
 		return nil, fmt.Errorf("telegram repository not configured")
 	}
+	muted, err := normalizeMuted(in.MutedEvents)
+	if err != nil {
+		return nil, err
+	}
+	in.MutedEvents = muted
 	return s.repo.Accept(ctx, id, in)
+}
+
+// normalizeMuted validates, sorts and de-duplicates a muted list; nil stays
+// nil, meaning "leave it as it is".
+func normalizeMuted(events *[]string) (*[]string, error) {
+	if events == nil {
+		return nil, nil
+	}
+	out, unknown := domain.NormalizeMutedEvents(*events)
+	if unknown != "" {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownEvent, unknown)
+	}
+	return &out, nil
 }
 
 func (s *TelegramSubscriptions) Reject(ctx context.Context, id, rejectedBy string) (*domain.TelegramSubscription, error) {
@@ -84,6 +107,11 @@ func (s *TelegramSubscriptions) UpdateAlerts(ctx context.Context, id string, in 
 	if in.Empty() {
 		return nil, ErrNoAlertChange
 	}
+	muted, err := normalizeMuted(in.MutedEvents)
+	if err != nil {
+		return nil, err
+	}
+	in.MutedEvents = muted
 	return s.repo.UpdateAlerts(ctx, id, in)
 }
 
@@ -136,33 +164,48 @@ func (s *TelegramSubscriptions) IsAllowedIncoming(ctx context.Context, chatID st
 	return sub.IsAccepted()
 }
 
-// RoutingChats returns every chat that should receive order and product
-// alerts: the transitional env destinations first, then each accepted
-// subscription carrying the matching flag, without duplicates.
+// RoutingChats returns every chat that should receive event among the order
+// and product alerts: the transitional env destinations first, then each
+// accepted subscription carrying the matching flag, without duplicates. A chat
+// that muted event is left out; an empty event ignores mutes.
 //
 // Env and database destinations are unioned rather than one overriding the
 // other. Preferring env meant that as long as TELEGRAM_ORDER_CHAT_ID was set —
 // which it is in production — accepting a chat in manage-web did nothing at
 // all, so the whole subscription UI was inert wherever the fallback existed.
-func (s *TelegramSubscriptions) RoutingChats(ctx context.Context, env *ports.TelegramEnvAllowlist) (orderChatIDs, productChatIDs []string) {
+// For the same reason a mute recorded on the env chat's own row applies to the
+// env destination too; an env chat with no row has nowhere to record one and
+// receives everything.
+func (s *TelegramSubscriptions) RoutingChats(ctx context.Context, env *ports.TelegramEnvAllowlist, event string) (orderChatIDs, productChatIDs []string) {
 	var order, product chatSet
+	var accepted []domain.TelegramSubscription
+	if s.Enabled() {
+		// A failed read still alerts the env chats, unmuted.
+		accepted, _ = s.repo.ListAccepted(ctx)
+	}
+	muted := make(map[string]struct{})
+	if event != "" {
+		for _, sub := range accepted {
+			if sub.Mutes(event) {
+				muted[strings.TrimSpace(sub.ChatID)] = struct{}{}
+			}
+		}
+	}
+	addUnmuted := func(set *chatSet, chatID string) {
+		if _, ok := muted[strings.TrimSpace(chatID)]; !ok {
+			set.add(chatID)
+		}
+	}
 	if env != nil {
-		order.add(env.OrderChatID)
-		product.add(env.ProductChatID)
-	}
-	if !s.Enabled() {
-		return order.list(), product.list()
-	}
-	accepted, err := s.repo.ListAccepted(ctx)
-	if err != nil {
-		return order.list(), product.list()
+		addUnmuted(&order, env.OrderChatID)
+		addUnmuted(&product, env.ProductChatID)
 	}
 	for _, sub := range accepted {
 		if sub.AlertOrder {
-			order.add(sub.ChatID)
+			addUnmuted(&order, sub.ChatID)
 		}
 		if sub.AlertProduct {
-			product.add(sub.ChatID)
+			addUnmuted(&product, sub.ChatID)
 		}
 	}
 	return order.list(), product.list()

@@ -63,6 +63,7 @@ Production bot (2026-08): `@MHYM7_BOT` (`dupli1_notification`).
 1. **`/start` registers**, and nothing else does. An explicit `/start` from an unknown chat upserts a **pending** `telegram_subscriptions` row with `chat_id` and `telegram_user_id`. Any other message — ordinary chatter in a group the bot sits in, a stray `/help` — is ignored entirely: no row, no reply.
 2. **Managers** accept or reject pending rows, or manually add a user ID / chat ID via the REST API (`notification.telegram.manage`).
 3. **Outbound ops alerts** — sent to the **union** of the env chat IDs and every accepted subscription carrying `alert_order` / `alert_product`, each chat once. Env destinations do not suppress database ones: while they did, setting `TELEGRAM_ORDER_CHAT_ID` made the whole subscription UI inert.
+   A chat can also **mute single messages** inside a class it receives (`muted_events`), e.g. keep `order.paid` and drop `order.created`. Mutable messages: order class `order.created`, `order.paid`, `order.status_updated`, `payment.canceled`, `payment.callback_rejected`; product class `product.created`, `product.updated`, `product.deleted`, `product.image_uploaded`. Support handoffs cannot be muted. A mute on the env chat's own subscription row applies to the env destination too; an env chat with no row receives everything.
 4. **Metadata refresh** — a `/start` from a chat that is already registered
    refreshes its stored `chat_type`, `chat_label` and `username`, so a renamed
    group stops showing its old name in the manager UI. The write happens only
@@ -93,8 +94,8 @@ Requires Bearer JWT with `notification.telegram.read` (list) or `notification.te
 | `GET` | `/api/v1/notification/telegram/subscriptions?status=pending` | List registrations |
 | `POST` | `/api/v1/notification/telegram/subscriptions` | Manually accept a user ID and/or chat ID |
 | `GET` | `/api/v1/notification/telegram/subscriptions/{id}` | One subscription (`notification.telegram.read`) |
-| `PATCH` | `/api/v1/notification/telegram/subscriptions/{id}` | Change alert classes after accept too (`alert_order`, `alert_product`, `alert_support`; any omitted flag is kept). `400` with no flag, `409` on a rejected row |
-| `POST` | `/api/v1/notification/telegram/subscriptions/{id}/accept` | Accept pending registration (`alert_order`, `alert_product`, `alert_support` in body) |
+| `PATCH` | `/api/v1/notification/telegram/subscriptions/{id}` | Change alert classes after accept too (`alert_order`, `alert_product`, `alert_support`; any omitted flag is kept) and the muted messages (`muted_events`, replaces the whole list; `[]` unmutes all). `400` with nothing to change or an unknown event, `409` on a rejected row |
+| `POST` | `/api/v1/notification/telegram/subscriptions/{id}/accept` | Accept pending registration (`alert_order`, `alert_product`, `alert_support`, optional `muted_events` in body) |
 | `POST` | `/api/v1/notification/telegram/subscriptions/{id}/reject` | Reject pending registration |
 | `DELETE` | `/api/v1/notification/telegram/subscriptions/{id}` | Remove subscription |
 
@@ -141,7 +142,7 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 | `TELEGRAM_WEBHOOK_SECRET` | **Required** when webhook URL is set | Validates `X-Telegram-Bot-Api-Secret-Token`; startup fails without it, and the handler is fail-closed |
 | `AUTH_JWKS_URL` | **Required for manage-web** | Auth JWKS for RS256 manager tokens. Without it, Telegram manager routes return `503 auth not configured` and manage-web `/telegram` shows **Failed to load Telegram subscriptions**. |
 | `TELEGRAM_ALLOWED_USER_IDS` | Optional bootstrap | Comma-separated user IDs until DB entries exist |
-| `TELEGRAM_ORDER_CHAT_ID` | Optional routing | Always receives order alerts, in addition to accepted `alert_order` subscriptions |
+| `TELEGRAM_ORDER_CHAT_ID` | Optional routing | Always receives order alerts, in addition to accepted `alert_order` subscriptions — except a message muted on that chat's own subscription row |
 | `TELEGRAM_PRODUCT_CHAT_ID` | Optional routing | Always receives product alerts, in addition to accepted `alert_product` subscriptions |
 | `NATS_URL` | Yes (for dispatch) | e.g. `nats://nats.dupli1.local:4222` |
 | `NATS_TOKEN` | Yes (with `--auth`) | Must match the broker token. Compose default `dupli1_nats_dev`; prod Secrets Manager `dupli1/production/nats-token` |

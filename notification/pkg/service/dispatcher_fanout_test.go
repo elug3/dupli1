@@ -3,6 +3,7 @@ package service_test
 import (
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -164,5 +165,85 @@ func TestDispatcherKeepsSendingAfterAFailedChat(t *testing.T) {
 	}
 	if len(notifier.chatIDs) != 2 {
 		t.Fatalf("every chat should have been attempted, got %v", notifier.chatIDs)
+	}
+}
+
+// A chat that muted order.created still gets order.paid, and the other chats
+// on order alerts still get both (the case that started this: a manager wanted
+// the payment alert without the creation alert arriving with it).
+func TestDispatcherSkipsAChatThatMutedTheEvent(t *testing.T) {
+	repo := memory.NewTelegramRepository()
+	subs := service.NewTelegramSubscriptions(repo)
+	ctx := t.Context()
+
+	quiet, err := subs.CreateManual(ctx, ports.TelegramManualInput{ChatID: "-100quiet", AlertOrder: true})
+	if err != nil {
+		t.Fatalf("create quiet: %v", err)
+	}
+	if _, err := subs.CreateManual(ctx, ports.TelegramManualInput{ChatID: "-100loud", AlertOrder: true}); err != nil {
+		t.Fatalf("create loud: %v", err)
+	}
+	muted := []string{service.SubjectOrderCreated}
+	if _, err := subs.UpdateAlerts(ctx, quiet.ID, ports.TelegramAlertsInput{MutedEvents: &muted}); err != nil {
+		t.Fatalf("mute: %v", err)
+	}
+
+	notifier := &recordedNotifier{}
+	dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{
+		Routing: service.NewTelegramRouting(subs, &ports.TelegramEnvAllowlist{}),
+	})
+
+	if err := dispatcher.HandleForTest(ctx, service.SubjectOrderCreated, orderPayload(t, "ORD-1")); err != nil {
+		t.Fatalf("handle created: %v", err)
+	}
+	if got := strings.Join(notifier.chatIDs, ","); got != "-100loud" {
+		t.Fatalf("order.created chats = %q, want only the chat that did not mute it", got)
+	}
+
+	notifier.chatIDs = nil
+	if err := dispatcher.HandleForTest(ctx, service.SubjectOrderPaid, orderPayload(t, "ORD-1")); err != nil {
+		t.Fatalf("handle paid: %v", err)
+	}
+	sort.Strings(notifier.chatIDs)
+	if got := strings.Join(notifier.chatIDs, ","); got != "-100loud,-100quiet" {
+		t.Fatalf("order.paid chats = %q, want both chats", got)
+	}
+}
+
+// The env order chat is a destination whatever the table says, but when that
+// chat also has a subscription row, the row's mutes apply to it. Otherwise
+// muting would do nothing for the one chat production configures by env.
+func TestDispatcherAppliesARowMuteToTheEnvChat(t *testing.T) {
+	repo := memory.NewTelegramRepository()
+	subs := service.NewTelegramSubscriptions(repo)
+	ctx := t.Context()
+
+	row, err := subs.CreateManual(ctx, ports.TelegramManualInput{ChatID: "-100env", AlertOrder: true})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	muted := []string{service.SubjectOrderCreated}
+	if _, err := subs.UpdateAlerts(ctx, row.ID, ports.TelegramAlertsInput{MutedEvents: &muted}); err != nil {
+		t.Fatalf("mute: %v", err)
+	}
+
+	env := &ports.TelegramEnvAllowlist{OrderChatID: "-100env"}
+	notifier := &recordedNotifier{}
+	dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{
+		Routing:     service.NewTelegramRouting(subs, env),
+		OrderChatID: "-100env",
+	})
+
+	if err := dispatcher.HandleForTest(ctx, service.SubjectOrderCreated, orderPayload(t, "ORD-2")); err != nil {
+		t.Fatalf("handle created: %v", err)
+	}
+	if len(notifier.chatIDs) != 0 {
+		t.Fatalf("order.created reached %v, want nothing: the env chat muted it", notifier.chatIDs)
+	}
+	if err := dispatcher.HandleForTest(ctx, service.SubjectOrderPaid, orderPayload(t, "ORD-2")); err != nil {
+		t.Fatalf("handle paid: %v", err)
+	}
+	if got := strings.Join(notifier.chatIDs, ","); got != "-100env" {
+		t.Fatalf("order.paid chats = %q, want the env chat", got)
 	}
 }
