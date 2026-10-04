@@ -51,6 +51,7 @@ func (c *Client) GetOrder(ctx context.Context, bearerToken, orderID string) (*po
 		Status          string `json:"status"`
 		TotalWon        int64  `json:"total_won"`
 		TotalKRW        int64  `json:"total_krw"`
+		PaymentMethod   string `json:"payment_method"`
 		RecipientName   string `json:"recipient_name"`
 		RecipientPhone  string `json:"recipient_phone"`
 		ShippingAddress struct {
@@ -73,6 +74,7 @@ func (c *Client) GetOrder(ctx context.Context, bearerToken, orderID string) (*po
 		CustomerID:     body.CustomerID,
 		Status:         body.Status,
 		TotalWon:       total,
+		PaymentMethod:  body.PaymentMethod,
 		RecipientName:  body.RecipientName,
 		RecipientPhone: body.RecipientPhone,
 		ShippingAddress: ports.ShippingAddress{

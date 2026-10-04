@@ -7,6 +7,11 @@ import "time"
 // DUPLI1_ORDER_SHIPPING_FEE_KRW / DUPLI1_ORDER_SHIPPING_FEE_CENTS aliases) are not set.
 const DefaultShippingFeeWon int64 = 0
 
+// DefaultCardSurchargeBps is the card surcharge, in basis points of what an
+// order otherwise costs (1000 = 10%), applied when
+// DUPLI1_ORDER_CARD_SURCHARGE_BPS is not set.
+const DefaultCardSurchargeBps int64 = 1000
+
 type ServerOptions struct {
 	Addr string
 
@@ -36,6 +41,11 @@ type ServerOptions struct {
 	// delivery.
 	ShippingFeeWon int64
 
+	// CardSurchargeBps is added to an order paid by card, in basis points of
+	// the goods after discounts plus delivery (1000 = 10%). Set
+	// DUPLI1_ORDER_CARD_SURCHARGE_BPS to change it; 0 turns it off.
+	CardSurchargeBps int64
+
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
@@ -52,7 +62,9 @@ func NewServerOptions() *ServerOptions {
 		ProductURL: "http://localhost:8081",
 		// Free delivery by default; set DUPLI1_ORDER_SHIPPING_FEE_WON to charge.
 		ShippingFeeWon: DefaultShippingFeeWon,
-		ReadTimeout:    5 * time.Second,
+		// 10% on card payments; DUPLI1_ORDER_CARD_SURCHARGE_BPS overrides.
+		CardSurchargeBps: DefaultCardSurchargeBps,
+		ReadTimeout:      5 * time.Second,
 		// WriteTimeout covers paid cancel, which waits on NANO through payment.
 		WriteTimeout:    25 * time.Second,
 		IdleTimeout:     120 * time.Second,

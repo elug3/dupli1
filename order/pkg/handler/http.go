@@ -100,6 +100,7 @@ func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 			SKU      string `json:"sku"`
 			Quantity int    `json:"quantity"`
 		} `json:"items"`
+		PaymentMethod string `json:"payment_method"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
@@ -113,6 +114,9 @@ func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if !h.mayPriceForMethod(w, claims, req.PaymentMethod) {
+		return
+	}
 
 	items := make([]domain.OrderItem, len(req.Items))
 	for i, item := range req.Items {
@@ -123,6 +127,7 @@ func (h *Handler) createOrder(w http.ResponseWriter, r *http.Request) {
 		CustomerID:     req.CustomerID,
 		Items:          items,
 		IdempotencyKey: strings.TrimSpace(r.Header.Get("Idempotency-Key")),
+		PaymentMethod:  req.PaymentMethod,
 	})
 	if err != nil {
 		respondServiceError(w, err)
@@ -555,7 +560,7 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidTransition), errors.Is(err, domain.ErrPaymentAmountMismatch),
 		errors.Is(err, domain.ErrInvalidCheckoutSession), errors.Is(err, domain.ErrEmptyCheckout),
 		errors.Is(err, domain.ErrInvalidFulfillment), errors.Is(err, domain.ErrInvalidShipment),
-		errors.Is(err, domain.ErrSessionNotOpen):
+		errors.Is(err, domain.ErrSessionNotOpen), errors.Is(err, domain.ErrInvalidPaymentMethod):
 		respondError(w, http.StatusBadRequest, err.Error())
 	default:
 		log.Printf("order: internal error: %v", err)

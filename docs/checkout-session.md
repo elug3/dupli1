@@ -90,6 +90,8 @@ A session with **no items** quotes `total_won: 0` even while `shipping_fee_won` 
 
 A coupon discounts goods only, so the total never falls below the delivery charge.
 
+**Card surcharge.** An order paid by card costs 10% more. `complete` (and direct `POST /api/v1/orders`) takes an optional `payment_method`: `credit_card`, the default when it is left out, or `bypass`, which needs `payment.bypass` (`403` otherwise) because it is how staff record an offline payment. A card order gets `card_surcharge_won` = `DUPLI1_ORDER_CARD_SURCHARGE_BPS` basis points (default `1000`, 10%; `0` turns it off) of `subtotal_won - discount_won + shipping_fee_won`, rounded down to the won, and `total_won` includes it. The order records `payment_method`, and payment refuses a card checkout on an order priced for `bypass` (`409`), so the surcharge cannot be skipped. The session itself never shows the surcharge, since it does not know the method yet; storefronts quote it from `limits.card_surcharge_bps` on `GET /settings`. The rate is read at `complete`, not snapshotted on the session. Orders placed before this have `payment_method: ""` and `card_surcharge_won: 0`.
+
 ---
 
 ### `GET /api/v1/orders/checkout/sessions/{id}`
@@ -259,6 +261,7 @@ Direct order create (`POST /api/v1/orders`) supports optional `Idempotency-Key` 
 | `DUPLI1_PRODUCT_URL` | — | **Deprecated** direct product override |
 | `DUPLI1_INVENTORY_URL` | — | **Deprecated** alias for product override |
 | `DUPLI1_ORDER_SHIPPING_FEE_WON` | `0` | Flat delivery charge in whole KRW; `0` (the default) is free. Deprecated alias: `DUPLI1_ORDER_SHIPPING_FEE_CENTS`. |
+| `DUPLI1_ORDER_CARD_SURCHARGE_BPS` | `1000` | Card surcharge in basis points (1000 = 10%) of goods after discounts plus delivery; `0` turns it off. |
 
 ## Errors
 

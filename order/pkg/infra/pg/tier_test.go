@@ -23,6 +23,10 @@ func TestOrderTierSurvivesEveryReadPath(t *testing.T) {
 	if err := order.SetTier("VIP", 20000); err != nil {
 		t.Fatalf("SetTier: %v", err)
 	}
+	// The card surcharge rides the same read paths.
+	if err := order.ApplyPaymentMethod("credit_card", 1000); err != nil {
+		t.Fatalf("ApplyPaymentMethod: %v", err)
+	}
 	if err := repo.Save(ctx, order); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -32,6 +36,10 @@ func TestOrderTierSurvivesEveryReadPath(t *testing.T) {
 		if got.TierPromotionCode != "VIP" || got.TierDiscountWon != 20000 || got.DiscountWon != 30000 {
 			t.Fatalf("%s: tier %q %d discount %d, want VIP 20000 / 30000",
 				where, got.TierPromotionCode, got.TierDiscountWon, got.DiscountWon)
+		}
+		if got.PaymentMethod != "credit_card" || got.CardSurchargeWon != 17000 || got.TotalWon != 187000 {
+			t.Fatalf("%s: method %q surcharge %d total %d, want credit_card 17000 / 187000",
+				where, got.PaymentMethod, got.CardSurchargeWon, got.TotalWon)
 		}
 	}
 

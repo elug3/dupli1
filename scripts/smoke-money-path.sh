@@ -170,9 +170,14 @@ check "order status" "$(echo "$completed" | field 'd["order"]["status"]')" pendi
 # configured DUPLI1_ORDER_SHIPPING_FEE_WON (0 included).
 shipping_fee=$(echo "$completed" | field 'd["order"].get("shipping_fee_won", 0)')
 check "order subtotal" "$(echo "$completed" | field 'd["order"]["subtotal_won"]')" "$((catalog_price * QUANTITY))"
-check "order total includes shipping" \
+# The customer leaves payment_method out, which prices the order for a card:
+# the surcharge (DUPLI1_ORDER_CARD_SURCHARGE_BPS of goods plus delivery) is in
+# the total. Read it back too, so any configured rate passes.
+check "order priced for card" "$(echo "$completed" | field 'd["order"].get("payment_method", "")')" credit_card
+card_surcharge=$(echo "$completed" | field 'd["order"].get("card_surcharge_won", 0)')
+check "order total includes shipping and card surcharge" \
   "$(echo "$completed" | field 'd["order"]["total_won"]')" \
-  "$((catalog_price * QUANTITY + shipping_fee))"
+  "$((catalog_price * QUANTITY + shipping_fee + card_surcharge))"
 
 read -r stock_reserved_q stock_reserved_r <<<"$(stock_of "$SKU_ID")"
 check "stock reserved on checkout" "$stock_reserved_r" "$((reserved_before + QUANTITY))"

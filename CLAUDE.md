@@ -129,6 +129,8 @@ POST /orders → pending → paid → confirmed → in_transit → delivered →
 - `delivered → disputed`: customer reports non-receipt (`POST /orders/{id}/receipt/dispute`). A manager resolves it either way — `POST /orders/{id}/dispute/resolve` closes it fulfilled (proof of delivery), or `PUT /orders/{id}/status` → `canceled` refunds it like any other cancel.
 - Cancellation: immediate refund while `pending`/`paid` (not yet confirmed); from `confirmed` through `delivered` a customer cancel opens a manager-approval request (`POST /orders/{id}/cancel`, approved/rejected via `.../cancel/approve` / `.../cancel/reject`, auto-approved after the same 2-hour SLA). Once shipped, canceling refunds but never auto-restocks.
 
+Card payments carry a surcharge (`DUPLI1_ORDER_CARD_SURCHARGE_BPS`, default 1000 = 10%) on goods after discounts plus delivery. Order prices it at checkout complete from the order's `payment_method` (`credit_card` by default; `bypass` needs `payment.bypass` and has none) and stores it as `card_surcharge_won` inside `total_won`, so payment and refunds just use the total; payment refuses a card checkout on a bypass-priced order.
+
 Order calls product stock/promotions via the internal nginx gateway (`DUPLI1_GATEWAY_URL`), not direct service URLs. Pricing is resolved server-side — client `unit_price_won` is ignored.
 
 Event flow: `payment.succeeded` (NATS, published by payment outbox) → order marks `paid`. `POST /orders/{id}/ship` → commits inventory reservation → `in_transit`.

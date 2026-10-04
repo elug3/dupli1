@@ -41,6 +41,9 @@ type Service struct {
 	// whole KRW. Zero (the default) means delivery is free, which keeps the
 	// service safe to run unconfigured.
 	shippingFeeKRW int64
+	// cardSurchargeBps is the card surcharge in basis points (1000 = 10%)
+	// added to an order paid by card. Zero means no surcharge.
+	cardSurchargeBps int64
 	now            func() time.Time
 }
 
@@ -64,6 +67,9 @@ type CreateOrderInput struct {
 	// service-configured fee so a direct POST /orders still charges the
 	// current amount.
 	ShippingFeeWon *int64
+	// PaymentMethod is how the order will be paid: credit_card (the default
+	// when empty, and the one that carries the card surcharge) or bypass.
+	PaymentMethod string
 }
 
 type CompleteCheckoutInput struct {
@@ -71,6 +77,7 @@ type CompleteCheckoutInput struct {
 	RecipientPhone  string
 	ShippingAddress domain.ShippingAddress
 	SourceAddressID string
+	PaymentMethod   string
 }
 
 type idempotencyFingerprint struct {
@@ -86,6 +93,9 @@ type idempotencyFingerprint struct {
 	RecipientPhone  string                 `json:"recipient_phone,omitempty"`
 	ShippingAddress domain.ShippingAddress `json:"shipping_address,omitempty"`
 	SourceAddressID string                 `json:"source_address_id,omitempty"`
+	// The raw input, not the normalized method, so a request that leaves it
+	// out hashes as it did before the field existed.
+	PaymentMethod string `json:"payment_method,omitempty"`
 	Items           []struct {
 		SkuID    string `json:"sku_id,omitempty"`
 		SKU      string `json:"sku,omitempty"`
@@ -149,6 +159,18 @@ func (s *Service) WithShippingFee(krw int64) *Service {
 	return s
 }
 
+// WithCardSurcharge sets the surcharge added to an order paid by card, in basis
+// points of what the order otherwise costs (1000 = 10%). A negative value is
+// ignored so a misconfigured rate cannot discount card orders.
+func (s *Service) WithCardSurcharge(bps int64) *Service {
+	if bps < 0 {
+		log.Printf("order: ignoring negative card surcharge %d bps", bps)
+		return s
+	}
+	s.cardSurchargeBps = bps
+	return s
+}
+
 // WithPayment sets the client used to refund a captured payment when a paid
 // order is canceled. Without it, paid cancel fails closed so the card capture
 // is not dropped locally while NANO still holds the money.
@@ -204,6 +226,10 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		return nil, err
 	}
 	if err := order.SetTier(input.TierPromotionCode, input.TierDiscountWon); err != nil {
+		_ = s.stock.ReleaseReservation(ctx, reservationID)
+		return nil, err
+	}
+	if err := order.ApplyPaymentMethod(input.PaymentMethod, s.cardSurchargeBps); err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
@@ -770,6 +796,7 @@ func hashCreateOrderInput(input CreateOrderInput) string {
 		RecipientPhone:  strings.TrimSpace(input.RecipientPhone),
 		ShippingAddress: input.ShippingAddress,
 		SourceAddressID: strings.TrimSpace(input.SourceAddressID),
+		PaymentMethod:   strings.TrimSpace(input.PaymentMethod),
 	}
 	fp.Items = make([]struct {
 		SkuID    string `json:"sku_id,omitempty"`

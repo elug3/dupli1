@@ -103,6 +103,7 @@ func applyEnv(opts *order.ServerOptions) {
 		opts.DatabaseConnString = v
 	}
 	applyShippingFeeEnv(opts)
+	applyCardSurchargeEnv(opts)
 	if v := os.Getenv("DUPLI1_ORDER_NATS_URL"); v != "" {
 		opts.NATSURL = v
 	} else if v := os.Getenv("NATS_URL"); v != "" {
@@ -135,6 +136,23 @@ func applyShippingFeeEnv(opts *order.ServerOptions) {
 		return
 	}
 	opts.ShippingFeeWon = won
+}
+
+// applyCardSurchargeEnv reads DUPLI1_ORDER_CARD_SURCHARGE_BPS, the card
+// surcharge in basis points (1000 = 10%, 0 = none). Invalid or negative values
+// are logged and ignored so the compiled default stays in place.
+func applyCardSurchargeEnv(opts *order.ServerOptions) {
+	const name = "DUPLI1_ORDER_CARD_SURCHARGE_BPS"
+	v := os.Getenv(name)
+	if v == "" {
+		return
+	}
+	bps, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || bps < 0 {
+		log.Printf("order: ignoring invalid %s=%q", name, v)
+		return
+	}
+	opts.CardSurchargeBps = bps
 }
 
 func splitAddr(addr string) (string, int, error) {

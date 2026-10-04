@@ -29,6 +29,7 @@ func TestBootstrapConfig_CarriesEveryMatchingOption(t *testing.T) {
 		JWKSURL:            "http://auth.test/jwks.json",
 		NATSURL:            "nats://nats.test:4222",
 		ShippingFeeWon:     30000,
+		CardSurchargeBps:   1000,
 	}
 
 	cfg := order.BootstrapConfig(opts)

@@ -77,9 +77,13 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 			RecipientPhone  string                 `json:"recipient_phone"`
 			ShippingAddress domain.ShippingAddress `json:"shipping_address"`
 			AddressID       string                 `json:"address_id"`
+			PaymentMethod   string                 `json:"payment_method"`
 		}
 		if err := decodeJSON(r, &req); err != nil {
 			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !h.mayPriceForMethod(w, claims, req.PaymentMethod) {
 			return
 		}
 		result, err := h.svc.CompleteCheckout(r.Context(), sessionID, service.CompleteCheckoutInput{
@@ -87,6 +91,7 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 			RecipientPhone:  req.RecipientPhone,
 			ShippingAddress: req.ShippingAddress,
 			SourceAddressID: req.AddressID,
+			PaymentMethod:   req.PaymentMethod,
 		})
 		if err != nil {
 			respondServiceError(w, err)
@@ -260,4 +265,21 @@ func checkoutSessionPathParts(path string) []string {
 		}
 	}
 	return nil
+}
+
+// mayPriceForMethod refuses an order priced for bypass to anyone who could not
+// then pay it by bypass. Bypass carries no card surcharge, and payment refuses
+// a card payment on a bypass order, so without this a shopper could still
+// price an order surcharge-free and be left with one they cannot pay.
+func (h *Handler) mayPriceForMethod(w http.ResponseWriter, claims authjwt.Claims, method string) bool {
+	m, err := domain.NormalizePaymentMethod(method)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return false
+	}
+	if m == domain.PaymentMethodBypass && h.jwtValidator != nil && !permissions.CanBypassPayment(claims.Permissions) {
+		respondError(w, http.StatusForbidden, "forbidden: payment_method bypass requires payment.bypass")
+		return false
+	}
+	return true
 }

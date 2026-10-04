@@ -95,7 +95,14 @@ type Order struct {
 	// ShippingFeeWon is the delivery charge in whole KRW, captured at order
 	// creation so a later config change never re-prices a placed order.
 	ShippingFeeWon  int64           `json:"shipping_fee_won"`
-	TotalWon        int64           `json:"total_won"`
+	// PaymentMethod is what the order was priced for: credit_card or bypass
+	// (staff recording an offline payment). Empty on orders placed before
+	// the card surcharge existed.
+	PaymentMethod string `json:"payment_method,omitempty"`
+	// CardSurchargeWon is the card surcharge, in whole KRW, already included
+	// in TotalWon. Zero for any other method.
+	CardSurchargeWon int64           `json:"card_surcharge_won"`
+	TotalWon         int64           `json:"total_won"`
 	RecipientName   string          `json:"recipient_name,omitempty"`
 	RecipientPhone  string          `json:"recipient_phone,omitempty"`
 	ShippingAddress ShippingAddress `json:"shipping_address,omitempty"`
