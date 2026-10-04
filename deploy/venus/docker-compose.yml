@@ -255,6 +255,9 @@ services:
       # exchange is internal-only, so it goes to the gateway's :8081.
       DUPLI1_WEB_SERVICE_API_KEY: ${DUPLI1_WEB_SERVICE_API_KEY:?set it in /opt/dupli1/.env — docs/auth-service-api-keys.md}
       DUPLI1_WEB_SERVICE_AUTH_URL: http://proxy.dupli1.local:8081
+      # Shopper sessions. Unset, they live in process memory and every web
+      # deploy signs every shopper out (dupli1-web session-store.server.ts).
+      DUPLI1_WEB_REDIS_URL: redis://redis.dupli1.local:6379
 
   manage-web:
     <<: *service
