@@ -82,7 +82,8 @@ const (
 	RouteCatalogEditions      = "/api/v1/products/catalog/editions"
 	RouteCatalogEditionByCode = "/api/v1/products/catalog/editions/{code}"
 
-	// Bag merchandising taxonomy (storefront filters; not SKU segment masters).
+	// Merchandising taxonomy (storefront filters; not SKU segment masters).
+	RouteCatalogCategories    = "/api/v1/products/catalog/categories"
 	RouteCatalogMaster        = "/api/v1/products/catalog/master"
 	RouteCatalogSubCategories = "/api/v1/products/catalog/subcategories"
 	RouteCatalogBagStyles     = "/api/v1/products/catalog/bag-styles"

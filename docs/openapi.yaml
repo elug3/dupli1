@@ -913,9 +913,17 @@ paths:
         '204':
           description: No content
 
+  /api/v1/products/catalog/categories:
+    get:
+      summary: List product categories (bags, clothing) with their subcategories
+      tags: [Catalog]
+      responses:
+        '200':
+          description: Success
+
   /api/v1/products/catalog/master:
     get:
-      summary: Bag merchandising taxonomy dictionaries
+      summary: Merchandising taxonomy for one category (?category=, default bags)
       tags: [Catalog]
       responses:
         '200':
@@ -923,7 +931,7 @@ paths:
 
   /api/v1/products/catalog/subcategories:
     get:
-      summary: List bag subcategories
+      summary: List one category's subcategories (?category=, default bags)
       tags: [Catalog]
       responses:
         '200':

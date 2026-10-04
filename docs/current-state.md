@@ -92,7 +92,7 @@ See [service-layout.md](service-layout.md) for details.
 - **Persistence:** `products` on `postgres-product`
 - **Features:**
   - Parent (style) + variant (SKU) model: search returns parents only (no color duplicates)
-  - Bag merchandising taxonomy (`subCategory`, `style`, `target`) with public master catalog + product search filters
+  - Merchandising taxonomy: `category` (`bags`, `clothing`) with category-scoped `subCategory`, shared `style` / `target`; public `GET /api/v1/products/catalog/categories` and `catalog/master?category=` + product search filters
   - Price stored on parent product (`price` / `officialPrice`); variants inherit for cart JSON — [product-price-on-parent.md](product-price-on-parent.md)
   - Parent `attributes` string map (PDP memo; not searched) — [product-attributes.md](product-attributes.md)
   - Dual SKU identity + master dictionaries: [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`; human `sku`; `/api/v1/products/catalog/…`; Phase C enforces existing master codes on create)

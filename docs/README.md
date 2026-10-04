@@ -76,7 +76,7 @@ These retain design history. Prefer the living docs above for current behavior.
 | [product-sku-master-data-plan.md](product-sku-master-data-plan.md) | A–C shipped; Phase D (admin UI) open |
 | [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md) | Accepted; not implemented |
 | [product-sale-unit-reflection.md](product-sale-unit-reflection.md) | Decision background for flatten plan |
-| [product-multi-category-design.md](product-multi-category-design.md) | Wallets Sep / padded Oct schedule |
+| [product-multi-category-design.md](product-multi-category-design.md) | Categories (bags, clothing); wallets Sep / padded jackets Oct schedule |
 | [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md) | Keep Product/Variant names |
 | [auth-service-api-keys.md](auth-service-api-keys.md) | API keys for `account_type: service` accounts — design, not implemented |
 | [auth-profile-extension-plan.md](auth-profile-extension-plan.md) | Phases A–B shipped; Phase D (`profile` service) live — data copy from auth's orphaned tables still open. See [profile-service.md](profile-service.md) |

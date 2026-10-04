@@ -1481,14 +1481,38 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
 
+  /api/v1/products/catalog/categories:
+    get:
+      tags: [Catalog]
+      summary: List product categories
+      operationId: catalogCategories
+      description: |
+        Every category a product may carry (bags, clothing), in storefront
+        order, each with its own subcategories. Public.
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+
   /api/v1/products/catalog/master:
     get:
       tags: [Catalog]
-      summary: Bag merchandising taxonomy dictionaries
+      summary: Merchandising taxonomy dictionaries for one category
       operationId: catalogMaster
       description: |
         Public read for storefront filter UIs. These are merchandising terms
         (subcategory, occasion style, audience), not the SKU segment masters above.
+        Subcategories belong to the requested category; styles and targets are shared.
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema: { type: string, default: bags }
       responses:
         '200':
           description: subCategories, styles and targets
@@ -1500,8 +1524,13 @@ paths:
   /api/v1/products/catalog/subcategories:
     get:
       tags: [Catalog]
-      summary: List bag subcategories
+      summary: List one category's subcategories
       operationId: catalogSubCategories
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema: { type: string, default: bags }
       responses:
         '200':
           description: Subcategory terms
@@ -2241,6 +2270,21 @@ components:
           type: string
         name:
           type: string
+
+    Category:
+      type: object
+      required: [code, name, subCategories]
+      properties:
+        code:
+          type: string
+          example: clothing
+        name:
+          type: string
+          example: Clothing
+        subCategories:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogTerm'
 
     Brand:
       type: object

@@ -15,7 +15,7 @@
 |------|-----------|
 | **By 2026-08-30** | **Dupli1 v1.0** released (tag `v1.0` after [v1.0-release-spec.md](v1.0-release-spec.md) closeout) |
 | **September 2026** | **Wallet** products added to the catalog (multi-category phases 1–2 — [product-multi-category-design.md](product-multi-category-design.md)) |
-| **October 2026** | **Padded** products added to the catalog (bag line expansion; merchandising / SKU seed, not a new category) |
+| **October 2026** | **Padded jackets** added — a new `clothing` category (decided 2026-10-04; earlier drafts called these padded bag-line products) |
 
 v1.1 platform work starts only after the v1.0 tag — see [v1.1-release-plan.md](v1.1-release-plan.md).
 
