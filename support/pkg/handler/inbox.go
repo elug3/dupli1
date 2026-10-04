@@ -20,32 +20,46 @@ import (
 // the console never needs it to answer, and an id that never leaves the service
 // cannot leak from the admin UI.
 type inquiryJSON struct {
-	ID           string        `json:"id"`
-	Topic        string        `json:"topic"`
-	Status       string        `json:"status"`
-	AssignedTo   string        `json:"assigned_to,omitempty"`
-	Language     string        `json:"language,omitempty"`
-	Username     string        `json:"username,omitempty"`
-	EntryContext string        `json:"entry_context,omitempty"`
-	LastMessage  string        `json:"last_message,omitempty"`
-	OpenedAt     time.Time     `json:"opened_at"`
-	ClosedAt     *time.Time    `json:"closed_at,omitempty"`
-	Transcript   []messageJSON `json:"transcript,omitempty"`
+	ID           string     `json:"id"`
+	Channel      string     `json:"channel"`
+	Topic        string     `json:"topic"`
+	Status       string     `json:"status"`
+	AssignedTo   string     `json:"assigned_to,omitempty"`
+	Language     string     `json:"language,omitempty"`
+	Username     string     `json:"username,omitempty"`
+	EntryContext string     `json:"entry_context,omitempty"`
+	LastMessage  string     `json:"last_message,omitempty"`
+	OpenedAt     time.Time  `json:"opened_at"`
+	ClosedAt     *time.Time `json:"closed_at,omitempty"`
+	// Web inquiries only: the shopper's account and what they asked about,
+	// for the console's context panel. Never their phone or addresses.
+	CustomerID         string        `json:"customer_id,omitempty"`
+	CustomerEmail      string        `json:"customer_email,omitempty"`
+	CustomerLastReadAt *time.Time    `json:"customer_last_read_at,omitempty"`
+	ProductID          string        `json:"product_id,omitempty"`
+	SkuID              string        `json:"sku_id,omitempty"`
+	OrderID            string        `json:"order_id,omitempty"`
+	Transcript         []messageJSON `json:"transcript,omitempty"`
 }
 
 type messageJSON struct {
-	ID            string    `json:"id"`
-	Direction     string    `json:"direction"`
-	Author        string    `json:"author,omitempty"`
-	Body          string    `json:"body"`
-	Delivery      string    `json:"delivery,omitempty"`
-	DeliveryError string    `json:"delivery_error,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            string          `json:"id"`
+	Direction     string          `json:"direction"`
+	Author        string          `json:"author,omitempty"`
+	Kind          string          `json:"kind"`
+	Body          string          `json:"body"`
+	RefID         string          `json:"ref_id,omitempty"`
+	Ref           json.RawMessage `json:"ref,omitempty"`
+	Delivery      string          `json:"delivery,omitempty"`
+	DeliveryError string          `json:"delivery_error,omitempty"`
+	NoticeStatus  string          `json:"notice_status,omitempty"`
+	CreatedAt     time.Time       `json:"created_at"`
 }
 
 func inquiryToJSON(view service.InquiryView, withTranscript bool) inquiryJSON {
 	out := inquiryJSON{
 		ID:           view.ID,
+		Channel:      domain.ChannelOf(view.Channel),
 		Topic:        view.Topic,
 		Status:       view.Status,
 		AssignedTo:   view.AssignedTo,
@@ -55,6 +69,13 @@ func inquiryToJSON(view service.InquiryView, withTranscript bool) inquiryJSON {
 		LastMessage:  view.LastMessage,
 		OpenedAt:     view.OpenedAt,
 		ClosedAt:     view.ClosedAt,
+
+		CustomerID:         view.CustomerID,
+		CustomerEmail:      view.CustomerEmail,
+		CustomerLastReadAt: view.CustomerLastReadAt,
+		ProductID:          view.ProductID,
+		SkuID:              view.SkuID,
+		OrderID:            view.OrderID,
 	}
 	if withTranscript {
 		out.Transcript = make([]messageJSON, 0, len(view.Transcript))
@@ -63,9 +84,13 @@ func inquiryToJSON(view service.InquiryView, withTranscript bool) inquiryJSON {
 				ID:            message.ID,
 				Direction:     message.Direction,
 				Author:        message.Author,
+				Kind:          kindOf(message),
 				Body:          message.Body,
+				RefID:         message.RefID,
+				Ref:           refOf(message),
 				Delivery:      message.Delivery,
 				DeliveryError: message.DeliveryError,
+				NoticeStatus:  message.NoticeStatus,
 				CreatedAt:     message.CreatedAt,
 			})
 		}
@@ -87,6 +112,11 @@ func (h *Handler) inquiries(w http.ResponseWriter, r *http.Request) {
 	filter := ports.InquiryFilter{
 		Status:     strings.TrimSpace(r.URL.Query().Get("status")),
 		AssignedTo: strings.TrimSpace(r.URL.Query().Get("assigned_to")),
+		Channel:    strings.TrimSpace(r.URL.Query().Get("channel")),
+	}
+	if filter.Channel != "" && filter.Channel != domain.ChannelWeb && filter.Channel != domain.ChannelTelegram {
+		respondError(w, http.StatusBadRequest, "unknown channel")
+		return
 	}
 	// ?queue=waiting is the 대기 list: open and claimed by nobody.
 	if strings.TrimSpace(r.URL.Query().Get("queue")) == "waiting" {
@@ -160,13 +190,20 @@ func (h *Handler) inquiryAction(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) reply(w http.ResponseWriter, r *http.Request, id, manager string) {
 	var req struct {
 		Body string `json:"body"`
+		// A reference card sent with the reply (web consultations only): a
+		// product by its SKU, or an order.
+		SkuID   string `json:"sku_id"`
+		OrderID string `json:"order_id"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 
-	view, err := h.inbox.Reply(r.Context(), id, manager, req.Body)
+	view, err := h.inbox.ReplyWith(r.Context(), service.ReplyInput{
+		InquiryID: id, ManagerID: manager, Body: req.Body,
+		Bearer: bearerOf(r), SkuID: req.SkuID, OrderID: req.OrderID,
+	})
 	// An undeliverable reply is stored and shown as 미전송 rather than reported
 	// as a failure: the manager did their part, and the record must say the
 	// shopper never got it.
@@ -192,6 +229,12 @@ func (h *Handler) respondInquiry(w http.ResponseWriter, view *service.InquiryVie
 	switch {
 	case errors.Is(err, service.ErrInquiryNotFound):
 		respondError(w, http.StatusNotFound, "inquiry not found")
+	case errors.Is(err, service.ErrReferenceOnTelegram):
+		respondCode(w, http.StatusUnprocessableEntity, "reference_on_telegram", err.Error())
+	case errors.Is(err, service.ErrInvalidMessage),
+		errors.Is(err, service.ErrInvalidReference),
+		errors.Is(err, service.ErrReferencesUnavailable):
+		respondWebError(w, err)
 	case err != nil:
 		respondError(w, http.StatusInternalServerError, "could not load inquiry")
 	default:

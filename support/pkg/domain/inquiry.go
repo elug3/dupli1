@@ -26,6 +26,16 @@ type Inquiry struct {
 	AssignedTo     string
 	OpenedAt       time.Time
 	ClosedAt       *time.Time
+
+	// Channel is where the shopper writes from (ChannelTelegram, ChannelWeb).
+	Channel string
+	// CustomerID is the web shopper's account id; empty for Telegram.
+	CustomerID string
+	// The inquiry's subject as the shopper opened it: the product (by SKU)
+	// or the order they were asking about. Empty for a general question.
+	ProductID string
+	SkuID     string
+	OrderID   string
 }
 
 // NewInquiry opens an inquiry on a topic.
@@ -76,6 +86,19 @@ type Message struct {
 	Delivery      string
 	DeliveryError string
 	CreatedAt     time.Time
+
+	// Kind is MessageText, MessageProductRef, MessageOrderRef or
+	// MessageSystem. Empty reads as text.
+	Kind string
+	// RefID and RefSnapshot carry a reference card: the product's SKU id or
+	// the order id, and what the card showed when it was attached, so the
+	// transcript never changes under a later price edit or a deleted product.
+	RefID       string
+	RefSnapshot []byte
+	// NoticeStatus tracks the email telling a web shopper about this reply:
+	// NoticePending until decided, then NoticeSent, NoticeFailed or
+	// NoticeSkipped. Always empty on Telegram and inbound messages.
+	NoticeStatus string
 }
 
 // Excerpt shortens a message for an ops alert.

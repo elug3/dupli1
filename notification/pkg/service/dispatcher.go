@@ -286,6 +286,7 @@ func formatSupportInquiryMessage(event events.SupportInquiry) string {
 		b.WriteString("🙋 <b>상담 요청</b>\n")
 	}
 	b.WriteString(fmt.Sprintf("문의 번호: <code>%s</code>\n", tg.EscapeHTML(event.InquiryID)))
+	b.WriteString(fmt.Sprintf("채널: %s\n", supportChannelLabel(event.Channel)))
 	if topic := supportTopicLabel(event.Topic); topic != "" {
 		b.WriteString(fmt.Sprintf("분류: %s\n", topic))
 	}
@@ -302,6 +303,15 @@ func formatSupportInquiryMessage(event events.SupportInquiry) string {
 		b.WriteString(fmt.Sprintf("\n<a href=\"%s\">상담 열기</a>", tg.EscapeHTML(url)))
 	}
 	return b.String()
+}
+
+// supportChannelLabel names where the shopper is writing from. Events from
+// before web chat carry no channel and were all Telegram.
+func supportChannelLabel(channel string) string {
+	if channel == "web" {
+		return "웹 (로그인 고객)"
+	}
+	return "텔레그램"
 }
 
 // supportTopicLabel names the menu node the shopper escalated from.

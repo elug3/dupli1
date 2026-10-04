@@ -18,6 +18,12 @@ type ServerOptions struct {
 	ManageWebURL          string
 	BusinessHours         domain.BusinessHours
 	MessageRetention      time.Duration
+	GatewayURL            string
+	StorefrontURL         string
+	SMTPAddr              string
+	SMTPUsername          string
+	SMTPPassword          string
+	SMTPFrom              string
 	JWTSecret             string
 	JWKSURL               string
 	ReadTimeout           time.Duration

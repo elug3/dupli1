@@ -1168,6 +1168,23 @@ Health and settings (`GET /health`, `GET /api/v1/support/health`, `GET /settings
 | POST | `/api/v1/support/inquiries/{id}/reply` | `support.reply` | `{ "body": "…" }` — send to the shopper |
 | POST | `/api/v1/support/inquiries/{id}/close` | `support.reply` | Finish it |
 | GET / PUT | `/api/v1/support/answers` | `support.manage` | The bot's canned copy; `PUT` takes `{ "node", "body" }` |
+| GET | `/api/v1/support/inquiries/events` | `support.read` | SSE of every inquiry change (ids only) |
+
+Since web chat, `GET /api/v1/support/inquiries` also takes `?channel=web|telegram`, and every inquiry carries `channel`. Web inquiries add `customer_id`, `customer_email`, `customer_last_read_at`, `product_id`, `sku_id` and `order_id`. Transcript lines carry `kind` (`text`, `product_ref`, `order_ref`, `system`), cards add `ref_id` and `ref`, and web replies add `notice_status`. A reply may carry `sku_id` / `order_id` to send a card; on a Telegram inquiry that is `422 reference_on_telegram`.
+
+### Web consultation chat
+
+Signed-in shoppers' side of the same inbox. Full design: [support-web-chat.md](support-web-chat.md).
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/api/v1/support/web/conversation` | Bearer (customer/manager) | The caller's conversation: open inquiry, last 200 messages, `unread`, service hours |
+| POST | `/api/v1/support/web/messages` | Bearer | `{ body?, product_id?, sku_id?, order_id? }`; opens an inquiry when none is open |
+| POST | `/api/v1/support/web/read` | Bearer | `204`, marks everything read |
+| POST | `/api/v1/support/web/inquiries/current/close` | Bearer | The shopper ends the consultation |
+| GET | `/api/v1/support/web/events` | Bearer | SSE of the caller's own changes (ids only) |
+
+Errors carry a `code`: `invalid_message` 400, `invalid_reference` 422 (an order that is not yours reads the same as a missing one), `reference_unavailable` 503, `rate_limited` 429, `customer_required` 403, `chat_unavailable` 503.
 
 List responses carry `{"inquiries": […]}` without transcripts; single-inquiry
 responses carry `{"inquiry": {…, "transcript": […]}}`.
@@ -1295,3 +1312,9 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | POST | `/api/v1/support/inquiries/{id}/reply` | `support.reply` | support |
 | POST | `/api/v1/support/inquiries/{id}/close` | `support.reply` | support |
 | GET/PUT | `/api/v1/support/answers` | `support.manage` | support |
+| GET | `/api/v1/support/inquiries/events` | `support.read` | support |
+| GET | `/api/v1/support/web/conversation` | Bearer (own) | support |
+| POST | `/api/v1/support/web/messages` | Bearer (own) | support |
+| POST | `/api/v1/support/web/read` | Bearer (own) | support |
+| POST | `/api/v1/support/web/inquiries/current/close` | Bearer (own) | support |
+| GET | `/api/v1/support/web/events` | Bearer (own) | support |

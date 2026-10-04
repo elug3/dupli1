@@ -76,6 +76,27 @@ func Migrate(db *sql.DB) error {
 		`ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS delivery_error TEXT`,
 		`CREATE INDEX IF NOT EXISTS support_messages_conversation_idx
 		 ON support_messages (conversation_id, created_at DESC)`,
+		// Web chat (docs/support-web-chat.md), additive like everything here. A
+		// web conversation keeps chat_id = 'web:' || customer_id, so the
+		// existing UNIQUE (chat_id) already gives one per customer.
+		`ALTER TABLE support_conversations ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'telegram'`,
+		`ALTER TABLE support_conversations ADD COLUMN IF NOT EXISTS customer_id TEXT`,
+		`ALTER TABLE support_conversations ADD COLUMN IF NOT EXISTS customer_email TEXT`,
+		`ALTER TABLE support_conversations ADD COLUMN IF NOT EXISTS customer_last_read_at TIMESTAMPTZ`,
+		`ALTER TABLE support_conversations ADD COLUMN IF NOT EXISTS customer_notified_at TIMESTAMPTZ`,
+		`CREATE INDEX IF NOT EXISTS support_conversations_customer_idx
+		 ON support_conversations (customer_id) WHERE customer_id IS NOT NULL`,
+		`ALTER TABLE support_inquiries ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'telegram'`,
+		`ALTER TABLE support_inquiries ADD COLUMN IF NOT EXISTS customer_id TEXT`,
+		`ALTER TABLE support_inquiries ADD COLUMN IF NOT EXISTS product_id TEXT`,
+		`ALTER TABLE support_inquiries ADD COLUMN IF NOT EXISTS sku_id TEXT`,
+		`ALTER TABLE support_inquiries ADD COLUMN IF NOT EXISTS order_id TEXT`,
+		`ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'text'`,
+		`ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS ref_id TEXT`,
+		`ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS ref_snapshot JSONB`,
+		`ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS notice_status TEXT`,
+		`CREATE INDEX IF NOT EXISTS support_messages_notice_pending_idx
+		 ON support_messages (created_at) WHERE notice_status = 'pending'`,
 		`CREATE TABLE IF NOT EXISTS support_answers (
 			node        TEXT NOT NULL,
 			language    TEXT NOT NULL DEFAULT 'ko',

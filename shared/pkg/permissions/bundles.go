@@ -57,6 +57,10 @@ var bundles = map[string][]string{
 	BundleSupportAgent: {
 		SupportRead,
 		SupportReply,
+		// A web consultation shows the shopper's purchase history beside the
+		// transcript, and order admits another customer's orders only to this
+		// permission (docs/support-web-chat.md).
+		OrderReadAll,
 	},
 }
 
