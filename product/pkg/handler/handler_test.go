@@ -75,6 +75,7 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	handler.Mount(mux, "POST", handler.RouteCatalogColors, http.HandlerFunc(h.CreateColor), handler.LegacyRouteCatalogColors)
 	handler.Mount(mux, "PATCH", handler.RouteCatalogColorByCode, http.HandlerFunc(h.UpdateColor), handler.LegacyRouteCatalogColorByCode)
 	handler.Mount(mux, "DELETE", handler.RouteCatalogColorByCode, http.HandlerFunc(h.DeleteColor), handler.LegacyRouteCatalogColorByCode)
+	mux.Handle("GET "+handler.RouteCatalogCategories, http.HandlerFunc(h.ListCategories))
 	handler.Mount(mux, "GET", handler.RouteCatalogMaster, http.HandlerFunc(h.GetMasterCatalog), handler.LegacyRouteCatalogMaster)
 	handler.Mount(mux, "GET", handler.RouteCatalogSubCategories, http.HandlerFunc(h.ListSubCategories), handler.LegacyRouteCatalogSubCategories)
 	handler.Mount(mux, "GET", handler.RouteCatalogBagStyles, http.HandlerFunc(h.ListBagStyles), handler.LegacyRouteCatalogBagStyles)

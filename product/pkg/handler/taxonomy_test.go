@@ -47,6 +47,55 @@ func TestMasterCatalogEndpoints(t *testing.T) {
 	}
 }
 
+func TestCategoryScopedCatalogEndpoints(t *testing.T) {
+	mux, _ := newFullMux(memory.NewProductStore())
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteCatalogCategories, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("categories: want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var cats []domain.Category
+	if err := json.NewDecoder(rec.Body).Decode(&cats); err != nil {
+		t.Fatal(err)
+	}
+	if len(cats) != 2 || cats[0].Code != "bags" || cats[1].Code != "clothing" {
+		t.Fatalf("categories: %+v", cats)
+	}
+
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteCatalogMaster+"?category=clothing", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clothing master: want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var catalog domain.MasterCatalog
+	if err := json.NewDecoder(rec.Body).Decode(&catalog); err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog.SubCategories) != 1 || catalog.SubCategories[0].Code != "padded" {
+		t.Fatalf("clothing subCategories: %+v", catalog.SubCategories)
+	}
+	if len(catalog.Styles) != 5 || len(catalog.Targets) != 4 {
+		t.Fatalf("shared terms missing: %+v", catalog)
+	}
+
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteCatalogSubCategories+"?category=bags", nil))
+	var subs []domain.CatalogTerm
+	if err := json.NewDecoder(rec.Body).Decode(&subs); err != nil {
+		t.Fatal(err)
+	}
+	if len(subs) != 5 || subs[0].Code != "handbags" {
+		t.Fatalf("bag subcategories: %+v", subs)
+	}
+
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, handler.RouteCatalogMaster+"?category=shoes", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown category: want 400, got %d", rec.Code)
+	}
+}
+
 func TestSearchProductsTaxonomyFilters(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{

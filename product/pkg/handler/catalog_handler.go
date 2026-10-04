@@ -255,10 +255,16 @@ func (h *Handler) DeleteEdition(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --- Bag merchandising taxonomy ---
+// --- Merchandising taxonomy ---
 
+// ListCategories serves GET /api/v1/products/catalog/categories.
+func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
+	h.respondJSON(w, http.StatusOK, h.catalogSvc.ListCategories(r.Context()))
+}
+
+// GetMasterCatalog serves one category's taxonomy; ?category= defaults to bags.
 func (h *Handler) GetMasterCatalog(w http.ResponseWriter, r *http.Request) {
-	catalog, err := h.catalogSvc.MasterCatalog(r.Context())
+	catalog, err := h.catalogSvc.MasterCatalog(r.Context(), r.URL.Query().Get("category"))
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -267,7 +273,7 @@ func (h *Handler) GetMasterCatalog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListSubCategories(w http.ResponseWriter, r *http.Request) {
-	list, err := h.catalogSvc.ListSubCategories(r.Context())
+	list, err := h.catalogSvc.ListSubCategories(r.Context(), r.URL.Query().Get("category"))
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

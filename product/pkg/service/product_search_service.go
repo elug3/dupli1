@@ -257,7 +257,7 @@ func (s *ProductSearchService) CreateProduct(ctx context.Context, p domain.Produ
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	if err := domain.NormalizeProductTaxonomy(&p); err != nil {
+	if err := domain.NormalizeProductTaxonomy(&p, ""); err != nil {
 		return nil, ports.Invalid(err.Error())
 	}
 	attrs, err := domain.NormalizeAttributes(p.Attributes)
@@ -291,7 +291,7 @@ func (s *ProductSearchService) UpdateProduct(ctx context.Context, p domain.Produ
 		return nil, err
 	}
 	merged := existing.MergeUpdate(p)
-	if err := domain.NormalizeProductTaxonomy(&merged); err != nil {
+	if err := domain.NormalizeProductTaxonomy(&merged, existing.Category); err != nil {
 		return nil, ports.Invalid(err.Error())
 	}
 	attrs, err := domain.NormalizeAttributes(merged.Attributes)

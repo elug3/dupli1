@@ -205,7 +205,8 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	handler.Mount(mux, "PATCH", handler.RouteCatalogEditionByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.UpdateEdition)), handler.LegacyRouteCatalogEditionByCode)
 	handler.Mount(mux, "DELETE", handler.RouteCatalogEditionByCode, requirePerm(permissions.ProductMasterWrite, http.HandlerFunc(h.DeleteEdition)), handler.LegacyRouteCatalogEditionByCode)
 
-	// Bag merchandising taxonomy — public reads for storefront filter UIs.
+	// Merchandising taxonomy — public reads for storefront filter UIs.
+	mux.Handle("GET "+handler.RouteCatalogCategories, http.HandlerFunc(h.ListCategories))
 	handler.Mount(mux, "GET", handler.RouteCatalogMaster, http.HandlerFunc(h.GetMasterCatalog), handler.LegacyRouteCatalogMaster)
 	handler.Mount(mux, "GET", handler.RouteCatalogSubCategories, http.HandlerFunc(h.ListSubCategories), handler.LegacyRouteCatalogSubCategories)
 	handler.Mount(mux, "GET", handler.RouteCatalogBagStyles, http.HandlerFunc(h.ListBagStyles), handler.LegacyRouteCatalogBagStyles)

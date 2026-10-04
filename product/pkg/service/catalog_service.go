@@ -100,11 +100,37 @@ func (s *CatalogService) DeleteEdition(ctx context.Context, code string) error {
 	return s.store.DeleteEdition(ctx, code)
 }
 
-func (s *CatalogService) ListSubCategories(ctx context.Context) ([]domain.CatalogTerm, error) {
+// ListSubCategories returns one category's subcategories; "" means bags.
+// Bag terms come from the store (seeded tables) so the response stays as it
+// was before categories; other categories are served from their seeds.
+func (s *CatalogService) ListSubCategories(ctx context.Context, category string) ([]domain.CatalogTerm, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("catalog store not initialized")
 	}
-	return s.store.ListSubCategories(ctx)
+	c, err := lookupCategory(category)
+	if err != nil {
+		return nil, err
+	}
+	if c.Code == domain.DefaultCategory {
+		return s.store.ListSubCategories(ctx)
+	}
+	return append([]domain.CatalogTerm(nil), c.SubCategories...), nil
+}
+
+// ListCategories returns every category products may carry.
+func (s *CatalogService) ListCategories(context.Context) []domain.Category {
+	return domain.Categories()
+}
+
+func lookupCategory(code string) (domain.Category, error) {
+	if code == "" {
+		code = domain.DefaultCategory
+	}
+	c, ok := domain.LookupCategory(code)
+	if !ok {
+		return domain.Category{}, ports.Invalid(fmt.Sprintf("invalid category %q", code))
+	}
+	return c, nil
 }
 
 func (s *CatalogService) ListBagStyles(ctx context.Context) ([]domain.CatalogTerm, error) {
@@ -121,9 +147,10 @@ func (s *CatalogService) ListTargets(ctx context.Context) ([]domain.CatalogTerm,
 	return s.store.ListTargets(ctx)
 }
 
-// MasterCatalog returns the bag merchandising taxonomy (subcategories, styles, targets).
-func (s *CatalogService) MasterCatalog(ctx context.Context) (*domain.MasterCatalog, error) {
-	subs, err := s.ListSubCategories(ctx)
+// MasterCatalog returns one category's merchandising taxonomy: its
+// subcategories plus the shared styles and targets. "" means bags.
+func (s *CatalogService) MasterCatalog(ctx context.Context, category string) (*domain.MasterCatalog, error) {
+	subs, err := s.ListSubCategories(ctx, category)
 	if err != nil {
 		return nil, err
 	}

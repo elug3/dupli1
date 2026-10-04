@@ -49,7 +49,7 @@ type Product struct {
 	StyleCode   string `json:"styleCode,omitempty"`
 	Material    string `json:"material"`
 	Category    string `json:"category"`
-	// SubCategory is a bag type under category (handbags, tote, shoulder, cross, mini).
+	// SubCategory is a type within Category (bags: handbags, tote, …; clothing: padded).
 	SubCategory string `json:"subCategory,omitempty"`
 	// Style is bag occasion / look (casual, evening, business, weekend, statement).
 	// Distinct from StyleCode (SKU design-family master).
