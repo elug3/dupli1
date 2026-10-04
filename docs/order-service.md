@@ -112,7 +112,7 @@ The `dupli1-order` service account is seeded with `order.ship`, `order.status.up
 
 All order JSON / DB money uses **whole KRW won** with the `*_won` suffix (`subtotal_won`, `discount_won`, `shipping_fee_won`, `total_won`, `unit_price_won`). Legacy `*_krw` / `*_cents` columns are renamed on migrate.
 
-**Shipping fee:** flat per-order charge from `DUPLI1_ORDER_SHIPPING_FEE_WON` (deprecated aliases `DUPLI1_ORDER_SHIPPING_FEE_KRW`, `DUPLI1_ORDER_SHIPPING_FEE_CENTS`; default **30000**). Snapshotted on the checkout session at open; `complete` charges the quoted fee. Coupons discount goods only — total never drops below shipping unless shipping is also discounted (future promo work).
+**Shipping fee:** flat per-order charge from `DUPLI1_ORDER_SHIPPING_FEE_WON` (deprecated aliases `DUPLI1_ORDER_SHIPPING_FEE_KRW`, `DUPLI1_ORDER_SHIPPING_FEE_CENTS`; default **0**, free delivery). Snapshotted on the checkout session at open; `complete` charges the quoted fee. Coupons discount goods only — total never drops below shipping unless shipping is also discounted (future promo work).
 
 Client-sent `unit_price_won` on create/checkout is **ignored**; prices are resolved server-side from product.
 
