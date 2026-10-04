@@ -995,7 +995,7 @@ session the tier is worked out each time it is read, and complete asks again
 (failing with `503` rather than charging a member full price if product
 cannot answer).
 
-`shipping_fee_won` is a flat per-order delivery charge in whole KRW, set by `DUPLI1_ORDER_SHIPPING_FEE_WON` on the order service (deprecated aliases: `DUPLI1_ORDER_SHIPPING_FEE_KRW`, `DUPLI1_ORDER_SHIPPING_FEE_CENTS`). It defaults to **30000** (30,000 KRW); set the variable to `0` for free delivery. JSON, Go identifiers, and Postgres columns for money use `*_won` (`shipping_fee_won`, `subtotal_won`, `discount_won`, `total_won`, `unit_price_won`, `amount_won`, …) — not `*_krw` or `*_cents`. Existing databases rename leftover `*_krw` / `*_cents` columns on migrate.
+`shipping_fee_won` is a flat per-order delivery charge in whole KRW, set by `DUPLI1_ORDER_SHIPPING_FEE_WON` on the order service (deprecated aliases: `DUPLI1_ORDER_SHIPPING_FEE_KRW`, `DUPLI1_ORDER_SHIPPING_FEE_CENTS`). It defaults to **0** (free delivery since 2026-10-04); set the variable to a positive amount to charge. JSON, Go identifiers, and Postgres columns for money use `*_won` (`shipping_fee_won`, `subtotal_won`, `discount_won`, `total_won`, `unit_price_won`, `amount_won`, …) — not `*_krw` or `*_cents`. Existing databases rename leftover `*_krw` / `*_cents` columns on migrate.
 
 The charge applies to every order regardless of size — there is no free-shipping threshold. A coupon discounts **goods only** and is capped at `subtotal_won`, so the total can never drop below the shipping fee: a 100%-off coupon still pays delivery. An empty checkout session quotes `total_won: 0` rather than a bare delivery charge; the fee appears once the session has at least one item.
 

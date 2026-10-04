@@ -74,7 +74,7 @@ Create an empty checkout session.
   "status": "open",
   "subtotal_won": 0,
   "discount_won": 0,
-  "shipping_fee_won": 30000,
+  "shipping_fee_won": 0,
   "total_won": 0,
   "expires_at": "2026-06-21T12:30:00Z",
   "created_at": "2026-06-21T12:00:00Z",
@@ -84,7 +84,7 @@ Create an empty checkout session.
 
 **Pricing.** `total_won = subtotal_won - discount_won + shipping_fee_won`.
 
-`shipping_fee_won` is the flat delivery charge quoted for this session (whole KRW, from `DUPLI1_ORDER_SHIPPING_FEE_WON`, default 30000; set 0 for free delivery; deprecated alias `DUPLI1_ORDER_SHIPPING_FEE_CENTS`). It is fixed when the session opens, and `complete` charges that quoted amount even if the configured fee changed mid-checkout. Direct `POST /api/v1/orders` (no session) uses the current configured fee.
+`shipping_fee_won` is the flat delivery charge quoted for this session (whole KRW, from `DUPLI1_ORDER_SHIPPING_FEE_WON`, default 0 = free delivery; set a positive amount to charge; deprecated alias `DUPLI1_ORDER_SHIPPING_FEE_CENTS`). It is fixed when the session opens, and `complete` charges that quoted amount even if the configured fee changed mid-checkout. Direct `POST /api/v1/orders` (no session) uses the current configured fee.
 
 A session with **no items** quotes `total_won: 0` even while `shipping_fee_won` is non-zero, as above — an empty cart owes nothing to ship. The charge enters the total once the session holds at least one item, and drops out again if every item is removed.
 
@@ -203,8 +203,8 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
     "coupon_code": "SUMMER30",
     "subtotal_won": 10000,
     "discount_won": 3000,
-    "shipping_fee_won": 30000,
-    "total_won": 37000
+    "shipping_fee_won": 0,
+    "total_won": 7000
   },
   "order": {
     "id": "ord_000001",
@@ -224,8 +224,8 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
     "coupon_code": "SUMMER30",
     "subtotal_won": 10000,
     "discount_won": 3000,
-    "shipping_fee_won": 30000,
-    "total_won": 37000,
+    "shipping_fee_won": 0,
+    "total_won": 7000,
     "items": [
       { "sku": "BAG-1", "quantity": 2, "unit_price_won": 5000 }
     ]
@@ -258,7 +258,7 @@ Direct order create (`POST /api/v1/orders`) supports optional `Idempotency-Key` 
 | `DUPLI1_AUTH_URL` | — | Auth base for service-account login (prefer direct; gateway OK after proxy is up) |
 | `DUPLI1_PRODUCT_URL` | — | **Deprecated** direct product override |
 | `DUPLI1_INVENTORY_URL` | — | **Deprecated** alias for product override |
-| `DUPLI1_ORDER_SHIPPING_FEE_WON` | `30000` | Flat delivery charge in whole KRW; `0` is free. Deprecated alias: `DUPLI1_ORDER_SHIPPING_FEE_CENTS`. |
+| `DUPLI1_ORDER_SHIPPING_FEE_WON` | `0` | Flat delivery charge in whole KRW; `0` (the default) is free. Deprecated alias: `DUPLI1_ORDER_SHIPPING_FEE_CENTS`. |
 
 ## Errors
 

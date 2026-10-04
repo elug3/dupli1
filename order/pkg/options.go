@@ -5,7 +5,7 @@ import "time"
 // DefaultShippingFeeWon is the flat per-order delivery charge in whole KRW
 // applied when DUPLI1_ORDER_SHIPPING_FEE_WON (and the deprecated
 // DUPLI1_ORDER_SHIPPING_FEE_KRW / DUPLI1_ORDER_SHIPPING_FEE_CENTS aliases) are not set.
-const DefaultShippingFeeWon int64 = 30000
+const DefaultShippingFeeWon int64 = 0
 
 type ServerOptions struct {
 	Addr string
@@ -50,7 +50,7 @@ func NewServerOptions() *ServerOptions {
 		// task defs) and make order call itself → 404 → checkout "unavailable items".
 		// Local Compose sets DUPLI1_GATEWAY_URL; bare `go run` can still use ProductURL.
 		ProductURL: "http://localhost:8081",
-		// Flat delivery charge in whole KRW (30,000 KRW).
+		// Free delivery by default; set DUPLI1_ORDER_SHIPPING_FEE_WON to charge.
 		ShippingFeeWon: DefaultShippingFeeWon,
 		ReadTimeout:    5 * time.Second,
 		// WriteTimeout covers paid cancel, which waits on NANO through payment.

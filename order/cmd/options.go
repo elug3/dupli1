@@ -114,7 +114,7 @@ func applyEnv(opts *order.ServerOptions) {
 // it falls back to DUPLI1_ORDER_SHIPPING_FEE_KRW, then the deprecated
 // DUPLI1_ORDER_SHIPPING_FEE_CENTS alias. WON wins over KRW over CENTS.
 // Invalid or negative values are logged and ignored so the compiled default
-// (30000) stays in place.
+// (0, free delivery) stays in place.
 func applyShippingFeeEnv(opts *order.ServerOptions) {
 	name := "DUPLI1_ORDER_SHIPPING_FEE_WON"
 	v := os.Getenv(name)
