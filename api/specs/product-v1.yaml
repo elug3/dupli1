@@ -1879,6 +1879,15 @@ components:
           example:
             condition: excellent
             care: wipe with dry cloth
+        sizeChart:
+          type: array
+          maxItems: 20
+          description: >
+            Garment measurements per size (cm) behind the storefront size guide,
+            one chart per parent. Sizes are size master codes, unique, and for
+            clothing one of the category's `sizes`.
+          items:
+            $ref: '#/components/schemas/SizeChartRow'
         viewCount:
           type: integer
           format: int64
@@ -2043,6 +2052,25 @@ components:
           description: >
             Free-form string key/value memo. Omitted on PUT keeps current map;
             `{}` clears. Not used for search/pricing/checkout.
+        sizeChart:
+          type: array
+          maxItems: 20
+          description: Omitted on PUT keeps the current chart; `[]` clears it.
+          items:
+            $ref: '#/components/schemas/SizeChartRow'
+
+    SizeChartRow:
+      type: object
+      required: [size]
+      description: >
+        One size's measurements in centimetres, rounded to 0.5 cm, each 0–300.
+        A row gives at least one; 0 or omitted means not given.
+      properties:
+        size: { type: string, example: M }
+        chestCm: { type: number, example: 112 }
+        lengthCm: { type: number, example: 70.5 }
+        shoulderCm: { type: number }
+        sleeveCm: { type: number }
 
     ProductSearchResponse:
       type: object
@@ -2285,6 +2313,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CatalogTerm'
+        sizes:
+          type: array
+          description: Size master codes its variants may use; absent means any size.
+          items:
+            type: string
+          example: [XXS, XS, S, M, L, XL, XXL]
 
     Brand:
       type: object

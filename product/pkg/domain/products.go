@@ -68,6 +68,10 @@ type Product struct {
 	// (condition, care, authenticity notes, etc.). Not used for search,
 	// pricing, or checkout. Managers write; storefront treats as read-only.
 	Attributes map[string]string `json:"attributes,omitempty"`
+	// SizeChart is the garment measurements per size behind the storefront
+	// size guide (clothing). One chart per parent: every color of a style is
+	// cut the same.
+	SizeChart []SizeChartRow `json:"sizeChart,omitempty"`
 	// ViewCount is unique guest PDP views (denormalized). Public on PDP and recs.
 	ViewCount int64 `json:"viewCount"`
 	// SoldCount is units committed from inventory reservations (denormalized).

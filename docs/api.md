@@ -576,7 +576,7 @@ Example: `GET /api/v1/products?category=bags&subcategory=tote&style=casual&targe
 
 See [product-rich-search.md](product-rich-search.md) and [product-master-catalog.md](product-master-catalog.md).
 
-On create and update, `category` must be one of `GET /api/v1/products/catalog/categories` (`bags`, `clothing`) and `subCategory` must belong to it; otherwise `400`. `GET /api/v1/products/catalog/master?category=clothing` returns that category's subcategories with the shared styles and targets.
+On create and update, `category` must be one of `GET /api/v1/products/catalog/categories` (`bags`, `clothing`) and `subCategory` must belong to it; otherwise `400`. A category that lists `sizes` (clothing: `XXS`–`XXL`) refuses any other `sizeCode` on its variants with `400`. `GET /api/v1/products/catalog/master?category=clothing` returns that category's subcategories with the shared styles and targets.
 
 **Response `200`**
 ```json
@@ -723,7 +723,7 @@ Failures carry machine-readable reason codes (`invalid_code`, `expired`, `alread
 
 ### `GET /api/v1/products/{id}`
 
-Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Cart lines use each variant's `sku` / `skuId` (inventory key). Parent `price` is the charged amount; `officialPrice` is display-only. Each variant may include `dimensions` (`widthMm` / `heightMm` / `depthMm` in millimeters) — distinct from letter `size`/`sizeCode`; see [product-sku-dimensions.md](product-sku-dimensions.md).
+Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Cart lines use each variant's `sku` / `skuId` (inventory key). Parent `price` is the charged amount; `officialPrice` is display-only. Each variant may include `dimensions` (`widthMm` / `heightMm` / `depthMm` in millimeters) — distinct from letter `size`/`sizeCode`; see [product-sku-dimensions.md](product-sku-dimensions.md). A parent may include `sizeChart` (`[{ size, chestCm, lengthCm, shoulderCm, sleeveCm }]`, centimetres) for the size guide; see [product-master-catalog.md](product-master-catalog.md#size-chart).
 
 Each embedded variant includes stock enrichment: `availableQty` (`max(0, quantity − reserved)`) and `inStock` (`availableQty > 0`). Every sellable SKU has a `stock_items` row (created with qty 0 on variant create; see [product-stock-tracking-plan.md](product-stock-tracking-plan.md)). Legacy parent `stock` is omitted from responses.
 
