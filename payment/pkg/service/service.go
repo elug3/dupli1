@@ -90,6 +90,13 @@ func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInpu
 	} else if existing != nil {
 		return existing, nil
 	}
+	// A new card checkout must match what the order was priced for: an order
+	// priced for bypass carries no card surcharge, so paying it by card would
+	// skip the surcharge. Orders from before order recorded a method have none
+	// and were never surcharged; they pay as they always did.
+	if order.PaymentMethod != "" && order.PaymentMethod != domain.MethodCreditCard {
+		return nil, ports.ErrMethodMismatch
+	}
 
 	paymentID, err := s.repo.NextPaymentID(ctx)
 	if err != nil {

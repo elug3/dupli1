@@ -34,6 +34,7 @@ func BootstrapConfig(opts ServerOptions) bootstrap.Config {
 		JWKSURL:            opts.JWKSURL,
 		NATSURL:            opts.NATSURL,
 		ShippingFeeWon:     opts.ShippingFeeWon,
+		CardSurchargeBps:   opts.CardSurchargeBps,
 		HTTPClient:         bootstrap.DefaultHTTPClient(),
 	}
 }

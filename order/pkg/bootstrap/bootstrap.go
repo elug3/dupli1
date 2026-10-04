@@ -47,6 +47,9 @@ type Config struct {
 	// ShippingFeeWon is the flat delivery charge added to every order, in
 	// whole KRW. Zero means free delivery.
 	ShippingFeeWon int64
+	// CardSurchargeBps is added to an order paid by card, in basis points
+	// (1000 = 10%). Zero means no surcharge.
+	CardSurchargeBps int64
 
 	HTTPClient *http.Client
 }
@@ -141,6 +144,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	svc = service.NewWithCheckout(repo, stock, promotionClient, 0, eventPublisher).
 		WithProduct(product).
 		WithShippingFee(cfg.ShippingFeeWon).
+		WithCardSurcharge(cfg.CardSurchargeBps).
 		WithPayment(payment)
 
 	if natsSubscriber != nil {

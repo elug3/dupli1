@@ -114,6 +114,8 @@ All order JSON / DB money uses **whole KRW won** with the `*_won` suffix (`subto
 
 **Shipping fee:** flat per-order charge from `DUPLI1_ORDER_SHIPPING_FEE_WON` (deprecated aliases `DUPLI1_ORDER_SHIPPING_FEE_KRW`, `DUPLI1_ORDER_SHIPPING_FEE_CENTS`; default **0**, free delivery). Snapshotted on the checkout session at open; `complete` charges the quoted fee. Coupons discount goods only — total never drops below shipping unless shipping is also discounted (future promo work).
 
+**Card surcharge:** a card order (`payment_method: credit_card`, the default) adds `DUPLI1_ORDER_CARD_SURCHARGE_BPS` (default 1000 = 10%) of `subtotal - discount + shipping`, rounded down, as `card_surcharge_won` inside `total_won`; `bypass` orders have none. See [checkout-session.md](checkout-session.md).
+
 Client-sent `unit_price_won` on create/checkout is **ignored**; prices are resolved server-side from product.
 
 ---

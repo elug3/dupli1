@@ -75,3 +75,24 @@ func TestApplyEnvShippingFeeUnsetUsesDefault(t *testing.T) {
 		t.Fatalf("ShippingFeeWon = %d, want default %d when unset", opts.ShippingFeeWon, order.DefaultShippingFeeWon)
 	}
 }
+
+func TestApplyEnvCardSurcharge(t *testing.T) {
+	t.Setenv("DUPLI1_ORDER_CARD_SURCHARGE_BPS", "250")
+	if opts := configureForTest(t); opts.CardSurchargeBps != 250 {
+		t.Fatalf("CardSurchargeBps = %d, want 250", opts.CardSurchargeBps)
+	}
+}
+
+func TestApplyEnvCardSurchargeDefaultsToTenPercent(t *testing.T) {
+	t.Setenv("DUPLI1_ORDER_CARD_SURCHARGE_BPS", "")
+	if opts := configureForTest(t); opts.CardSurchargeBps != 1000 {
+		t.Fatalf("CardSurchargeBps = %d, want default 1000", opts.CardSurchargeBps)
+	}
+}
+
+func TestApplyEnvCardSurchargeInvalidKeepsDefault(t *testing.T) {
+	t.Setenv("DUPLI1_ORDER_CARD_SURCHARGE_BPS", "-5")
+	if opts := configureForTest(t); opts.CardSurchargeBps != order.DefaultCardSurchargeBps {
+		t.Fatalf("CardSurchargeBps = %d, want default for a negative value", opts.CardSurchargeBps)
+	}
+}

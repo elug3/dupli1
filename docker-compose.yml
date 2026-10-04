@@ -290,6 +290,7 @@ services:
       # Flat per-order delivery charge in whole KRW. Unset is 0 (free delivery).
       # DUPLI1_ORDER_SHIPPING_FEE_KRW and DUPLI1_ORDER_SHIPPING_FEE_CENTS are deprecated aliases.
       DUPLI1_ORDER_SHIPPING_FEE_WON: ${DUPLI1_ORDER_SHIPPING_FEE_WON:-${DUPLI1_ORDER_SHIPPING_FEE_KRW:-${DUPLI1_ORDER_SHIPPING_FEE_CENTS:-0}}}
+      DUPLI1_ORDER_CARD_SURCHARGE_BPS: ${DUPLI1_ORDER_CARD_SURCHARGE_BPS:-1000}
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-do-not-use-in-production}
       AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
       NATS_URL: nats://nats:4222

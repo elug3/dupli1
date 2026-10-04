@@ -1001,6 +1001,8 @@ The charge applies to every order regardless of size — there is no free-shippi
 
 The fee is **snapshotted** on the checkout session when it opens; `complete` charges that quoted fee even if the configured amount changed. Direct `POST /orders` uses the current configured fee. Orders created before this feature carry `shipping_fee_won: 0` and keep their original totals.
 
+**Card surcharge.** An order paid by card costs 10% more. `complete` (and direct `POST /api/v1/orders`) takes an optional `payment_method`: `credit_card`, the default when it is left out, or `bypass`, which needs `payment.bypass` (`403` otherwise) because it is how staff record an offline payment. A card order gets `card_surcharge_won` = `DUPLI1_ORDER_CARD_SURCHARGE_BPS` basis points (default `1000`, 10%; `0` turns it off) of `subtotal_won - discount_won + shipping_fee_won`, rounded down to the won, and `total_won` includes it. The order records `payment_method`, and payment refuses a card checkout on an order priced for `bypass` (`409`), so the surcharge cannot be skipped. The session itself never shows the surcharge, since it does not know the method yet; storefronts quote it from `limits.card_surcharge_bps` on `GET /settings`. The rate is read at `complete`, not snapshotted on the session. Orders placed before this have `payment_method: ""` and `card_surcharge_won: 0`.
+
 Because `total_won` is what the payment service charges and what the order requires to mark itself paid, the fee flows through the money path automatically.
 
 See [checkout-session.md](checkout-session.md) for the full checkout flow.

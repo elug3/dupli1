@@ -708,7 +708,7 @@ func respondServiceError(w http.ResponseWriter, err error) {
 		respondError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, ports.ErrMethodUnavailable), errors.Is(err, ports.ErrCancelUnsupported):
 		respondError(w, http.StatusNotImplemented, err.Error())
-	case errors.Is(err, domain.ErrNotCancelable):
+	case errors.Is(err, domain.ErrNotCancelable), errors.Is(err, ports.ErrMethodMismatch):
 		respondError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, domain.ErrCancelAmountInvalid):
 		respondError(w, http.StatusBadRequest, err.Error())

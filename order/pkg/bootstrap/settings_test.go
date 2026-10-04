@@ -25,3 +25,14 @@ func TestBuildSettings_PublishesShippingFee(t *testing.T) {
 		t.Fatalf("free delivery: got %v (present=%t), want 0", v, ok)
 	}
 }
+
+// Storefronts quote the card surcharge line from this rate.
+func TestBuildSettings_PublishesCardSurcharge(t *testing.T) {
+	resp := bootstrap.BuildSettings(bootstrap.Config{CardSurchargeBps: 1000})
+	if v := resp.Limits["card_surcharge_bps"]; v != int64(1000) {
+		t.Fatalf("card_surcharge_bps = %v (%T), want int64 1000", v, v)
+	}
+	if v, ok := bootstrap.BuildSettings(bootstrap.Config{}).Limits["card_surcharge_bps"]; !ok || v != int64(0) {
+		t.Fatalf("no surcharge: got %v (present=%t), want an explicit 0", v, ok)
+	}
+}

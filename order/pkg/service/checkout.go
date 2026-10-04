@@ -201,6 +201,9 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 	if err != nil {
 		return nil, err
 	}
+	if _, err := domain.NormalizePaymentMethod(input.PaymentMethod); err != nil {
+		return nil, err
+	}
 
 	pricedItems, err := s.priceItems(ctx, session.Items)
 	if err != nil {
@@ -263,6 +266,7 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 		ShippingAddress: snapshot.ShippingAddress,
 		SourceAddressID: snapshot.SourceAddressID,
 		ShippingFeeWon:  &shippingFee,
+		PaymentMethod:   input.PaymentMethod,
 	})
 	if err != nil {
 		return nil, err
