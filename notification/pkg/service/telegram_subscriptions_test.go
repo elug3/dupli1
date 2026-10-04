@@ -74,6 +74,9 @@ func TestTelegramSubscriptionsManualChatID(t *testing.T) {
 	if item.Status != domain.SubscriptionStatusAccepted {
 		t.Fatalf("status = %q", item.Status)
 	}
+	if item.ChatLabel != "Ops" || item.Username != "" {
+		t.Fatalf("manual row = label %q username %q, want label Ops and empty username", item.ChatLabel, item.Username)
+	}
 }
 
 func TestTelegramSubscriptionsRejectAndLookup(t *testing.T) {

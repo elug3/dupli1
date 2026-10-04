@@ -21,6 +21,7 @@ import (
 	"github.com/elug3/dupli1/auth/pkg/infra/memory"
 	"github.com/elug3/dupli1/auth/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/permissions"
+	"github.com/elug3/dupli1/shared/pkg/reportperiod"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -778,6 +779,104 @@ func TestRefresh(t *testing.T) {
 			t.Errorf("want 400, got %d", w.Code)
 		}
 	})
+}
+
+// ---- GET /reports/registrations --------------------------------------------
+
+type registrationStatsFake struct {
+	times   []time.Time
+	undated int
+}
+
+func (f *registrationStatsFake) RegistrationTimes(_ context.Context, accountType string, _, _ time.Time) ([]time.Time, int, error) {
+	if accountType != domain.AccountTypeCustomer {
+		return nil, 0, errors.New("unexpected account type")
+	}
+	return f.times, f.undated, nil
+}
+
+func TestRegistrationReport_HTTP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	stats := &registrationStatsFake{
+		times:   []time.Time{time.Date(2026, 9, 30, 12, 0, 0, 0, reportperiod.Location)},
+		undated: 2,
+	}
+	repo := newFakeUserRepo()
+	accessGen := jwtgen.NewTokenGeneratorWithType("access-secret", 900, "access")
+	svc := service.NewService(
+		repo,
+		accessGen,
+		service.WithRegistrationStats(stats),
+	)
+	r := bootstrap.NewRouter(handler.NewHandler(svc, zerolog.Nop()), false, nil, nil, nil)
+
+	customer, err := domain.NewUser(uuid.New().String(), "cust@example.com", "password12", domain.AccountTypeCustomer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Save(t.Context(), customer); err != nil {
+		t.Fatal(err)
+	}
+	customerToken, err := accessGen.Generate(t.Context(), customer.ID, customer.Permissions, ports.Identity{Email: customer.Email})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := "/api/v1/auth/reports/registrations?granularity=week&from=2026-09-29&to=2026-10-05"
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("Authorization", "Bearer "+customerToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("customer without user.read: want 403, got %d: %s", w.Code, w.Body.String())
+	}
+
+	reader, err := domain.NewUser(uuid.New().String(), "reports@internal.dupli1", "reports-secret", domain.AccountTypeManager, permissions.UserRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Save(t.Context(), reader); err != nil {
+		t.Fatal(err)
+	}
+	readerToken, err := accessGen.Generate(t.Context(), reader.ID, reader.Permissions, ports.Identity{Email: reader.Email})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("Authorization", "Bearer "+readerToken)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("user.read: want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body struct {
+		UndatedCustomers int `json:"undated_customers"`
+		Periods          []struct {
+			NewCustomers int `json:"new_customers"`
+		} `json:"periods"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.UndatedCustomers != 2 || len(body.Periods) != 2 {
+		t.Fatalf("report = %+v", body)
+	}
+	var total int
+	for _, p := range body.Periods {
+		total += p.NewCustomers
+	}
+	if total != 1 {
+		t.Fatalf("new_customers across periods = %d, want 1", total)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/auth/reports/registrations?granularity=day", nil)
+	req.Header.Set("Authorization", "Bearer "+readerToken)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bad granularity: want 400, got %d: %s", w.Code, w.Body.String())
+	}
 }
 
 // ---- DELETE /users/:id -----------------------------------------------------
