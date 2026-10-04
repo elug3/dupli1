@@ -265,6 +265,16 @@ func (s *ProductSearchService) CreateProduct(ctx context.Context, p domain.Produ
 		return nil, ports.Invalid(err.Error())
 	}
 	p.Attributes = attrs
+	chart, err := domain.NormalizeSizeChart(p.Category, p.SizeChart)
+	if err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
+	p.SizeChart = chart
+	for _, v := range p.Variants {
+		if err := domain.CheckVariantSize(p.Category, v.SizeCode); err != nil {
+			return nil, ports.Invalid(err.Error())
+		}
+	}
 	created, err := s.store.CreateProduct(ctx, p)
 	if err != nil {
 		return nil, err
@@ -299,6 +309,20 @@ func (s *ProductSearchService) UpdateProduct(ctx context.Context, p domain.Produ
 		return nil, ports.Invalid(err.Error())
 	}
 	merged.Attributes = attrs
+	chart, err := domain.NormalizeSizeChart(merged.Category, merged.SizeChart)
+	if err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
+	merged.SizeChart = chart
+	if merged.Category != existing.Category {
+		// Moving a style into a sized category: its SKUs must already be
+		// in that category's sizes.
+		for _, v := range existing.Variants {
+			if err := domain.CheckVariantSize(merged.Category, v.SizeCode); err != nil {
+				return nil, ports.Invalid(fmt.Sprintf("variant %s: %v", v.SKU, err))
+			}
+		}
+	}
 	updated, err := s.store.UpdateProduct(ctx, merged)
 	if err != nil {
 		return nil, err
@@ -336,6 +360,9 @@ func (s *ProductSearchService) CreateVariant(ctx context.Context, productID stri
 	parent, err := s.store.GetProduct(ctx, productID)
 	if err != nil {
 		return nil, err
+	}
+	if err := domain.CheckVariantSize(parent.Category, v.SizeCode); err != nil {
+		return nil, ports.Invalid(err.Error())
 	}
 	dims, err := domain.NormalizeDimensions(v.Dimensions)
 	if err != nil {
@@ -376,6 +403,15 @@ func (s *ProductSearchService) UpdateVariant(ctx context.Context, productID, sku
 		merged.ListingImageURLs = domain.SyncListingImageURLs(
 			existing.ImageURLs, existing.ListingImageURLs, merged.ImageURLs,
 		)
+	}
+	if merged.SizeCode != existing.SizeCode {
+		parent, err := s.store.GetProduct(ctx, productID)
+		if err != nil {
+			return nil, err
+		}
+		if err := domain.CheckVariantSize(parent.Category, merged.SizeCode); err != nil {
+			return nil, ports.Invalid(err.Error())
+		}
 	}
 	dims, err := domain.NormalizeDimensions(merged.Dimensions)
 	if err != nil {

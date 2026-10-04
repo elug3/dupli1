@@ -120,6 +120,10 @@ func (existing Product) MergeUpdate(incoming Product) Product {
 	if incoming.Tags != nil {
 		merged.Tags = incoming.Tags
 	}
+	if incoming.SizeChart != nil {
+		// [] clears the chart; an omitted field keeps it.
+		merged.SizeChart = incoming.SizeChart
+	}
 	if incoming.Attributes != nil {
 		merged.Attributes = incoming.Attributes
 	}

@@ -444,3 +444,53 @@ func TestDeleteProduct_RefusesReservedStock(t *testing.T) {
 		t.Fatalf("unreserved stock: want delete, got %v", err)
 	}
 }
+
+func TestClothingSizesAndSizeChart(t *testing.T) {
+	store := memory.NewProductStore()
+	inv := memory.NewInventoryStore()
+	store.WithInventory(inv)
+	if _, err := store.Catalog.CreateStyle(t.Context(), domain.Style{BrandCode: "BOT", Code: "PUF001", Name: "Puffer"}); err != nil {
+		t.Fatal(err)
+	}
+	store.Products = []domain.Product{
+		{ID: "JKT-1", Name: "Puffer", BrandCode: "BOT", StyleCode: "PUF001", Category: "clothing", SubCategory: "padded", Status: "active", Price: 900000},
+		{ID: "BAG-1", Name: "Cassette", BrandCode: "BOT", StyleCode: "PUF001", Category: "bags", Status: "active", Price: 2500},
+	}
+	store.Variants = []domain.Variant{
+		{SKU: "BOT_PUF001_BLK_OS", ProductID: "BAG-1", Color: "Black", ColorCode: "BLK", SizeCode: "OS", Status: "active"},
+	}
+	svc := service.NewProductSearchService(store, nil).WithInventory(inv)
+
+	if _, err := svc.CreateVariant(t.Context(), "JKT-1", domain.Variant{ColorCode: "BLK", SizeCode: "OS"}); !errors.Is(err, ports.ErrInvalid) {
+		t.Fatalf("one-size jacket: want ErrInvalid, got %v", err)
+	}
+	v, err := svc.CreateVariant(t.Context(), "JKT-1", domain.Variant{ColorCode: "BLK", SizeCode: "M"})
+	if err != nil {
+		t.Fatalf("M jacket: %v", err)
+	}
+	if _, err := svc.UpdateVariant(t.Context(), "JKT-1", v.SKU, domain.Variant{SizeCode: "LRG"}); !errors.Is(err, ports.ErrInvalid) {
+		t.Fatalf("resize to a bag size: want ErrInvalid, got %v", err)
+	}
+
+	updated, err := svc.UpdateProduct(t.Context(), domain.Product{ID: "JKT-1", SizeChart: []domain.SizeChartRow{{Size: "m", ChestCm: 112}}})
+	if err != nil {
+		t.Fatalf("set chart: %v", err)
+	}
+	if len(updated.SizeChart) != 1 || updated.SizeChart[0].Size != "M" {
+		t.Fatalf("size chart = %+v", updated.SizeChart)
+	}
+	// Omitting the chart keeps it; [] clears it.
+	kept, err := svc.UpdateProduct(t.Context(), domain.Product{ID: "JKT-1", Name: "Puffer II"})
+	if err != nil || len(kept.SizeChart) != 1 {
+		t.Fatalf("chart dropped by an unrelated edit: %+v err=%v", kept.SizeChart, err)
+	}
+	cleared, err := svc.UpdateProduct(t.Context(), domain.Product{ID: "JKT-1", SizeChart: []domain.SizeChartRow{}})
+	if err != nil || cleared.SizeChart != nil {
+		t.Fatalf("clear chart: %+v err=%v", cleared.SizeChart, err)
+	}
+
+	// A bag with a one-size SKU cannot be moved into clothing.
+	if _, err := svc.UpdateProduct(t.Context(), domain.Product{ID: "BAG-1", Category: "clothing", SubCategory: "padded"}); !errors.Is(err, ports.ErrInvalid) {
+		t.Fatalf("bag to clothing with an OS SKU: want ErrInvalid, got %v", err)
+	}
+}

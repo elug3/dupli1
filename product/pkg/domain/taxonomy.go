@@ -27,6 +27,40 @@ type Category struct {
 	Code          string        `json:"code"`
 	Name          string        `json:"name"`
 	SubCategories []CatalogTerm `json:"subCategories"`
+	// Sizes lists the size master codes its variants may use, in display
+	// order. Empty means any size (bags use OS and capacity sizes alike).
+	Sizes []string `json:"sizes,omitempty"`
+}
+
+// AllowsSize reports whether a variant of this category may carry the size
+// master code. A category with no size list allows any code.
+func (c Category) AllowsSize(code string) bool {
+	if len(c.Sizes) == 0 {
+		return true
+	}
+	code = strings.ToUpper(strings.TrimSpace(code))
+	for _, s := range c.Sizes {
+		if s == code {
+			return true
+		}
+	}
+	return false
+}
+
+// CheckVariantSize refuses a size the product's category does not sell.
+// Unknown (legacy) categories are not checked.
+func CheckVariantSize(category, sizeCode string) error {
+	c, ok := LookupCategory(category)
+	if !ok || len(c.Sizes) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(sizeCode) == "" {
+		return fmt.Errorf("sizeCode is required for %s (one of %s)", c.Code, strings.Join(c.Sizes, ", "))
+	}
+	if !c.AllowsSize(sizeCode) {
+		return fmt.Errorf("size %s is not a %s size (one of %s)", strings.ToUpper(strings.TrimSpace(sizeCode)), c.Code, strings.Join(c.Sizes, ", "))
+	}
+	return nil
 }
 
 // DefaultCategory is what a product without a category is validated as. Rows
@@ -68,14 +102,18 @@ var SeedClothingSubCategories = []CatalogTerm{
 // order. Adding one here is what makes its products creatable.
 var SeedCategories = []Category{
 	{Code: "bags", Name: "Bags", SubCategories: SeedSubCategories},
-	{Code: "clothing", Name: "Clothing", SubCategories: SeedClothingSubCategories},
+	{Code: "clothing", Name: "Clothing", SubCategories: SeedClothingSubCategories, Sizes: ApparelSizes},
 }
+
+// ApparelSizes are the letter sizes clothing is sold in, smallest first.
+var ApparelSizes = []string{"XXS", "XS", "S", "M", "L", "XL", "XXL"}
 
 // Categories returns a copy of SeedCategories.
 func Categories() []Category {
 	out := make([]Category, len(SeedCategories))
 	for i, c := range SeedCategories {
 		c.SubCategories = append([]CatalogTerm(nil), c.SubCategories...)
+		c.Sizes = append([]string(nil), c.Sizes...)
 		out[i] = c
 	}
 	return out
