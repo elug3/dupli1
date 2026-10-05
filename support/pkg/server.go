@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/elug3/dupli1/shared/pkg/sentrymon"
 	"github.com/elug3/dupli1/support/pkg/bootstrap"
 )
 
@@ -52,6 +53,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	app.HTTP.Handler = sentrymon.Handler(app.HTTP.Handler)
 
 	return &Server{
 		opts:    opts,

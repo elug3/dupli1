@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/elug3/dupli1/order/pkg/bootstrap"
+	"github.com/elug3/dupli1/shared/pkg/sentrymon"
 )
 
 type Server struct {
@@ -50,7 +51,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	}
 	httpSrv := &http.Server{
 		Addr:         opts.Addr,
-		Handler:      app.Router,
+		Handler:      sentrymon.Handler(app.Router),
 		ReadTimeout:  opts.ReadTimeout,
 		WriteTimeout: opts.WriteTimeout,
 		IdleTimeout:  opts.IdleTimeout,

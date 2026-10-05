@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/elug3/dupli1/notification/pkg/bootstrap"
+	"github.com/elug3/dupli1/shared/pkg/sentrymon"
 )
 
 type ServerOptions struct {
@@ -72,6 +73,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	app.HTTP.Handler = sentrymon.Handler(app.HTTP.Handler)
 
 	return &Server{
 		opts:    opts,

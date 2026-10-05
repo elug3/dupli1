@@ -8,6 +8,7 @@ import (
 	"os/signal"
 
 	"github.com/elug3/dupli1/profile/pkg"
+	"github.com/elug3/dupli1/shared/pkg/sentrymon"
 )
 
 var usageStr = `
@@ -28,6 +29,8 @@ Options:
 `
 
 func main() {
+	defer sentrymon.Init("dupli1-profile")()
+
 	fs := flag.NewFlagSet("dupli1-profile", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, usageStr)

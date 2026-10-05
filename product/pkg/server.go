@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/elug3/dupli1/product/pkg/bootstrap"
+	"github.com/elug3/dupli1/shared/pkg/sentrymon"
 )
 
 // ProductSearchServer is the read-only server for customers to search products.
@@ -36,7 +37,7 @@ func NewSearchServer(opts SearchServerOptions) (*ProductSearchServer, error) {
 	addr := fmt.Sprintf("%s:%d", opts.Host, opts.Port)
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      app.Handler,
+		Handler:      sentrymon.Handler(app.Handler),
 		ReadTimeout:  time.Duration(opts.ReadTimeout) * time.Second,
 		WriteTimeout: time.Duration(opts.WriteTimeout) * time.Second,
 	}
@@ -135,7 +136,7 @@ func NewServer(opts ServerOptions) (*ProductServer, error) {
 		app:  app,
 		server: &http.Server{
 			Addr:         addr,
-			Handler:      app.Handler,
+			Handler:      sentrymon.Handler(app.Handler),
 			ReadTimeout:  time.Duration(opts.ReadTimeout) * time.Second,
 			WriteTimeout: time.Duration(opts.WriteTimeout) * time.Second,
 		},
