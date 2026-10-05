@@ -72,7 +72,7 @@ func TestCategoryScopedCatalogEndpoints(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&catalog); err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog.SubCategories) != 1 || catalog.SubCategories[0].Code != "padded" {
+	if len(catalog.SubCategories) != 2 || catalog.SubCategories[0].Code != "padded" || catalog.SubCategories[1].Code != "jackets" {
 		t.Fatalf("clothing subCategories: %+v", catalog.SubCategories)
 	}
 	if len(catalog.Styles) != 5 || len(catalog.Targets) != 4 {
