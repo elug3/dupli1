@@ -56,6 +56,13 @@ func TestNormalizeProductTaxonomyScopesSubCategoryToCategory(t *testing.T) {
 	if jacket.Category != "clothing" || jacket.SubCategory != "padded" {
 		t.Fatalf("got category=%q sub=%q", jacket.Category, jacket.SubCategory)
 	}
+	unpadded := Product{Category: "clothing", SubCategory: "Jackets", Target: "men"}
+	if err := NormalizeProductTaxonomy(&unpadded, ""); err != nil {
+		t.Fatal(err)
+	}
+	if unpadded.SubCategory != "jackets" {
+		t.Fatalf("got sub=%q, want jackets", unpadded.SubCategory)
+	}
 
 	bag := Product{Category: "Bags", SubCategory: "tote"}
 	if err := NormalizeProductTaxonomy(&bag, ""); err != nil {
@@ -71,6 +78,9 @@ func TestNormalizeProductTaxonomyScopesSubCategoryToCategory(t *testing.T) {
 	}
 	if err := NormalizeProductTaxonomy(&Product{Category: "bags", SubCategory: "padded"}, ""); err == nil {
 		t.Fatal("expected padded to be refused for bags")
+	}
+	if err := NormalizeProductTaxonomy(&Product{Category: "bags", SubCategory: "jackets"}, ""); err == nil {
+		t.Fatal("expected jackets to be refused for bags")
 	}
 	// A blank category is validated as bags and stays blank.
 	blank := Product{SubCategory: "tote"}
@@ -107,6 +117,9 @@ func TestCategories(t *testing.T) {
 	}
 	if len(cats[0].SubCategories) != len(SeedSubCategories) {
 		t.Fatalf("bag subcategories: %+v", cats[0].SubCategories)
+	}
+	if len(cats[1].SubCategories) != 2 || cats[1].SubCategories[0].Code != "padded" || cats[1].SubCategories[1].Code != "jackets" {
+		t.Fatalf("clothing subcategories: %+v", cats[1].SubCategories)
 	}
 	cats[0].SubCategories[0].Code = "mutated"
 	if SeedSubCategories[0].Code != "handbags" {
