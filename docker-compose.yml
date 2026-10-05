@@ -2,6 +2,13 @@
 # This docker-compose file is intended for local testing.
 # Production is deployed to AWS ECS — do not use this file for production.
 
+# Sentry error and log reporting (shared/pkg/sentrymon). Off unless SENTRY_DSN
+# is set in the shell or .env before `docker compose up`.
+x-sentry-env: &sentry-env
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-local}
+  SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+
 services:
   postgres-auth:
     image: postgres:16-alpine
@@ -191,6 +198,7 @@ services:
     ports:
       - "18080:8080"
     environment:
+      <<: *sentry-env
       DB_URL: postgres://dupli1:dupli1_dev@postgres-auth:5432/dupli1_db?sslmode=disable
       REDIS_URL: redis://redis:6379
       NATS_URL: nats://nats:4222
@@ -232,6 +240,7 @@ services:
     ports:
       - "8081:8080"
     environment:
+      <<: *sentry-env
       DUPLI1_PRODUCT_DB: postgres://dupli1:dupli1_dev@postgres-product:5432/products?sslmode=disable
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: "8080"
@@ -276,6 +285,7 @@ services:
     ports:
       - "8083:8080"
     environment:
+      <<: *sentry-env
       DUPLI1_ORDER_ADDR: :8080
       # Stock/coupons go through the internal nginx gateway (not direct product DNS),
       # on its internal listener: :80 refuses the internal APIs (api/nginx.conf).
@@ -321,6 +331,7 @@ services:
     ports:
       - "8086:8080"
     environment:
+      <<: *sentry-env
       DUPLI1_CART_ADDR: :8080
       DUPLI1_CART_DB: postgres://dupli1:dupli1_dev@postgres-cart:5432/cart?sslmode=disable
       DUPLI1_PRODUCT_URL: http://dupli1-product:8080
@@ -352,6 +363,7 @@ services:
     ports:
       - "8087:8080"
     environment:
+      <<: *sentry-env
       DUPLI1_PAYMENT_ADDR: :8080
       DUPLI1_PAYMENT_DB: postgres://dupli1:dupli1_dev@postgres-payment:5432/payments?sslmode=disable
       DUPLI1_ORDER_URL: http://dupli1-order:8080
@@ -396,6 +408,7 @@ services:
     ports:
       - "8084:8080"
     environment:
+      <<: *sentry-env
       DUPLI1_NOTIFICATION_ADDR: :8080
       DUPLI1_NOTIFICATION_DB: postgres://dupli1:dupli1_dev@postgres-notification:5432/notifications?sslmode=disable
       NATS_URL: nats://nats:4222
@@ -430,6 +443,7 @@ services:
     ports:
       - "8088:8080"
     environment:
+      <<: *sentry-env
       DUPLI1_PROFILE_ADDR: :8080
       DUPLI1_PROFILE_DB: postgres://dupli1:dupli1_dev@postgres-profile:5432/profiles?sslmode=disable
       AUTH_JWKS_URL: http://dupli1-auth:8080/api/v1/auth/.well-known/jwks.json
@@ -460,6 +474,7 @@ services:
     ports:
       - "8089:8080"
     environment:
+      <<: *sentry-env
       DUPLI1_SUPPORT_ADDR: :8080
       DUPLI1_SUPPORT_DB: postgres://dupli1:dupli1_dev@postgres-support:5432/support?sslmode=disable
       # The customer bot's own token and webhook secret. Deliberately NOT the

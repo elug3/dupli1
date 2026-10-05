@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/elug3/dupli1/shared/pkg/sentrymon"
 	support "github.com/elug3/dupli1/support/pkg"
 )
 
@@ -28,6 +29,8 @@ Options:
 `
 
 func main() {
+	defer sentrymon.Init("dupli1-support")()
+
 	fs := flag.NewFlagSet("dupli1-support", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, usageStr)

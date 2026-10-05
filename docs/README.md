@@ -28,6 +28,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [deployment-ec2.md](deployment-ec2.md) | Single-EC2 Compose overlay |
 | [deployment-venus.md](deployment-venus.md) | Self-hosted production on VENUS (Cloudflare Tunnel) — AWS exit runbook |
 | [auth-logging.md](auth-logging.md) | Auth zerolog events (as-built) |
+| [sentry-monitoring.md](sentry-monitoring.md) | Sentry error and log reporting for the Go services and both web apps |
 
 ### Product as-built references
 

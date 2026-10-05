@@ -8,6 +8,7 @@ import (
 	"os/signal"
 
 	notification "github.com/elug3/dupli1/notification/pkg"
+	"github.com/elug3/dupli1/shared/pkg/sentrymon"
 )
 
 var usageStr = `
@@ -27,6 +28,8 @@ Options:
 `
 
 func main() {
+	defer sentrymon.Init("dupli1-notification")()
+
 	fs := flag.NewFlagSet("dupli1-notification", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, usageStr)

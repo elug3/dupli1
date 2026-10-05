@@ -19,6 +19,16 @@ x-service: &service
     driver: json-file
     options: { max-size: "20m", max-file: "5" }
 
+# Sentry error and log reporting (docs/sentry-monitoring.md). Each app is off
+# until its DSN is set in /opt/dupli1/.env: SENTRY_DSN_BACKEND for the Go
+# services (shared/pkg/sentrymon), SENTRY_DSN_WEB and SENTRY_DSN_MANAGE_WEB
+# below. The release is the image tag deploy.sh rolls out.
+x-sentry-env: &sentry-env
+  SENTRY_DSN: ${SENTRY_DSN_BACKEND:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+  SENTRY_RELEASE: ${DUPLI1_BACKEND_TAG:-}
+  SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+
 services:
   # ── state ────────────────────────────────────────────────────────────────
   postgres:
@@ -107,6 +117,7 @@ services:
     entrypoint: ["/usr/local/bin/service"]
     command: []
     environment:
+      <<: *sentry-env
       DUPLI1_AUTH_ADDR: ":8080"
       DB_URL: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/schick_db?sslmode=disable
       REDIS_URL: redis://redis.dupli1.local:6379
@@ -129,6 +140,7 @@ services:
     <<: *service
     image: dupli1-prod/product:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
+      <<: *sentry-env
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: "8080"
       DUPLI1_PRODUCT_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/products?sslmode=disable
@@ -147,6 +159,7 @@ services:
     <<: *service
     image: dupli1-prod/order:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
+      <<: *sentry-env
       DUPLI1_ORDER_ADDR: ":8080"
       DUPLI1_ORDER_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/orders?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
@@ -167,6 +180,7 @@ services:
     <<: *service
     image: dupli1-prod/cart:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
+      <<: *sentry-env
       DUPLI1_CART_ADDR: ":8080"
       DUPLI1_CART_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/cart?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
@@ -180,6 +194,7 @@ services:
     <<: *service
     image: dupli1-prod/payment:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
+      <<: *sentry-env
       DUPLI1_PAYMENT_ADDR: ":8080"
       DUPLI1_PAYMENT_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/payments?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
@@ -201,6 +216,7 @@ services:
     <<: *service
     image: dupli1-prod/profile:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
+      <<: *sentry-env
       DUPLI1_PROFILE_ADDR: ":8080"
       # Customer profiles and saved shipping addresses. Without it profile ran
       # in memory (as it did on ECS) and lost every address on each restart
@@ -216,6 +232,7 @@ services:
     <<: *service
     image: dupli1-prod/notification:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
+      <<: *sentry-env
       DUPLI1_NOTIFICATION_ADDR: ":8080"
       # Telegram chat subscriptions (accepted in manage-web). VENUS-only DB:
       # AWS ran notification in-memory, so approvals were lost on restart.
@@ -251,6 +268,10 @@ services:
       HOST: 0.0.0.0
       PORT: "3000"
       DUPLI1_API_BASE_URL: http://proxy.dupli1.local
+      SENTRY_DSN: ${SENTRY_DSN_WEB:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${DUPLI1_WEB_TAG:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
       # The web service account's API key (same value auth seeds). The
       # exchange is internal-only, so it goes to the gateway's :8081.
       DUPLI1_WEB_SERVICE_API_KEY: ${DUPLI1_WEB_SERVICE_API_KEY:?set it in /opt/dupli1/.env — docs/auth-service-api-keys.md}
@@ -267,6 +288,10 @@ services:
       DUPLI1_API_BASE_URL: http://proxy.dupli1.local
       DUPLI1_GATEWAY_URL: http://proxy.dupli1.local
       REDIS_URL: redis://redis.dupli1.local:6379
+      SENTRY_DSN: ${SENTRY_DSN_MANAGE_WEB:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_RELEASE: ${DUPLI1_MANAGE_WEB_TAG:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
 
   # Replaces the ALB: host/path routing plus /product-images/ (was CloudFront).
   edge:

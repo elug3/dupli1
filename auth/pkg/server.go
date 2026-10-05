@@ -6,9 +6,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/elug3/dupli1/auth/pkg/bootstrap"
+	"github.com/elug3/dupli1/shared/pkg/sentrymon"
 	"github.com/rs/zerolog"
 )
 
@@ -74,7 +76,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 
 	srv := &http.Server{
 		Addr:         opts.Addr,
-		Handler:      app.Engine,
+		Handler:      sentrymon.Handler(app.Engine),
 		ReadTimeout:  opts.ReadTimeout,
 		WriteTimeout: opts.WriteTimeout,
 		IdleTimeout:  opts.IdleTimeout,
@@ -166,5 +168,31 @@ func newLogger(output, level string) zerolog.Logger {
 		lvl = zerolog.InfoLevel
 	}
 
+	if sentrymon.Enabled() {
+		w = zerolog.MultiLevelWriter(w, sentryLogWriter{})
+	}
+
 	return zerolog.New(w).With().Timestamp().Logger().Level(lvl)
+}
+
+// sentryLogWriter forwards zerolog lines to Sentry Logs at zerolog's level.
+type sentryLogWriter struct{}
+
+func (sentryLogWriter) Write(p []byte) (int, error) {
+	return sentryLogWriter{}.WriteLevel(zerolog.InfoLevel, p)
+}
+
+func (sentryLogWriter) WriteLevel(l zerolog.Level, p []byte) (int, error) {
+	level := sentrymon.LevelInfo
+	switch {
+	case l == zerolog.NoLevel:
+	case l >= zerolog.ErrorLevel && l <= zerolog.PanicLevel:
+		level = sentrymon.LevelError
+	case l == zerolog.WarnLevel:
+		level = sentrymon.LevelWarn
+	case l < zerolog.InfoLevel:
+		return len(p), nil
+	}
+	sentrymon.Emit(level, strings.TrimRight(string(p), "\n"))
+	return len(p), nil
 }

@@ -91,6 +91,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/serviceaccount` | Service account names (`dupli1-order`, `dupli1-web`) auth stamps into the `service_name` claim and internal routes allowlist via `authjwt.Claims.CalledBy`. No dependencies, so auth imports it without the JWKS validator |
 | `shared/pkg/productclient` | HTTP client for product's variant-lookup endpoint, returning a superset `Variant`; used by `cart` and `order`, each mapping only the display field it needs (`Color` vs `ProductName`) into its own local `ports.VariantInfo` |
 | `shared/pkg/reportperiod` | KST report periods (Monday weeks, calendar months): parses `granularity`/`from`/`to`, lists periods and buckets a time into one; used by `order` (sales report) and `auth` (sign-up report) so their periods line up |
+| `shared/pkg/sentrymon` | Sentry reporting, off unless `SENTRY_DSN` is set: `Init(service)` from each `cmd/main.go` (also mirrors the stdlib logger to Sentry Logs), `Handler` around each service's HTTP handler (panics and `5xx` responses become issues; SSE still flushes). See [docs/sentry-monitoring.md](docs/sentry-monitoring.md) |
 
 ### Service ownership
 
