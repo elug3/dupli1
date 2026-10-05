@@ -576,7 +576,7 @@ Example: `GET /api/v1/products?category=bags&subcategory=tote&style=casual&targe
 
 See [product-rich-search.md](product-rich-search.md) and [product-master-catalog.md](product-master-catalog.md).
 
-On create and update, `category` must be one of `GET /api/v1/products/catalog/categories` (`bags`, `clothing`) and `subCategory` must belong to it; otherwise `400`. A category that lists `sizes` (clothing: `XXS`–`XXL`) refuses any other `sizeCode` on its variants with `400`. `GET /api/v1/products/catalog/master?category=clothing` returns that category's subcategories with the shared styles and targets.
+On create and update, `category` must be one of `GET /api/v1/products/catalog/categories` (`bags`, `clothing`) and `subCategory` must belong to it; otherwise `400`. A category that lists `sizes` (clothing: `XXS`–`4XL`, and Italian `34`–`60` in S, regular, R and L fits) refuses any other `sizeCode` on its variants with `400`. `GET /api/v1/products/catalog/master?category=clothing` returns that category's subcategories with the shared styles and targets.
 
 **Response `200`**
 ```json

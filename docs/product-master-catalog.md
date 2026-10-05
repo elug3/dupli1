@@ -10,13 +10,13 @@ Storefront bag filters need a fixed **master catalog** independent of SKU segmen
 | Dimension | Product field | Query param | Codes |
 |-----------|---------------|-------------|-------|
 | Category | `category` | `category` | `bags`, `clothing` |
-| Sub category (per category) | `subCategory` | `subcategory` (alias `subCategory`) | bags: `handbags`, `tote`, `shoulder`, `cross`, `mini` · clothing: `padded` |
+| Sub category (per category) | `subCategory` | `subcategory` (alias `subCategory`) | bags: `handbags`, `tote`, `shoulder`, `cross`, `mini` · clothing: `padded`, `jackets` |
 | Style (occasion / look) | `style` | `style` | `casual`, `evening`, `business`, `weekend`, `statement` |
 | Target (audience) | `target` | `target` | `all`, `men`, `women`, `kids` |
 
 `style` here is **not** SKU `styleCode` (design family under a brand).
 
-Categories and their subcategories are Go seeds (`domain.SeedCategories`); adding a category there is what makes its products creatable. A category may also list its **sizes** (size master codes): `clothing` sells `XXS`–`XXL`, so a jacket SKU in `OS` or a bag capacity size is `400`, and so is moving a product into `clothing` while one of its SKUs has such a size. `bags` lists none and takes any size. Style and target are shared by every category. See [product-multi-category-design.md](product-multi-category-design.md).
+Categories and their subcategories are Go seeds (`domain.SeedCategories`); adding a category there is what makes its products creatable. A category may also list its **sizes** (size master codes): `clothing` sells letter sizes `XXS`–`XXXL` and `4XL`, and Italian sizes `34`–`60` in even steps, each in a short, regular and long fit (`48S`, `48`, `48R`, `48L`), so a jacket SKU in `OS` or a bag capacity size is `400`, and so is moving a product into `clothing` while one of its SKUs has such a size. `bags` lists none and takes any size. Style and target are shared by every category. See [product-multi-category-design.md](product-multi-category-design.md).
 
 ## Master catalog APIs (public)
 
@@ -69,4 +69,4 @@ Optional JSON fields on parent. `category` must be a known category (code or nam
 - [x] Validation on create/update
 - [x] Docs + OpenAPI notes
 - [x] Categories (`bags`, `clothing`) with category-scoped subcategories
-- [x] Category sizes (`clothing`: `XXS`–`XXL`) and a per-parent `sizeChart`
+- [x] Category sizes (`clothing`: `XXS`–`4XL`, Italian `34`–`60` with S/R/L fits) and a per-parent `sizeChart`

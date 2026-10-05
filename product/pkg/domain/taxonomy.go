@@ -96,6 +96,7 @@ var SeedTargets = []CatalogTerm{
 // Clothing subcategory seeds (under category=clothing).
 var SeedClothingSubCategories = []CatalogTerm{
 	{Code: "padded", Name: "Padded Jackets"},
+	{Code: "jackets", Name: "Jackets"},
 }
 
 // SeedCategories lists every category a product may carry, in storefront
@@ -105,8 +106,23 @@ var SeedCategories = []Category{
 	{Code: "clothing", Name: "Clothing", SubCategories: SeedClothingSubCategories, Sizes: ApparelSizes},
 }
 
-// ApparelSizes are the letter sizes clothing is sold in, smallest first.
-var ApparelSizes = []string{"XXS", "XS", "S", "M", "L", "XL", "XXL"}
+// ApparelSizes are the sizes clothing is sold in, smallest first: letter
+// sizes, then Italian sizes 34–60, each in its short (S), regular, regular
+// (R) and long (L) fit, the way Italian houses label tailoring.
+var ApparelSizes = append(
+	[]string{"XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "4XL"},
+	italianSizes(34, 60)...,
+)
+
+func italianSizes(from, to int) []string {
+	var out []string
+	for n := from; n <= to; n += 2 {
+		for _, fit := range []string{"S", "", "R", "L"} {
+			out = append(out, fmt.Sprintf("%d%s", n, fit))
+		}
+	}
+	return out
+}
 
 // Categories returns a copy of SeedCategories.
 func Categories() []Category {

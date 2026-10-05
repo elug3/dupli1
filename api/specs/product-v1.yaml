@@ -2318,7 +2318,7 @@ components:
           description: Size master codes its variants may use; absent means any size.
           items:
             type: string
-          example: [XXS, XS, S, M, L, XL, XXL]
+          example: [XXS, XS, S, M, L, XL, XXL, XXXL, 4XL, 34S, '34', 34R, 34L]
 
     Brand:
       type: object

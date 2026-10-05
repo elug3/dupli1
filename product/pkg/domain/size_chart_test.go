@@ -51,6 +51,16 @@ func TestCheckVariantSize(t *testing.T) {
 	if err := CheckVariantSize("clothing", "OS"); err == nil || !strings.Contains(err.Error(), "not a clothing size") {
 		t.Fatalf("OS jacket: err = %v", err)
 	}
+	for _, size := range []string{"34", "36s", "44", "48R", "52L", "60", "XXXL", "4XL"} {
+		if err := CheckVariantSize("clothing", size); err != nil {
+			t.Fatalf("%s jacket: %v", size, err)
+		}
+	}
+	for _, size := range []string{"32", "35", "62", "48X", "S48"} {
+		if err := CheckVariantSize("clothing", size); err == nil {
+			t.Fatalf("%s jacket: expected refusal", size)
+		}
+	}
 	if err := CheckVariantSize("clothing", ""); err == nil || !strings.Contains(err.Error(), "required") {
 		t.Fatalf("sizeless jacket: err = %v", err)
 	}
