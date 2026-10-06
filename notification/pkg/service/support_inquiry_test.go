@@ -191,3 +191,27 @@ func TestWebInquiryAlertNamesTheChannel(t *testing.T) {
 		t.Fatalf("alert leaked the account id: %q", notifier.message)
 	}
 }
+
+func TestProductQuestionAlertSaysItIsAProductQuestion(t *testing.T) {
+	notifier := &recordedNotifier{}
+	dispatcher := service.NewDispatcher(notifier, service.DispatcherConfig{
+		Routing: &stubChatRouting{supportChats: []string{"-support"}},
+	})
+	payload := inquiryPayload(t, events.SupportInquiry{
+		InquiryID: "01HQ", Topic: "prd", Channel: "product_question",
+		EntryContext: "숏 패딩 재킷 Black / M", Excerpt: "평소 L인데 M?",
+		ManageURL: "https://manage.dupli1.com/support?tab=questions&question=01HQ",
+		OpenedAt:  time.Now().UTC(),
+	})
+	if err := dispatcher.HandleForTest(t.Context(), service.SubjectSupportInquiryOpened, payload); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	for _, want := range []string{"<b>상품 문의</b>", "상품 페이지 문의", "평소 L인데 M?", ">문의 열기</a>", "tab=questions&amp;question=01HQ"} {
+		if !strings.Contains(notifier.message, want) {
+			t.Fatalf("alert = %q, want %q", notifier.message, want)
+		}
+	}
+	if strings.Contains(notifier.message, "상담 요청") {
+		t.Fatalf("a product question is not a consultation: %q", notifier.message)
+	}
+}

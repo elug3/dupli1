@@ -139,10 +139,23 @@ func Bootstrap(cfg Config) (*App, error) {
 		Now:           time.Now,
 	})
 
-	// A deleted account takes its consultation words with it. Queue-grouped,
-	// so one replica does each deletion.
+	questions := service.NewProductQuestions(service.ProductQuestionsDeps{
+		Repo:          store.questions,
+		Products:      products,
+		Publisher:     publisher,
+		Notifier:      notifier,
+		StorefrontURL: cfg.StorefrontURL,
+		NewID:         newULID,
+		Now:           time.Now,
+	})
+
+	// A deleted account takes its consultation words and its product
+	// questions with it. Queue-grouped, so one replica does each deletion.
+	forget := func(ctx context.Context, customerID string) error {
+		return errors.Join(webChat.ForgetCustomer(ctx, customerID), questions.ForgetCustomer(ctx, customerID))
+	}
 	if subscriber != nil {
-		if err := subscriber.OnUserDeleted(workerCtx, webChat.ForgetCustomer); err != nil {
+		if err := subscriber.OnUserDeleted(workerCtx, forget); err != nil {
 			cancelWorkers()
 			_ = closePublisher()
 			_ = store.close()
@@ -176,6 +189,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		UpdateContext: workerCtx,
 		WebChat:       webChat,
 		Hub:           hub,
+		Questions:     questions,
 	})
 
 	// Close what nobody has touched, so the queue shows live work rather than
@@ -278,6 +292,7 @@ type store struct {
 	answers       ports.AnswerRepository
 	inquiries     ports.InquiryRepository
 	messages      ports.MessageRepository
+	questions     ports.ProductQuestionRepository
 	close         func() error
 }
 
@@ -296,6 +311,7 @@ func openStore(connString string) (*store, error) {
 			answers:       memory.NewAnswerRepository(),
 			inquiries:     memory.NewInquiryRepository(),
 			messages:      memory.NewMessageRepository(),
+			questions:     memory.NewProductQuestionRepository(),
 			close:         func() error { return nil },
 		}, nil
 	}
@@ -319,6 +335,7 @@ func openStore(connString string) (*store, error) {
 		answers:       postgres.NewAnswerRepository(db),
 		inquiries:     postgres.NewInquiryRepository(db),
 		messages:      postgres.NewMessageRepository(db),
+		questions:     postgres.NewProductQuestionRepository(db),
 		close:         db.Close,
 	}, nil
 }
