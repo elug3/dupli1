@@ -53,6 +53,45 @@ func TestBuildSalesReport_RefundCountsInTheWeekItHappened(t *testing.T) {
 	}
 }
 
+func TestBuildSalesReport_AggregatesCardSurchargeWithGross(t *testing.T) {
+	r, err := reportperiod.NewRange("week", "2026-09-21", "2026-09-27", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(t time.Time) *time.Time { return &t }
+
+	orders := []domain.Order{
+		{
+			ID:               "card",
+			Status:           domain.StatusPaid,
+			TotalWon:         275000,
+			DiscountWon:      5000,
+			ShippingFeeWon:   0,
+			CardSurchargeWon: 25000,
+			PaidAt:           at(kst(2026, 9, 22, 12)),
+		},
+		{
+			ID:               "bypass",
+			Status:           domain.StatusPaid,
+			TotalWon:         100000,
+			CardSurchargeWon: 0,
+			PaidAt:           at(kst(2026, 9, 23, 9)),
+		},
+	}
+	rep := domain.BuildSalesReport(r, orders)
+
+	if len(rep.Periods) != 1 {
+		t.Fatalf("periods = %d, want 1", len(rep.Periods))
+	}
+	p := rep.Periods[0]
+	if p.Orders != 2 || p.GrossWon != 375000 || p.CardSurchargeWon != 25000 {
+		t.Fatalf("period = %+v, want 2 orders gross 375000 surcharge 25000", p)
+	}
+	if rep.Totals.CardSurchargeWon != 25000 || rep.Totals.GrossWon != 375000 {
+		t.Fatalf("totals = %+v", rep.Totals)
+	}
+}
+
 func TestBuildSalesReport_EmptyPeriodsAreListed(t *testing.T) {
 	r, err := reportperiod.NewRange("month", "2026-01-01", "2026-03-31", time.Now())
 	if err != nil {
