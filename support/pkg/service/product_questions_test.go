@@ -73,8 +73,8 @@ func TestAskRecordsVariantAndAnnounces(t *testing.T) {
 	if q.Body != "평소 L 입는데 M이랑 고민이에요." || q.Fit.UsualSize != "L" {
 		t.Fatalf("not trimmed: %+v %+v", q.Body, q.Fit)
 	}
-	if q.VariantLabel != "Black / M" || q.ProductName != "숏 패딩 재킷" || q.AuthorMask != "s3****" {
-		t.Fatalf("snapshot = %q %q %q", q.VariantLabel, q.ProductName, q.AuthorMask)
+	if q.VariantLabel != "Black / M" || q.ProductName != "숏 패딩 재킷" || q.CustomerEmail != asker.Email {
+		t.Fatalf("snapshot = %q %q %q", q.VariantLabel, q.ProductName, q.CustomerEmail)
 	}
 	if q.Status != domain.QuestionWaiting {
 		t.Fatalf("status = %s", q.Status)
@@ -134,68 +134,67 @@ func TestAskIsRateLimited(t *testing.T) {
 	}
 }
 
-func TestListRedactsOthersSecretQuestions(t *testing.T) {
+func TestMineShowsOnlyTheCallersQuestions(t *testing.T) {
 	h := newQuestionHarness()
 	ctx := context.Background()
-	secret := sizeQuestion()
-	secret.Secret = true
-	mine, _ := h.svc.Ask(ctx, asker, secret)
+	jacket, _ := h.svc.Ask(ctx, asker, sizeQuestion())
+	bag := service.AskInput{ProductID: "BAG", SkuID: "SKU-BAG", Type: domain.QuestionProduct, Body: "스트랩 조절 되나요?"}
+	if _, err := h.svc.Ask(ctx, asker, bag); err != nil {
+		t.Fatal(err)
+	}
 	stock := service.AskInput{ProductID: "JACKET", SkuID: "SKU-M", Type: domain.QuestionStock, Body: "재입고 되나요?"}
 	if _, err := h.svc.Ask(ctx, other, stock); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.svc.Answer(ctx, "mgr", mine.ID, "M을 권해드려요."); err != nil {
+	if _, err := h.svc.Answer(ctx, "mgr", jacket.ID, "M을 권해드려요."); err != nil {
 		t.Fatal(err)
 	}
 
-	anonymous, err := h.svc.List(ctx, "JACKET", "", service.ListQuery{})
+	onJacket, err := h.svc.Mine(ctx, asker, "JACKET")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if anonymous.Total != 2 || anonymous.Counts[domain.QuestionSize] != 1 || anonymous.Counts[domain.QuestionStock] != 1 {
-		t.Fatalf("counts = %d %v", anonymous.Total, anonymous.Counts)
+	if len(onJacket) != 1 || onJacket[0].ID != jacket.ID || onJacket[0].Answer != "M을 권해드려요." {
+		t.Fatalf("asker's jacket questions = %+v", onJacket)
 	}
-	for _, item := range anonymous.Items {
-		if item.CustomerID != "" || item.CustomerEmail != "" || item.AnsweredBy != "" {
-			t.Fatalf("staff fields leaked: %+v", item)
-		}
-		if item.ID == mine.ID && (!item.Redacted || item.Body != "" || item.Answer != "" || item.Fit != nil) {
-			t.Fatalf("secret not redacted for a stranger: %+v", item)
-		}
+	view := onJacket[0]
+	if view.CustomerID != "" || view.CustomerEmail != "" || view.AnsweredBy != "" || view.Staff {
+		t.Fatalf("staff fields reached the shopper: %+v", view)
 	}
-
-	own, _ := h.svc.List(ctx, "JACKET", asker.ID, service.ListQuery{MineOnly: true})
-	if len(own.Items) != 1 || own.Items[0].Redacted || own.Items[0].Answer == "" || !own.Items[0].Mine {
-		t.Fatalf("author view = %+v", own.Items)
+	all, _ := h.svc.Mine(ctx, asker, "")
+	if len(all) != 2 || all[0].ProductID != "BAG" {
+		t.Fatalf("all of asker's questions, newest first = %+v", all)
 	}
-
-	answered, _ := h.svc.List(ctx, "JACKET", "", service.ListQuery{AnsweredOnly: true})
-	if len(answered.Items) != 1 {
-		t.Fatalf("answered only = %d", len(answered.Items))
+	strangers, _ := h.svc.Mine(ctx, other, "JACKET")
+	if len(strangers) != 1 || strangers[0].Type != domain.QuestionStock {
+		t.Fatalf("other shopper sees = %+v", strangers)
 	}
-	stockOnly, _ := h.svc.List(ctx, "JACKET", "", service.ListQuery{Type: domain.QuestionStock})
-	if len(stockOnly.Items) != 1 || stockOnly.Items[0].Type != domain.QuestionStock {
-		t.Fatalf("type filter = %+v", stockOnly.Items)
+	if _, err := h.svc.Mine(ctx, service.Customer{}, "JACKET"); !errors.Is(err, service.ErrCustomerRequired) {
+		t.Fatalf("anonymous: %v", err)
 	}
 }
 
-func TestListPagesNewestFirst(t *testing.T) {
+func TestPurgeDropsOldQuestionTextButKeepsAnswers(t *testing.T) {
 	h := newQuestionHarness()
 	ctx := context.Background()
-	for i := 0; i < service.QuestionPageSize+1; i++ {
-		_ = h.repo.Save(ctx, &domain.ProductQuestion{
-			ID: fmt.Sprintf("R%02d", i), ProductID: "JACKET", CustomerID: "u9", AuthorMask: "u9****",
-			Type: domain.QuestionOther, Body: "?", Status: domain.QuestionWaiting,
-			CreatedAt: h.now.Add(time.Duration(i) * time.Minute),
-		})
+	old, _ := h.svc.Ask(ctx, asker, sizeQuestion())
+	_, _ = h.svc.Answer(ctx, "mgr", old.ID, "M을 권해드려요.")
+	h.now = h.now.Add(181 * 24 * time.Hour)
+	recent, _ := h.svc.Ask(ctx, other, sizeQuestion())
+
+	purged, err := h.svc.PurgeExpiredBodies(ctx, 180*24*time.Hour)
+	if err != nil || purged != 1 {
+		t.Fatalf("purged %d, %v", purged, err)
 	}
-	first, _ := h.svc.List(ctx, "JACKET", "", service.ListQuery{})
-	if len(first.Items) != service.QuestionPageSize || !first.More || first.Items[0].ID != fmt.Sprintf("R%02d", service.QuestionPageSize) {
-		t.Fatalf("page 1 = %d more=%v first=%s", len(first.Items), first.More, first.Items[0].ID)
+	got, _ := h.repo.FindByID(ctx, old.ID)
+	if got.Body != domain.PurgedBody || got.Fit != nil || got.Answer != "M을 권해드려요." {
+		t.Fatalf("old = %+v", got)
 	}
-	second, _ := h.svc.List(ctx, "JACKET", "", service.ListQuery{Page: 2})
-	if len(second.Items) != 1 || second.More || second.Items[0].ID != "R00" {
-		t.Fatalf("page 2 = %+v", second.Items)
+	if kept, _ := h.repo.FindByID(ctx, recent.ID); kept.Body == domain.PurgedBody {
+		t.Fatal("recent question purged")
+	}
+	if again, _ := h.svc.PurgeExpiredBodies(ctx, 180*24*time.Hour); again != 0 {
+		t.Fatalf("purged twice: %d", again)
 	}
 }
 
@@ -207,9 +206,9 @@ func TestEditAndWithdrawOnlyOwnUnanswered(t *testing.T) {
 	if _, err := h.svc.Edit(ctx, other, q.ID, sizeQuestion()); !errors.Is(err, service.ErrQuestionNotFound) {
 		t.Fatalf("stranger edit: %v", err)
 	}
-	edit := service.AskInput{Type: domain.QuestionSize, Body: "XS도 괜찮을까요?", Secret: true}
+	edit := service.AskInput{Type: domain.QuestionSize, Body: "XS도 괜찮을까요?"}
 	view, err := h.svc.Edit(ctx, asker, q.ID, edit)
-	if err != nil || view.Body != "XS도 괜찮을까요?" || !view.Secret || view.Fit != nil || view.SkuID != "SKU-M" {
+	if err != nil || view.Body != "XS도 괜찮을까요?" || view.Fit != nil || view.SkuID != "SKU-M" {
 		t.Fatalf("edit = %+v, %v", view, err)
 	}
 
@@ -268,21 +267,17 @@ func TestAnswerEmailsOnceAndCorrectionsDoNot(t *testing.T) {
 	}
 }
 
-func TestHiddenQuestionsLeaveThePageAndJoinTheHiddenQueue(t *testing.T) {
+func TestHiddenQuestionsLeaveTheWaitingQueue(t *testing.T) {
 	h := newQuestionHarness()
 	ctx := context.Background()
 	q, _ := h.svc.Ask(ctx, asker, sizeQuestion())
 
 	waiting, _ := h.svc.Queue(ctx, ports.ProductQuestionFilter{})
-	if len(waiting) != 1 || waiting[0].CustomerEmail != asker.Email {
+	if len(waiting) != 1 || waiting[0].CustomerEmail != asker.Email || !waiting[0].Staff {
 		t.Fatalf("staff queue = %+v", waiting)
 	}
 	if _, err := h.svc.SetHidden(ctx, "mgr", q.ID, true); err != nil {
 		t.Fatal(err)
-	}
-	page, _ := h.svc.List(ctx, "JACKET", asker.ID, service.ListQuery{})
-	if page.Total != 0 {
-		t.Fatalf("hidden question still on the page: %+v", page.Items)
 	}
 	hidden, _ := h.svc.Queue(ctx, ports.ProductQuestionFilter{Queue: ports.QuestionQueueHidden})
 	if len(hidden) != 1 || hidden[0].HiddenBy != "mgr" {
@@ -290,6 +285,10 @@ func TestHiddenQuestionsLeaveThePageAndJoinTheHiddenQueue(t *testing.T) {
 	}
 	if waiting, _ := h.svc.Queue(ctx, ports.ProductQuestionFilter{}); len(waiting) != 0 {
 		t.Fatalf("hidden question still waiting: %+v", waiting)
+	}
+	mine, _ := h.svc.Mine(ctx, asker, "JACKET")
+	if len(mine) != 1 || mine[0].Hidden {
+		t.Fatalf("the asker still sees their question, without the moderation flag: %+v", mine)
 	}
 	if view, _ := h.svc.SetHidden(ctx, "mgr", q.ID, false); view.Hidden || view.HiddenAt != nil {
 		t.Fatalf("unhide = %+v", view)
@@ -306,7 +305,7 @@ func TestForgetCustomerKeepsTheAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := h.repo.FindByID(ctx, q.ID)
-	if got.Body != domain.ForgottenQuestionBody || got.Fit != nil || got.CustomerEmail != "" || got.AuthorMask != domain.ForgottenAuthor {
+	if got.Body != domain.ForgottenQuestionBody || got.Fit != nil || got.CustomerEmail != "" {
 		t.Fatalf("not forgotten: %+v", got)
 	}
 	if got.Answer != "M을 권해드려요." {

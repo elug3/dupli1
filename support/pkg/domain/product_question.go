@@ -31,17 +31,13 @@ const (
 	maxUsualSizeRunes = 10
 )
 
-// ForgottenAuthor and ForgottenQuestionBody replace what a deleted account
-// wrote. Not PurgedBody: that says the retention window closed, and on a
-// public page it would read as if the shop deleted the question.
-const (
-	ForgottenAuthor       = "탈퇴 회원"
-	ForgottenQuestionBody = "(탈퇴한 회원의 문의입니다)"
-)
+// ForgottenQuestionBody replaces what a deleted account wrote. Not
+// PurgedBody: that says the retention window closed, and staff should be able
+// to tell the two apart.
+const ForgottenQuestionBody = "(탈퇴한 회원의 문의입니다)"
 
-// Fit is the optional body information on a size question. It is published
-// with a public question, so it is kept to what helps another shopper pick a
-// size and nothing that identifies anyone.
+// Fit is the optional body information on a size question: what staff need
+// to recommend a size, and nothing more.
 type Fit struct {
 	HeightCm  int    `json:"height_cm,omitempty"`
 	WeightKg  int    `json:"weight_kg,omitempty"`
@@ -68,8 +64,9 @@ func (f *Fit) Valid() bool {
 }
 
 // ProductQuestion is one question a shopper asked about a product, and the
-// answer staff gave. Unlike a consultation it is published on the product
-// page, unless the shopper marked it secret.
+// answer staff gave. It is private: only the shopper who asked and staff ever
+// see it. Unlike a consultation it is a single question and answer, filed
+// under the product and variant it is about.
 type ProductQuestion struct {
 	ID        string
 	ProductID string
@@ -84,13 +81,10 @@ type ProductQuestion struct {
 
 	CustomerID    string
 	CustomerEmail string
-	// AuthorMask is the only author identity anyone but staff sees (s3****).
-	AuthorMask string
 
-	Type   string
-	Body   string
-	Fit    *Fit
-	Secret bool
+	Type string
+	Body string
+	Fit  *Fit
 
 	Status     string
 	Answer     string
@@ -126,18 +120,6 @@ func ValidAnswerBody(body string) bool {
 	return trimmed != "" && utf8.RuneCountInString(trimmed) <= MaxAnswerRunes
 }
 
-// MaskAuthor turns an email into the public author label: its first two
-// characters and four stars (s3****). An address too short to mask, or none,
-// shows only stars.
-func MaskAuthor(email string) string {
-	local, _, _ := strings.Cut(strings.TrimSpace(email), "@")
-	runes := []rune(local)
-	if len(runes) < 3 {
-		return "****"
-	}
-	return string(runes[:2]) + "****"
-}
-
 // VariantLabel reads "Color / Size" for a variant. The size is the last
 // segment of the human SKU (Brand_Style_Color[_Edition]_Size).
 func VariantLabel(color, sku string) string {
@@ -168,25 +150,12 @@ func (q *ProductQuestion) EditableBy(customerID string) bool {
 	return q != nil && customerID != "" && q.CustomerID == customerID && !q.IsAnswered()
 }
 
-// ReadableBy reports whether a viewer may read the question's words: anyone
-// for a public one; only its author and staff for a secret one.
-func (q *ProductQuestion) ReadableBy(customerID string, staff bool) bool {
-	if q == nil {
-		return false
-	}
-	if staff || !q.Secret {
-		return true
-	}
-	return customerID != "" && q.CustomerID == customerID
-}
-
-// Forget removes what an account wrote, for a deleted account. The row stays
-// with its answer, so the product page does not lose an answer other shoppers
-// relied on, but the question's words, fit and the author go.
+// Forget removes what a deleted account wrote. The row stays, as a
+// consultation's does, so the record of what was asked and answered survives
+// without the shopper's words, fit or address.
 func (q *ProductQuestion) Forget(now time.Time) {
 	q.Body = ForgottenQuestionBody
 	q.Fit = nil
 	q.CustomerEmail = ""
-	q.AuthorMask = ForgottenAuthor
 	q.UpdatedAt = now
 }

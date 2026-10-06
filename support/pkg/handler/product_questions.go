@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
-	"github.com/elug3/dupli1/shared/pkg/authmiddleware"
 	"github.com/elug3/dupli1/support/pkg/domain"
 	"github.com/elug3/dupli1/support/pkg/ports"
 	"github.com/elug3/dupli1/support/pkg/service"
@@ -21,28 +20,22 @@ import (
 const maxQuestionBody = 32 << 10
 
 // questionJSON is a product question on the wire. The staff-only fields are
-// empty (and omitted) for everyone else: viewOf blanks them in the service.
+// empty (and omitted) for the shopper: viewOf blanks them in the service.
 type questionJSON struct {
 	ID           string      `json:"id"`
 	ProductID    string      `json:"product_id"`
 	SkuID        string      `json:"sku_id,omitempty"`
 	VariantLabel string      `json:"variant_label,omitempty"`
 	ProductName  string      `json:"product_name,omitempty"`
-	Author       string      `json:"author"`
 	Type         string      `json:"type"`
 	Body         string      `json:"body"`
 	Fit          *domain.Fit `json:"fit,omitempty"`
-	Secret       bool        `json:"secret"`
 	Status       string      `json:"status"`
 	Answer       string      `json:"answer,omitempty"`
 	AnsweredAt   *time.Time  `json:"answered_at,omitempty"`
 	CreatedAt    time.Time   `json:"created_at"`
 	UpdatedAt    time.Time   `json:"updated_at"`
-	// Redacted: a secret question someone else asked; body and answer are
-	// empty and the storefront shows "비밀글입니다".
-	Redacted bool `json:"redacted"`
-	Mine     bool `json:"mine"`
-	// Editable: the viewer may still edit or withdraw it.
+	// Editable: the shopper may still edit or withdraw it (not answered).
 	Editable bool `json:"editable"`
 
 	CustomerID    string     `json:"customer_id,omitempty"`
@@ -60,19 +53,15 @@ func questionToJSON(view service.QuestionView) questionJSON {
 		SkuID:         view.SkuID,
 		VariantLabel:  view.VariantLabel,
 		ProductName:   view.ProductName,
-		Author:        view.AuthorMask,
 		Type:          view.Type,
 		Body:          view.Body,
 		Fit:           view.Fit,
-		Secret:        view.Secret,
 		Status:        view.Status,
 		Answer:        view.Answer,
 		AnsweredAt:    view.AnsweredAt,
 		CreatedAt:     view.CreatedAt,
 		UpdatedAt:     view.UpdatedAt,
-		Redacted:      view.Redacted,
-		Mine:          view.Mine,
-		Editable:      view.Mine && !view.IsAnswered(),
+		Editable:      !view.Staff && !view.IsAnswered(),
 		CustomerID:    view.CustomerID,
 		CustomerEmail: view.CustomerEmail,
 		AnsweredBy:    view.AnsweredBy,
@@ -91,17 +80,16 @@ func questionsToJSON(views []service.QuestionView) []questionJSON {
 }
 
 type questionRequest struct {
-	SkuID  string      `json:"sku_id"`
-	Type   string      `json:"type"`
-	Body   string      `json:"body"`
-	Secret bool        `json:"secret"`
-	Fit    *domain.Fit `json:"fit"`
+	SkuID string      `json:"sku_id"`
+	Type  string      `json:"type"`
+	Body  string      `json:"body"`
+	Fit   *domain.Fit `json:"fit"`
 }
 
 func (h *Handler) registerProductQuestionRoutes(mux *http.ServeMux) {
-	// Anyone reads a product's questions; signing in only adds "mine" and the
-	// words of one's own secret questions.
-	mux.HandleFunc("GET /api/v1/support/products/{productID}/questions", h.optionalAuth(h.requireQuestions(h.listProductQuestions)))
+	// Questions are private: a product's list is the caller's own questions
+	// about it, never anyone else's.
+	mux.HandleFunc("GET /api/v1/support/products/{productID}/questions", h.requireAuth(h.requireQuestions(h.listProductQuestions)))
 	mux.HandleFunc("POST /api/v1/support/products/{productID}/questions", h.requireAuth(h.requireQuestions(h.askProductQuestion)))
 
 	// The shopper's own questions. No product in the path: the id is checked
@@ -127,43 +115,8 @@ func (h *Handler) requireQuestions(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// optionalAuth reads a token when one is sent. Without a validator the public
-// list is still served, anonymously: it holds nothing a token would unlock
-// except the caller's own secret questions.
-func (h *Handler) optionalAuth(next http.HandlerFunc) http.HandlerFunc {
-	if h.jwtValidator == nil {
-		return func(w http.ResponseWriter, r *http.Request) {
-			r.Header.Del("Authorization")
-			next(w, r)
-		}
-	}
-	return authmiddleware.OptionalAuth(h.jwtValidator, respondError)(next)
-}
-
 func (h *Handler) listProductQuestions(w http.ResponseWriter, r *http.Request) {
-	viewerID := ""
-	if customer, ok := customerFrom(r); ok {
-		viewerID = customer.ID
-	}
-	q := r.URL.Query()
-	page, _ := strconv.Atoi(q.Get("page"))
-	result, err := h.questions.List(r.Context(), r.PathValue("productID"), viewerID, service.ListQuery{
-		Type:         q.Get("type"),
-		AnsweredOnly: q.Get("answered") == "true",
-		MineOnly:     q.Get("mine") == "true",
-		Page:         page,
-	})
-	if err != nil {
-		h.respondQuestionError(w, err)
-		return
-	}
-	respondJSON(w, http.StatusOK, map[string]any{
-		"questions": questionsToJSON(result.Items),
-		"total":     result.Total,
-		"counts":    result.Counts,
-		"page":      result.Page,
-		"has_more":  result.More,
-	})
+	h.respondMine(w, r, r.PathValue("productID"))
 }
 
 func (h *Handler) askProductQuestion(w http.ResponseWriter, r *http.Request) {
@@ -181,23 +134,26 @@ func (h *Handler) askProductQuestion(w http.ResponseWriter, r *http.Request) {
 		SkuID:     req.SkuID,
 		Type:      req.Type,
 		Body:      req.Body,
-		Secret:    req.Secret,
 		Fit:       req.Fit,
 	})
 	if err != nil {
 		h.respondQuestionError(w, err)
 		return
 	}
-	respondJSON(w, http.StatusCreated, questionToJSON(service.QuestionView{ProductQuestion: *question, Mine: true}))
+	respondJSON(w, http.StatusCreated, questionToJSON(service.QuestionView{ProductQuestion: *question}))
 }
 
 func (h *Handler) myProductQuestions(w http.ResponseWriter, r *http.Request) {
+	h.respondMine(w, r, "")
+}
+
+func (h *Handler) respondMine(w http.ResponseWriter, r *http.Request, productID string) {
 	customer, ok := customerFrom(r)
 	if !ok {
 		respondCode(w, http.StatusForbidden, "customer_required", "a customer account is required")
 		return
 	}
-	views, err := h.questions.Mine(r.Context(), customer)
+	views, err := h.questions.Mine(r.Context(), customer, productID)
 	if err != nil {
 		h.respondQuestionError(w, err)
 		return
@@ -216,7 +172,7 @@ func (h *Handler) editProductQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view, err := h.questions.Edit(r.Context(), customer, r.PathValue("id"), service.AskInput{
-		Type: req.Type, Body: req.Body, Secret: req.Secret, Fit: req.Fit,
+		Type: req.Type, Body: req.Body, Fit: req.Fit,
 	})
 	if err != nil {
 		h.respondQuestionError(w, err)

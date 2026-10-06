@@ -83,7 +83,7 @@ These retain design history. Prefer the living docs above for current behavior.
 | [auth-profile-extension-plan.md](auth-profile-extension-plan.md) | Phases A–B shipped; Phase D (`profile` service) live — data copy from auth's orphaned tables still open. See [profile-service.md](profile-service.md) |
 | [order-tracking-plan.md](order-tracking-plan.md) | Customer order history + required ship tracking |
 | [manager-settings-api.md](manager-settings-api.md) | Sketch only |
-| [support-product-questions.md](support-product-questions.md) | Product questions (상품 문의): public per-product Q&A with 비밀글, answered from the `/support` console |
+| [support-product-questions.md](support-product-questions.md) | Product questions (상품 문의): private per-product questions from the product page, answered from the `/support` console |
 | [support-web-chat.md](support-web-chat.md) | Web consultation chat for signed-in shoppers: second channel of `support`, references, SSE, reply-notice email |
 | [support-telegram-bot.md](support-telegram-bot.md) | Customer-facing Telegram inquiry bot: menus, conversation state, staff handoff — **proposed, not implemented** |
 | [frontend-product-variants-migration.md](frontend-product-variants-migration.md) | Sibling frontend migration notes |

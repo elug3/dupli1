@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/elug3/dupli1/support/pkg/domain"
 	"github.com/elug3/dupli1/support/pkg/ports"
@@ -41,14 +42,10 @@ func (r *ProductQuestionRepository) FindByID(_ context.Context, id string) (*dom
 	return &row, nil
 }
 
-func (r *ProductQuestionRepository) ListByProduct(_ context.Context, productID string, includeHidden bool) ([]domain.ProductQuestion, error) {
+func (r *ProductQuestionRepository) ListByCustomer(_ context.Context, customerID, productID string) ([]domain.ProductQuestion, error) {
 	return r.list(func(q domain.ProductQuestion) bool {
-		return q.ProductID == productID && (includeHidden || !q.Hidden)
+		return q.CustomerID == customerID && (productID == "" || q.ProductID == productID)
 	}, false), nil
-}
-
-func (r *ProductQuestionRepository) ListByCustomer(_ context.Context, customerID string) ([]domain.ProductQuestion, error) {
-	return r.list(func(q domain.ProductQuestion) bool { return q.CustomerID == customerID }, false), nil
 }
 
 func (r *ProductQuestionRepository) ListForStaff(_ context.Context, filter ports.ProductQuestionFilter) ([]domain.ProductQuestion, error) {
@@ -79,6 +76,21 @@ func (r *ProductQuestionRepository) Delete(_ context.Context, id string) error {
 	defer r.mu.Unlock()
 	delete(r.rows, id)
 	return nil
+}
+
+func (r *ProductQuestionRepository) PurgeBodies(_ context.Context, olderThan time.Time, placeholder string) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	purged := 0
+	for id, row := range r.rows {
+		if !row.CreatedAt.Before(olderThan) || row.Body == placeholder || row.Body == domain.ForgottenQuestionBody {
+			continue
+		}
+		row.Body, row.Fit = placeholder, nil
+		r.rows[id] = row
+		purged++
+	}
+	return purged, nil
 }
 
 func (r *ProductQuestionRepository) list(keep func(domain.ProductQuestion) bool, oldestFirst bool) []domain.ProductQuestion {

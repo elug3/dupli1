@@ -203,7 +203,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	if retention == 0 {
 		retention = DefaultMessageRetention
 	}
-	go runRetentionPurge(workerCtx, inbox, retention)
+	go runRetentionPurge(workerCtx, inbox, questions, retention)
 
 	// The shopper hears about a reply they have not read, by email.
 	go runReplyNotices(workerCtx, webChat, cfg.ReplyNoticeDelay)
@@ -481,12 +481,13 @@ func runStaleCloser(ctx context.Context, inbox *service.Inbox, quietFor time.Dur
 	}
 }
 
-// runRetentionPurge drops message text past its retention window.
+// runRetentionPurge drops message and product question text past its
+// retention window.
 //
 // It sweeps once at start and then daily: a deploy should not be able to
 // postpone a purge that was already due, which an interval-only ticker would
 // do on a service that restarts often.
-func runRetentionPurge(ctx context.Context, inbox *service.Inbox, retention time.Duration) {
+func runRetentionPurge(ctx context.Context, inbox *service.Inbox, questions *service.ProductQuestions, retention time.Duration) {
 	if retention <= 0 {
 		log.Println("message retention is disabled — transcripts are kept indefinitely")
 		return
@@ -496,10 +497,14 @@ func runRetentionPurge(ctx context.Context, inbox *service.Inbox, retention time
 		purged, err := inbox.PurgeExpiredBodies(ctx, retention)
 		if err != nil {
 			log.Printf("purge expired message bodies: %v", err)
-			return
-		}
-		if purged > 0 {
+		} else if purged > 0 {
 			log.Printf("purged %d message body(ies) older than %s", purged, retention)
+		}
+		purged, err = questions.PurgeExpiredBodies(ctx, retention)
+		if err != nil {
+			log.Printf("purge expired product questions: %v", err)
+		} else if purged > 0 {
+			log.Printf("purged %d product question(s) older than %s", purged, retention)
 		}
 	}
 	purge()

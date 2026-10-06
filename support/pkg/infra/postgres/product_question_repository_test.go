@@ -20,12 +20,12 @@ func TestProductQuestionRepositoryRoundTrip(t *testing.T) {
 	base := time.Date(2026, 10, 6, 14, 0, 0, 0, time.UTC)
 	first := &domain.ProductQuestion{
 		ID: product + "-1", ProductID: product, SkuID: "SKU-M", VariantLabel: "Black / M", ProductName: "숏 패딩 재킷",
-		CustomerID: "u1", CustomerEmail: "s3jin@gmail.com", AuthorMask: "s3****", Type: domain.QuestionSize,
-		Body: "M?", Fit: &domain.Fit{HeightCm: 178, UsualSize: "L"}, Secret: true,
+		CustomerID: "u1", CustomerEmail: "s3jin@gmail.com", Type: domain.QuestionSize,
+		Body: "M?", Fit: &domain.Fit{HeightCm: 178, UsualSize: "L"},
 		Status: domain.QuestionWaiting, CreatedAt: base, UpdatedAt: base,
 	}
 	second := &domain.ProductQuestion{
-		ID: product + "-2", ProductID: product, CustomerID: "u2", AuthorMask: "mk****", Type: domain.QuestionStock,
+		ID: product + "-2", ProductID: product, CustomerID: "u2", Type: domain.QuestionStock,
 		Body: "재입고?", Status: domain.QuestionWaiting, CreatedAt: base.Add(time.Minute), UpdatedAt: base.Add(time.Minute),
 	}
 	for _, q := range []*domain.ProductQuestion{first, second} {
@@ -38,7 +38,7 @@ func TestProductQuestionRepositoryRoundTrip(t *testing.T) {
 	if err != nil || got == nil {
 		t.Fatalf("find: %v %v", got, err)
 	}
-	if got.Fit == nil || got.Fit.HeightCm != 178 || !got.Secret || got.VariantLabel != "Black / M" || got.AnsweredAt != nil {
+	if got.Fit == nil || got.Fit.HeightCm != 178 || got.VariantLabel != "Black / M" || got.AnsweredAt != nil {
 		t.Fatalf("round trip = %+v", got)
 	}
 
@@ -57,20 +57,19 @@ func TestProductQuestionRepositoryRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	visible, _ := repo.ListByProduct(ctx, product, false)
-	if len(visible) != 1 || visible[0].Answer != "M" || visible[0].AnsweredAt == nil {
-		t.Fatalf("visible = %+v", visible)
+	onProduct, _ := repo.ListByCustomer(ctx, "u1", product)
+	if len(onProduct) != 1 || onProduct[0].Answer != "M" || onProduct[0].AnsweredAt == nil {
+		t.Fatalf("u1 on product = %+v", onProduct)
 	}
-	all, _ := repo.ListByProduct(ctx, product, true)
-	if len(all) != 2 || all[0].ID != second.ID {
-		t.Fatalf("all should be newest first: %+v", all)
+	if elsewhere, _ := repo.ListByCustomer(ctx, "u1", product+"-other"); len(elsewhere) != 0 {
+		t.Fatalf("product filter ignored: %+v", elsewhere)
 	}
 	answered, _ := repo.ListForStaff(ctx, ports.ProductQuestionFilter{Queue: ports.QuestionQueueAnswered, ProductID: product})
 	hidden, _ := repo.ListForStaff(ctx, ports.ProductQuestionFilter{Queue: ports.QuestionQueueHidden, ProductID: product, Type: domain.QuestionStock})
 	if len(answered) != 1 || len(hidden) != 1 || hidden[0].HiddenBy != "mgr" {
 		t.Fatalf("answered=%d hidden=%+v", len(answered), hidden)
 	}
-	mine, _ := repo.ListByCustomer(ctx, "u1")
+	mine, _ := repo.ListByCustomer(ctx, "u1", "")
 	found := false
 	for _, q := range mine {
 		found = found || q.ID == first.ID
@@ -79,6 +78,21 @@ func TestProductQuestionRepositoryRoundTrip(t *testing.T) {
 		t.Fatal("ListByCustomer missed the question")
 	}
 
+	purged, err := repo.PurgeBodies(ctx, base.Add(30*time.Second), domain.PurgedBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if purged < 1 {
+		t.Fatalf("purged %d", purged)
+	}
+	if p, _ := repo.FindByID(ctx, first.ID); p.Body != domain.PurgedBody || p.Fit != nil || p.Answer != "M" {
+		t.Fatalf("after purge = %+v", p)
+	}
+	if p, _ := repo.FindByID(ctx, second.ID); p.Body != "재입고?" {
+		t.Fatalf("newer question purged: %+v", p)
+	}
+
+	got, _ = repo.FindByID(ctx, first.ID)
 	got.Fit = nil
 	if err := repo.Save(ctx, got); err != nil {
 		t.Fatal(err)

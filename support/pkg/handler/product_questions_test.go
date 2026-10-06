@@ -42,16 +42,11 @@ func newQuestionMux(t *testing.T, withValidator bool) *http.ServeMux {
 type questionList struct {
 	Questions []struct {
 		ID            string `json:"id"`
-		Author        string `json:"author"`
 		Body          string `json:"body"`
 		Answer        string `json:"answer"`
-		Redacted      bool   `json:"redacted"`
-		Mine          bool   `json:"mine"`
 		Editable      bool   `json:"editable"`
 		CustomerEmail string `json:"customer_email"`
 	} `json:"questions"`
-	Total  int            `json:"total"`
-	Counts map[string]int `json:"counts"`
 }
 
 func decodeList(t *testing.T, body []byte) questionList {
@@ -81,7 +76,7 @@ func TestProductQuestionsRoundTrip(t *testing.T) {
 	}
 
 	res := do(t, mux, http.MethodPost, path, customerToken,
-		`{"sku_id":"SKU01","type":"size","body":"평소 L인데 M?","secret":true,"fit":{"height_cm":178,"weight_kg":70,"usual_size":"L"}}`)
+		`{"sku_id":"SKU01","type":"size","body":"평소 L인데 M?","fit":{"height_cm":178,"weight_kg":70,"usual_size":"L"}}`)
 	if res.Code != http.StatusCreated {
 		t.Fatalf("ask: %d %s", res.Code, res.Body)
 	}
@@ -94,18 +89,16 @@ func TestProductQuestionsRoundTrip(t *testing.T) {
 		t.Fatalf("own new question not editable: %s", res.Body)
 	}
 
-	// Anyone reads the list; a stranger sees the secret one only as a row.
-	res = do(t, mux, http.MethodGet, path, "", "")
-	if res.Code != http.StatusOK {
-		t.Fatalf("anonymous list: %d %s", res.Code, res.Body)
+	// Private: a product's list is the caller's own questions.
+	if res := do(t, mux, http.MethodGet, path, "", ""); res.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous list: %d", res.Code)
 	}
-	list := decodeList(t, res.Body.Bytes())
-	if list.Total != 1 || list.Counts["size"] != 1 || !list.Questions[0].Redacted || list.Questions[0].Body != "" || list.Questions[0].Author != "us****" {
-		t.Fatalf("anonymous list = %s", res.Body)
+	if list := decodeList(t, do(t, mux, http.MethodGet, path, otherToken, "").Body.Bytes()); len(list.Questions) != 0 {
+		t.Fatalf("another shopper sees = %+v", list.Questions)
 	}
-	list = decodeList(t, do(t, mux, http.MethodGet, path, customerToken, "").Body.Bytes())
-	if list.Questions[0].Redacted || !list.Questions[0].Mine || list.Questions[0].CustomerEmail != "" {
-		t.Fatalf("author list = %+v", list.Questions[0])
+	list := decodeList(t, do(t, mux, http.MethodGet, path, customerToken, "").Body.Bytes())
+	if len(list.Questions) != 1 || list.Questions[0].Body != "평소 L인데 M?" || list.Questions[0].CustomerEmail != "" {
+		t.Fatalf("author list = %+v", list.Questions)
 	}
 
 	// Staff only, and permission-checked.
@@ -141,18 +134,17 @@ func TestProductQuestionsRoundTrip(t *testing.T) {
 	if res := do(t, mux, http.MethodPost, staffPath+"/"+asked.ID+"/hide", staffToken, `{}`); res.Code != http.StatusOK {
 		t.Fatalf("hide: %d %s", res.Code, res.Body)
 	}
-	if list := decodeList(t, do(t, mux, http.MethodGet, path, "", "").Body.Bytes()); list.Total != 0 {
-		t.Fatalf("hidden question still listed: %+v", list)
+	if queue := decodeList(t, do(t, mux, http.MethodGet, staffPath+"?queue=hidden", staffToken, "").Body.Bytes()); len(queue.Questions) != 1 {
+		t.Fatalf("hidden queue = %+v", queue)
 	}
 }
 
-func TestProductQuestionListWithoutAuthConfigured(t *testing.T) {
+func TestProductQuestionsWithoutAuthConfigured(t *testing.T) {
 	mux := newQuestionMux(t, false)
-	res := do(t, mux, http.MethodGet, "/api/v1/support/products/P01/questions", customerToken, "")
-	if res.Code != http.StatusOK {
-		t.Fatalf("public list without a validator: %d %s", res.Code, res.Body)
-	}
-	if res := do(t, mux, http.MethodPost, "/api/v1/support/products/P01/questions", customerToken, `{}`); res.Code != http.StatusServiceUnavailable {
-		t.Fatalf("ask without a validator: %d", res.Code)
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		res := do(t, mux, method, "/api/v1/support/products/P01/questions", customerToken, `{}`)
+		if res.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s without a validator: %d", method, res.Code)
+		}
 	}
 }

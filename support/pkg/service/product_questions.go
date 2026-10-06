@@ -29,16 +29,13 @@ var (
 	ErrQuestionLocked = errors.New("an answered question can no longer be changed")
 )
 
-// QuestionPageSize is how many questions one page of a product's list holds.
-const QuestionPageSize = 20
-
 // QuestionChannel is the alert channel product questions announce on, so the
 // ops alert can say it is a product page question, not a consultation.
 const QuestionChannel = "product_question"
 
-// ProductQuestions is 상품 문의: shoppers ask about a product from its page,
-// staff answer in the console, and the answer is published under the question
-// unless the shopper asked privately.
+// ProductQuestions is 상품 문의: shoppers ask about a product from its page
+// and staff answer in the console. Questions are private: the shopper who
+// asked and staff are the only ones who ever see one.
 type ProductQuestions struct {
 	repo       ports.ProductQuestionRepository
 	products   ports.ProductReader
@@ -91,7 +88,6 @@ type AskInput struct {
 	SkuID     string
 	Type      string
 	Body      string
-	Secret    bool
 	Fit       *domain.Fit
 }
 
@@ -145,11 +141,9 @@ func (s *ProductQuestions) Ask(ctx context.Context, customer Customer, in AskInp
 		ProductName:   ref.Name,
 		CustomerID:    customer.ID,
 		CustomerEmail: customer.Email,
-		AuthorMask:    domain.MaskAuthor(customer.Email),
 		Type:          in.Type,
 		Body:          in.Body,
 		Fit:           in.Fit,
-		Secret:        in.Secret,
 		Status:        domain.QuestionWaiting,
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -202,102 +196,45 @@ func (s *ProductQuestions) announce(ctx context.Context, q *domain.ProductQuesti
 // QuestionView is one question as a given viewer may see it.
 type QuestionView struct {
 	domain.ProductQuestion
-	// Redacted: a secret question someone else asked. Its words, fit and
-	// answer are blanked; the row still shows, so counts add up.
-	Redacted bool
-	// Mine: the viewer asked it.
-	Mine bool
+	// Staff: the viewer is staff, so the asker's identity and the managers
+	// involved are included.
+	Staff bool
 }
 
-func viewOf(q domain.ProductQuestion, viewerID string, staff bool) QuestionView {
-	view := QuestionView{ProductQuestion: q, Mine: viewerID != "" && q.CustomerID == viewerID}
-	if !q.ReadableBy(viewerID, staff) {
-		view.Redacted = true
-		view.Body = ""
-		view.Fit = nil
-		view.Answer = ""
-		view.VariantLabel = ""
-	}
-	// Only staff learn who asked, beyond the masked label.
+func viewOf(q domain.ProductQuestion, staff bool) QuestionView {
+	view := QuestionView{ProductQuestion: q, Staff: staff}
+	// The shopper already knows who they are; which manager answered or hid
+	// a question is staff business.
 	if !staff {
 		view.CustomerID = ""
 		view.CustomerEmail = ""
 		view.AnsweredBy = ""
+		view.Hidden = false
 		view.HiddenBy = ""
+		view.HiddenAt = nil
 	}
 	return view
 }
 
-// ListQuery narrows a product's public list.
-type ListQuery struct {
-	Type         string
-	AnsweredOnly bool
-	MineOnly     bool
-	Page         int
-}
-
-// QuestionPage is one page of a product's questions, with the per-type counts
-// the filter chips show (of everything visible, before filtering).
-type QuestionPage struct {
-	Items  []QuestionView
-	Total  int
-	Counts map[string]int
-	Page   int
-	More   bool
-}
-
-// List returns a product's questions for the product page. Anyone may read;
-// viewerID is the signed-in shopper, or empty.
-func (s *ProductQuestions) List(ctx context.Context, productID, viewerID string, query ListQuery) (*QuestionPage, error) {
-	productID = strings.TrimSpace(productID)
-	if productID == "" {
-		return nil, ErrQuestionNotFound
-	}
-	rows, err := s.repo.ListByProduct(ctx, productID, false)
-	if err != nil {
-		return nil, err
-	}
-	page := &QuestionPage{Counts: map[string]int{}, Page: max(query.Page, 1)}
-	var matched []domain.ProductQuestion
+func viewsOf(rows []domain.ProductQuestion, staff bool) []QuestionView {
+	out := make([]QuestionView, 0, len(rows))
 	for _, q := range rows {
-		page.Counts[q.Type]++
-		page.Total++
-		if query.Type != "" && q.Type != query.Type {
-			continue
-		}
-		if query.AnsweredOnly && !q.IsAnswered() {
-			continue
-		}
-		if query.MineOnly && (viewerID == "" || q.CustomerID != viewerID) {
-			continue
-		}
-		matched = append(matched, q)
+		out = append(out, viewOf(q, staff))
 	}
-	start := (page.Page - 1) * QuestionPageSize
-	end := min(start+QuestionPageSize, len(matched))
-	if start < len(matched) {
-		for _, q := range matched[start:end] {
-			page.Items = append(page.Items, viewOf(q, viewerID, false))
-		}
-	}
-	page.More = end < len(matched)
-	return page, nil
+	return out
 }
 
-// Mine returns everything the shopper asked, for 마이페이지 → 상품 문의.
-func (s *ProductQuestions) Mine(ctx context.Context, customer Customer) ([]QuestionView, error) {
+// Mine returns the shopper's own questions, newest first: all of them for
+// 마이페이지 → 상품 문의, or only those about one product for its page.
+func (s *ProductQuestions) Mine(ctx context.Context, customer Customer, productID string) ([]QuestionView, error) {
 	if strings.TrimSpace(customer.ID) == "" {
 		return nil, ErrCustomerRequired
 	}
-	rows, err := s.repo.ListByCustomer(ctx, customer.ID)
+	rows, err := s.repo.ListByCustomer(ctx, customer.ID, strings.TrimSpace(productID))
 	if err != nil {
 		return nil, err
 	}
-	out := make([]QuestionView, 0, len(rows))
-	for _, q := range rows {
-		out = append(out, viewOf(q, customer.ID, false))
-	}
-	return out, nil
+	return viewsOf(rows, false), nil
 }
 
 // Edit changes the shopper's own unanswered question. The product and variant
@@ -311,12 +248,12 @@ func (s *ProductQuestions) Edit(ctx context.Context, customer Customer, id strin
 	if err != nil {
 		return nil, err
 	}
-	q.Type, q.Body, q.Fit, q.Secret = in.Type, in.Body, in.Fit, in.Secret
+	q.Type, q.Body, q.Fit = in.Type, in.Body, in.Fit
 	q.UpdatedAt = s.now()
 	if err := s.repo.Save(ctx, q); err != nil {
 		return nil, err
 	}
-	view := viewOf(*q, customer.ID, false)
+	view := viewOf(*q, false)
 	return &view, nil
 }
 
@@ -352,11 +289,7 @@ func (s *ProductQuestions) Queue(ctx context.Context, filter ports.ProductQuesti
 	if err != nil {
 		return nil, err
 	}
-	out := make([]QuestionView, 0, len(rows))
-	for _, q := range rows {
-		out = append(out, viewOf(q, "", true))
-	}
-	return out, nil
+	return viewsOf(rows, true), nil
 }
 
 // Get returns one question for staff.
@@ -368,12 +301,11 @@ func (s *ProductQuestions) Get(ctx context.Context, id string) (*QuestionView, e
 	if q == nil {
 		return nil, ErrQuestionNotFound
 	}
-	view := viewOf(*q, "", true)
+	view := viewOf(*q, true)
 	return &view, nil
 }
 
-// Answer records staff's answer, publishes it under the question, and emails
-// the shopper. Answering again replaces the answer (a correction) and sends
+// Answer records staff's answer and emails the shopper. Answering again replaces the answer (a correction) and sends
 // no second email.
 func (s *ProductQuestions) Answer(ctx context.Context, managerID, id, body string) (*QuestionView, error) {
 	body = strings.TrimSpace(body)
@@ -398,7 +330,7 @@ func (s *ProductQuestions) Answer(ctx context.Context, managerID, id, body strin
 	if first {
 		s.notifyAnswer(ctx, q)
 	}
-	view := viewOf(*q, "", true)
+	view := viewOf(*q, true)
 	return &view, nil
 }
 
@@ -414,8 +346,9 @@ func (s *ProductQuestions) notifyAnswer(ctx context.Context, q *domain.ProductQu
 	}
 }
 
-// SetHidden hides a question from the product page (spam, abuse, personal
-// details), or shows it again.
+// SetHidden sets a question aside without answering it (spam, abuse, a
+// duplicate): it leaves the waiting queue for the hidden one. Its author
+// still sees it, unanswered. Unhiding puts it back in the queue.
 func (s *ProductQuestions) SetHidden(ctx context.Context, managerID, id string, hidden bool) (*QuestionView, error) {
 	q, err := s.repo.FindByID(ctx, strings.TrimSpace(id))
 	if err != nil {
@@ -435,17 +368,17 @@ func (s *ProductQuestions) SetHidden(ctx context.Context, managerID, id string, 
 	if err := s.repo.Save(ctx, q); err != nil {
 		return nil, err
 	}
-	view := viewOf(*q, "", true)
+	view := viewOf(*q, true)
 	return &view, nil
 }
 
 // ForgetCustomer removes a deleted account's words from every question it
-// asked. Answers stay, so the product page keeps what other shoppers read.
+// asked, keeping the rows and staff's answers, as a consultation does.
 func (s *ProductQuestions) ForgetCustomer(ctx context.Context, customerID string) error {
 	if strings.TrimSpace(customerID) == "" {
 		return nil
 	}
-	rows, err := s.repo.ListByCustomer(ctx, customerID)
+	rows, err := s.repo.ListByCustomer(ctx, customerID, "")
 	if err != nil {
 		return fmt.Errorf("list questions to forget: %w", err)
 	}
@@ -458,4 +391,13 @@ func (s *ProductQuestions) ForgetCustomer(ctx context.Context, customerID string
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// PurgeExpiredBodies drops the words of questions asked longer ago than
+// retention, the same promise transcripts carry. Answers stay.
+func (s *ProductQuestions) PurgeExpiredBodies(ctx context.Context, retention time.Duration) (int, error) {
+	if retention <= 0 {
+		return 0, nil
+	}
+	return s.repo.PurgeBodies(ctx, s.now().Add(-retention), domain.PurgedBody)
 }
