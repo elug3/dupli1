@@ -270,3 +270,43 @@ func TestSaveAndLoadOrderShipmentTracking(t *testing.T) {
 		t.Fatalf("ListAll tracking = %q", orders[0].TrackingNumber)
 	}
 }
+
+// Lines of one order can carry different unit prices (SKUs of one style with
+// their own price); each is stored and loaded as charged, and the order keeps
+// the summed subtotal that refunds are based on.
+func TestSaveAndLoadOrderKeepsPerSkuUnitPrices(t *testing.T) {
+	dsn := requireDSN(t)
+	pool := freshSchema(t, dsn, "order_sku_prices_test")
+	repo := &Repository{pool: pool}
+	if err := repo.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	ctx := t.Context()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	order, err := domain.NewOrder("ord-sku-prices", "cust-1", "res-1", []domain.OrderItem{
+		{SkuID: "sku-a", SKU: "PRA_1BA906_BLK_M", Quantity: 1, UnitPriceWon: 300000},
+		{SkuID: "sku-b", SKU: "PRA_1BA906_MNZV_M", Quantity: 2, UnitPriceWon: 380000},
+	}, "", 0, 0, now)
+	if err != nil {
+		t.Fatalf("NewOrder: %v", err)
+	}
+	if err := repo.Save(ctx, order); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := repo.Get(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	prices := map[string]int64{}
+	for _, it := range loaded.Items {
+		prices[it.SkuID] = it.UnitPriceWon
+	}
+	if prices["sku-a"] != 300000 || prices["sku-b"] != 380000 {
+		t.Fatalf("unit prices = %v", prices)
+	}
+	if want := int64(300000 + 2*380000); loaded.SubtotalWon != want || loaded.TotalWon != want {
+		t.Fatalf("subtotal/total = %d/%d, want %d", loaded.SubtotalWon, loaded.TotalWon, want)
+	}
+}

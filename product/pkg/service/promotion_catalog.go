@@ -84,6 +84,7 @@ func (c *StorePromotionCatalog) LineAttributes(
 			continue
 		}
 
+		variant.ApplyParentPrice(*parent)
 		out[i] = ports.LineCatalog{
 			Found:     true,
 			SkuID:     variant.SkuID,
@@ -91,9 +92,10 @@ func (c *StorePromotionCatalog) LineAttributes(
 			ProductID: parent.ID,
 			Category:  parent.Category,
 			BrandCode: parent.BrandCode,
-			// A markdown is the parent's official price standing above what it
-			// actually sells for; price lives on the parent, never the variant.
-			OnSale: parent.OfficialPrice > parent.Price,
+			// A markdown is the official price standing above what the SKU
+			// actually sells for. Both are the SKU's effective prices: its own
+			// override where it has one, the parent's otherwise.
+			OnSale: variant.OfficialPrice > variant.Price,
 		}
 	}
 	return out, nil
