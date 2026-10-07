@@ -37,7 +37,7 @@ func (p *InquiryPublisher) InquiryOpened(ctx context.Context, in ports.InquiryOp
 		Username:     in.Username,
 		EntryContext: in.EntryContext,
 		Excerpt:      in.Excerpt,
-		ManageURL:    p.inquiryURL(in.InquiryID),
+		ManageURL:    p.manageLink(in),
 		AfterHours:   in.AfterHours,
 		OpenedAt:     now,
 		Occurred:     now,
@@ -45,9 +45,15 @@ func (p *InquiryPublisher) InquiryOpened(ctx context.Context, in ports.InquiryOp
 	})
 }
 
-func (p *InquiryPublisher) inquiryURL(inquiryID string) string {
-	if p.manageURL == "" || inquiryID == "" {
+func (p *InquiryPublisher) manageLink(in ports.InquiryOpened) string {
+	if p.manageURL == "" {
 		return ""
 	}
-	return p.manageURL + "/support/inquiries/" + inquiryID
+	if in.ManagePath != "" {
+		return p.manageURL + in.ManagePath
+	}
+	if in.InquiryID == "" {
+		return ""
+	}
+	return p.manageURL + "/support/inquiries/" + in.InquiryID
 }

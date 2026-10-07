@@ -50,6 +50,8 @@ type Options struct {
 	WebChat *service.WebChat
 	// Hub fans live changes out to the customer and inbox streams.
 	Hub *livefeed.Hub
+	// Questions is 상품 문의; nil leaves its routes answering 503.
+	Questions *service.ProductQuestions
 }
 
 // HealthProbe reports whether one dependency is reachable.
@@ -66,6 +68,7 @@ type Handler struct {
 	healthProbes  map[string]HealthProbe
 	webChat       *service.WebChat
 	hub           *livefeed.Hub
+	questions     *service.ProductQuestions
 }
 
 func New(opts Options) *Handler {
@@ -84,6 +87,7 @@ func New(opts Options) *Handler {
 		healthProbes:  opts.HealthProbes,
 		webChat:       opts.WebChat,
 		hub:           opts.Hub,
+		questions:     opts.Questions,
 	}
 }
 
@@ -110,6 +114,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/support/web/read", h.requireAuth(h.requireWebChat(h.webRead)))
 	mux.HandleFunc("/api/v1/support/web/inquiries/current/close", h.requireAuth(h.requireWebChat(h.webClose)))
 	mux.HandleFunc("/api/v1/support/web/events", h.requireAuth(h.requireWebChat(h.webEvents)))
+
+	h.registerProductQuestionRoutes(mux)
 }
 
 func (h *Handler) requireWebChat(next http.HandlerFunc) http.HandlerFunc {

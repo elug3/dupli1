@@ -79,6 +79,9 @@ type InquiryOpened struct {
 	EntryContext string
 	Excerpt      string
 	AfterHours   bool
-	// Channel is "telegram" or "web".
+	// Channel is "telegram", "web" or "product_question".
 	Channel string
+	// ManagePath, when set, is the console path the alert links to instead
+	// of the inquiry page (a product question lives on its own tab).
+	ManagePath string
 }

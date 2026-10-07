@@ -97,6 +97,34 @@ func Migrate(db *sql.DB) error {
 		`ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS notice_status TEXT`,
 		`CREATE INDEX IF NOT EXISTS support_messages_notice_pending_idx
 		 ON support_messages (created_at) WHERE notice_status = 'pending'`,
+		// Product questions (상품 문의): private per-product questions, seen
+		// only by the asker and staff. fit is the optional body info on a size
+		// question.
+		`CREATE TABLE IF NOT EXISTS support_product_questions (
+			id              TEXT PRIMARY KEY,
+			product_id      TEXT NOT NULL,
+			sku_id          TEXT,
+			variant_label   TEXT,
+			product_name    TEXT,
+			customer_id     TEXT NOT NULL,
+			customer_email  TEXT,
+			type            TEXT NOT NULL,
+			body            TEXT NOT NULL,
+			fit             JSONB,
+			status          TEXT NOT NULL,
+			answer          TEXT,
+			answered_by     TEXT,
+			answered_at     TIMESTAMPTZ,
+			hidden          BOOLEAN NOT NULL DEFAULT false,
+			hidden_by       TEXT,
+			hidden_at       TIMESTAMPTZ,
+			created_at      TIMESTAMPTZ NOT NULL,
+			updated_at      TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS support_product_questions_customer_idx
+		 ON support_product_questions (customer_id, product_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS support_product_questions_queue_idx
+		 ON support_product_questions (status, hidden, created_at)`,
 		`CREATE TABLE IF NOT EXISTS support_answers (
 			node        TEXT NOT NULL,
 			language    TEXT NOT NULL DEFAULT 'ko',

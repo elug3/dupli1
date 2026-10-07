@@ -139,10 +139,23 @@ func Bootstrap(cfg Config) (*App, error) {
 		Now:           time.Now,
 	})
 
-	// A deleted account takes its consultation words with it. Queue-grouped,
-	// so one replica does each deletion.
+	questions := service.NewProductQuestions(service.ProductQuestionsDeps{
+		Repo:          store.questions,
+		Products:      products,
+		Publisher:     publisher,
+		Notifier:      notifier,
+		StorefrontURL: cfg.StorefrontURL,
+		NewID:         newULID,
+		Now:           time.Now,
+	})
+
+	// A deleted account takes its consultation words and its product
+	// questions with it. Queue-grouped, so one replica does each deletion.
+	forget := func(ctx context.Context, customerID string) error {
+		return errors.Join(webChat.ForgetCustomer(ctx, customerID), questions.ForgetCustomer(ctx, customerID))
+	}
 	if subscriber != nil {
-		if err := subscriber.OnUserDeleted(workerCtx, webChat.ForgetCustomer); err != nil {
+		if err := subscriber.OnUserDeleted(workerCtx, forget); err != nil {
 			cancelWorkers()
 			_ = closePublisher()
 			_ = store.close()
@@ -176,6 +189,7 @@ func Bootstrap(cfg Config) (*App, error) {
 		UpdateContext: workerCtx,
 		WebChat:       webChat,
 		Hub:           hub,
+		Questions:     questions,
 	})
 
 	// Close what nobody has touched, so the queue shows live work rather than
@@ -189,7 +203,7 @@ func Bootstrap(cfg Config) (*App, error) {
 	if retention == 0 {
 		retention = DefaultMessageRetention
 	}
-	go runRetentionPurge(workerCtx, inbox, retention)
+	go runRetentionPurge(workerCtx, inbox, questions, retention)
 
 	// The shopper hears about a reply they have not read, by email.
 	go runReplyNotices(workerCtx, webChat, cfg.ReplyNoticeDelay)
@@ -278,6 +292,7 @@ type store struct {
 	answers       ports.AnswerRepository
 	inquiries     ports.InquiryRepository
 	messages      ports.MessageRepository
+	questions     ports.ProductQuestionRepository
 	close         func() error
 }
 
@@ -296,6 +311,7 @@ func openStore(connString string) (*store, error) {
 			answers:       memory.NewAnswerRepository(),
 			inquiries:     memory.NewInquiryRepository(),
 			messages:      memory.NewMessageRepository(),
+			questions:     memory.NewProductQuestionRepository(),
 			close:         func() error { return nil },
 		}, nil
 	}
@@ -319,6 +335,7 @@ func openStore(connString string) (*store, error) {
 		answers:       postgres.NewAnswerRepository(db),
 		inquiries:     postgres.NewInquiryRepository(db),
 		messages:      postgres.NewMessageRepository(db),
+		questions:     postgres.NewProductQuestionRepository(db),
 		close:         db.Close,
 	}, nil
 }
@@ -464,12 +481,13 @@ func runStaleCloser(ctx context.Context, inbox *service.Inbox, quietFor time.Dur
 	}
 }
 
-// runRetentionPurge drops message text past its retention window.
+// runRetentionPurge drops message and product question text past its
+// retention window.
 //
 // It sweeps once at start and then daily: a deploy should not be able to
 // postpone a purge that was already due, which an interval-only ticker would
 // do on a service that restarts often.
-func runRetentionPurge(ctx context.Context, inbox *service.Inbox, retention time.Duration) {
+func runRetentionPurge(ctx context.Context, inbox *service.Inbox, questions *service.ProductQuestions, retention time.Duration) {
 	if retention <= 0 {
 		log.Println("message retention is disabled — transcripts are kept indefinitely")
 		return
@@ -479,10 +497,14 @@ func runRetentionPurge(ctx context.Context, inbox *service.Inbox, retention time
 		purged, err := inbox.PurgeExpiredBodies(ctx, retention)
 		if err != nil {
 			log.Printf("purge expired message bodies: %v", err)
-			return
-		}
-		if purged > 0 {
+		} else if purged > 0 {
 			log.Printf("purged %d message body(ies) older than %s", purged, retention)
+		}
+		purged, err = questions.PurgeExpiredBodies(ctx, retention)
+		if err != nil {
+			log.Printf("purge expired product questions: %v", err)
+		} else if purged > 0 {
+			log.Printf("purged %d product question(s) older than %s", purged, retention)
 		}
 	}
 	purge()

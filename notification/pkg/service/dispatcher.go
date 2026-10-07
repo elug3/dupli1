@@ -282,10 +282,14 @@ func (d *Dispatcher) handleSupportInquiry(ctx context.Context, payload []byte) e
 // copied into an ops chat.
 func formatSupportInquiryMessage(event events.SupportInquiry) string {
 	var b strings.Builder
+	title := "상담 요청"
+	if event.Channel == productQuestionChannel {
+		title = "상품 문의"
+	}
 	if event.AfterHours {
-		b.WriteString("🌙 <b>상담 요청</b> (영업시간 외)\n")
+		b.WriteString("🌙 <b>" + title + "</b> (영업시간 외)\n")
 	} else {
-		b.WriteString("🙋 <b>상담 요청</b>\n")
+		b.WriteString("🙋 <b>" + title + "</b>\n")
 	}
 	b.WriteString(fmt.Sprintf("문의 번호: <code>%s</code>\n", tg.EscapeHTML(event.InquiryID)))
 	b.WriteString(fmt.Sprintf("채널: %s\n", supportChannelLabel(event.Channel)))
@@ -302,7 +306,11 @@ func formatSupportInquiryMessage(event events.SupportInquiry) string {
 		b.WriteString(fmt.Sprintf("\n<blockquote>%s</blockquote>\n", tg.EscapeHTML(excerpt)))
 	}
 	if url := strings.TrimSpace(event.ManageURL); url != "" {
-		b.WriteString(fmt.Sprintf("\n<a href=\"%s\">상담 열기</a>", tg.EscapeHTML(url)))
+		label := "상담 열기"
+		if event.Channel == productQuestionChannel {
+			label = "문의 열기"
+		}
+		b.WriteString(fmt.Sprintf("\n<a href=\"%s\">%s</a>", tg.EscapeHTML(url), label))
 	}
 	return b.String()
 }
@@ -310,11 +318,18 @@ func formatSupportInquiryMessage(event events.SupportInquiry) string {
 // supportChannelLabel names where the shopper is writing from. Events from
 // before web chat carry no channel and were all Telegram.
 func supportChannelLabel(channel string) string {
-	if channel == "web" {
+	switch channel {
+	case "web":
 		return "웹 (로그인 고객)"
+	case productQuestionChannel:
+		return "상품 페이지 문의"
 	}
 	return "텔레그램"
 }
+
+// productQuestionChannel marks a question a shopper asked on a product page
+// (상품 문의), which support announces on the same subject as consultations.
+const productQuestionChannel = "product_question"
 
 // supportTopicLabel names the menu node the shopper escalated from.
 func supportTopicLabel(topic string) string {

@@ -1190,6 +1190,21 @@ Signed-in shoppers' side of the same inbox. Full design: [support-web-chat.md](s
 
 Errors carry a `code`: `invalid_message` 400, `invalid_reference` 422 (an order that is not yours reads the same as a missing one), `reference_unavailable` 503, `rate_limited` 429, `customer_required` 403, `chat_unavailable` 503.
 
+### Product questions (상품 문의)
+
+Private per-product questions: only the asker and staff see them. Full design: [support-product-questions.md](support-product-questions.md).
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/v1/support/products/{productId}/questions` | Bearer | The caller's own questions about this product |
+| POST | `/api/v1/support/products/{productId}/questions` | Bearer | `{ sku_id, type, body, fit? }` |
+| GET | `/api/v1/support/me/product-questions` | Bearer | All of the caller's questions |
+| PATCH / DELETE | `/api/v1/support/me/product-questions/{id}` | Bearer | Only while unanswered (`409 question_answered` after) |
+| GET | `/api/v1/support/product-questions` | `support.read` | `?queue=waiting|answered|hidden`, `?type=`, `?product_id=` |
+| GET | `/api/v1/support/product-questions/{id}` | `support.read` | One question with the staff fields |
+| POST | `/api/v1/support/product-questions/{id}/answer` | `support.reply` | `{ answer }`; the first answer emails the shopper |
+| POST | `/api/v1/support/product-questions/{id}/hide` | `support.reply` | `{ hidden }` |
+
 List responses carry `{"inquiries": […]}` without transcripts; single-inquiry
 responses carry `{"inquiry": {…, "transcript": […]}}`.
 
