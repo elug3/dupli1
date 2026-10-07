@@ -66,6 +66,16 @@ POST /orders → pending → paid → confirmed → in_transit → delivered →
 
 Full transition matrix: [api.md § Orders](api.md#orders).
 
+### Pre-shipment video inspection (operations step)
+
+Every order is filmed before it ships. After an order is `confirmed` and before the operator calls `POST /orders/{id}/ship`, the operator records a video inspecting the item before it is packed. The order ships only after this video is recorded.
+
+This step happens **outside the system** today. The order service stores nothing about it: there is no field on the order, no status between `confirmed` and `in_transit`, no upload in manage-web, and the shopper does not see it. The video is kept outside dupli1, by the team that ships.
+
+What the video is for: it is the shop's evidence of what left the warehouse and in what condition. It is the first thing to check when a shopper opens a `disputed` order (`POST …/receipt/dispute`) or asks to cancel or return an item they say arrived damaged or different, before a manager resolves it with `POST …/dispute/resolve` or a cancel.
+
+If the step is ever brought into the system, it belongs between `confirmed` and `in_transit`: an inspection video reference on the order, required by `POST /orders/{id}/ship`, so shipping an uninspected order is refused rather than relying on the procedure.
+
 ---
 
 ## Background workers
