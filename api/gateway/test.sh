@@ -50,10 +50,11 @@ CLIENT=gwtest-client-$NET
 $DOCKER run -d --label "gwtest=$NET" --name "$CLIENT" --network "$NET" \
   --entrypoint sleep "${CURL_IMAGE:-curlimages/curl:8.10.1}" infinity >/dev/null
 
-# Prints "<status> <body>".
+# Prints "<status> <body>". -4: Docker DNS can return AAAA and nothing
+# listens on [::]:80, which curl reports as status 000.
 request() { # gateway-container port path
   local resp
-  resp=$($DOCKER exec "$CLIENT" curl -s --path-as-is -m 5 -w '\n%{http_code}' "http://$1:$2$3" || true)
+  resp=$($DOCKER exec "$CLIENT" curl -4 -s --path-as-is -m 5 -w '\n%{http_code}' "http://$1:$2$3" || true)
   echo "${resp##*$'\n'} ${resp%$'\n'*}"
 }
 
@@ -131,6 +132,7 @@ INTERNAL_AUTH=(
 
 run_suite() { # label wrapper-file [extra checks: "path=service" ...]
   local label=$1 wrapper=$2 name="gw-$1-$NET" r path svc port
+  local before=$FAILED i status
   shift 2
   $DOCKER run -d --label "gwtest=$NET" --name "$name" --network "$NET" \
     -v "$wrapper:/etc/nginx/conf.d/default.conf:ro" \
@@ -138,6 +140,21 @@ run_suite() { # label wrapper-file [extra checks: "path=service" ...]
   if ! $DOCKER exec "$name" nginx -t >/dev/null 2>&1; then
     echo "FAIL [$label] nginx -t:" >&2
     $DOCKER exec "$name" nginx -t >&2 || true
+    FAILED=1
+    return
+  fi
+  # Static upstreams (prod) resolve at start, so the master may not bind :80
+  # until after `nginx -t` (a second process) has already succeeded.
+  status=
+  for i in $(seq 1 50); do
+    status=$($DOCKER exec "$CLIENT" curl -4 -s -o /dev/null -m 1 -w '%{http_code}' "http://$name:80/gateway/health" || true)
+    if [[ $status == 200 ]]; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ $status != 200 ]]; then
+    echo "FAIL [$label] gateway never became ready on :80 (last status=${status:-none})" >&2
     FAILED=1
     return
   fi
@@ -157,7 +174,11 @@ run_suite() { # label wrapper-file [extra checks: "path=service" ...]
     check "$name" "$label" 80 "$path" 404 '{"error":"not found"}'
     check "$name" "$label" 8081 "$path" 200 "SVC=auth"
   done
-  echo "ok   [$label]"
+  if ((FAILED > before)); then
+    echo "FAIL [$label]" >&2
+  else
+    echo "ok   [$label]"
+  fi
 }
 
 # The ECS wrapper names the AWS VPC resolver, unreachable here; test it with
