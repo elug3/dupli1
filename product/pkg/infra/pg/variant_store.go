@@ -15,6 +15,7 @@ import (
 const variantSelectCols = `sku_id, sku, product_id, color, size,
 	COALESCE(color_code, ''), COALESCE(edition_code, ''), COALESCE(size_code, ''),
 	width_mm, height_mm, depth_mm,
+	price_won, official_price_won,
 	status, image_urls, COALESCE(listing_image_urls, '{}'), created_at`
 
 func scanVariant(scan func(...any) error) (domain.Variant, error) {
@@ -27,6 +28,7 @@ func scanVariant(scan func(...any) error) (domain.Variant, error) {
 		&v.SkuID, &v.SKU, &v.ProductID, &v.Color, &v.Size,
 		&v.ColorCode, &v.EditionCode, &v.SizeCode,
 		&widthMm, &heightMm, &depthMm,
+		&v.PriceOverride, &v.OfficialPriceOverride,
 		&v.Status, &imageURLs, &listingImageURLs, &createdAt,
 	)
 	if err != nil {
@@ -242,12 +244,12 @@ func (s *ProductSearchStore) CreateVariant(ctx context.Context, v domain.Variant
 	w, h, d := dimensionArgs(v.Dimensions)
 	err = tx.QueryRow(ctx,
 		`INSERT INTO product_variants (sku_id, sku, product_id, color, size, color_code, edition_code, size_code,
-		     width_mm, height_mm, depth_mm, status, image_urls, listing_image_urls)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		     width_mm, height_mm, depth_mm, price_won, official_price_won, status, image_urls, listing_image_urls)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		 RETURNING created_at`,
 		v.SkuID, v.SKU, v.ProductID, v.Color, v.Size,
 		nullEmpty(v.ColorCode), nullEmpty(v.EditionCode), nullEmpty(v.SizeCode),
-		w, h, d,
+		w, h, d, v.PriceOverride, v.OfficialPriceOverride,
 		v.Status, toTextArray(v.ImageURLs), toTextArray(v.ListingImageURLs),
 	).Scan(&createdAt)
 	if err != nil {
@@ -285,12 +287,13 @@ func (s *ProductSearchStore) UpdateVariant(ctx context.Context, v domain.Variant
 		`UPDATE product_variants
 		 SET color=$2, size=$3, color_code=$4, edition_code=$5, size_code=$6,
 		     width_mm=$7, height_mm=$8, depth_mm=$9,
-		     status=$10, image_urls=$11, listing_image_urls=$12
+		     price_won=$10, official_price_won=$11,
+		     status=$12, image_urls=$13, listing_image_urls=$14
 		 WHERE sku=$1
 		 RETURNING sku_id, product_id, created_at`,
 		v.SKU, v.Color, v.Size,
 		nullEmpty(v.ColorCode), nullEmpty(v.EditionCode), nullEmpty(v.SizeCode),
-		w, h, d,
+		w, h, d, v.PriceOverride, v.OfficialPriceOverride,
 		v.Status, toTextArray(v.ImageURLs), toTextArray(v.ListingImageURLs),
 	).Scan(&v.SkuID, &v.ProductID, &createdAt)
 	if err != nil {

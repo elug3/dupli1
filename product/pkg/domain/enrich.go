@@ -1,6 +1,10 @@
 package domain
 
-import "strings"
+import (
+	"fmt"
+	"math"
+	"strings"
+)
 
 const listingThumbSuffix = ".w600.jpg"
 
@@ -42,7 +46,7 @@ func DeriveListingImageURL(imageURL string) string {
 // body (e.g. color-only) can't silently blank out size/status/images —
 // omitted fields keep their current value instead of being overwritten with
 // the JSON zero value. Identity fields (SkuID, SKU, ProductID, CreatedAt)
-// and price fields (owned by the parent product) are never taken from incoming.
+// is never taken from incoming; price overrides are, where 0 clears one.
 func (existing Variant) MergeUpdate(incoming Variant) Variant {
 	merged := existing
 	if incoming.Color != "" {
@@ -74,10 +78,41 @@ func (existing Variant) MergeUpdate(incoming Variant) Variant {
 	if incoming.Dimensions != nil {
 		merged.Dimensions = incoming.Dimensions
 	}
-	// Price / OfficialPrice stay on the parent product.
+	merged.PriceOverride = mergeOverride(existing.PriceOverride, incoming.PriceOverride)
+	merged.OfficialPriceOverride = mergeOverride(existing.OfficialPriceOverride, incoming.OfficialPriceOverride)
+	// Price / OfficialPrice are response-only effective values.
 	merged.Price = existing.Price
 	merged.OfficialPrice = existing.OfficialPrice
 	return merged
+}
+
+// mergeOverride keeps current when incoming is nil, clears on 0, else replaces.
+func mergeOverride(current, incoming *float64) *float64 {
+	if incoming == nil {
+		return current
+	}
+	if *incoming == 0 {
+		return nil
+	}
+	v := *incoming
+	return &v
+}
+
+// ValidateVariantPrices rejects negative or fractional SKU price overrides
+// (KRW is whole won).
+func ValidateVariantPrices(v Variant) error {
+	for name, p := range map[string]*float64{
+		"priceOverride":         v.PriceOverride,
+		"officialPriceOverride": v.OfficialPriceOverride,
+	} {
+		if p == nil {
+			continue
+		}
+		if *p < 0 || *p != math.Trunc(*p) {
+			return fmt.Errorf("%s must be a non-negative whole won amount", name)
+		}
+	}
+	return nil
 }
 
 // MergeUpdate returns a copy of the product with non-zero / non-empty fields
@@ -146,14 +181,45 @@ func (existing Product) MergeUpdate(incoming Product) Product {
 	return merged
 }
 
-// ApplyParentPrice copies the parent product's price onto a variant for API
-// responses (cart/order still read price from the variant JSON).
+// ApplyParentPrice sets the variant's effective price for API responses
+// (cart/order read price from the variant JSON): its own override when set,
+// otherwise the parent product's.
 func (v *Variant) ApplyParentPrice(p Product) {
 	if v == nil {
 		return
 	}
 	v.Price = p.Price
+	if v.PriceOverride != nil {
+		v.Price = *v.PriceOverride
+	}
 	v.OfficialPrice = p.OfficialPrice
+	if v.OfficialPriceOverride != nil {
+		v.OfficialPrice = *v.OfficialPriceOverride
+	}
+}
+
+// priceFrom returns the lowest effective price across active variants, or 0
+// when they all share one price (nothing to show "from" for).
+func priceFrom(p Product, variants []Variant) float64 {
+	var lo, hi float64
+	seen := false
+	for _, v := range variants {
+		if v.Status != "" && v.Status != "active" {
+			continue
+		}
+		v.ApplyParentPrice(p)
+		if !seen || v.Price < lo {
+			lo = v.Price
+		}
+		if !seen || v.Price > hi {
+			hi = v.Price
+		}
+		seen = true
+	}
+	if !seen || lo == hi {
+		return 0
+	}
+	return lo
 }
 
 // EnrichFromVariants fills summary and legacy display fields from variants.
@@ -195,6 +261,7 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 		}
 	}
 
+	p.PriceFrom = priceFrom(*p, variants)
 	p.AvailableColors = colors
 	p.AvailableSizes = sizes
 	if defaultVariant != nil {

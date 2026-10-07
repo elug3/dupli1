@@ -370,6 +370,9 @@ func (s *ProductSearchService) CreateVariant(ctx context.Context, productID stri
 	}
 	v.Dimensions = dims
 	v.ProductID = productID
+	if err := domain.ValidateVariantPrices(v); err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
 	created, err := s.store.CreateVariant(ctx, v)
 	if err != nil {
 		return nil, err
@@ -386,7 +389,8 @@ func (s *ProductSearchService) CreateVariant(ctx context.Context, productID stri
 // UpdateVariant merges the incoming (possibly partial) body onto the
 // existing variant rather than overwriting it outright, so an update that
 // only sets e.g. color can't silently blank size/status/images.
-// Price is owned by the parent product and is not updated here.
+// priceOverride / officialPriceOverride set the SKU's own price (0 clears it
+// back to the parent's); omitting them leaves the override unchanged.
 func (s *ProductSearchService) UpdateVariant(ctx context.Context, productID, sku string, v domain.Variant) (*domain.Variant, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
@@ -418,6 +422,9 @@ func (s *ProductSearchService) UpdateVariant(ctx context.Context, productID, sku
 		return nil, ports.Invalid(err.Error())
 	}
 	merged.Dimensions = dims
+	if err := domain.ValidateVariantPrices(merged); err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
 	merged.SKU = sku
 	merged.ProductID = productID
 	updated, err := s.store.UpdateVariant(ctx, merged)

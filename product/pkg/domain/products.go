@@ -18,12 +18,18 @@ type Variant struct {
 	// (e.g. width 340 × height 220 × depth 80). Distinct from Size/SizeCode
 	// letter labels (S/M/L). Optional; omitted when unknown.
 	Dimensions *Dimensions `json:"dimensions,omitempty"`
-	// Price and OfficialPrice are filled from the parent product on read.
-	// They are not stored on the SKU row (price lives on Product).
-	OfficialPrice float64  `json:"officialPrice,omitempty"`
-	Price         float64  `json:"price,omitempty"`
-	Status        string   `json:"status"` // "active" | "draft" | "archived"
-	ImageURLs     []string `json:"imageUrls,omitempty"`
+	// Price and OfficialPrice are the effective prices on read: the SKU's
+	// override when it has one, otherwise the parent product's. Response-only;
+	// the stored values are PriceOverride / OfficialPriceOverride.
+	OfficialPrice float64 `json:"officialPrice,omitempty"`
+	Price         float64 `json:"price,omitempty"`
+	// PriceOverride / OfficialPriceOverride are the optional SKU-level prices
+	// (whole won). nil means inherit the parent's. On update, a value of 0
+	// clears the override; omitting the field leaves it unchanged.
+	PriceOverride         *float64 `json:"priceOverride,omitempty"`
+	OfficialPriceOverride *float64 `json:"officialPriceOverride,omitempty"`
+	Status                string   `json:"status"` // "active" | "draft" | "archived"
+	ImageURLs             []string `json:"imageUrls,omitempty"`
 	// ListingImageURLs are ~600px JPEG thumbs parallel to ImageURLs (same index).
 	// Used by category/home cards; full ImageURLs stay on the PDP gallery.
 	ListingImageURLs []string `json:"listingImageUrls,omitempty"`
@@ -59,11 +65,15 @@ type Product struct {
 	// OfficialPrice is the reference / list price in KRW won (not charged).
 	OfficialPrice float64 `json:"officialPrice,omitempty"`
 	// Price is the actual sale price in KRW won after discounts (whole won).
-	// Stored on the parent; all variants inherit this price for cart/order.
-	Price    float64  `json:"price"`
-	Status   string   `json:"status"` // "active" | "draft" | "archived"
-	Capacity string   `json:"capacity,omitempty"`
-	Tags     []string `json:"tags,omitempty"`
+	// Stored on the parent; a variant inherits it unless it carries its own
+	// PriceOverride.
+	Price float64 `json:"price"`
+	// PriceFrom is the lowest effective price across active variants. Set
+	// only when active variants differ in price, so cards can show "from".
+	PriceFrom float64  `json:"priceFrom,omitempty"`
+	Status    string   `json:"status"` // "active" | "draft" | "archived"
+	Capacity  string   `json:"capacity,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
 	// Attributes is a free-form string key/value memo for PDP display
 	// (condition, care, authenticity notes, etc.). Not used for search,
 	// pricing, or checkout. Managers write; storefront treats as read-only.
@@ -89,9 +99,9 @@ type Product struct {
 	DefaultImageURL string `json:"defaultImageUrl,omitempty"`
 	// DefaultListingImageURL is the listing-size JPEG for category/home cards
 	// (from the default active variant's first listingImageUrls entry).
-	DefaultListingImageURL string `json:"defaultListingImageUrl,omitempty"`
-	AvailableColors        []string `json:"availableColors,omitempty"`
-	AvailableSizes         []string `json:"availableSizes,omitempty"`
+	DefaultListingImageURL string    `json:"defaultListingImageUrl,omitempty"`
+	AvailableColors        []string  `json:"availableColors,omitempty"`
+	AvailableSizes         []string  `json:"availableSizes,omitempty"`
 	Variants               []Variant `json:"variants,omitempty"`
 
 	// Legacy display fields mirrored from the default active variant.

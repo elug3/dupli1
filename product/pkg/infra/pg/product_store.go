@@ -110,6 +110,8 @@ func (s *ProductSearchStore) migrate() error {
 		{"width_mm", "INTEGER"},
 		{"height_mm", "INTEGER"},
 		{"depth_mm", "INTEGER"},
+		{"price_won", "NUMERIC(10,2)"},          // SKU price override; NULL inherits products.price
+		{"official_price_won", "NUMERIC(10,2)"}, // SKU official price override; NULL inherits
 		{"listing_image_urls", "TEXT[] NOT NULL DEFAULT '{}'"},
 	} {
 		if _, err := s.pool.Exec(ctx, fmt.Sprintf(
@@ -579,7 +581,8 @@ func buildProductSearchOrder(filter map[string]string) string {
 	case domain.SortWishlist:
 		return fmt.Sprintf(" ORDER BY p.wishlist_count %s, p.id ASC", dir)
 	case domain.SortPrice:
-		return fmt.Sprintf(" ORDER BY p.price %s, p.id ASC", dir)
+		return fmt.Sprintf(` ORDER BY COALESCE((SELECT MIN(COALESCE(v.price_won, p.price)) FROM product_variants v
+			WHERE v.product_id = p.id AND v.status = 'active'), p.price) %s, p.id ASC`, dir)
 	case domain.SortName:
 		return fmt.Sprintf(" ORDER BY LOWER(p.name) %s, p.id ASC", dir)
 	default:
