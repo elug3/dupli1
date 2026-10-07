@@ -66,6 +66,7 @@ services:
         SELECT format('CREATE ROLE schick LOGIN PASSWORD %L', :'pw') WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'schick') \gexec
         SELECT 'CREATE DATABASE notifications OWNER schick' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'notifications') \gexec
         SELECT 'CREATE DATABASE profiles OWNER schick' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'profiles') \gexec
+        SELECT 'CREATE DATABASE support OWNER schick' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'support') \gexec
         SQL
     depends_on: { postgres: { condition: service_healthy } }
 
@@ -247,6 +248,43 @@ services:
       TELEGRAM_PRODUCT_CHAT_ID: ${TELEGRAM_PRODUCT_CHAT_ID:-}
     depends_on: { db-init: { condition: service_completed_successfully } }
     networks: { default: { aliases: [notification.dupli1.local] } }
+
+  # Customer consultation: the Telegram support bot, web chat and the staff
+  # inbox (docs/support-telegram-bot.md, docs/support-web-chat.md). Never on
+  # ECS, so this is the first production home. A separate bot from
+  # notification's ops bot: TELEGRAM_SUPPORT_*, never TELEGRAM_*.
+  support:
+    <<: *service
+    image: dupli1-prod/support:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
+    environment:
+      <<: *sentry-env
+      DUPLI1_SUPPORT_ADDR: ":8080"
+      # Conversations, inquiries and transcripts. In memory they would vanish
+      # on every deploy, and the inbox with them.
+      DUPLI1_SUPPORT_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/support?sslmode=disable
+      AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
+      JWT_SECRET: ${JWT_SECRET}
+      NATS_URL: nats://nats.dupli1.local:4222
+      MANAGE_WEB_URL: https://manage.dupli1.com
+      # Web chat checks product and order references through the gateway with
+      # the shopper's own token, like order does.
+      DUPLI1_GATEWAY_URL: http://proxy.dupli1.local:8081
+      DUPLI1_STOREFRONT_URL: ${PUBLIC_ORIGIN:-https://dupli1.com}
+      DUPLI1_SUPPORT_MESSAGE_RETENTION_DAYS: ${DUPLI1_SUPPORT_MESSAGE_RETENTION_DAYS:-180}
+      # Empty token: the bot stays off and web chat and the inbox still work.
+      # Set the webhook URL (https://dupli1.com/api/v1/support/telegram/webhook)
+      # only together with its secret — support refuses to start with the URL
+      # alone. Without a URL the bot long-polls instead.
+      TELEGRAM_SUPPORT_BOT_TOKEN: ${TELEGRAM_SUPPORT_BOT_TOKEN:-}
+      TELEGRAM_SUPPORT_WEBHOOK_URL: ${TELEGRAM_SUPPORT_WEBHOOK_URL:-}
+      TELEGRAM_SUPPORT_WEBHOOK_SECRET: ${TELEGRAM_SUPPORT_WEBHOOK_SECRET:-}
+      # Reply-notice email for web chat; unset sends no notice.
+      DUPLI1_SUPPORT_SMTP_ADDR: ${DUPLI1_SUPPORT_SMTP_ADDR:-}
+      DUPLI1_SUPPORT_SMTP_USERNAME: ${DUPLI1_SUPPORT_SMTP_USERNAME:-}
+      DUPLI1_SUPPORT_SMTP_PASSWORD: ${DUPLI1_SUPPORT_SMTP_PASSWORD:-}
+      DUPLI1_SUPPORT_SMTP_FROM: ${DUPLI1_SUPPORT_SMTP_FROM:-}
+    depends_on: { db-init: { condition: service_completed_successfully }, auth: { condition: service_started }, nats: { condition: service_started } }
+    networks: { default: { aliases: [support.dupli1.local] } }
 
   # ── HTTP ─────────────────────────────────────────────────────────────────
   # API gateway: production's nginx.ecs.conf with Docker's resolver.

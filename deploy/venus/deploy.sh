@@ -40,32 +40,34 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 DEPLOY_DIR=${DEPLOY_DIR:-$(cd "$HERE/../.." && pwd)}
 
 # Per target: services, their GHCR and local image names, the .env variable
-# holding their tag, and "host path" pairs that must answer 200 via the edge.
+# holding their tag, and "service host path" checks that must answer 200 via
+# the edge. The service names whose check it is, so a rollback can drop the
+# checks of a service the previous compose file doesn't have.
 declare -A GHCR LOCAL
 INTERNAL_GATEWAY=0
 case $TARGET in
   backend)
-    SERVICES=(auth product order cart payment profile notification proxy)
+    SERVICES=(auth product order cart payment profile notification support proxy)
     for s in "${SERVICES[@]}"; do GHCR[$s]=dupli1-$s; LOCAL[$s]=dupli1-prod/$s; done
     TAG_VAR=DUPLI1_BACKEND_TAG
     # Gateway routes that reach each service's health handler (notification has none).
-    HEALTH=("dupli1.com /gateway/health" "dupli1.com /api/v1/auth/health"
-      "dupli1.com /api/v1/products/health" "dupli1.com /api/v1/orders/health"
-      "dupli1.com /api/v1/cart/health" "dupli1.com /api/v1/payments/health"
-      "dupli1.com /api/v1/profile/health")
+    HEALTH=("proxy dupli1.com /gateway/health" "auth dupli1.com /api/v1/auth/health"
+      "product dupli1.com /api/v1/products/health" "order dupli1.com /api/v1/orders/health"
+      "cart dupli1.com /api/v1/cart/health" "payment dupli1.com /api/v1/payments/health"
+      "profile dupli1.com /api/v1/profile/health" "support dupli1.com /api/v1/support/health")
     INTERNAL_GATEWAY=1
     ;;
   web)
     SERVICES=(web)
     GHCR[web]=dupli1-web; LOCAL[web]=dupli1-prod/web
     TAG_VAR=DUPLI1_WEB_TAG
-    HEALTH=("dupli1.com /" "dupli1.com /login")
+    HEALTH=("web dupli1.com /" "web dupli1.com /login")
     ;;
   manage-web)
     SERVICES=(manage-web)
     GHCR[manage-web]=dupli1-manage-web; LOCAL[manage-web]=dupli1-prod/manage-web-container
     TAG_VAR=DUPLI1_MANAGE_WEB_TAG
-    HEALTH=("manage.dupli1.com /" "manage.dupli1.com /login")
+    HEALTH=("manage-web manage.dupli1.com /" "manage-web manage.dupli1.com /login")
     ;;
   *) echo "unknown target: $TARGET (backend, web or manage-web)" >&2; exit 2 ;;
 esac
@@ -109,7 +111,7 @@ state_of() { docker inspect -f '{{.State.Status}}/{{.RestartCount}}' "dupli1-$1-
 # listener answering), held for 15 s.
 healthy() {
   local -A base
-  local s h host path code deadline=$((SECONDS + 120)) bad=""
+  local s h rest host path code deadline=$((SECONDS + 120)) bad=""
   for s in "${SERVICES[@]}"; do base[$s]=$(state_of "$s"); done
   while ((SECONDS < deadline)); do
     bad=""
@@ -118,7 +120,7 @@ healthy() {
     done
     if [[ -z $bad ]]; then
       for h in "${HEALTH[@]}"; do
-        host=${h%% *}; path=${h#* }
+        rest=${h#* }; host=${rest%% *}; path=${rest#* }
         code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' -H "Host: $host" "http://127.0.0.1$path" || true)
         [[ $code == 200 ]] || { bad="$host$path → $code"; break; }
       done
@@ -170,6 +172,22 @@ dc logs --tail 50 "${SERVICES[@]}" >&2 || true
 # The previous images with the compose file and gateway config they ran with.
 git -C "$DEPLOY_DIR" checkout -q --detach "$PREV_COMMIT"
 set_tag "$PREV"
+# A service this deploy introduced is not in the previous compose file: stop
+# it and leave it out of the rollback rather than failing on "no such service".
+mapfile -t KNOWN < <(dc config --services)
+KEPT=()
+for s in "${SERVICES[@]}"; do
+  if [[ " ${KNOWN[*]} " == *" $s "* ]]; then
+    KEPT+=("$s")
+  else
+    echo "removing $s, which $(git -C "$DEPLOY_DIR" rev-parse --short HEAD) does not have" >&2
+    docker rm -f "dupli1-$s-1" >/dev/null 2>&1 || true
+    for i in "${!HEALTH[@]}"; do
+      if [[ ${HEALTH[$i]%% *} == "$s" ]]; then unset "HEALTH[$i]"; fi
+    done
+  fi
+done
+SERVICES=("${KEPT[@]}")
 dc up -d "${SERVICES[@]}"
 healthy || echo "rollback to $PREV is unhealthy too — check the stack by hand" >&2
 exit 1
