@@ -594,6 +594,7 @@ On create and update, `category` must be one of `GET /api/v1/products/catalog/ca
       "description": "...",
       "price": 2500.00,
       "officialPrice": 3200.00,
+      "priceFrom": 2300.00,
       "brand": "Bottega Veneta",
       "color": "Green",
       "material": "Leather",
@@ -817,7 +818,7 @@ Routes below require `Authorization: Bearer <access_token>`. Product validates R
 
 Each route also accepts the pre-rename `coupon.*` permission and answers on `/api/v1/products/coupons…` and `/api/v1/coupons…`, for one release ([product-promotion-rename.md](product-promotion-rename.md)).
 
-`PUT /api/v1/products/{id}` and variant updates **merge**: omitted JSON fields keep their current value, so a partial body cannot blank out data. The trade-off is that a zero value is indistinguishable from an omitted one — sending `price: 0` or `officialPrice: 0` is ignored rather than clearing the price. See [product-price-on-parent.md](product-price-on-parent.md).
+`PUT /api/v1/products/{id}` and variant updates **merge**: omitted JSON fields keep their current value, so a partial body cannot blank out data. The trade-off is that a zero value is indistinguishable from an omitted one — sending `price: 0` or `officialPrice: 0` on a product is ignored rather than clearing the price. Variant updates also accept `priceOverride` / `officialPriceOverride` (whole won, non-negative; `400` otherwise): omit to keep, a positive amount to set, **`0` to clear** back to inheriting the parent's price. Variant responses carry the effective `price` / `officialPrice` plus the stored overrides; a product with differing active SKU prices also carries `priceFrom` (lowest effective price). See [product-price-on-parent.md](product-price-on-parent.md).
 
 **Deletes are permanent and refuse while stock is still in play** (`409`):
 

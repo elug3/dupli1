@@ -114,7 +114,7 @@ Products have two levels: **parent** (style, e.g. "Prada Galleria") and **varian
 - `sku`: human string `Brand_Style_Color[_Edition]_Size`
 - `skuId`: canonical ULID (preferred in cart, checkout, inventory)
 
-Price lives on the **parent** (not the variant). Variants inherit price for cart JSON. Never place price on variants.
+Price lives on the **parent**; a variant inherits it unless it carries an optional override (`price_won` / `official_price_won` on `product_variants`, JSON `priceOverride` / `officialPriceOverride`, `NULL` = inherit, `0` on update clears). Variant reads return the *effective* price in `price` / `officialPrice` — that is what cart, order and promotions use, so none of them look at overrides. Never put a price on a variant by any other route, and never charge from the parent price when a variant read is available. See [docs/product-price-on-parent.md](docs/product-price-on-parent.md).
 
 ### Order lifecycle & money path
 
