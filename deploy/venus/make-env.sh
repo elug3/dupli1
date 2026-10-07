@@ -66,6 +66,12 @@ env = {
     "TELEGRAM_PRODUCT_CHAT_ID": old.get("TELEGRAM_PRODUCT_CHAT_ID", ""),
     **{f"{k}_AT_CUTOVER": telegram[k] for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ORDER_CHAT_ID", "TELEGRAM_PRODUCT_CHAT_ID")},
     "CLOUDFLARE_TUNNEL_TOKEN": old.get("CLOUDFLARE_TUNNEL_TOKEN", ""),
+    # Support (docs/support-web-chat.md): optional, set by hand, kept across
+    # re-runs. The customer bot's token is not the ops bot's.
+    **{k: old.get(k, "") for k in (
+        "TELEGRAM_SUPPORT_BOT_TOKEN", "TELEGRAM_SUPPORT_WEBHOOK_URL", "TELEGRAM_SUPPORT_WEBHOOK_SECRET",
+        "DUPLI1_SUPPORT_SMTP_ADDR", "DUPLI1_SUPPORT_SMTP_USERNAME", "DUPLI1_SUPPORT_SMTP_PASSWORD",
+        "DUPLI1_SUPPORT_SMTP_FROM")},
 }
 for k, v in env.items():
     if not isinstance(v, str) or "'" in v or "\n" in v:

@@ -45,14 +45,14 @@ declare -A GHCR LOCAL
 INTERNAL_GATEWAY=0
 case $TARGET in
   backend)
-    SERVICES=(auth product order cart payment profile notification proxy)
+    SERVICES=(auth product order cart payment profile notification support proxy)
     for s in "${SERVICES[@]}"; do GHCR[$s]=dupli1-$s; LOCAL[$s]=dupli1-prod/$s; done
     TAG_VAR=DUPLI1_BACKEND_TAG
     # Gateway routes that reach each service's health handler (notification has none).
     HEALTH=("dupli1.com /gateway/health" "dupli1.com /api/v1/auth/health"
       "dupli1.com /api/v1/products/health" "dupli1.com /api/v1/orders/health"
       "dupli1.com /api/v1/cart/health" "dupli1.com /api/v1/payments/health"
-      "dupli1.com /api/v1/profile/health")
+      "dupli1.com /api/v1/profile/health" "dupli1.com /api/v1/support/health")
     INTERNAL_GATEWAY=1
     ;;
   web)

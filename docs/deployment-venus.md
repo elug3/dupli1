@@ -50,13 +50,24 @@ VENUS  docker compose project "dupli1"  (deploy/venus/docker-compose.yml)
   same S3 API the product service's minio-go client uses. Note the repo's
   local `docker-compose.yml` still points at `minio/minio:latest` and will fail
   to pull on a fresh machine.
-- **Kept as production had it:** `support` is not deployed, redis and NATS
-  JetStream have no volumes. These are pre-existing gaps, not migration
-  changes. `profile` and `notification` also started in memory, as on ECS;
+- **Kept as production had it:** redis and NATS JetStream have no volumes.
+  These are pre-existing gaps, not migration changes. `profile` and `notification` also started in memory, as on ECS;
   both now have a database (`profiles`, `notifications`), which the one-shot
   `db-init` service creates if missing before either starts. In memory,
   profile lost every saved shipping address on each restart and deploy, so
   shoppers retyped their address at every checkout.
+- **`support` runs on VENUS only** (it was never deployed on ECS): the web
+  consultation chat, product questions (상품 문의) and the manage-web `/support`
+  inbox. Its `support` database is created by `db-init` like the others, and
+  `deploy.sh` rolls it out with the backend and checks
+  `/api/v1/support/health`. Optional `/opt/dupli1/.env` keys, kept by
+  `make-env.sh` across re-runs:
+  - `DUPLI1_SUPPORT_SMTP_ADDR|USERNAME|PASSWORD|FROM` — the reply-notice email.
+    Unset, no email goes out and everything else works.
+  - `TELEGRAM_SUPPORT_BOT_TOKEN` — the customer Telegram bot, never the ops
+    bot's token. Unset, that bot is inert. With no
+    `TELEGRAM_SUPPORT_WEBHOOK_URL` it long-polls; a webhook URL also needs
+    `TELEGRAM_SUPPORT_WEBHOOK_SECRET`.
 
 ## Files and locations
 
@@ -279,4 +290,3 @@ every connector that isn't using the new one.
 - Rotate the `Agent` IAM access key, then close the IAM user/role access.
 - Set up backups **on VENUS** (nightly `pg_dump` + image volume) to somewhere
   off the machine; there is no RDS/S3 durability any more.
-- Consider deploying `support` — the gap predates the migration.
