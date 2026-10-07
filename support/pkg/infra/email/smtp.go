@@ -83,6 +83,8 @@ func (n *SMTPNotifier) NotifyReply(_ context.Context, to, subject, link string) 
 func (n *SMTPNotifier) compose(to, subject, link string) []byte {
 	about := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(subject, "\r", " "), "\n", " "))
 
+	// Korean first, then English: the notice goes out without knowing which
+	// language the shopper reads the storefront in.
 	var body strings.Builder
 	body.WriteString("안녕하세요, Dupli1입니다.\r\n\r\n")
 	if about != "" {
@@ -93,11 +95,21 @@ func (n *SMTPNotifier) compose(to, subject, link string) []byte {
 	body.WriteString("아래 링크에서 답변을 확인해 주세요.\r\n\r\n")
 	body.WriteString(link + "\r\n\r\n")
 	body.WriteString("본 메일은 발신 전용입니다. 문의는 채팅 상담으로 이어서 남겨 주세요.\r\n")
+	body.WriteString("\r\n----------\r\n\r\n")
+	body.WriteString("Hello from Dupli1.\r\n\r\n")
+	if about != "" {
+		body.WriteString("Our team has replied to your question about \"" + about + "\".\r\n")
+	} else {
+		body.WriteString("Our team has replied to your question.\r\n")
+	}
+	body.WriteString("Open the link below to read the reply.\r\n\r\n")
+	body.WriteString(link + "\r\n\r\n")
+	body.WriteString("This address does not receive mail. To follow up, continue on the site.\r\n")
 
 	var msg strings.Builder
 	msg.WriteString("From: " + n.from.String() + "\r\n")
 	msg.WriteString("To: " + to + "\r\n")
-	msg.WriteString("Subject: " + mime.BEncoding.Encode("UTF-8", "[Dupli1] 상담원이 답변했습니다") + "\r\n")
+	msg.WriteString("Subject: " + mime.BEncoding.Encode("UTF-8", "[Dupli1] 상담원이 답변했습니다 / You have a reply") + "\r\n")
 	msg.WriteString("Date: " + n.now().Format(time.RFC1123Z) + "\r\n")
 	msg.WriteString("MIME-Version: 1.0\r\n")
 	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")

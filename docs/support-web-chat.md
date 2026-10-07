@@ -91,7 +91,7 @@ A web reply is stored with `notice_status = pending`. Every minute, `SendDueNoti
 - If the shopper has read past the newest one, or an email already covers this unread batch (`customer_notified_at` after `customer_last_read_at`), they are marked `skipped`.
 - Otherwise, one email goes out for the batch, and the replies are marked `sent`, or `failed` when SMTP refused.
 
-The next notice can only follow a read. The subject is the product name or `주문 <id>`, never the reply text, and the link is `DUPLI1_STOREFRONT_URL/profile/support`. This is the backend's first customer email.
+The next notice can only follow a read. The subject is the product name or `주문 <id>`, never the reply text, and the link is `DUPLI1_STOREFRONT_URL/profile/support`. The email is written in Korean, then English, because support does not know which language the shopper uses. This is the backend's first customer email.
 
 Without SMTP or a storefront URL, every reply ends `skipped` and chat works normally.
 

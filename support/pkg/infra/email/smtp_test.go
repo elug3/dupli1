@@ -29,7 +29,10 @@ func TestNotifyReplyNamesSubjectAndLinkOnly(t *testing.T) {
 	if len(gotTo) != 1 || gotTo[0] != "shopper@example.com" || gotAuth == nil {
 		t.Fatalf("to = %v auth = %v", gotTo, gotAuth)
 	}
-	for _, want := range []string{"Prada Galleria", "https://dupli1.com/profile/support", "charset=UTF-8"} {
+	for _, want := range []string{
+		"Prada Galleria", "https://dupli1.com/profile/support", "charset=UTF-8",
+		"상담원이 답변을 남겼습니다", "Our team has replied to your question about \"Prada Galleria\"",
+	} {
 		if !strings.Contains(gotMsg, want) {
 			t.Errorf("message lacks %q:\n%s", want, gotMsg)
 		}
