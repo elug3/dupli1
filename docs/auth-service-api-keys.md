@@ -1,9 +1,9 @@
 # Service account API keys
 
-**Status:** phases 1–3 and 5 implemented — **service accounts have no
+**Status:** implemented, phases 1–5 — **service accounts have no
 password.** They authenticate with an API key only and cannot sign in to the
-storefront or manage-web. Phase 4 (a manage-web keys panel) is open; the owner
-manages keys through the API meanwhile.
+storefront or manage-web. The owner manages keys from the service account's
+page in manage-web (`app/routes/users.$id.tsx`) or through the API.
 
 ### As built — where it differs from the design below
 

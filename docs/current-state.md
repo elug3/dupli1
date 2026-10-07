@@ -4,7 +4,7 @@ Authoritative snapshot of what is implemented in the Dupli1 repository today.
 
 ## Overview
 
-Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx gateway. Local dev uses Docker Compose; production uses AWS ECS on EC2, ALB, and Amazon RDS PostgreSQL.
+Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx gateway. Local dev uses Docker Compose; production runs the same images under Docker Compose on VENUS, a self-hosted machine behind a Cloudflare Tunnel (moved off AWS ECS / RDS on 2026-09-27, see [deployment-venus.md](deployment-venus.md)).
 
 | Area | Status |
 |------|--------|
@@ -17,9 +17,9 @@ Dupli1 is a fashion bag marketplace backend: Go microservices behind an nginx ga
 | Shopping cart | Implemented (PostgreSQL) |
 | Payments (NANO card + Bypass) | Implemented — see [payment-service.md](payment-service.md) |
 | Payment methods | Credit card (NANO) + Bypass implemented; Bitcoin planned — see [payment-methods-plan.md](payment-methods-plan.md) |
-| Notifications | Implemented (NATS → Telegram when configured); **subscriptions are not yet persisted in production** — the ECS task has no `DUPLI1_NOTIFICATION_DB`, see [dupli1-notification](#dupli1-notification) |
+| Notifications | Implemented (NATS → Telegram when configured); subscriptions persist in PostgreSQL `notifications`, in production too since the move to VENUS, see [dupli1-notification](#dupli1-notification) |
 | Web consultation chat | Partial — signed-in shoppers open a consultation from the storefront and attach a product or order; it lands in the same manage-web `/support` inbox with a context panel (email, the referenced product or order, purchase history). Live over SSE; a reply left unread for 5 minutes sends an email with a link and no reply text ([support-web-chat.md](support-web-chat.md)). Ships with support's first production deployment, which also needs SMTP credentials |
-| Product questions (상품 문의) | Partial — private per-product questions in `support`: a signed-in shopper asks about the variant they selected (size questions may carry height, weight and usual size), only they and staff see it, and they get an email when staff answer from the console. Follows transcript retention and account deletion. Backend only so far; the storefront and console follow, and it ships with support's first production deployment ([support-product-questions.md](support-product-questions.md)) |
+| Product questions (상품 문의) | Partial — private per-product questions in `support`: a signed-in shopper asks about the variant they selected (size questions may carry height, weight and usual size), only they and staff see it, and they get an email when staff answer from the console. Follows transcript retention and account deletion. The storefront asks from the product page and staff answer from manage-web `/support?tab=questions` ([support-product-questions.md](support-product-questions.md)) |
 | Customer Telegram consultation bot | Partial — **`support`** walks the full consultation menu in place and hands off to staff: asking for a human opens an inquiry, records the transcript, and publishes `support.inquiry_opened`, which `notification` fans out to chats holding `alert_support` (silently outside service hours). Service hours are weekdays 10:00–22:00 KST. Staff work the queue from manage-web `/support` (대기 / 내 상담 / 완료): claim, reply, close, with a reply that never reached the shopper shown as 미전송 The storefront's floating button opens `@dupli1_support_bot` carrying the page the shopper came from ([support-telegram-bot.md](support-telegram-bot.md) Phases 0–6). Deployed on VENUS with every backend deploy (web chat, inbox, the 180-day transcript purge); the bot itself stays inert until its token, webhook secret and URL are set in `/opt/dupli1/.env` ([deployment-venus.md](deployment-venus.md#customer-support-service)) |
 | Customer commerce profile + addresses | Implemented — own **`profile`** service (PostgreSQL), extracted from auth ([profile-service.md](profile-service.md), [auth-profile-extension-plan.md](auth-profile-extension-plan.md)); chat/analytics not started |
 | Guest PDP views + recommendations | Implemented — in product |
@@ -61,11 +61,11 @@ See [service-layout.md](service-layout.md) for details.
   - Owner seeded from `OWNER_EMAIL` / `OWNER_PASSWORD` (`permissions: ["*"]`, `account_type` `manager`)
   - Login lockout after 5 failed attempts for customers/managers, auto-expiring after 15 minutes; **admin and owner are never locked**
   - Deactivated/locked accounts are rejected on their very next authenticated request (not just next login/refresh) — `RequireAuth` re-checks account status on every call
-  - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`); seeded/synced on auth boot; ECS injects the shared Secrets Manager secret into auth + web (see [infra/terraform/README.md](../infra/terraform/README.md))
+  - `dupli1-web` service account: `permissions: ["user.create"]` (`DUPLI1_WEB_SERVICE_*`); seeded/synced on auth boot; it has no password and exchanges `DUPLI1_WEB_SERVICE_API_KEY` at `POST /api/v1/auth/token` (on VENUS both auth and web read the key from `/opt/dupli1/.env`; see [auth-service-api-keys.md](auth-service-api-keys.md))
   - `dupli1-order` service account: `order.ship`, `order.status.update`, `inventory.reservation.manage`, `payment.cancel` (`DUPLI1_ORDER_SERVICE_*`); order refreshes a Bearer access token and calls product stock/promotions **and payment cancel** via **`DUPLI1_GATEWAY_URL`** (`httpstock` / `httppayment` / gateway paths)
   - Login/refresh rate-limited per IP via Redis; Gin trusts only RFC1918 proxy hops (`SetTrustedProxies`) so a client-supplied `X-Forwarded-For` can't spoof a fresh IP and bypass the limit
   - Session store falls back to in-memory (with background GC) when no Redis is configured, so `/logout` and refresh-token revocation still work on a single instance instead of silently no-op'ing
-  - In production the ledger is authoritative and fail-closed: `Refresh` treats a missing key as revoked, so an empty Redis signs out every customer and operator. The ECS Redis task therefore persists to EFS with AOF — see [infra/terraform/README.md](../infra/terraform/README.md#redis-persistence)
+  - In production the ledger is authoritative and fail-closed: `Refresh` treats a missing key as revoked, so an empty Redis signs out every customer and operator. On ECS the Redis task persisted to EFS with AOF ([infra/terraform/README.md](../infra/terraform/README.md#redis-persistence)); the VENUS `redis` service has **no volume** (`deploy/venus/docker-compose.yml`), so recreating that container empties the ledger
   - `user.registered` NATS publish is best-effort: a broker outage is logged and the account still registers
   - Structured **zerolog** logging (`event` field) for session paths, internal errors, and bootstrap — [auth-logging.md](auth-logging.md)
 - **Tests:** `cd auth && go test ./...`
@@ -119,7 +119,7 @@ See [service-layout.md](service-layout.md) for details.
   - Order lifecycle at `/api/v1/orders` — statuses: `pending`, `paid`, `confirmed`, `in_transit`, `delivered`, `fulfilled`, `disputed`, `canceled`
   - List: `GET /api/v1/orders` (all — requires `order.read.all`); `GET /api/v1/orders?customer_id=` (ABAC). There is no `/orders/all` or `/orders/me`.
   - Consumes **`payment.succeeded`** (NATS) → `paid` (idempotent on `payment_id`; replays after ship/fulfill are no-ops); late payment on auto-`canceled` orders **re-reserves stock** and reopens the payment window before marking `paid`
-  - Consumes **`payment.canceled`** (NATS) → cancels a still-`paid` order on a full refund (`remaining_won == 0`) only when `payment_id` matches; omitted `remaining_won`, partial refunds, pending, and already-shipped orders are skipped. Atomic `paid`+`payment_id` guard so a concurrent ship is not last-write-wins canceled.
+  - Consumes **`payment.canceled`** (NATS) → cancels a `paid` or `confirmed` (not yet shipped) order on a full refund (`remaining_won == 0`) only when `payment_id` matches; omitted `remaining_won`, partial refunds, pending, and already-shipped orders are skipped. Atomic status (`paid`/`confirmed`) + `payment_id` guard so a concurrent ship is not last-write-wins canceled.
   - **Paid cancel / refund:** `PUT /orders/{id}/status` `{ "status": "canceled" }` calls payment `POST /payments/{payment_id}/cancel` (as the order service account; the operator's user ID goes into the refund reason) **before** flipping the order; a PG rejection leaves the order unchanged. Pending cancel is local only. Manager cancel is also allowed from `confirmed`, `in_transit`, `delivered`, and `disputed` (refunds; does not restock once stock is committed at ship).
   - **Confirmation / customer cancel:** `POST /orders/{id}/confirm` (`order.status.update`) moves `paid` → `confirmed` (a real status, not just a timestamp). Managers must confirm within 2 hours of payment; a worker auto-confirms after that. Customer `POST /orders/{id}/cancel` (ABAC owner) refunds immediately before confirmation; from `confirmed` through `delivered` it records a cancel request instead. Manager `…/cancel/approve` refunds; `…/cancel/reject` keeps the order. Unanswered cancel requests auto-approve after 2 hours.
   - **Delivery / receipt / dispute:** `POST /orders/{id}/deliver` (`order.ship`) moves `in_transit` → `delivered`. Customer `POST /orders/{id}/receipt/confirm` (ABAC owner) moves `delivered` → `fulfilled`; `POST /orders/{id}/receipt/dispute` moves it to `disputed` instead. A manager resolves a dispute either way: `POST /orders/{id}/dispute/resolve` (`order.status.update`) closes it `fulfilled` with no refund, or `PUT /status` → `canceled` refunds it. A delivered order with no customer response is auto-fulfilled 14 days after delivery.
@@ -169,15 +169,23 @@ See [service-layout.md](service-layout.md) for details.
 
 - **Host port:** 8084
 - **Features:** NATS subscriber (`order.*`, `product.*`, `payment.canceled`, `payment.callback_rejected`); Telegram ops alerts in Korean; webhook or `getUpdates` stores `chat_id` in PostgreSQL; manager API to accept users/chats. See [notification-telegram-bot.md](notification-telegram-bot.md)
-- **Database:** PostgreSQL `notifications` (`DUPLI1_NOTIFICATION_DB`; local port 5438). Without it the service falls back to an in-memory subscription repository that does not survive a restart — which is what production runs today, see **Production** below
+- **Database:** PostgreSQL `notifications` (`DUPLI1_NOTIFICATION_DB`; local port 5438). Without it the service falls back to an in-memory subscription repository that does not survive a restart — production sets it, see **Production** below
 - **Alert routing:** every destination, not one — the union of the env chat IDs (`TELEGRAM_ORDER_CHAT_ID` / `TELEGRAM_PRODUCT_CHAT_ID`) and every accepted subscription carrying `alert_order` / `alert_product`, each chat once. Env no longer overrides the database, so accepting a chat in manage-web takes effect even where the env fallback is set. A chat's alert classes stay editable after accept (`PATCH /api/v1/notification/telegram/subscriptions/{id}`), and single messages can be muted inside a class (`muted_events`, e.g. `order.paid` without `order.created`); a mute on the env chat's own row applies to it too
 - **Registration:** only an explicit `/start` registers a chat, and only if it is not already known, so the pending-registration ack is sent once. An env-allowlisted user is welcomed without a pending row; a `/start` from a known chat refreshes its stored label and username. Outbound alerts and `/start` replies are **Korean**.
 - **Delivery:** sends retry 3× with a doubling backoff on a timeout, 5xx or 429 (never on a 4xx); messages are truncated to Telegram's 4096-character limit at a tag/entity boundary. A send that still fails is logged — core NATS does not redeliver, so the alert is then dropped
 - **Webhook:** `TELEGRAM_WEBHOOK_SECRET` is required at startup whenever `TELEGRAM_WEBHOOK_URL` is set, and the secret is compared in constant time. An authenticated update is acknowledged **before** it is processed (work continues under the service context, 30s budget), so Telegram does not redeliver an update already in flight; the backlog drain runs before `setWebhook`, since Telegram answers `getUpdates` with `409` while a webhook is active
 - **More than one task:** NATS subscriptions use the queue group `dupli1-notification`, so an event is delivered once rather than once per task; the cached allowlist is rebuilt from the database every 30s so an accept served by one task reaches the others. Polling is **not** leader-elected — a second poller on the same bot token gets `409` and backs off 30s, which covers a deploy overlap but not permanent multi-task polling
 - **`/health`** reports each wired dependency (`postgres` ping, `nats` connection) and `status: degraded` when one fails, **always with HTTP 200** — nothing probes it today, so a 503 would signal nothing while risking a restart loop for whoever wires a probe to it later. Results cached 5s; probe errors are logged, not returned, since the route is unauthenticated
-- **Production:** bot token from Secrets Manager. **Subscriptions are not persisted:** the ECS task definition carries no `DUPLI1_NOTIFICATION_DB` (confirmed on `dupli1-notification:5`), so the service runs on the in-memory repository and every manager accept/reject is lost on deploy. Terraform is wired for the switch — `var.notification_db_url_secret_arn` defaults to `""` and the secret is omitted while it is empty — and needs the `notifications` database created, its URL stored as `dupli1/production/notification-db-url`, and the variable set. Production also runs **polling**, not webhook mode: neither `TELEGRAM_WEBHOOK_URL` nor `TELEGRAM_WEBHOOK_SECRET` is set on the task
+- **Production (VENUS):** bot token and chat IDs from `/opt/dupli1/.env`; `DUPLI1_NOTIFICATION_DB` points at the `notifications` database that `db-init` creates, so accepted subscriptions survive a deploy (on ECS they did not). Production runs **polling**, not webhook mode: neither `TELEGRAM_WEBHOOK_URL` nor `TELEGRAM_WEBHOOK_SECRET` is set
 - **Status:** Health + event dispatch + Telegram manager API (no outbound email/SMS yet)
+
+### dupli1-support
+
+- **Host port:** 8089
+- **Features:** customer consultation in three surfaces sharing one staff inbox — the Telegram consultation bot (`TELEGRAM_SUPPORT_*`, a separate bot from notification's), web consultation chat for signed-in shoppers, and private product questions (상품 문의). Handoffs publish `support.inquiry_opened` for notification to fan out. See [support-telegram-bot.md](support-telegram-bot.md), [support-web-chat.md](support-web-chat.md), [support-product-questions.md](support-product-questions.md)
+- **Database:** PostgreSQL `support` (`DUPLI1_SUPPORT_DB`; local port 5440); in-memory fallback without it
+- **Production (VENUS):** deployed with the other backend images; the bot stays inert until `TELEGRAM_SUPPORT_BOT_TOKEN` is set in `/opt/dupli1/.env` ([deployment-venus.md](deployment-venus.md#customer-support-service))
+- **Tests:** `cd support && go test ./...`
 
 ### dupli1-proxy
 
@@ -197,10 +205,11 @@ See [service-layout.md](service-layout.md) for details.
 | PostgreSQL `payments` | payment | `postgres-payment:5437` |
 | PostgreSQL `notifications` | notification | `postgres-notification:5438` |
 | PostgreSQL `profiles` | profile | `postgres-profile:5439` |
+| PostgreSQL `support` | support | `postgres-support:5440` |
 | MinIO `product-images` | product (local) | `minio:9000` via gateway `/product-images/` |
-| S3 + CloudFront OAC | product (AWS) | `images.dupli1.com` — see [product-images-browser-access.md](product-images-browser-access.md) |
+| SeaweedFS (S3 API) | product (VENUS) | served at `https://dupli1.com/product-images/` — see [product-images-browser-access.md](product-images-browser-access.md) |
 | Redis | auth | `redis:6379` (in Compose) |
-| NATS | auth, product, order, payment, notification, profile | `127.0.0.1:4222` in Compose (`--auth` / `NATS_TOKEN`); Cloud Map `nats.dupli1.local` in ECS |
+| NATS | auth, product, order, payment, notification, profile, support | `127.0.0.1:4222` in Compose (`--auth` / `NATS_TOKEN`); `nats.dupli1.local` on VENUS |
 
 ## API surface (summary)
 
@@ -213,6 +222,7 @@ See [service-layout.md](service-layout.md) for details.
 | cart | health only | own cart; admin read (`cart.read`) |
 | payment | health only | payments (ABAC + permissions); Bypass (`payment.bypass`); cancel/refund (`payment.cancel`) |
 | notification | health, Telegram webhook | Telegram subscriptions (`notification.telegram.read` / `notification.telegram.manage`) |
+| support | health, Telegram webhook | staff inbox and canned answers (`support.read` / `support.reply` / `support.manage`); shopper web chat and product questions (signed in, ABAC) |
 
 Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Permission spec: [permissions.md](permissions.md).
 
@@ -228,17 +238,18 @@ Full reference: [api.md](api.md). Route index: [endpoints.md](endpoints.md). Per
 | `github.com/elug3/dupli1/cart` | `cart/` |
 | `github.com/elug3/dupli1/payment` | `payment/` |
 | `github.com/elug3/dupli1/notification` | `notification/` |
-| `github.com/elug3/dupli1/shared` | `shared/` (permissions library) |
+| `github.com/elug3/dupli1/support` | `support/` |
+| `github.com/elug3/dupli1/shared` | `shared/` (cross-service libraries, see [CLAUDE.md](../CLAUDE.md#shared-module)) |
 
 ## Known gaps
 
 1. **Local TLS** — certs in `certs/` are not wired into nginx; gateway is HTTP only
-2. **Notification** — Telegram ops alerts only; no email/SMS. In production the service still runs on the in-memory subscription repository (no `DUPLI1_NOTIFICATION_DB` on the ECS task), so manager accept/reject decisions are lost on every deploy; terraform is ready and waiting on the Secrets Manager entry
+2. **Notification** — Telegram ops alerts only; no email/SMS
 3. **No migrations directory** — product migrates inline; auth uses bootstrap DDL
 4. **Planned packages not started** — user, chat, analytics (beyond `shared/pkg/permissions`)
 5. **Quality/performance** — see [quality-performance-review.md](quality-performance-review.md); money-path Criticals (C1 pricing, H7 JWT) are fixed — remaining items in [TODO.md](TODO.md)
 6. **v1.0 vs v1.1 vs v1.2** — **v1.0 postponed** (2026-07-27) until all checklist items in [v1.0-release-spec.md](v1.0-release-spec.md) are done; narrative: [v1-release-plan.md](v1-release-plan.md); v1.1 starts after v1.0 tags: [v1.1-release-plan.md](v1.1-release-plan.md)
-7. **Production JWT signing key** — **done**. Secret `dupli1/production/jwt-private-key` is injected as `JWT_PRIVATE_KEY` on ECS auth; `GET /api/v1/auth/settings` reports `features.ephemeral_jwt_key: false` (checklist A6).
+7. **Production JWT signing key** — **done**. On VENUS auth reads the key from `JWT_PRIVATE_KEY_FILE` (`/run/secrets/jwt_private_key.pem`); `GET /api/v1/auth/settings` reports `features.ephemeral_jwt_key: false` (checklist A6).
 8. **Legacy API path aliases** — canonical `/api/v1/{service}/…` paths are documented; the old top-level prefixes stay registered until the frontends migrate ([TODO.md](TODO.md))
 
 ## Running and testing
@@ -257,4 +268,4 @@ cd product && go test ./...
 
 ## Deployment
 
-Production: ECS on EC2, ALB, RDS PostgreSQL 16, S3, Secrets Manager. See [deployment-aws.md](deployment-aws.md).
+Production: Docker Compose on VENUS behind a Cloudflare Tunnel, deployed per image by `deploy/venus/deploy.sh`. See [deployment-venus.md](deployment-venus.md). The former AWS setup is in [deployment-aws.md](deployment-aws.md) (historical).

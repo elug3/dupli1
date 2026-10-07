@@ -1,6 +1,6 @@
 # Order tracking plan
 
-**Status:** Implementing (Phase A + B).  
+**Status:** Implemented. Shipping requires `carrier` + `tracking_number` (`order/pkg/handler/http.go`), and both storefront and admin show them.  
 **Repos:** `dupli1` (order), `dupli1-web`, `dupli1-manage-web`.
 
 ## Goal

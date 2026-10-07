@@ -1,6 +1,6 @@
 # Product images — browser access (private S3)
 
-**Status (2026-07-27):** **Done in production** — product `imageUrls` use CloudFront (the CDN). Checklist A2–A3 closed. Keep this doc as the architecture / ops reference.
+**Status:** Production moved to VENUS on 2026-09-27. Images now live in a SeaweedFS bucket (`product-images`, anonymous read of objects only) and the VENUS edge serves them at `https://dupli1.com/product-images/<key>` (`S3_PUBLIC_ENDPOINT`; `deploy/venus/nginx-edge.conf`). The CloudFront design below is the AWS-era record (closed 2026-07-27, checklist A2–A3).
 
 **Historical problem:** the product-images S3 bucket is **private** (Block Public Access on). When `S3_PUBLIC_ENDPOINT` pointed at the raw S3 regional domain, `imageUrls` were `https://<bucket>.s3.<region>.amazonaws.com/...` and browsers got 403. ECS nginx (`api/nginx.ecs.conf`) has **no** `/product-images/` proxy, and the ALB does not route image paths to S3.
 

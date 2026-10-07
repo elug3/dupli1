@@ -36,10 +36,10 @@ permissions.Has("product.create", []string{"product.*"}) // true
 permissions.HasAny(held, "product.create", "product.update")
 
 // Expand legacy RBAC roles when migrating stored user data.
-permissions.ExpandLegacyRoles([]string{"product_manager"}) // ["coupon.*", "product.*"]
+permissions.ExpandLegacyRoles([]string{"product_manager"}) // ["product.*", "promotion.*", "coupon.*"]
 
 // Apply a named bundle preset before saving a user.
-permissions.ExpandBundle("catalog_editor")
+perms, err := permissions.ExpandBundle("catalog_editor") // error for an unknown bundle
 ```
 
 ### `pkg/settings`
@@ -93,6 +93,10 @@ _ = client.EditMessageText(ctx, chatID, query.Message.MessageID, answer, nextMen
 
 `Send` obeys the access policy; `Reply`, `ReplyMenu`, `EditMessageText` and
 `AnswerCallback` do not, because each answers something the chat itself just did.
+
+### Other packages
+
+`authmiddleware`, `events`, `money`, `natsauth`, `natspublisher`, `outbox`, `pgsslmode`, `productclient`, `reportperiod`, `sentrymon` and `serviceaccount` are described in the repository's [CLAUDE.md → Shared module](../CLAUDE.md#shared-module) table; each package's doc comment is the reference.
 
 ### Testing
 

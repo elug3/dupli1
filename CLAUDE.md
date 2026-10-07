@@ -84,6 +84,8 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/settings` | `GET /settings` response helpers used by all services |
 | `shared/pkg/outbox` | Transactional outbox drain/retry loop (`Drainer`), used by `order` and `payment`; each service keeps its own outbox table/SQL behind the `Store` interface |
 | `shared/pkg/events` | NATS subject constants + payload structs for cross-service events (`order.*`, `payment.succeeded`, `product.*`, `support.inquiry_opened`, `support.message_created|inquiry_updated`); one canonical contract per publisher/subscriber pair instead of redeclaring subject strings and payload shapes on each side |
+| `shared/pkg/money` | The one storefront currency (`krw`) and whole-won amount helpers; its package comment is the record of the `*_cents` → `*_krw` → `*_won` renames |
+| `shared/pkg/natsauth` | Adds `nats.Token(NATS_TOKEN)` to a NATS connection when the env var is set (the broker runs with `--auth` in Compose) |
 | `shared/pkg/pgsslmode` | Picks `sslmode` for a Postgres connection string (local/docker hosts → `disable`, everything else including RDS → `require`); used by every service's DB bootstrap so the local-hostname list can't drift out of sync per service again |
 | `shared/pkg/natspublisher` | JSON-marshaling NATS event publisher (`New`, `Publish`, `Close`), used by `auth`, `order`, `product`, and `payment` |
 | `shared/pkg/authmiddleware` | Bearer-token HTTP middleware (`RequireAuth`, `OptionalAuth`) parameterized by `authjwt.AccessTokenValidator` and a per-service error-response callback, so each service keeps its own error body shape; used by `cart`, `order`, `payment`, `notification`, `product` |

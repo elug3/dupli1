@@ -2,11 +2,11 @@
 
 Design spec for the **customer-facing** Telegram inquiry bot: menu-driven consultation, conversation state, and handoff to a human operator.
 
-**Status:** Phases 0–6 complete, and Phase 7 prepared but not applied — the consultation works end to end, the storefront button opens the bot carrying where the shopper came from, and the Terraform, CI rows and retention job for production are all in the tree. **Nothing runs in production yet:** the bot stays unreachable until an operator creates the two secrets and runs `terraform apply` ([Deploying](#deploying-phase-7)). Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
+**Status:** Phases 0–6 complete, and Phase 7 prepared but not applied — the consultation works end to end, the storefront button opens the bot carrying where the shopper came from, and the Terraform, CI rows and retention job for production are all in the tree. Production has since moved to VENUS, where `support` deploys with the rest of the backend and the bot stays inert until its token is set ([deployment-venus.md → Customer support service](deployment-venus.md#customer-support-service)); the Terraform below was never applied. Supersedes nothing; the ops bot in [notification-telegram-bot.md](notification-telegram-bot.md) stays exactly as it is.
 
 **Scope (Tier 2):** inline-keyboard consultation menus, canned answers, and human handoff. **Out of scope (Tier 3):** authenticated order lookups ("where is my order?"), which need a Telegram↔customer identity binding — see [Deferred: authenticated lookups](#deferred-authenticated-lookups).
 
-**Related:** [notification-telegram-bot.md](notification-telegram-bot.md), [permissions.md](permissions.md), [service-layout.md](service-layout.md), [current-state.md](current-state.md), [deployment-aws.md](deployment-aws.md).
+**Related:** [notification-telegram-bot.md](notification-telegram-bot.md), [permissions.md](permissions.md), [service-layout.md](service-layout.md), [current-state.md](current-state.md), [deployment-venus.md](deployment-venus.md).
 
 ---
 

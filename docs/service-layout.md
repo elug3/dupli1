@@ -24,18 +24,22 @@ dupli1/
 ├── payment/
 │   ├── cmd/
 │   └── pkg/
-├── notification/
-├── support/                  # Customer Telegram consultation bot (Phase 2 skeleton)
+├── notification/             # NATS → Telegram ops alerts
 │   ├── cmd/
 │   └── pkg/
-├── shared/                   # Reusable Go modules (permissions, …)
+├── support/                  # Customer consultation: Telegram bot, web chat, product questions, staff inbox
+│   ├── cmd/
+│   └── pkg/
+├── shared/                   # Cross-service libraries (permissions, authjwt, events, outbox, …)
 │   ├── go.mod
 │   └── pkg/
 ├── api/
-│   ├── nginx.conf            # Gateway routing (dupli1-proxy image)
-│   └── Dockerfile
+│   ├── gateway/routes.conf   # The one route table every environment includes
+│   ├── nginx*.conf           # Per-environment wrappers (local, ECS image, single-EC2)
+│   └── Dockerfile*
+├── deploy/venus/             # Production: Compose stack, gateway/edge config, deploy.sh
 ├── infra/
-│   ├── terraform/
+│   ├── terraform/            # Former AWS production (historical)
 │   └── scripts/
 ├── certs/                    # Self-signed TLS material (not wired in local nginx yet)
 ├── Dockerfile                # Multi-service image (SERVICE build arg)
@@ -56,6 +60,11 @@ Cross-service libraries with no service-specific dependencies. Services import v
 |---------|---------|
 | `permissions` | Fine-grained permission constants, `Has` / `HasAny`, legacy role expansion, bundles — see [permissions.md](permissions.md) |
 | `settings` | Shared non-secret `GET /settings` response helpers used by all services |
+| `authjwt`, `authmiddleware`, `serviceaccount` | JWT/JWKS validation, Bearer middleware, service account names |
+| `events`, `natspublisher`, `natsauth`, `outbox` | NATS subjects and payloads, publisher, token auth, transactional outbox drainer |
+| `money`, `reportperiod`, `pgsslmode`, `productclient`, `sentrymon`, `telegram` | `*_won` helpers, KST report periods, Postgres `sslmode`, product variant client, Sentry, Telegram Bot API client |
+
+The per-package description is in [CLAUDE.md → Shared module](../CLAUDE.md#shared-module).
 
 ```bash
 cd shared && go test ./...
@@ -110,9 +119,9 @@ Owns customer commerce profile (`display_name`, `phone`) and saved shipping addr
 Owns:
 
 - Parent styles + variants (SKUs, each with a canonical ULID `SkuID`): search returns parents only; PDP embeds variants
-- Admin product/variant/coupon CRUD; new parent `id`s are ULIDs (legacy brand-prefixed ids e.g. `BOT-001` remain valid); images on variants
+- Admin product/variant/promotional-code CRUD; new parent `id`s are ULIDs (legacy brand-prefixed ids e.g. `BOT-001` remain valid); images on variants
 - Stock and reservations at `/api/v1/products/inventory/*` (merged in from the former standalone `inventory` service; legacy `/api/v1/inventory/*` still aliased). Keyed by canonical ULID `SkuID` with `sku` and `by-sku-id/{skuId}` lookups. Public reads; writes require `inventory.stock.write` or `inventory.reservation.manage`
-- JWT validation via `AUTH_JWKS_URL` (RS256 JWKS); per-route permission checks (`product.create`, `coupon.read`, …)
+- JWT validation via `AUTH_JWKS_URL` (RS256 JWKS); per-route permission checks (`product.create`, `promotion.read`, …)
 
 ### Order (`order/pkg`)
 
@@ -140,9 +149,16 @@ Bypass + NANO card; publishes `payment.succeeded` on NATS. See [payment-service.
 **Module:** `github.com/elug3/dupli1/notification`  
 **Status:** NATS → Telegram dispatch; PostgreSQL subscriptions; webhook or polling; manager subscription API. See [notification-telegram-bot.md](notification-telegram-bot.md).
 
+### Support (`support/pkg`)
+
+**Module:** `github.com/elug3/dupli1/support`  
+**Storage:** PostgreSQL (`support`), in-memory fallback when no DB URL is configured (tests)
+
+Customer consultation: the Telegram consultation bot (its own `TELEGRAM_SUPPORT_*` token, never the ops bot's), web consultation chat for signed-in shoppers, private product questions, and the staff inbox manage-web `/support` reads (`support.read|reply|manage`). See [support-telegram-bot.md](support-telegram-bot.md), [support-web-chat.md](support-web-chat.md), [support-product-questions.md](support-product-questions.md).
+
 ## Gateway routing
 
-`dupli1-proxy` uses [api/nginx.conf](../api/nginx.conf). Local gateway: **HTTP** on port **8080** (also mapped to host port 80).
+`dupli1-proxy` uses [api/nginx.conf](../api/nginx.conf), which includes the shared route table [api/gateway/routes.conf](../api/gateway/routes.conf). Local gateway: **HTTP** on port **8080** (also mapped to host port 80).
 
 | Path prefix | Backend |
 |-------------|---------|
@@ -150,8 +166,8 @@ Bypass + NANO card; publishes `payment.succeeded` on NATS. See [payment-service.
 | `/api/v1/auth/` | dupli1-auth |
 | `/api/v1/profile` | dupli1-profile |
 | `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses` | dupli1-profile (one-release alias; see [profile-service.md](profile-service.md)) |
-| `/api/v1/products` | dupli1-product (canonical; also covers `/products/variants`, `/products/coupons`, `/products/catalog`, `/products/inventory`) |
-| `/api/v1/coupons` | dupli1-product (legacy alias) |
+| `/api/v1/products` | dupli1-product (canonical; also covers `/products/variants`, `/products/promotions`, `/products/catalog`, `/products/inventory`) |
+| `/api/v1/coupons` | dupli1-product (pre-rename alias, one release) |
 | `/api/v1/catalog` | dupli1-product (legacy alias) |
 | `/api/v1/inventory/` | dupli1-product (legacy alias) |
 | `/api/v1/orders` | dupli1-order (canonical; also covers `/orders/checkout`) |
@@ -160,11 +176,12 @@ Bypass + NANO card; publishes `payment.succeeded` on NATS. See [payment-service.
 | `/api/v1/carts/` | dupli1-cart (legacy alias) |
 | `/api/v1/payments` | dupli1-payment |
 | `/api/v1/notification/` | dupli1-notification |
+| `/api/v1/support/` | dupli1-support |
 | `/api/v1/variants` | dupli1-product (legacy alias) |
 
 Checkout sessions: canonical `/api/v1/orders/checkout/sessions` (legacy `/api/v1/checkout/sessions`). Cart admin: canonical `/api/v1/cart/customers/{id}` (legacy `/api/v1/carts/{id}`). Path migration checklist: [TODO.md](TODO.md).
 
-Direct host ports (bypass gateway): auth **18080**, profile **8088**, product **8081**, order **8083**, cart **8086**, payment **8087**, notification **8084**.
+Direct host ports (bypass gateway): auth **18080**, profile **8088**, product **8081**, order **8083**, cart **8086**, payment **8087**, notification **8084**, support **8089**.
 
 ## Adding a new service
 
@@ -185,6 +202,8 @@ cd order && go test ./...
 cd cart && go test ./...
 cd payment && go test ./...
 cd notification && go test ./...
+cd support && go test ./...
+cd shared && go test ./...
 ```
 
 Root `go test ./...` does not work — the root `go.mod` is a stub.

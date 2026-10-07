@@ -238,6 +238,7 @@ See [notification-telegram-bot.md](notification-telegram-bot.md).
 | `POST` | `/api/v1/auth/register` | `user.create` (or temporary open register) |
 | `GET` | `/api/v1/auth/me` | (authenticated) |
 | `GET` | `/api/v1/auth/users` | `user.read` |
+| `GET` | `/api/v1/auth/reports/registrations` | `user.read` |
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` |
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `user.status.update` |
@@ -295,6 +296,12 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `POST` | `/api/v1/products/promotions/redeem` | — (public, rate-limited) |
 | `POST` | `/api/v1/products/promotions/evaluate` | — (public, rate-limited) |
 | `POST` | `/api/v1/products/promotions/reserve\|consume\|release\|tier` | `promotion.redeem` + caller `dupli1-order` ([internal](#internal-apis)) |
+| `GET`/`POST` | `/api/v1/products/promotions/me` | (authenticated; own wallet) |
+| `POST` | `/api/v1/products/promotions/me/tier` | (authenticated; own tier) |
+| `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` |
+| `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` |
+| `GET` | `/api/v1/products/reports/visitors` | `product.read` |
+| `POST` | `/api/v1/products/visits` | — (public beacon, rate-limited) |
 
 Legacy top-level aliases (`/api/v1/variants/…`, `/api/v1/catalog/…`, `/api/v1/coupons/…`) are still registered with the same permissions; see [TODO.md](TODO.md) for the migration table. The promotion routes additionally answer on the pre-rename `/api/v1/products/coupons…` spelling ([product-promotion-rename.md](product-promotion-rename.md)).
 
@@ -322,6 +329,7 @@ registered as an alias.
 | `POST` | `/api/v1/orders` | ABAC or `order.create` |
 | `GET` | `/api/v1/orders` | `order.read.all` |
 | `GET` | `/api/v1/orders/events` | `order.read.all` (live stream; ends when the token expires) |
+| `GET` | `/api/v1/orders/reports/sales` | `order.read.all` |
 | `GET` | `/api/v1/orders?customer_id=` | ABAC or `order.read.all` |
 | `GET` | `/api/v1/orders/{id}` | ABAC or `order.read.all` |
 | `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` |
@@ -361,7 +369,16 @@ registered as an alias.
 | `POST` | `/api/v1/notification/telegram/subscriptions` | `notification.telegram.manage` |
 | `POST` | `/api/v1/notification/telegram/subscriptions/{id}/accept` | `notification.telegram.manage` |
 | `POST` | `/api/v1/notification/telegram/subscriptions/{id}/reject` | `notification.telegram.manage` |
+| `GET` | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.read` |
+| `PATCH` | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` |
 | `DELETE` | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` |
+
+Webhook (`POST /api/v1/notification/telegram/webhook`) and NATS event dispatch require no JWT. Manager routes require Bearer + `AUTH_JWKS_URL` on the notification service.
+
+### Support service
+
+| Method | Path | Permission |
+|--------|------|------------|
 | `GET` | `/api/v1/support/inquiries` | `support.read` |
 | `GET` | `/api/v1/support/inquiries/{id}` | `support.read` |
 | `POST` | `/api/v1/support/inquiries/{id}/assign` | `support.reply` |
@@ -374,8 +391,13 @@ registered as an alias.
 | `POST` | `/api/v1/support/web/read` | same |
 | `POST` | `/api/v1/support/web/inquiries/current/close` | same |
 | `GET` | `/api/v1/support/web/events` | same (SSE) |
+| `GET`/`POST` | `/api/v1/support/products/{productID}/questions` | Bearer (own questions only) |
+| `GET` | `/api/v1/support/me/product-questions` | Bearer (own questions only) |
+| `PATCH`/`DELETE` | `/api/v1/support/me/product-questions/{id}` | Bearer, owner, while unanswered |
+| `GET` | `/api/v1/support/product-questions`, `…/{id}` | `support.read` |
+| `POST` | `/api/v1/support/product-questions/{id}/answer\|hide` | `support.reply` |
 
-Webhook (`POST /api/v1/notification/telegram/webhook`) and NATS event dispatch require no JWT. Manager routes require Bearer + `AUTH_JWKS_URL` on the notification task in production.
+The support Telegram webhook (`POST /api/v1/support/telegram/webhook`) is authenticated by its secret header, not a JWT.
 
 ### Support
 
@@ -437,10 +459,9 @@ One-time mapping applied to `users.permissions` during database migration (`auth
 | Legacy role | Expanded permissions |
 |-------------|---------------------|
 | `owner` | `*` |
-| `admin` | `admin.*`, `user.*`, `product.*`, `promotion.*`, `coupon.*`, `inventory.stock.write`, `inventory.reservation.manage`, `order.ship`, `order.status.update`, `order.read.all`, `cart.read`, `payment.bypass` |
+| `admin` | `admin.*`, `user.create`, `user.read`, `user.permissions.update`, `user.password.update`, `user.status.update`, `product.*`, `promotion.*`, `coupon.*`, `inventory.stock.write`, `inventory.reservation.manage`, `order.ship`, `order.status.update`, `order.read.all`, `cart.read`, `payment.bypass` |
 | `user_manager` | `user.password.update`, `user.status.update` |
 | `customer_registrar` | `user.create` |
-| `support_agent` | `support.read`, `support.reply` |
 | `product_manager` | `product.*`, `promotion.*`, `coupon.*` |
 | `order_manager` | `order.ship`, `order.status.update`, `order.read.all`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass` |
 | `customer` | _(empty — storefront ABAC only)_ |
@@ -453,8 +474,7 @@ Users with multiple legacy roles receive the **union** of expanded permissions (
 |---------|----------|-------|-----------------|
 | Owner | `OWNER_EMAIL` | `owner`, `product_manager` | `*` |
 | dupli1-web | `DUPLI1_WEB_SERVICE_*` | `customer_registrar` | `user.create` |
-| `support_agent` | `support.read`, `support.reply` |
-| dupli1-order | `DUPLI1_ORDER_SERVICE_*` | `order_manager` | `order.ship`, `order.status.update`, `inventory.reservation.manage`, `payment.cancel` |
+| dupli1-order | `DUPLI1_ORDER_SERVICE_*` | `order_manager` | `order.ship`, `order.status.update`, `inventory.reservation.manage`, `payment.cancel`, `promotion.redeem` |
 
 Note: `dupli1-order` does not need `cart.read` or `inventory.stock.write` for its runtime paths (reservations only). `payment.cancel` is how every paid-order cancel refunds: the order service always calls payment as this account, never with the operator's token. The legacy `order_manager` role was broader than the order service account requires.
 

@@ -40,7 +40,7 @@ Product / Order / Payment services
 | `dupli1-notification` | Subscribes to NATS; formats HTML messages; sends via Bot API. Also fans out customer inquiry handoffs from the support bot (`support.inquiry_opened` → chats with `alert_support`), delivered silently when the inquiry was opened outside service hours |
 | `dupli1-nats` | Event bus (`order.*`, `product.*`, `payment.succeeded` consumed indirectly via order) |
 | Telegram Bot API | Outbound `sendMessage`; inbound webhook or `getUpdates` |
-| Secrets Manager `dupli1/production/telegram` | **Bot token** (+ transitional env chat IDs) |
+| `/opt/dupli1/.env` on VENUS | **Bot token** (+ transitional env chat IDs) |
 | PostgreSQL `notifications` | `telegram_subscriptions` — pending/accepted users and chat IDs |
 
 Production bot (2026-08): `@MHYM7_BOT` (`dupli1_notification`).
@@ -53,7 +53,7 @@ Production bot (2026-08): `@MHYM7_BOT` (`dupli1_notification`).
 
 | Data | Sensitivity | Store (target) | Store (today) |
 |------|-------------|----------------|---------------|
-| `TELEGRAM_BOT_TOKEN` | **Secret** — full send access as the bot | Secrets Manager | Secrets Manager |
+| `TELEGRAM_BOT_TOKEN` | **Secret** — full send access as the bot | Host secret store | `/opt/dupli1/.env` on VENUS |
 | Telegram **user IDs** (allowlist) | ACL — who may use bot commands | PostgreSQL `telegram_subscriptions` | Env `TELEGRAM_ALLOWED_USER_IDS` (bootstrap) |
 | **Chat IDs** (destinations) | Config — where alerts go; not credentials | PostgreSQL `telegram_subscriptions` | Env `TELEGRAM_ORDER_CHAT_ID` / `PRODUCT` (fallback) |
 | Channel / event toggles | Policy | Auth DB (`settings.notifications`) | Not implemented |
@@ -136,7 +136,7 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `DUPLI1_NOTIFICATION_DB` | Recommended (prod) | PostgreSQL `notifications` database. **Not yet wired in production** — see [Production database](#production-database-pending) |
+| `DUPLI1_NOTIFICATION_DB` | Recommended (prod) | PostgreSQL `notifications` database. Set in production (VENUS) — see [Production database](#production-database) |
 | `TELEGRAM_BOT_TOKEN` | Yes (for Telegram) | Bot API token from [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_WEBHOOK_URL` | Production | Public HTTPS webhook URL |
 | `TELEGRAM_WEBHOOK_SECRET` | **Required** when webhook URL is set | Validates `X-Telegram-Bot-Api-Secret-Token`; startup fails without it, and the handler is fail-closed |
@@ -145,7 +145,7 @@ Chat IDs are **routing configuration**, not secrets. Keeping them in Secrets Man
 | `TELEGRAM_ORDER_CHAT_ID` | Optional routing | Always receives order alerts, in addition to accepted `alert_order` subscriptions — except a message muted on that chat's own subscription row |
 | `TELEGRAM_PRODUCT_CHAT_ID` | Optional routing | Always receives product alerts, in addition to accepted `alert_product` subscriptions |
 | `NATS_URL` | Yes (for dispatch) | e.g. `nats://nats.dupli1.local:4222` |
-| `NATS_TOKEN` | Yes (with `--auth`) | Must match the broker token. Compose default `dupli1_nats_dev`; prod Secrets Manager `dupli1/production/nats-token` |
+| `NATS_TOKEN` | Yes (with `--auth`) | Must match the broker token. Compose default `dupli1_nats_dev`; not set on VENUS, whose `nats` runs without `--auth` |
 | `MANAGE_WEB_URL` | Recommended | Base URL for “관리자에서 주문 보기” links (default `https://manage.dupli1.com`) |
 
 Local DB: `postgres://dupli1:dupli1_dev@localhost:5438/notifications?sslmode=disable`
@@ -158,34 +158,21 @@ where a dependency is wired it adds a `dependencies` map — `postgres` is pinge
 one of them fails.
 
 **The status code is always `200`.** Nothing probes this endpoint today: the
-notification container declares no ECS health check and is reached through Cloud
-Map rather than an ALB target group. A `503` would tell no one anything, while
+notification container declares no health check in `deploy/venus/docker-compose.yml`
+and is reached only inside the stack's network. A `503` would tell no one anything, while
 arranging a restart loop for whoever later points a probe at it during a NATS
 blip — decide that deliberately, by reading `status`, rather than inheriting it.
 Probe results are cached for 5s so an unauthenticated request cannot drive
 database pings, and a probe's error is logged rather than returned, since the
 route needs no auth and connection errors name hosts.
 
-### Production database (pending)
+### Production database
 
-The ECS task definition carries no `DUPLI1_NOTIFICATION_DB` secret yet, so
-production falls back to the in-memory subscription repository: manager
-accept/reject decisions are lost on every deploy or task replacement, and two
-tasks do not share an allowlist. The `/telegram` tab in manage-web still works,
-but nothing it records survives a restart.
-
-Terraform is already wired for the switch, mirroring how `profile` handles the
-same gap: `var.notification_db_url_secret_arn` defaults to `""` and the DB entry
-is omitted from the task's `secrets` block while it is empty. To enable
-persistence:
-
-1. Create the `notifications` database on the production Postgres instance.
-2. Store its connection string in Secrets Manager as
-   `dupli1/production/notification-db-url`.
-3. Set `notification_db_url_secret_arn` to that ARN (tfvars, or the variable
-   default in `infra/terraform/variables.tf`) and apply.
-
-The service migrates its own schema on startup, so no migration step is needed.
+On VENUS `DUPLI1_NOTIFICATION_DB` points at the `notifications` database, which
+`db-init` creates, so accepted subscriptions survive a deploy
+(`deploy/venus/docker-compose.yml`). On AWS the ECS task never had it and ran
+on the in-memory repository, losing every accept/reject on restart. The service
+migrates its own schema on startup, so no migration step is needed.
 
 If an event has no destination at all — no env chat ID and no accepted subscription with the matching flag — it is **logged and skipped** (no Telegram send). When several chats are configured, each is attempted even if an earlier one fails; the failures are reported together.
 
@@ -194,7 +181,7 @@ timeout, a 5xx or a `429`; a 4xx (a chat that blocked the bot, a malformed
 message) is not retried, since it fails identically every time. Messages longer
 than Telegram's 4096-character limit are truncated at a tag and entity boundary,
 with the tags left open closed off — an order with enough line items used to
-exceed the limit and have its alert rejected outright. Core NATS does not redeliver — a missed alert is only visible in CloudWatch (`/ecs/dupli1-notification`).
+exceed the limit and have its alert rejected outright. Core NATS does not redeliver — a missed alert is only visible in the container log (`docker logs dupli1-notification-1` on VENUS).
 
 ### Running more than one task
 
@@ -311,7 +298,7 @@ Publishers: `order`, `product` and `payment` services (payment success flows thr
 
 | Command | Who | Behaviour |
 |---------|-----|-----------|
-| `/start` | Allowlisted users only | Welcome text + **chat ID** for ops setup (today: paste into config; target: auto-register in DB) |
+| `/start` | Anyone | Env-allowlisted users get the welcome text and **chat ID**; an unknown chat gets a pending `telegram_subscriptions` row for a manager to accept in manage-web `/telegram`, acknowledged once (see [Access rules](#access-rules-implemented)) |
 
 No other commands are implemented. Unknown commands are ignored.
 
@@ -324,13 +311,7 @@ No other commands are implemented. Unknown commands are ignored.
 ### 1. Create the bot
 
 1. Open [@BotFather](https://t.me/BotFather) → `/newbot` → save the **token**.
-2. Store token in Secrets Manager:
-
-```bash
-aws secretsmanager put-secret-value --region us-east-1 \
-  --secret-id dupli1/production/telegram \
-  --secret-string '{"TELEGRAM_BOT_TOKEN":"<token>"}'
-```
+2. Put the token in `/opt/dupli1/.env` on VENUS as `TELEGRAM_BOT_TOKEN='<token>'`.
 
 ### 2. Allowlist ops users
 
@@ -343,7 +324,7 @@ Get each ops person's Telegram **user ID** (e.g. [@userinfobot](https://t.me/use
 TELEGRAM_ALLOWED_USER_IDS=123456789,987654321
 ```
 
-**Target:** add IDs via `PATCH /api/v1/settings/notifications` or manage-web.
+**Or** let each person send `/start` and accept their pending row in manage-web `/telegram`.
 
 ### 3. Configure alert destinations
 
@@ -358,15 +339,9 @@ TELEGRAM_ALLOWED_USER_IDS=123456789,987654321
 
 Use one chat ID for orders and another for catalog alerts.
 
-**Today:** update secret + redeploy notification service:
+**Env route:** edit `/opt/dupli1/.env`, then recreate the service: `$DC up -d notification` (`$DC` as in [deployment-venus.md](deployment-venus.md)).
 
-```bash
-aws ecs update-service --region us-east-1 \
-  --cluster production --service dupli1-notification \
-  --force-new-deployment
-```
-
-**Target:** set chat IDs in Manager Settings — no redeploy.
+**No-redeploy route:** accept the chat's `/start` registration in manage-web `/telegram` and tick its alert classes.
 
 ### 4. Local development
 
@@ -392,7 +367,7 @@ Run the stack: `sudo docker compose up --build`. Trigger a test order or product
 
 ### Logs
 
-CloudWatch: `/ecs/dupli1-notification`
+`docker logs dupli1-notification-1` on VENUS
 
 | Log line | Meaning |
 |----------|---------|
@@ -406,13 +381,13 @@ CloudWatch: `/ecs/dupli1-notification`
 - NATS: at-most-once delivery; failed Telegram sends are logged and dropped.
 - Missing token: Telegram disabled; NATS handler may still run.
 - Missing chat ID: per-event skip with log line.
-- Non-allowlisted `/start`: no reply.
+- `/start` from an unknown chat: pending row, acknowledged once; nothing is sent to it until a manager accepts it.
 
 ### Rotating the bot token
 
 1. Revoke/regenerate in BotFather.
-2. Update `TELEGRAM_BOT_TOKEN` in Secrets Manager.
-3. Redeploy `dupli1-notification`.
+2. Update `TELEGRAM_BOT_TOKEN` in `/opt/dupli1/.env` on VENUS.
+3. `$DC up -d notification`.
 4. Chat IDs and allowlist unchanged.
 
 ---
@@ -430,7 +405,7 @@ The Bot API transport moved to `shared/pkg/telegram` so a second bot can reuse i
 | `/start` handler (ops-specific) | `notification/pkg/infra/telegram/commands.go` |
 | Update processor (ops-specific) | `notification/pkg/infra/telegram/processor.go` |
 | Bootstrap | `notification/pkg/bootstrap/bootstrap.go` |
-| ECS secrets (transitional) | `infra/terraform/ecs_services.tf` |
+| Production env | `deploy/venus/docker-compose.yml` (`notification`) |
 
 ---
 
@@ -438,9 +413,8 @@ The Bot API transport moved to `shared/pkg/telegram` so a second bot can reuse i
 
 | Step | Description |
 |------|-------------|
-| **Done** | NATS → Telegram dispatch; PostgreSQL subscriptions; webhook + getUpdates; manager accept API; `/start` |
-| **Next** | Manage-web UI; wire `settings.notifications` in auth for global toggles |
-| **Later** | Event-type mute flags per subscription |
+| **Done** | NATS → Telegram dispatch; PostgreSQL subscriptions; webhook + getUpdates; manager accept API; `/start`; manage-web `/telegram` UI; per-chat alert classes and `muted_events` |
+| **Next** | Wire `settings.notifications` in auth for global toggles |
 
 ---
 

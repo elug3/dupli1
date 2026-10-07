@@ -1,5 +1,7 @@
 # Dupli1 AWS (ECS on EC2)
 
+> **Historical.** Production moved off AWS to VENUS on 2026-09-27 ([docs/deployment-venus.md](../../docs/deployment-venus.md)) and the `aws.yml` workflow was removed. This Terraform describes the former production.
+
 Terraform provisions the production compute path on the existing VPC and RDS:
 
 | Resource | Purpose |

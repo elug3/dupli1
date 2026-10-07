@@ -6,7 +6,7 @@
 
 | When | Milestone |
 |------|-----------|
-| **By 2026-08-30** | Dupli1 **v1.0** released — [v1.0-release-spec.md](v1.0-release-spec.md) |
+| ~~By 2026-08-30~~ | Dupli1 **v1.0** released — [v1.0-release-spec.md](v1.0-release-spec.md). The date passed without a release tag; no new date is set |
 | **September 2026** | **Wallet** products added — [product-multi-category-design.md](product-multi-category-design.md) |
 | **October 2026** | **Padded jackets** added — a new `clothing` category (decided 2026-10-04; earlier drafts called these padded bags) |
 

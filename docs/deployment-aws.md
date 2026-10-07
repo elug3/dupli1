@@ -1,6 +1,8 @@
 # AWS deployment
 
-Dupli1 production runs on **ECS (EC2 launch type)** in `us-east-1`, fronted by an **Application Load Balancer** (HTTP + HTTPS). Images were built and pushed by `.github/workflows/aws.yml`, removed after the 2026-09-27 move to VENUS ([deployment-venus.md](deployment-venus.md)); CI now publishes to GHCR.
+> **Historical.** Production moved to VENUS on 2026-09-27 — see [deployment-venus.md](deployment-venus.md). This page describes the former AWS setup.
+
+Dupli1 production ran on **ECS (EC2 launch type)** in `us-east-1`, fronted by an **Application Load Balancer** (HTTP + HTTPS). Images were built and pushed by `.github/workflows/aws.yml`, removed after the 2026-09-27 move to VENUS ([deployment-venus.md](deployment-venus.md)); CI now publishes to GHCR.
 
 ## Architecture
 
