@@ -384,6 +384,12 @@ Phases 0–1 are prerequisites with no user-visible change and can land first, i
 
 ## Deploying (Phase 7)
 
+> **Production is now VENUS, not AWS.** `support` is part of the VENUS stack
+> (`deploy/venus/`) and deploys with every backend push to `main`; switching
+> the bot on there is three `.env` values — see
+> [deployment-venus.md → Customer support service](deployment-venus.md#customer-support-service).
+> The AWS steps below are kept for reference only.
+
 Everything that is code is in the tree. What remains needs an AWS console and the
 bot token, so it is an operator's work, not a commit.
 

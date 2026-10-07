@@ -51,23 +51,13 @@ VENUS  docker compose project "dupli1"  (deploy/venus/docker-compose.yml)
   local `docker-compose.yml` still points at `minio/minio:latest` and will fail
   to pull on a fresh machine.
 - **Kept as production had it:** redis and NATS JetStream have no volumes.
-  These are pre-existing gaps, not migration changes. `profile` and `notification` also started in memory, as on ECS;
+  This is a pre-existing gap, not a migration change. `support`, which ECS
+  never ran, is deployed here for the first time — see
+  [Customer support service](#customer-support-service). `profile` and `notification` also started in memory, as on ECS;
   both now have a database (`profiles`, `notifications`), which the one-shot
   `db-init` service creates if missing before either starts. In memory,
   profile lost every saved shipping address on each restart and deploy, so
   shoppers retyped their address at every checkout.
-- **`support` runs on VENUS only** (it was never deployed on ECS): the web
-  consultation chat, product questions (상품 문의) and the manage-web `/support`
-  inbox. Its `support` database is created by `db-init` like the others, and
-  `deploy.sh` rolls it out with the backend and checks
-  `/api/v1/support/health`. Optional `/opt/dupli1/.env` keys, kept by
-  `make-env.sh` across re-runs:
-  - `DUPLI1_SUPPORT_SMTP_ADDR|USERNAME|PASSWORD|FROM` — the reply-notice email.
-    Unset, no email goes out and everything else works.
-  - `TELEGRAM_SUPPORT_BOT_TOKEN` — the customer Telegram bot, never the ops
-    bot's token. Unset, that bot is inert. With no
-    `TELEGRAM_SUPPORT_WEBHOOK_URL` it long-polls; a webhook URL also needs
-    `TELEGRAM_SUPPORT_WEBHOOK_SECRET`.
 
 ## Files and locations
 
@@ -121,8 +111,8 @@ checks out only `deploy/venus/deploy.sh` into its own workspace and runs
 
 1. moves the deploy checkout `/opt/dupli1/repo` (the compose file and gateway
    config the stack runs from) to the pushed commit;
-2. pulls the 8 backend images (`auth product order cart payment profile
-   notification proxy`) and tags them `dupli1-prod/<name>:<tag>`;
+2. pulls the 9 backend images (`auth product order cart payment profile
+   notification support proxy`) and tags them `dupli1-prod/<name>:<tag>`;
 3. sets `DUPLI1_BACKEND_TAG=<tag>` in `/opt/dupli1/.env` and runs `up -d` for
    those services (`redis` and `nats` stay on `DUPLI1_IMAGE_TAG`);
 4. waits up to 2 min for every service to run without restarting, every
@@ -130,7 +120,8 @@ checks out only `deploy/venus/deploy.sh` into its own workspace and runs
    (`:8081`) to answer, then holds 15 s;
 5. otherwise puts the previous tag **and the previous checkout** back and
    restarts on them, failing the job — old images with the compose file they
-   ran with, not the new one.
+   ran with, not the new one. A service the previous compose file doesn't
+   have (one this deploy introduced) is stopped and left out.
 
 The gateway config — the small `nginx-gateway.conf` wrapper plus the shared
 `api/gateway/routes.conf` and `hosts.dupli1.local.conf` it includes — is mounted
@@ -183,6 +174,34 @@ each of the three repos: Actions → *Approval for running fork pull request
 workflows* = **all external contributors**, and the `production` environment
 limited to the default branch (`main` / `master`). The runners run as `serial`
 (in the `docker` group, i.e. root-equivalent).
+
+## Customer support service
+
+`support` (Telegram consultation bot, web chat, the manage-web `/support`
+inbox) runs in the stack like every other backend service: same tag, same
+deploy, database `support` created by `db-init`. Its gateway route
+(`/api/v1/support/`) is in the shared `routes.conf`, and the edge serves the
+two consultation streams (`/api/v1/support/{web,inquiries}/events`)
+unbuffered.
+
+With no `TELEGRAM_SUPPORT_BOT_TOKEN` the service still runs — web chat and the
+inbox work, the bot is inert. To switch the bot on, add to `/opt/dupli1/.env`:
+
+```bash
+TELEGRAM_SUPPORT_BOT_TOKEN='…'        # @dupli1_support_bot from @BotFather — never the ops bot's token
+TELEGRAM_SUPPORT_WEBHOOK_SECRET=$(openssl rand -hex 32)
+TELEGRAM_SUPPORT_WEBHOOK_URL=https://dupli1.com/api/v1/support/telegram/webhook
+```
+
+then `$DC up -d support`. On start it deletes any old webhook, drains pending
+updates and registers this one, so nothing else may be using that token. Set
+the URL only together with the secret: support refuses to start with the URL
+alone. Check with `docker logs dupli1-support-1` (`webhook registered`) and
+by sending `/start` to the bot.
+
+Optional: `DUPLI1_SUPPORT_SMTP_{ADDR,USERNAME,PASSWORD,FROM}` for the
+unread-reply email, and `DUPLI1_SUPPORT_MESSAGE_RETENTION_DAYS` (default 180)
+for the transcript purge.
 
 ## Before cutover — checklist
 
