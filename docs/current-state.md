@@ -268,4 +268,4 @@ cd product && go test ./...
 
 ## Deployment
 
-Production: Docker Compose on VENUS behind a Cloudflare Tunnel, deployed per image by `deploy/venus/deploy.sh`. See [deployment-venus.md](deployment-venus.md). The former AWS setup is in [deployment-aws.md](deployment-aws.md) (historical).
+Production: Docker Compose on VENUS behind a Cloudflare Tunnel, deployed per image by `deploy/venus/deploy.sh`. See [deployment-venus.md](deployment-venus.md).

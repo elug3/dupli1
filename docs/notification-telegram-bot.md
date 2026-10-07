@@ -4,7 +4,7 @@ Design and operations guide for the Dupli1 ops Telegram bot (`dupli1-notificatio
 
 **Status:** Webhook (or polling fallback), PostgreSQL subscriptions, manager accept API, and `/start` implemented. Global Manager Settings integration remains a follow-up.
 
-**Related:** [current-state.md](current-state.md), [deployment-aws.md](deployment-aws.md), [manager-settings-api.md](manager-settings-api.md), [payment-service.md](payment-service.md).
+**Related:** [current-state.md](current-state.md), [deployment-venus.md](deployment-venus.md), [manager-settings-api.md](manager-settings-api.md), [payment-service.md](payment-service.md).
 
 ---
 

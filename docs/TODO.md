@@ -64,7 +64,6 @@ See [v1.1-release-plan.md](v1.1-release-plan.md) for full slices and exit criter
 - [ ] **Consistent sessions** — BFF holds refresh; `dupli1_session` HttpOnly cookie contract — [api.md](api.md)
 - [ ] **Verify access control** — ABAC + permissions matrix; negative tests on money path — [permissions.md](permissions.md)
 - [ ] **Revocable session from BFF** — logout revokes refresh in Redis + clears cookie — `dupli1-web`
-- [ ] **AWS deployment alignment** — [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md), [deployment-aws.md](deployment-aws.md)
 - [ ] **CI/CD automation** — backend OIDC, frontend task-def alignment, post-deploy smoke
 
 ## v1.2 (commerce & product — deferred)
@@ -113,10 +112,8 @@ Completeness / code-quality follow-ups for `dupli1-notification`. Design: [notif
 - [x] **Pending `/start` reply silently dropped** — fixed: `Client.Reply` bypasses outbound `AllowsChat` for `/start` acks; `TestUpdateProcessorStartPending` sets access policy on the client.
 - [ ] **Any inbound Telegram message creates a pending subscription** — discoverable bots can fill `telegram_subscriptions`; consider registering only on `/start` (or rate-limit / require allowlisted user for upsert).
 
-### Production / ECS wiring
+### Production wiring
 
-- [ ] **Wire `DUPLI1_NOTIFICATION_DB` in ECS** — Terraform task def has no notification DB URL; service falls back to in-memory repo (subscriptions lost on restart). Add RDS `notifications` DB + Secrets Manager + task secret (mirror cart/payment).
-- [ ] **Wire `AUTH_JWKS_URL` on notification ECS task** — without JWKS, manager subscription API returns 503.
 - [ ] **Wire Telegram webhook in prod** — set `TELEGRAM_WEBHOOK_URL` + `TELEGRAM_WEBHOOK_SECRET` (today: polling only).
 
 ### Reliability / product gaps
@@ -130,8 +127,7 @@ Completeness / code-quality follow-ups for `dupli1-notification`. Design: [notif
 
 - [x] **Refresh order lifecycle docs** — `endpoints.md`, `api/specs/order-v1.yaml`, `docs/openapi.yaml`, [order-service.md](order-service.md) aligned with `confirmed` / `delivered` / `disputed` stages (2026-09-14).
 - [ ] **Implement order live-events SSE in dupli1-order** — manage-web client + [order-live-events.md](order-live-events.md) contract; route returns 404 today.
-- [ ] **Refresh stale notification docs** — keep `endpoints.md` / OpenAPI in sync with webhook + subscriptions; reconcile webhook vs polling notes in [notification-telegram-bot.md](notification-telegram-bot.md). (`service-layout.md` / `current-state.md` API table updated 2026-08-17.)
-- [ ] **OpenAPI: telegram manager + webhook** — extend `api/specs/notification-v1.yaml` (and `docs/openapi.yaml` if needed) beyond health/settings.
+- [ ] **Refresh stale notification docs** — keep `endpoints.md` in sync with webhook + subscriptions; reconcile webhook vs polling notes in [notification-telegram-bot.md](notification-telegram-bot.md). (`service-layout.md` / `current-state.md` API table updated 2026-08-17.)
 - [ ] **Fix CLI usage blurb** — `notification/cmd/main.go` claims “customer and admin messaging APIs”; service is ops Telegram only.
 
 ### Tests / quality
@@ -289,29 +285,3 @@ See [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md).
 ### Found while implementing SkuID + inventory merge (2026-07-10)
 
 - [ ] **Frontend repos (`dupli1-web`, `dupli1-manage-web`) legacy path + `skuId` finish** — clients prefer `skuId` for cart/inventory where known, but still call legacy prefixes (`/api/v1/inventory/*`, `/catalog`, …; `/coupons` is done). Migrate to canonical `/api/v1/products/…` (and peers), then drop aliases. See [frontend-product-variants-migration.md](frontend-product-variants-migration.md).
-
-## AWS deployment readiness (reviewed 2026-07-13)
-
-Architecture is suitable (ECS on EC2 + ALB + RDS + Terraform + GitHub Actions). See [deployment-aws.md](deployment-aws.md).
-
-### Working today (live ALB)
-
-- [x] Gateway health, auth, product catalog
-- [x] Storefront (`dupli1-web`) and admin (`dupli1-manage-web`) ECS services
-- [x] Redis, NATS, NAT, Secrets Manager (auth/product DB URLs), Cloud Map `dupli1.local`
-- [x] **Cart + payment on ECS** — ECR repos, Cloud Map (`cart` / `payment`), task defs, RDS DBs + secrets, nginx upstreams; APIs return 401 without auth (not 502)
-- [x] **Order stabilized** — listens on `:8080`, `DUPLI1_ORDER_DB` from Secrets Manager; ASG sized for awsvpc ENI limits
-- [x] **HTTPS on ALB** — ACM cert + `:443` listener; `/api/*` + `/gateway/*` → proxy
-- [x] **Route53 → current ALB** — `dupli1.com` / `www` alias `dupli1-production-alb`
-- [x] **JWT_SECRET in Secrets Manager** — no longer plain env default in task defs
-- [x] **Orphan `dupli1-inventory` Fargate service removed**
-- [x] **Docs updated** — [deployment-aws.md](deployment-aws.md) lists cart/payment/frontends/RDS DBs
-
-### Remaining
-
-- [ ] **Manager settings API** — sketch in [manager-settings-api.md](manager-settings-api.md) (`GET|PATCH /api/v1/settings/{section}`).
-- [x] **Enable `awsvpcTrunking` for the ECS instance role** — user-data `PutAccountSetting` + IAM + account default; ASG defaults 2/1/4; verify with `infra/scripts/shrink-ecs-asg.sh` after instance refresh.
-- [ ] **Create `dupli1-profile` ECR repo** — Terraform: `aws_ecr_repository.profile` + `github_actions_ecr_create` IAM. `terraform apply` (or the one-shot `aws ecr create-repository` in [deployment-aws.md](deployment-aws.md)) unblocks `Build dupli1-profile`. PowerUser cannot `CreateRepository`.
-- [x] **Prefer OIDC for backend CI** — backend `.github/workflows/aws.yml` uses `github-actions-deploy-role` (no long-lived access keys).
-- [ ] **HTTP→HTTPS redirect on ALB `:80` default action** — Terraform models redirect; live still serves HTTP for health/clients (API rule intact).
-- [ ] **Apply cost cleanup** — follow [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md) (Phases 1–2); script: `infra/scripts/cleanup-aws-orphans.sh`. Evidence: [aws-cost-optimization.md](aws-cost-optimization.md).

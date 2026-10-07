@@ -68,7 +68,7 @@ What a new service actually costs here:
 |---|---|---|
 | Boilerplate | **~420 lines** | `profile`'s `cmd/main.go` + `cmd/options.go` + `pkg/server.go` + `pkg/bootstrap` + `pkg/options.go`, mostly copy-adapt |
 | CI | 3 entries | one job in `test.yml`, a build-matrix row and a deploy row in `aws.yml`, plus an ECR repo |
-| Database | **no new instance** | services hold their own database on the shared `dupli1-production` RDS, injected per service from Secrets Manager (`DUPLI1_*_DB`). [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md) lists RDS at $2.40 |
+| Database | **no new instance** | services hold their own database on the shared `dupli1-production` RDS, injected per service from Secrets Manager (`DUPLI1_*_DB`) |
 | ALB / NAT | **none** | it sits behind the existing nginx gateway. Those are the expensive line items — the $50–70 idle mode is ALB + NAT |
 | Compute | **no new billing unit** | ECS on **EC2**, not Fargate: 2 × `t3.large` (16 GB) carrying ~4 GB of task reservations across 12 services. An extra 256 MB task uses headroom already paid for |
 
@@ -471,4 +471,4 @@ What Phase 6 needs is only the **username**. The token is a separate thing, issu
 
 ## Docs to update when this ships
 
-Per [AGENTS.md](../AGENTS.md) and [docs/README.md](README.md): [current-state.md](current-state.md), [api.md](api.md), [endpoints.md](endpoints.md), [openapi.yaml](openapi.yaml), [permissions.md](permissions.md), [service-layout.md](service-layout.md), and the root `CLAUDE.md` service-ownership and dev-credentials tables.
+Per [AGENTS.md](../AGENTS.md) and [docs/README.md](README.md): [current-state.md](current-state.md), [api.md](api.md), [endpoints.md](endpoints.md), [permissions.md](permissions.md), [service-layout.md](service-layout.md), and the root `CLAUDE.md` service-ownership and dev-credentials tables.

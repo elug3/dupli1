@@ -367,7 +367,7 @@ The address-validation logic (`krPhoneDigits`/`postalCodeRE`/`pcccRE` regexes an
 - [x] Router: `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses/…`
 - [x] Tests: ABAC, default address, max addresses, patch merge
 - [x] Docs: [endpoints.md](endpoints.md), [api.md](api.md)
-- [x] [openapi.yaml](openapi.yaml) — paths TBD
+- [x] `openapi.yaml` (removed) — paths TBD
 - [x] [current-state.md](current-state.md) status bump
 
 ### Phase B — Order snapshot (blocks NANO card)
@@ -390,7 +390,7 @@ The address-validation logic (`krPhoneDigits`/`postalCodeRE`/`pcccRE` regexes an
 - [x] Cut frontend over to `/api/v1/profile/me/...`; drop profile routes/code from `auth` (orphan auth DB tables may remain until manual drop)
 - [x] Auth publishes `user.deleted`; profile subscribes and deletes owned PII
 - [x] `DELETE /api/v1/auth/users/:id` (`user.delete`)
-- [x] Docs: this file, `CLAUDE.md` service table + dev DB credentials table, `AGENTS.md` DB credentials table, new [profile-service.md](profile-service.md), [current-state.md](current-state.md), [api.md](api.md), [endpoints.md](endpoints.md), [openapi.yaml](openapi.yaml), [service-layout.md](service-layout.md), [docs/README.md](README.md) — updated
+- [x] Docs: this file, `CLAUDE.md` service table + dev DB credentials table, `AGENTS.md` DB credentials table, new [profile-service.md](profile-service.md), [current-state.md](current-state.md), [api.md](api.md), [endpoints.md](endpoints.md), `openapi.yaml` (removed), [service-layout.md](service-layout.md), [docs/README.md](README.md) — updated
 
 ---
 
@@ -421,7 +421,7 @@ The address-validation logic (`krPhoneDigits`/`postalCodeRE`/`pcccRE` regexes an
 | `auth/pkg/bootstrap/router.go` | Routes under authed group |
 | [endpoints.md](endpoints.md) | Route table |
 | [api.md](api.md) | Request/response examples |
-| [openapi.yaml](openapi.yaml) | Schemas |
+| `openapi.yaml` (removed) | Schemas |
 | [current-state.md](current-state.md) | Profile status |
 
 ---

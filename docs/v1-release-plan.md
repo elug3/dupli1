@@ -190,7 +190,7 @@ Then tag **v1.0** and execute **v1.1** from [v1.1-release-plan.md](v1.1-release-
 
 Operator steps that cannot be done from the repo. Region `us-east-1`, ECS cluster
 `production`, Terraform in `infra/terraform/`. Architecture reference:
-[deployment-aws.md](deployment-aws.md).
+`deployment-aws.md` (removed).
 
 ### 1. Persistent JWT signing key — **done**
 
@@ -199,7 +199,7 @@ Prod auth injects `JWT_PRIVATE_KEY` from `dupli1/production/jwt-private-key` and
 
 Without a persistent key, auth mints a new RSA key on every task start: all outstanding access and
 refresh tokens break and the other services see a changed JWKS. Auth reads the PEM from
-`JWT_PRIVATE_KEY` (see [deployment-aws.md](deployment-aws.md#jwt-signing-key)).
+`JWT_PRIVATE_KEY` (see `deployment-aws.md` (removed)).
 
 ```bash
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out jwt-private-key.pem
@@ -330,5 +330,5 @@ Commerce backlog (guest cart, refunds, co-view, …) → **v1.2**.
 
 - Checkboxes live in [v1.0-release-spec.md](v1.0-release-spec.md); this file is the **narrative boundary** plus the operator runbook, and [TODO.md](TODO.md) links to the open items rather than repeating them.
 - Post-launch scope: [v1.1-release-plan.md](v1.1-release-plan.md).
-- Done in this cut: order status machine and canonical paths in [api.md](api.md) / [permissions.md](permissions.md) / `api/specs/order-v1.yaml`; inventory, catalog and coupon coverage in `api/specs/product-v1.yaml`; [openapi.yaml](openapi.yaml) rebuilt as a full gateway index; [current-state.md](current-state.md) “Known gaps” refreshed (the “client-trusted prices” risk was already fixed and is not listed).
-- Still to update at ship time: tick the exit criteria above and record the production values (CDN domain, JWT key secret ARN) in [deployment-aws.md](deployment-aws.md).
+- Done in this cut: order status machine and canonical paths in [api.md](api.md) / [permissions.md](permissions.md) / `api/specs/order-v1.yaml`; inventory, catalog and coupon coverage in `api/specs/product-v1.yaml`; `openapi.yaml` (removed) rebuilt as a full gateway index; [current-state.md](current-state.md) “Known gaps” refreshed (the “client-trusted prices” risk was already fixed and is not listed).
+- Still to update at ship time: tick the exit criteria above and record the production values (CDN domain, JWT key secret ARN) in `deployment-aws.md` (removed).

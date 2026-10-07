@@ -4,7 +4,7 @@ Authoritative specification for migrating Dupli1 from coarse service-manager **r
 
 **Status:** Phase 5 complete — legacy JWT `roles` claim, dual-read validators, and `PATCH …/roles` alias removed. Authorization uses the `permissions` claim only.
 
-**Related docs:** [endpoints.md](endpoints.md) (route index), [api.md](api.md), [current-state.md](current-state.md), [openapi.yaml](openapi.yaml).
+**Related docs:** [endpoints.md](endpoints.md) (route index), [api.md](api.md), [current-state.md](current-state.md).
 
 ---
 
