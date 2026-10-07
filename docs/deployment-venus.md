@@ -128,7 +128,7 @@ The gateway config — the small `nginx-gateway.conf` wrapper plus the shared
 from the deploy checkout, not taken from the proxy image, so the config and its
 includes always match, including when a rollback runs an older image. It is
 only read when the proxy container is created. A deploy always
-recreates it (its image tag changes), and step 3 also checks the internal
+recreates it (its image tag changes), and step 4 also checks the internal
 listener (`proxy.dupli1.local:8081`, where order sends the internal APIs). After
 editing the file by hand, recreate the proxy yourself:
 `$DC up -d --force-recreate proxy`.

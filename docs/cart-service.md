@@ -1,6 +1,6 @@
 # Cart Service
 
-The **cart service** (`dupli1-cart`) stores a persistent shopping cart per authenticated customer. It holds **what the customer intends to buy** (variant SKU/SkuID + quantity). It does **not** reserve stock, apply coupons, or create orders — those remain in **order** and **product** (stock and reservations were merged into the product service; see [product-variants-plan.md](product-variants-plan.md)).
+The **cart service** (`dupli1-cart`) stores a persistent shopping cart per authenticated customer. It holds **what the customer intends to buy** (variant SKU/SkuID + quantity). It does **not** reserve stock, apply promotional codes, or create orders — those remain in **order** and **product** (stock and reservations were merged into the product service; see [product-variants-plan.md](product-variants-plan.md)).
 
 For the short-lived checkout pipeline (coupon, TTL, inventory reservation), see [checkout-session.md](checkout-session.md).
 
@@ -298,9 +298,9 @@ See [checkout-session.md](checkout-session.md) for checkout session details. See
 ## Stock semantics
 
 - **Add to cart** does not decrement inventory.
+- **Add and replace are stock-checked:** `POST`/`PUT /api/v1/cart/items` refuse a line whose `quantity` exceeds the SKU's `available_qty` with `400` and `reason: "insufficient_stock"` plus `sku_id`, `sku`, `available_qty` and `requested` (`cart/pkg/service/service.go` `checkAvailableQty`). The check is skipped when no inventory URL is configured.
 - **`available_qty`** on the cart response is informational (from inventory read).
-- If stock drops before checkout, **`complete`** may fail when order reserves — same as checkout without a persistent cart.
-- Optional future: reject add when `quantity > available_qty`, or flag stale lines on `GET`.
+- If stock drops after the line was added, **`complete`** may fail when order reserves — same as checkout without a persistent cart.
 
 ---
 
@@ -311,7 +311,7 @@ See [checkout-session.md](checkout-session.md) for checkout session details. See
 | `DUPLI1_CART_ADDR` | `:8086` | Listen address |
 | `DUPLI1_CART_DB` | — | Postgres URL (`cart` database); omit for in-memory (tests) |
 | `DUPLI1_PRODUCT_URL` | `http://localhost:8081` | Variant lookup (prefer gateway in Compose) |
-| `DUPLI1_INVENTORY_URL` | `http://localhost:8081` | **Deprecated** stock-hint override (product owns inventory) |
+| `DUPLI1_INVENTORY_URL` | `http://localhost:8082` (code default; Compose and VENUS point it at product) | Stock reads for `available_qty` and the add-to-cart stock check (product owns inventory). The `:8082` default is a leftover from the standalone inventory service |
 | `AUTH_JWKS_URL` | — | RS256 JWT validation (Compose: auth JWKS) |
 | `JWT_SECRET` | — | HS256 dev fallback |
 
@@ -362,5 +362,5 @@ Local Postgres: `postgres://dupli1:dupli1_dev@localhost:5436/cart?sslmode=disabl
 |------|--------|
 | Guest cart + merge on login | Not started — reuse `dupli1_guest` from [product-guest-views-plan.md](product-guest-views-plan.md) |
 | `POST /api/v1/cart/checkout` | Not started |
-| Stock enforcement on add | Not started |
-| CI / ECS deploy for cart | Done (ECS live; see [current-state.md](current-state.md)) |
+| Stock enforcement on add | Done — `400 insufficient_stock` (see [Stock semantics](#stock-semantics)) |
+| CI / production deploy for cart | Done (VENUS; see [deployment-venus.md](deployment-venus.md)) |

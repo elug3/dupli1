@@ -142,12 +142,12 @@ sequenceDiagram
 | Card data on Dupli1 | **Never** |
 | Default currency | **`krw` only** (single currency; other codes rejected) |
 | Amount unit | Whole Korean won (`amount_won` = zero-decimal minor units for KRW — **not** won×100) |
-| Unpaid `pending` TTL | **5 minutes** → auto-cancel + release stock |
+| Unpaid `pending` TTL | **5 minutes** (`order/pkg/domain` `DefaultPaymentTTL`, a constant) → auto-cancel + release stock |
 | Inventory plan | **B** — reserve on checkout complete; **commit on `in_transit`** |
 | Payment → order | **`payment.succeeded` event** (not HTTP confirm from payment) |
 | Who sets `paid` | **Order service** (event consumer) |
-| Who sets `in_transit` | **Order-manager** via `POST /orders/{id}/ship` |
-| Manual `confirmed` | **Removed** |
+| Who sets `in_transit` | **Order-manager** via `POST /orders/{id}/ship` (from `confirmed`) |
+| `confirmed` | Set by a manager (`POST /orders/{id}/confirm`) or auto after 2h — a fulfillment acceptance step, not a payment confirmation (payment never sets it) |
 | Telegram | **Notification service** on `order.paid` |
 | Event payload | `order_id`, **`payment_id`**, **`amount_won`** (must match `order.total_won`) |
 | Audit | `shipped_by`, `shipped_at` on order |
@@ -172,7 +172,7 @@ sequenceDiagram
 ### Notification service owns
 
 - Subscribing to **`order.paid`** (and other order events)
-- Telegram messages to `TELEGRAM_ORDER_CHAT_ID`
+- Telegram messages to every chat that opted into order alerts: `TELEGRAM_ORDER_CHAT_ID` plus each accepted subscription with `alert_order`
 
 ### Payment does **not**
 
@@ -334,12 +334,11 @@ A refused callback the PG had already approved also publishes `payment.callback_
 | `DUPLI1_ORDER_URL` | payment | Fetch order for validation |
 | `DUPLI1_PAYMENT_PUBLIC_URL` | payment | Public gateway base for NANO `receiveUrl` + checkout bridge |
 | `NANO_BASE_URL` | payment | `https://dev3.nanopay.co.kr` (test) or `https://pay.nanopay.co.kr` (prod) |
-| `NANO_VER` / `NANO_SHOPCODE` / `NANO_LOGIN_ID` / `NANO_API_KEY` | payment | Merchant credentials (prod: Secrets Manager `dupli1/production/nano-payment`) |
+| `NANO_VER` / `NANO_SHOPCODE` / `NANO_LOGIN_ID` / `NANO_API_KEY` | payment | Merchant credentials (prod: `/opt/dupli1/.env` on VENUS) |
 | `NANO_SUCCESS_URL` / `NANO_FAILURE_URL` | payment | Storefront redirects after `nano/return` |
-| `DUPLI1_PAYMENT_ORDER_TTL` | order | `5m` pending payment window |
 | `NATS_URL` | all | Event bus |
-| `NATS_TOKEN` | all | Token matching nats-server `--auth` (Compose default `dupli1_nats_dev`; prod `dupli1/production/nats-token`) |
-| `TELEGRAM_BOT_TOKEN` | notification | Bot token (prod: Secrets Manager `dupli1/production/telegram`) — **only secret**; see [notification-telegram-bot.md](notification-telegram-bot.md) |
+| `NATS_TOKEN` | all | Token matching nats-server `--auth` (Compose default `dupli1_nats_dev`; not set on VENUS, whose `nats` runs without `--auth`) |
+| `TELEGRAM_BOT_TOKEN` | notification | Bot token (prod: `/opt/dupli1/.env` on VENUS) — **only secret**; see [notification-telegram-bot.md](notification-telegram-bot.md) |
 | `TELEGRAM_ALLOWED_USER_IDS` | notification | Comma-separated Telegram user IDs allowed to use `/start` (transitional; target: Manager Settings) |
 | `TELEGRAM_ORDER_CHAT_ID` | notification | Ops order alerts chat (transitional; target: Manager Settings) |
 | `TELEGRAM_PRODUCT_CHAT_ID` | notification | Product ops chat (same secret) |

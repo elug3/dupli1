@@ -1,6 +1,6 @@
 # LOCAL DEVELOPMENT ONLY
 # This docker-compose file is intended for local testing.
-# Production is deployed to AWS ECS — do not use this file for production.
+# Production runs on VENUS (deploy/venus/docker-compose.yml) — do not use this file for production.
 
 # Sentry error and log reporting (shared/pkg/sentrymon). Off unless SENTRY_DSN
 # is set in the shell or .env before `docker compose up`.

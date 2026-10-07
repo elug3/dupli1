@@ -2,7 +2,7 @@
 
 All services listen on port `8080` inside Docker. The nginx gateway proxies by path prefix with no stripping, so gateway paths match service paths.
 
-**Path convention:** `/api/v1/{service_name}/...` (`auth`, `profile`, `products`, `orders`, `cart`, `payments`, `notification`). Legacy top-level aliases (`variants`, `coupons`, `catalog`, `inventory`, `checkout`, `carts`) still work until clients migrate — see [TODO.md](TODO.md).
+**Path convention:** `/api/v1/{service_name}/...` (`auth`, `profile`, `products`, `orders`, `cart`, `payments`, `notification`, `support`). Legacy top-level aliases (`variants`, `coupons`, `catalog`, `inventory`, `checkout`, `carts`) still work until clients migrate — see [TODO.md](TODO.md).
 
 | Gateway prefix | Upstream service |
 |---|---|
@@ -11,7 +11,7 @@ All services listen on port `8080` inside Docker. The nginx gateway proxies by p
 | `/api/v1/profile` | `dupli1-profile:8080` |
 | `/api/v1/auth/me/profile`, `/api/v1/auth/me/addresses` | `dupli1-profile:8080` (one-release alias — see [profile-service.md](profile-service.md)) |
 | `/api/v1/products` | `dupli1-product:8080` |
-| `/api/v1/coupons` | `dupli1-product:8080` (legacy alias) |
+| `/api/v1/coupons` | `dupli1-product:8080` (pre-rename alias of `/api/v1/products/promotions`, one release) |
 | `/api/v1/catalog` | `dupli1-product:8080` (legacy alias) |
 | `/api/v1/variants` | `dupli1-product:8080` (legacy alias) |
 | `/api/v1/inventory/` | `dupli1-product:8080` (legacy alias) |
@@ -42,12 +42,18 @@ Each service also registers `/health` and `/settings` directly for internal/side
 | `POST` | `/api/v1/auth/login` | — | Login and receive a refresh token |
 | `POST` | `/api/v1/auth/logout` | — | Invalidate the current session |
 | `POST` | `/api/v1/auth/refresh` | — | Exchange a refresh token for a new access token |
+| `POST` | `/api/v1/auth/token` | `Authorization: ApiKey dk_live_…` | Service account exchanges an API key for an access token (internal `:8081` listener only; no refresh token) — [auth-service-api-keys.md](auth-service-api-keys.md) |
+| `GET` | `/api/v1/auth/.well-known/jwks.json` | — | Public signing keys (RS256 mode) |
 | `GET` | `/api/v1/auth/me` | Bearer | Return the authenticated user's account (email, permissions) |
 | `DELETE` | `/api/v1/auth/users/:id` | `user.delete` | Permanently delete user; enqueues `user.deleted` in the same transaction (consumed by `profile` to drop owned PII — see [Profile Service](#profile-service)) |
 | `GET` | `/api/v1/auth/users` | `user.read` | List users (filtered by auth ABAC hierarchy) |
 | `PATCH` | `/api/v1/auth/users/:id/permissions` | `user.permissions.update` | Replace a user's permissions (optional `account_type`) |
 | `PATCH` | `/api/v1/auth/users/:id/password` | `user.password.update` | Set a new password for a user |
 | `PATCH` | `/api/v1/auth/users/:id/status` | `user.status.update` | Activate or deactivate a user |
+| `GET` | `/api/v1/auth/users/:id/api-keys` | `user.apikey.read` | List a service account's API keys (never the plaintext) |
+| `POST` | `/api/v1/auth/users/:id/api-keys` | `user.apikey.manage` | Mint an API key; the plaintext is in this response only |
+| `DELETE` | `/api/v1/auth/api-keys/:keyId` | `user.apikey.manage` | Revoke a key (`409` for a key seeded from env) |
+| `GET` | `/api/v1/auth/reports/registrations` | `user.read` | Customer sign-ups per KST week or month (`granularity`, `from`, `to`) |
 
 **Temporary open register:** when `AUTH_OPEN_REGISTER=true` (current default), `POST /register` accepts unauthenticated requests and always creates `account_type: customer` with empty permissions. Set `AUTH_OPEN_REGISTER=false` to require Bearer + `user.create` again.
 
@@ -91,15 +97,17 @@ Errors: `400` bad request, `401` missing/invalid token, `403` insufficient permi
 
 Request:
 ```json
-{ "email": "user@example.com", "password": "secret" }
+{ "email": "user@example.com", "password": "secret", "client": "storefront" }
 ```
+
+`client` is `storefront` (dupli1-web: customers and managers) or `manage` (manage-web: managers only); `service` is accepted but admits nobody. It is optional while callers roll over.
 
 Response `200`:
 ```json
 { "refresh_token": "<token>" }
 ```
 
-Errors: `400` bad request, `401` invalid credentials, `403` locked (customers/managers after 5 failures, auto-expires after 15 min) or deactivated. **Admin and owner are never locked.**
+Errors: `400` bad request, `401` invalid credentials, `403 account_type_not_allowed` when the account type does not belong to that `client` (service accounts always), `403` locked (customers/managers after 5 failures, auto-expires after 15 min) or deactivated. **Admin and owner are never locked.**
 
 ### POST /api/v1/auth/logout
 
@@ -124,7 +132,7 @@ Response `200`:
 
 The refresh token rotates on every call — store `refresh_token` from the response and use it next time; the one just sent no longer works.
 
-Errors: `400` bad request, `401` invalid/expired/already-rotated token, or account deactivated/locked.
+Errors: `400` bad request, `401` invalid/expired/already-rotated token, or account deactivated/locked. `503 refresh unavailable` when auth cannot reach its refresh-token ledger or the user store — keep the token and retry; only a `401` means it is dead.
 
 ### GET /api/v1/auth/me
 
@@ -284,7 +292,7 @@ Errors: `400` invalid field, `401` missing/invalid token, `404` address not foun
 | `GET` | `/api/v1/products/variants` | — | Batch public variants (`?sku_ids=id1,id2`, max 50) |
 | `GET` | `/api/v1/products/variants/by-sku/{sku}` | — | Public active variant by human SKU (legacy: `/api/v1/variants/{sku}`) |
 | `GET` | `/api/v1/products/variants/by-sku-id/{skuId}` | — | Public active variant by ULID (legacy: `/api/v1/variants/by-sku-id/{skuId}`) |
-| `POST` | `/api/v1/products/coupons/redeem` | — | Redeem a coupon code (legacy: `/api/v1/coupons/redeem`) |
+| `POST` | `/api/v1/products/promotions/redeem` | — (throttled) | Look up a promotional code (pre-rename: `/api/v1/products/coupons/redeem`, `/api/v1/coupons/redeem`) |
 | `POST` | `/api/v1/products` | `product.create` | Create parent (ULID `id`; requires existing `brandCode`+`styleCode`) |
 | `PUT` | `/api/v1/products/{id}` | `product.update` | Update parent |
 | `DELETE` | `/api/v1/products/{id}` | `product.delete` | Delete parent (cascades variants) |
@@ -317,10 +325,22 @@ Errors: `400` invalid field, `401` missing/invalid token, `404` address not foun
 | `GET` | `/api/v1/products/catalog/subcategories` | public | List bag subcategories |
 | `GET` | `/api/v1/products/catalog/bag-styles` | public | List bag styles (occasion) |
 | `GET` | `/api/v1/products/catalog/targets` | public | List targets (all/men/women/kids) |
-| `GET` | `/api/v1/products/coupons` | `coupon.read` | List coupons (legacy: `/api/v1/coupons`) |
-| `POST` | `/api/v1/products/coupons` | `coupon.create` | Create coupon |
-| `PUT` | `/api/v1/products/coupons/by-code/{code}` | `coupon.update` | Update coupon (legacy: `/api/v1/coupons/{code}`) |
-| `DELETE` | `/api/v1/products/coupons/by-code/{code}` | `coupon.delete` | Delete coupon |
+| `GET` | `/api/v1/products/catalog/categories` | public | Categories with their subcategories and allowed sizes |
+| `GET` | `/api/v1/products/promotions` | `promotion.read` | List promotional codes |
+| `POST` | `/api/v1/products/promotions` | `promotion.create` | Create promotional code |
+| `PUT` | `/api/v1/products/promotions/by-code/{code}` | `promotion.update` | Update promotional code |
+| `DELETE` | `/api/v1/products/promotions/by-code/{code}` | `promotion.delete` | Delete promotional code |
+| `POST` | `/api/v1/products/promotions/evaluate` | — (throttled) | Price a code against a cart (`422` with `reason` when it does not apply) |
+| `POST` | `/api/v1/products/promotions/reserve` · `/consume` · `/release` | `promotion.redeem` + `dupli1-order` (internal `:8081` only) | Usage ledger |
+| `POST` | `/api/v1/products/promotions/tier` | `promotion.redeem` + `dupli1-order` (internal `:8081` only) | Customer tier discount for a cart |
+| `GET` / `POST` | `/api/v1/products/promotions/me` | signed in | The caller's own promotional-code wallet |
+| `POST` | `/api/v1/products/promotions/me/tier` | signed in | The caller's own tier discount on a cart |
+| `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` | Grant a `single_user` code to one account |
+| `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` | Withdraw an issued entitlement |
+| `POST` | `/api/v1/products/visits` | — (throttled) | Storefront page-load visitor beacon |
+| `GET` | `/api/v1/products/reports/visitors` | `product.read` | Unique visitors per KST week or month |
+
+The pre-rename spellings `/api/v1/products/coupons…`, `/api/v1/coupons…` and the `coupon.*` permissions are still accepted for one release ([product-promotion-rename.md](product-promotion-rename.md)); write only the names above.
 
 Public search defaults to `status = active` on the **parent**. Query filters: `category`, `subcategory`, `style`, `target`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** (human `sku` or canonical `skuId`) with inventory. Identity + masters: [product-sku-system.md](product-sku-system.md). Bag taxonomy: [product-master-catalog.md](product-master-catalog.md). Parent display memo: [product-attributes.md](product-attributes.md). See also [product-variants-plan.md](product-variants-plan.md).
 
@@ -371,7 +391,7 @@ Public related parents for PDP (`limit` default 8, max 24). Content similarity +
 
 ### GET /api/v1/variants/{sku}
 
-Deprecated alias of `GET /api/v1/products/variants/{sku}`. Public variant lookup by SKU. Returns `404` when the variant or parent product is not active. Used by the cart service for price validation.
+Deprecated alias of `GET /api/v1/products/variants/by-sku/{sku}`. Public variant lookup by SKU. Returns `404` when the variant or parent product is not active. Cart and order look variants up through `shared/pkg/productclient`, which calls the canonical `by-sku` / `by-sku-id` paths.
 
 ### GET /api/v1/products/variants?sku_ids=
 
@@ -404,6 +424,7 @@ See [cart-service.md](cart-service.md) for architecture, boundaries with invento
 | `GET` | `/api/v1/payments/settings` | — | Non-secret service settings |
 | `POST` | `/api/v1/payments` | ABAC / `payment.create`; Bypass needs `payment.bypass` | Start payment for a pending order (`method`: `credit_card` default, or `bypass`) |
 | `GET` | `/api/v1/payments/{id}` | ABAC / `payment.read.all` | Payment status |
+| `POST` | `/api/v1/payments/{id}/cancel` | `payment.cancel` (staff only) | Full or partial refund (`amount_won`); honors `Idempotency-Key` |
 | `GET` | `/api/v1/payments/{id}/nano/checkout` | — | Bridge into NANO certified card checkout |
 | `POST` | `/api/v1/payments/nano/return` | — | NANO form `receiveUrl` callback; always answers a browser with a redirect or a page, never JSON |
 | `POST` | `/api/v1/payments/webhooks/nano` | — | Optional NANO JSON webhook |
@@ -511,12 +532,14 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | `GET` | `/api/v1/orders/checkout/sessions/{id}` | ABAC / `order.read.all` | Get session (re-checks variants → `unavailable_items`) |
 | `PUT` | `/api/v1/orders/checkout/sessions/{id}/items` | ABAC / `order.create` | Replace all items (`422` + `unavailable_items` on bad variants) |
 | `POST` | `/api/v1/orders/checkout/sessions/{id}/items` | ABAC / `order.create` | Add or update one item (`422` + `unavailable_items` on bad variants) |
-| `DELETE` | `/api/v1/orders/checkout/sessions/{id}/items/{sku}` | ABAC / `order.create` | Remove item |
-| `POST` | `/api/v1/orders/checkout/sessions/{id}/coupon` | ABAC / `order.create` | Apply coupon |
-| `POST` | `/api/v1/orders/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout (`422` + `unavailable_items` when variants invalid) |
+| `DELETE` | `/api/v1/orders/checkout/sessions/{id}/items/{sku}` | ABAC / `order.create` | Remove item (also `…/items/by-sku-id/{skuId}`) |
+| `POST` | `/api/v1/orders/checkout/sessions/{id}/promotion` | ABAC / `order.create` | Apply a promotional code (pre-rename: `…/coupon`) |
+| `DELETE` | `/api/v1/orders/checkout/sessions/{id}/promotion` | ABAC / `order.create` | Remove the applied code |
+| `POST` | `/api/v1/orders/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout; `payment_method` `credit_card` (default, adds the card surcharge) or `bypass` (`payment.bypass`); `422` + `unavailable_items` when variants invalid |
 | `POST` | `/api/v1/orders` | ABAC / `order.create` | Create a new order |
 | `GET` | `/api/v1/orders` | `order.read.all` | List all orders |
 | `GET` | `/api/v1/orders/events` | `order.read.all` | Live order stream (SSE): a snapshot per change, `Last-Event-ID` replay, 20s heartbeat — [order-live-events.md](order-live-events.md) |
+| `GET` | `/api/v1/orders/reports/sales` | `order.read.all` | Sales report per KST week or month (`granularity`, `from`, `to`) |
 | `GET` | `/api/v1/orders?customer_id={id}` | ABAC / `order.read.all` | List orders for a customer |
 | `GET` | `/api/v1/orders/{id}` | ABAC / `order.read.all` | Get a single order |
 | `POST` | `/api/v1/orders/{id}/confirm` | `order.status.update` | Accept paid order (`paid` → `confirmed`; 2-hour SLA) |
@@ -654,8 +677,11 @@ Order object shape:
   "status": "confirmed",
   "subtotal_won": 9900,
   "discount_won": 0,
+  "tier_discount_won": 0,
   "shipping_fee_won": 0,
-  "total_won": 9900,
+  "payment_method": "credit_card",
+  "card_surcharge_won": 990,
+  "total_won": 10890,
   "payment_due_at": "...",
   "paid_at": "...",
   "confirmed_at": "...",
@@ -679,6 +705,8 @@ NATS → Telegram ops alerts. Design: [notification-telegram-bot.md](notificatio
 | `POST` | `/api/v1/notification/telegram/subscriptions` | `notification.telegram.manage` | Create / upsert subscription |
 | `POST` | `/api/v1/notification/telegram/subscriptions/{id}/accept` | `notification.telegram.manage` | Accept pending subscription |
 | `POST` | `/api/v1/notification/telegram/subscriptions/{id}/reject` | `notification.telegram.manage` | Reject pending subscription |
+| `GET` | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.read` | One subscription |
+| `PATCH` | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` | Change `alert_order` / `alert_product` / `alert_support` / `muted_events`; omitted fields are kept, a rejected row is `409` |
 | `DELETE` | `/api/v1/notification/telegram/subscriptions/{id}` | `notification.telegram.manage` | Delete subscription |
 
 Local Compose uses `getUpdates` polling when webhook URL is unset. Subscriptions persist in PostgreSQL `notifications` (`DUPLI1_NOTIFICATION_DB`, host port **5438**).
@@ -687,7 +715,7 @@ Local Compose uses `getUpdates` polling when webhook URL is unset. Subscriptions
 
 ## Support Service
 
-Customer-facing Telegram consultation bot — **a different bot from the ops one above**, with its own token, webhook secret and update stream. Design: [support-telegram-bot.md](support-telegram-bot.md).
+Customer consultation: the Telegram consultation bot — **a different bot from the ops one above**, with its own token, webhook secret and update stream — plus web consultation chat and product questions, all answered from one staff inbox. Design: [support-telegram-bot.md](support-telegram-bot.md), [support-web-chat.md](support-web-chat.md), [support-product-questions.md](support-product-questions.md).
 
 | Method | Path | Permission / rule | Description |
 |---|---|---|---|
@@ -695,11 +723,24 @@ Customer-facing Telegram consultation bot — **a different bot from the ops one
 | `GET` | `/api/v1/support/settings` | — | Non-secret service settings |
 | `POST` | `/api/v1/support/telegram/webhook` | webhook secret header | Telegram Bot API webhook; serves `message` and `callback_query` |
 | `GET` | `/api/v1/support/inquiries` | `support.read` | Inbox list; `?queue=waiting`, `?assigned_to=me`, `?status=closed` |
+| `GET` | `/api/v1/support/inquiries/events` | `support.read` | Inbox live stream (SSE; frames carry ids only) |
 | `GET` | `/api/v1/support/inquiries/{id}` | `support.read` | One inquiry with its full transcript |
 | `POST` | `/api/v1/support/inquiries/{id}/assign` | `support.reply` | Claim, or take over from another manager |
 | `POST` | `/api/v1/support/inquiries/{id}/reply` | `support.reply` | Send the shopper a reply; `{"delivered": false}` when it could not be delivered |
 | `POST` | `/api/v1/support/inquiries/{id}/close` | `support.reply` | Finish, freeing the chat for a later consultation |
 | `GET`/`PUT` | `/api/v1/support/answers` | `support.manage` | Read or edit the bot's canned copy |
+| `GET` | `/api/v1/support/web/conversation` | signed in | The shopper's own web consultation and transcript |
+| `POST` | `/api/v1/support/web/messages` | signed in | Write to staff; may reference a product (`sku_id`) or an order |
+| `POST` | `/api/v1/support/web/read` | signed in | Mark staff replies read |
+| `POST` | `/api/v1/support/web/inquiries/current/close` | signed in | Close the shopper's open consultation |
+| `GET` | `/api/v1/support/web/events` | signed in | The shopper's live stream (SSE) |
+| `GET` / `POST` | `/api/v1/support/products/{productID}/questions` | signed in | The caller's own questions on a product / ask one |
+| `GET` | `/api/v1/support/me/product-questions` | signed in | All of the caller's product questions |
+| `PATCH` / `DELETE` | `/api/v1/support/me/product-questions/{id}` | signed in, owner | Edit or withdraw an unanswered question |
+| `GET` | `/api/v1/support/product-questions` | `support.read` | Staff queue (`?queue=waiting\|answered\|hidden`, `?type=`) |
+| `GET` | `/api/v1/support/product-questions/{id}` | `support.read` | One question |
+| `POST` | `/api/v1/support/product-questions/{id}/answer` | `support.reply` | Answer (replaces an earlier answer) |
+| `POST` | `/api/v1/support/product-questions/{id}/hide` | `support.reply` | Hide from or return to the queue |
 
 Inquiry JSON carries no `chat_id`: the shopper's Telegram identity never leaves the service, and the console does not need it to answer.
 

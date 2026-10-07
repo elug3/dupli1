@@ -1,12 +1,12 @@
 # Checkout Session
 
-Checkout sessions provide a multi-step purchase flow inside the **order service** (`dupli1-order`). A client builds a cart-like session, optionally applies a coupon, then completes checkout to create a pending order with inventory reserved.
+Checkout sessions provide a multi-step purchase flow inside the **order service** (`dupli1-order`). A client builds a cart-like session, optionally applies a promotional code, then completes checkout to create a pending order with inventory reserved.
 
 For a **persistent** shopping cart (saved across sessions), use the **cart service** first — see [cart-service.md](cart-service.md).
 
 For **payment** after checkout, see [payment-service.md](payment-service.md) (NANO card / Bypass; 5-minute unpaid window).
 
-Recipient name, phone, and shipping address are snapshotted on checkout **complete** (optional prefill from auth profile) — see [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
+Recipient name, phone, and shipping address are snapshotted on checkout **complete** (optional prefill from the customer's saved addresses in the `profile` service) — see [profile-service.md](profile-service.md).
 
 Direct order creation (`POST /api/v1/orders`) remains available for callers that already have a finalized cart.
 
@@ -24,12 +24,13 @@ sequenceDiagram
     Client->>Order: POST /api/v1/orders/checkout/sessions/{id}/items
     Order-->>Client: session with subtotal
 
-    Client->>Order: POST /api/v1/orders/checkout/sessions/{id}/coupon
-    Order->>Product: POST /api/v1/products/coupons/redeem
-    Product-->>Order: discount fraction
+    Client->>Order: POST /api/v1/orders/checkout/sessions/{id}/promotion
+    Order->>Product: POST /api/v1/products/promotions/evaluate (session lines)
+    Product-->>Order: discount_won, or a refusal reason
     Order-->>Client: session with discount + total
 
     Client->>Order: POST /api/v1/orders/checkout/sessions/{id}/complete
+    Order->>Product: re-evaluate and reserve the code (/api/v1/products/promotions/reserve)
     Order->>Product: reserve stock (/api/v1/products/inventory/reservations)
     Order-->>Client: completed session + pending order
 ```
@@ -37,15 +38,15 @@ sequenceDiagram
 Stock and reservations are owned by the product service (merged in from the
 former standalone inventory service). Order calls them through the **internal
 API gateway** (`DUPLI1_GATEWAY_URL`) using canonical paths
-`/api/v1/products/inventory/...` and `/api/v1/products/coupons/...` (legacy
-`/api/v1/inventory/...` and `/api/v1/coupons/...` still work via gateway aliases).
+`/api/v1/products/inventory/...` and `/api/v1/products/promotions/...` (legacy
+`/api/v1/inventory/...` still works via a gateway alias).
 Deprecated: `DUPLI1_PRODUCT_URL` / `DUPLI1_INVENTORY_URL` as direct product overrides.
 
 ## Session states
 
 | Status | Meaning |
 |--------|---------|
-| `open` | Session accepts item and coupon changes |
+| `open` | Session accepts item and promotional-code changes |
 | `completed` | Checkout finished; `order_id` is set |
 | `expired` | `expires_at` passed; session is read-only |
 
@@ -88,7 +89,7 @@ Create an empty checkout session.
 
 A session with **no items** quotes `total_won: 0` even while `shipping_fee_won` is non-zero, as above — an empty cart owes nothing to ship. The charge enters the total once the session holds at least one item, and drops out again if every item is removed.
 
-A coupon discounts goods only, so the total never falls below the delivery charge.
+A promotional code discounts goods only, so the total never falls below the delivery charge.
 
 **Card surcharge.** An order paid by card costs 10% more. `complete` (and direct `POST /api/v1/orders`) takes an optional `payment_method`: `credit_card`, the default when it is left out, or `bypass`, which needs `payment.bypass` (`403` otherwise) because it is how staff record an offline payment. A card order gets `card_surcharge_won` = `DUPLI1_ORDER_CARD_SURCHARGE_BPS` basis points (default `1000`, 10%; `0` turns it off) of `subtotal_won - discount_won + shipping_fee_won`, rounded down to the won, and `total_won` includes it. The order records `payment_method`, and payment refuses a card checkout on an order priced for `bypass` (`409`), so the surcharge cannot be skipped. The session itself never shows the surcharge, since it does not know the method yet; storefronts quote it from `limits.card_surcharge_bps` on `GET /settings`. The rate is read at `complete`, not snapshotted on the session. Orders placed before this have `payment_method: ""` and `card_surcharge_won: 0`.
 
@@ -155,18 +156,22 @@ Remove a line item.
 
 ---
 
-### `POST /api/v1/orders/checkout/sessions/{id}/coupon`
+### `POST /api/v1/orders/checkout/sessions/{id}/promotion`
 
-Apply a coupon by redeeming it from the product service.
+Apply a promotional code. Order asks product to price it against the session's lines (`POST /api/v1/products/promotions/evaluate`); the pre-rename path `…/{id}/coupon` is still accepted for one release.
 
 **Request**
 ```json
 { "code": "SUMMER30" }
 ```
 
-**Response `200`** — session with `coupon_code`, `discount_won`, and `total_won` updated.
+**Response `200`** — session with `promotion_code`, `discount_won`, and `total_won` updated (`coupon_code` is emitted alongside `promotion_code` for one release).
 
-Requires `DUPLI1_PRODUCT_URL` to be configured. Returns `503` when the coupon client is unavailable.
+A code that does not apply is `422` with `reason` (`invalid_code`, `expired`, `already_used`, `not_eligible`, `campaign_exhausted`, `login_required`) and, for `not_eligible`, a `sub_reason` such as `min_spend`. `502` when product cannot be reached.
+
+### `DELETE /api/v1/orders/checkout/sessions/{id}/promotion`
+
+Remove the applied code. **Response `200`** — updated session.
 
 ---
 
@@ -191,7 +196,7 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
 }
 ```
 
-`address_id` is optional audit metadata when the client copied from auth profile; the order stores the snapshot fields, not a live reference.
+`address_id` is optional audit metadata when the client copied from a saved address in `profile`; the order stores the snapshot fields, not a live reference.
 
 `shipping_address.pccc` is optional — the Korea Personal Customs Clearance Code (`P` + 12 digits) required by carriers to clear an overseas-purchase shipment through Korean customs. Omit it for domestic-sourced items.
 
@@ -202,7 +207,7 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
     "id": "cs_000001",
     "status": "completed",
     "order_id": "ord_000001",
-    "coupon_code": "SUMMER30",
+    "promotion_code": "SUMMER30",
     "subtotal_won": 10000,
     "discount_won": 3000,
     "shipping_fee_won": 0,
@@ -223,7 +228,7 @@ Finalize checkout: reserve inventory, create a `pending` order with **fulfillmen
       "pccc": "P123456789012"
     },
     "source_address_id": "addr_000001",
-    "coupon_code": "SUMMER30",
+    "promotion_code": "SUMMER30",
     "subtotal_won": 10000,
     "discount_won": 3000,
     "shipping_fee_won": 0,
@@ -256,9 +261,10 @@ Direct order create (`POST /api/v1/orders`) supports optional `Idempotency-Key` 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DUPLI1_ORDER_ADDR` | `:8083` | Listen address |
-| `DUPLI1_GATEWAY_URL` | `http://localhost:8080` | Internal nginx gateway (stock + coupons) |
-| `DUPLI1_AUTH_URL` | — | Auth base for service-account login (prefer direct; gateway OK after proxy is up) |
-| `DUPLI1_PRODUCT_URL` | — | **Deprecated** direct product override |
+| `DUPLI1_GATEWAY_URL` | — (Compose: `http://dupli1-proxy:8081`) | Internal nginx gateway for stock, promotions, variants and payment refunds. When unset, order falls back to `DUPLI1_PRODUCT_URL` |
+| `DUPLI1_AUTH_URL` | — | Auth base for the service-account API-key exchange (falls back to the gateway) |
+| `DUPLI1_ORDER_SERVICE_API_KEY` | — | The `dupli1-order` service account's API key, exchanged at `POST /api/v1/auth/token` |
+| `DUPLI1_PRODUCT_URL` | `http://localhost:8081` | **Deprecated** direct product override, used only when the gateway URL is unset |
 | `DUPLI1_INVENTORY_URL` | — | **Deprecated** alias for product override |
 | `DUPLI1_ORDER_SHIPPING_FEE_WON` | `0` | Flat delivery charge in whole KRW; `0` (the default) is free. Deprecated alias: `DUPLI1_ORDER_SHIPPING_FEE_CENTS`. |
 | `DUPLI1_ORDER_CARD_SURCHARGE_BPS` | `1000` | Card surcharge in basis points (1000 = 10%) of goods after discounts plus delivery; `0` turns it off. |
@@ -267,10 +273,10 @@ Direct order create (`POST /api/v1/orders`) supports optional `Idempotency-Key` 
 
 | Status | Condition |
 |--------|-----------|
-| `400` | Invalid input, empty checkout, expired session, invalid coupon, duplicate `complete` on non-open session |
+| `400` | Invalid input, empty checkout, expired session, duplicate `complete` on non-open session |
 | `404` | Session not found |
-| `422` | Variant not sellable on item mutations or `complete` — body includes `unavailable_items` |
-| `503` | Coupon service not configured |
+| `422` | Variant not sellable on item mutations or `complete` — body includes `unavailable_items`; or a promotional code that does not apply — body includes `reason` / `sub_reason` |
+| `502` | Product, promotion or payment dependency unavailable |
 | `500` | Inventory or persistence failure |
 
 ## Package layout
@@ -280,8 +286,12 @@ Direct order create (`POST /api/v1/orders`) supports optional `Idempotency-Key` 
 | `order/pkg/domain/checkout_session.go` | Session entity and totals logic |
 | `order/pkg/service/checkout.go` | Use cases |
 | `order/pkg/ports/repository.go` | Order and checkout session persistence |
-| `order/pkg/ports/coupon.go` | Coupon redemption port |
-| `order/pkg/infra/httpcoupon/` | Product service HTTP adapter |
+| `order/pkg/ports/promotion.go` | Promotional-code port (evaluate, reserve, consume, release, tier) |
+| `order/pkg/infra/httppromotion/` | Product promotions HTTP adapter |
+| `order/pkg/infra/httpstock/` | Product stock reservations HTTP adapter |
+| `order/pkg/infra/httpproduct/` | Product variant lookups |
+| `order/pkg/infra/httppayment/` | Payment refunds |
+| `order/pkg/infra/httpauth/` | Service-account API-key exchange |
 | `order/pkg/handler/checkout.go` | HTTP routes |
 
 Order and checkout routes require `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SECRET` is configured (RS256 via auth JWKS when set).

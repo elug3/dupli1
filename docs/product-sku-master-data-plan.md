@@ -1,8 +1,8 @@
 # Plan: SKU Master Data (Code → Name) Runtime CRUD
 
-> **Mostly shipped.** Phases A–C are as-built in [product-sku-system.md](product-sku-system.md). Only **Phase D** (admin UI) remains open — track in [TODO.md](TODO.md).
+> **Mostly shipped.** Phases A–C are as-built in [product-sku-system.md](product-sku-system.md). Phase D's dictionary screens shipped as manage-web `/catalog`; what remains is D.2 — `domain.BrandCodeFromName` still resolves against the in-memory `SeedBrands`.
 
-**Status:** Phase A + B + C implemented. Phase D pending.  
+**Status:** Phases A–C implemented; Phase D.1 (manage-web `/catalog`) implemented; D.2 open.  
 **As-built reference:** [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`, human SKU, masters, catalog APIs, write enforce).
 
 ## Intent

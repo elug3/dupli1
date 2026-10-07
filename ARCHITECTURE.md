@@ -223,8 +223,17 @@ shared/
 └── pkg/
     ├── permissions/    # Fine-grained permission constants and helpers
     ├── settings/       # Shared GET /settings response helpers
-    └── authjwt/        # JWKS / JWT validation helpers (where extracted)
+    ├── authjwt/        # JWKS / JWT validation helpers
+    ├── authmiddleware/ # Bearer-token HTTP middleware
+    ├── events/         # NATS subjects + payload structs
+    ├── outbox/         # Transactional outbox drainer
+    ├── natspublisher/  # JSON NATS publisher
+    ├── natsauth/       # NATS_TOKEN connection option
+    ├── money/          # KRW currency and *_won helpers
+    └── …               # pgsslmode, productclient, reportperiod, sentrymon, serviceaccount, telegram
 ```
+
+The full table is in [CLAUDE.md → Shared module](CLAUDE.md#shared-module).
 
 Local services typically `replace` the module to `../shared`. Business logic must never be placed in shared.
 

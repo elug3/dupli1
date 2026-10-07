@@ -4,7 +4,7 @@ All traffic is routed through the nginx gateway. Locally use **HTTP** at `http:/
 
 **Currency:** the storefront uses **KRW only**. Product `price` values and cart/order/payment `*_won` fields are **whole Korean won** (zero-decimal minor units for `krw` — do not multiply by 100). Settings expose `limits.currency: "krw"`.
 
-**Path convention:** every route is namespaced by its owning service — `/api/v1/products/…` (including inventory, catalog and coupons), `/api/v1/orders/…` (including checkout sessions), `/api/v1/cart/…`, `/api/v1/payments/…`, `/api/v1/auth/…`, `/api/v1/profile/…`. The paths documented here are the canonical ones. Older top-level prefixes (`/api/v1/inventory`, `/api/v1/catalog`, `/api/v1/coupons`, `/api/v1/variants`, `/api/v1/checkout`, `/api/v1/carts`) are still registered as aliases and are called out where they differ; new clients should not use them. Migration table: [TODO.md](TODO.md).
+**Path convention:** every route is namespaced by its owning service — `/api/v1/products/…` (including inventory, catalog and promotional codes), `/api/v1/orders/…` (including checkout sessions), `/api/v1/cart/…`, `/api/v1/payments/…`, `/api/v1/auth/…`, `/api/v1/profile/…`. The paths documented here are the canonical ones. Older top-level prefixes (`/api/v1/inventory`, `/api/v1/catalog`, `/api/v1/coupons`, `/api/v1/variants`, `/api/v1/checkout`, `/api/v1/carts`) are still registered as aliases and are called out where they differ; new clients should not use them. Migration table: [TODO.md](TODO.md).
 
 ---
 
@@ -91,9 +91,9 @@ RS256 public key set for verifying access tokens issued by auth.
 
 ### `POST /api/v1/auth/register`
 
-Create a new user account. Requires `user.create`.
+Create a new user account. Requires `user.create` — unless open register is on (`AUTH_OPEN_REGISTER`, default `true`), in which case an unauthenticated call is accepted and always creates a `customer` with no permissions.
 
-**Headers** — `Authorization: Bearer <access_token>`
+**Headers** — `Authorization: Bearer <access_token>` (optional under open register)
 
 **Request body**
 ```json
@@ -137,7 +137,7 @@ Configure on `dupli1-auth` startup:
 | `DUPLI1_WEB_SERVICE_EMAIL` | Service account email (skip seeding when empty) |
 | `DUPLI1_WEB_SERVICE_API_KEY` | Its API key, required when the email is set — service accounts have no password ([auth-service-api-keys.md](auth-service-api-keys.md)) |
 
-`dupli1-web` should log in with these credentials server-side, cache/refresh the access token, and call register from the backend only — never expose the service password to browsers.
+`dupli1-web` exchanges the key server-side at `POST /api/v1/auth/token` (`Authorization: ApiKey …`, internal listener only), exchanges again near expiry (there is no refresh token), and calls register from the backend only — never expose the key to browsers.
 
 ---
 
@@ -649,17 +649,17 @@ Look up a promotional code. No authentication required.
 
 This is a **lookup**: it answers whether a code is live, honouring `active`, `expires_at` and the campaign cap, and is rate-limited per IP and per customer. It is **not** cart-aware and returns no discount amount — use `evaluate` for that. Usage limits are enforced by the ledger at `reserve`, not here.
 
-#### Target surface (planned)
+#### Cart-aware evaluation, ledger and wallet
 
-Being replaced by a cart-aware evaluation call as part of [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md). Planned, **not implemented**:
+The cart-aware surface from [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md). Everything is live except campaign stats (Phase 4):
 
 | Method | Path | Permission | Purpose | Status |
 |--------|------|------------|---------|--------|
 | `POST` | `/api/v1/products/promotions/evaluate` | — (public, rate-limited) | Price a code against a checkout context → `{ ok, discount_won, eligible_sku_ids, eligible_subtotal_won, reason, sub_reason }`. Order calls it at apply and again at complete; the storefront uses it to preview. Lines need only `{sku_id, sku, quantity, unit_price_won}` — a line's category, brand, parent and sale state are read from the catalog here, and a caller that sends them has them overwritten | **live** |
-| `POST` | `/api/v1/products/promotions/reserve` | `promotion.redeem` | Re-evaluate and record a pending use against an order. Idempotent per order | **live** |
-| `POST` | `/api/v1/products/promotions/consume` | `promotion.redeem` | Mark an order's reservation paid. Idempotent | **live** |
-| `POST` | `/api/v1/products/promotions/release` | `promotion.redeem` | Hand a use back, for a cancel before shipment | **live** |
-| `POST` | `/api/v1/products/promotions/tier` | `promotion.redeem` | The customer's automatic tier discount on a cart (`apply_mode: auto`), the best one if they hold several → `{ ok, code, discount_won, … }`. Internal (the customer id is in the body); order calls it on every session read and at complete | **live** |
+| `POST` | `/api/v1/products/promotions/reserve` | `promotion.redeem` + `dupli1-order` (internal) | Re-evaluate and record a pending use against an order. Idempotent per order | **live** |
+| `POST` | `/api/v1/products/promotions/consume` | `promotion.redeem` + `dupli1-order` (internal) | Mark an order's reservation paid. Idempotent | **live** |
+| `POST` | `/api/v1/products/promotions/release` | `promotion.redeem` + `dupli1-order` (internal) | Hand a use back, for a cancel before shipment | **live** |
+| `POST` | `/api/v1/products/promotions/tier` | `promotion.redeem` + `dupli1-order` (internal) | The customer's automatic tier discount on a cart (`apply_mode: auto`), the best one if they hold several → `{ ok, code, discount_won, … }`. Internal (the customer id is in the body); order calls it on every session read and at complete | **live** |
 | `POST` | `/api/v1/products/promotions/me/tier` | Bearer (ABAC) | The same answer for the signed-in customer (id from the token, never the body), so the storefront can show a member's tier before checkout | **live** |
 | `GET`/`POST` | `/api/v1/products/promotions/me` | Bearer (ABAC) | Current customer's wallet. POST a cart to have each entitlement judged against it; the customer id comes from the token, never the body | **live** |
 | `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` | Issue a single-user entitlement, idempotent on `trigger_key` | **live** |
@@ -1039,7 +1039,7 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 | POST | `/api/v1/orders` | Create order directly |
 | GET | `/api/v1/orders` | List all orders (`order.read.all`) |
 | GET | `/api/v1/orders/events` | Live order stream, Server-Sent Events (`order.read.all`) — see [order-live-events.md](order-live-events.md) |
-| GET | `/api/v1/orders/reports/sales?granularity=week\|month&from=YYYY-MM-DD&to=YYYY-MM-DD` | Sales report (`order.read.all`). KST periods: weeks run Monday–Sunday, months are calendar months; `from`/`to` are inclusive and widened to whole periods (default: the last 12 weeks or 12 months up to the current one; at most 104 weeks or 36 months, else `400`). Returns `{granularity, timezone, from, to, periods[], totals}`; each period has `period_start`, `period_end`, `orders`, `gross_won`, `discount_won`, `shipping_fee_won`, `refunds`, `refunded_won`, `net_won`, `average_order_won`. A sale counts in the period of its `paid_at`; a refund (a paid order canceled) counts in the period of its `canceled_at`, so `net_won = gross_won - refunded_won` is what moved in that period. Empty periods are listed |
+| GET | `/api/v1/orders/reports/sales?granularity=week\|month&from=YYYY-MM-DD&to=YYYY-MM-DD` | Sales report (`order.read.all`). KST periods: weeks run Monday–Sunday, months are calendar months; `from`/`to` are inclusive and widened to whole periods (default: the last 12 weeks or 12 months up to the current one; at most 104 weeks or 36 months, else `400`). Returns `{granularity, timezone, from, to, periods[], totals}`; each period has `period_start`, `period_end`, `orders`, `gross_won`, `discount_won`, `shipping_fee_won`, `card_surcharge_won`, `refunds`, `refunded_won`, `net_won`, `average_order_won`. A sale counts in the period of its `paid_at`; a refund (a paid order canceled) counts in the period of its `canceled_at`, so `net_won = gross_won - refunded_won` is what moved in that period. Empty periods are listed |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
 | POST | `/api/v1/orders/{id}/confirm` | `order.status.update` — manager accepts a paid order (`paid` → `confirmed`; 2-hour SLA from `paid_at`, auto-confirmed by the sweep otherwise) |
@@ -1130,7 +1130,7 @@ A full cancel moves the payment to `canceled`. A **partial** cancel leaves it `s
 
 `bypass` payments never touched a PG, so they are canceled locally only and the matching refund is made out of band.
 
-The cancel publishes **`payment.canceled`** (NATS, via the payment outbox). Order cancels a still-`paid` order on a full refund when `remaining_won` is present and `0` and `payment_id` matches; notification alerts ops. Concurrent cancels of the same payment serialize on a row lock so NANO is not called twice.
+The cancel publishes **`payment.canceled`** (NATS, via the payment outbox). Order cancels a `paid` or `confirmed` (not yet shipped) order on a full refund when `remaining_won` is present and `0` and `payment_id` matches; notification alerts ops. Concurrent cancels of the same payment serialize on a row lock so NANO is not called twice.
 
 Unpaid `pending` orders auto-cancel after **5 minutes**. Full design: [payment-service.md](payment-service.md).
 
@@ -1234,9 +1234,16 @@ All error responses use a JSON envelope:
 { "error": "human-readable message" }
 ```
 
-**Other services** (stdlib)
+Some auth errors add a string `code` (e.g. `account_type_not_allowed`).
+
+**product, order, cart, payment, profile** (stdlib)
 ```json
 { "error": "human-readable message", "code": 400 }
+```
+
+**notification, support** (stdlib)
+```json
+{ "error": "human-readable message" }
 ```
 
 ---
