@@ -109,4 +109,4 @@ Architecture (hexagonal DDD per service, JWT/JWKS auth, PostgreSQL, NATS payment
 7. ~~Consolidate `authjwt` + JWKS `singleflight`~~ (**H8**/**H9** done); shared HTTP client helpers still optional
 8. ~~Product: sanitize 500 responses; other services; check migrate `Exec` errors~~ **done** (H4 + H5)
 
-See also: [TODO.md](TODO.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [current-state.md](current-state.md), [aws-cost-optimization.md](aws-cost-optimization.md).
+See also: [TODO.md](TODO.md), [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md), [current-state.md](current-state.md).

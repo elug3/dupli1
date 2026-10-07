@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Opt-in cleanup of idle AWS spend found in the 2026-07-14 cost review.
-# See docs/aws-cost-optimization.md.
 #
 # Already removed (2026-09-15 live cleanup, do not recreate):
 #   empty Global Accelerators, Sydney schick-test/mweb-vpn, stopped dupli1-vpn,

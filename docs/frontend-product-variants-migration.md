@@ -429,12 +429,6 @@ Search still returns a **single** `BOT-001` card.
 
 ---
 
-## OpenAPI
-
-Machine-readable contract: [api/specs/product-v1.yaml](../api/specs/product-v1.yaml)
-
----
-
 ## Support contacts / follow-ups
 
 Backend remaining work (not required for initial client migration):

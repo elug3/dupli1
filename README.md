@@ -58,7 +58,7 @@ bash infra/scripts/fetch-rds-env.sh
 docker compose -f docker-compose.yml -f docker-compose.rds.yml --env-file .env.rds up --build
 ```
 
-[docs/deployment-aws.md](docs/deployment-aws.md) describes the former ECS + RDS setup; production is in [docs/deployment-venus.md](docs/deployment-venus.md).
+Production runs on VENUS; see [docs/deployment-venus.md](docs/deployment-venus.md).
 
 ## Project Structure
 

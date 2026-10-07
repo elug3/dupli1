@@ -2,7 +2,7 @@
 
 Index of `docs/`. Prefer **living** docs for as-built behavior; treat **historical / plan** docs as design context unless their status line says otherwise.
 
-When the API surface changes, update [current-state.md](current-state.md) and [api.md](api.md) (and [endpoints.md](endpoints.md) / [openapi.yaml](openapi.yaml) when routes change). See [AGENTS.md](../AGENTS.md).
+When the API surface changes, update [current-state.md](current-state.md) and [api.md](api.md) (and [endpoints.md](endpoints.md) when routes change). See [AGENTS.md](../AGENTS.md).
 
 ## Living (start here)
 
@@ -11,7 +11,6 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [current-state.md](current-state.md) | Authoritative snapshot of what is implemented |
 | [api.md](api.md) | Service API narrative |
 | [endpoints.md](endpoints.md) | Route index |
-| [openapi.yaml](openapi.yaml) | OpenAPI aggregate |
 | [permissions.md](permissions.md) | Permission catalog and ABAC |
 | [service-layout.md](service-layout.md) | Module / directory layout |
 | [TODO.md](TODO.md) | Living backlog and schedule |
@@ -59,19 +58,6 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [v1.0-release-spec.md](v1.0-release-spec.md) | v1.0 closeout checklist |
 | [v1-release-plan.md](v1-release-plan.md) | v1.0 narrative + launch runbook |
 | [v1.1-release-plan.md](v1.1-release-plan.md) | Post-launch slices (blocked on v1.0) |
-| [aws-cost-reduction-plan.md](aws-cost-reduction-plan.md) | Cost cut plan |
-| [aws-cost-optimization.md](aws-cost-optimization.md) | Mid-month cost review |
-| [aws-july-2026-cost-report.md](aws-july-2026-cost-report.md) | July 2026 cost evidence |
-
-## AWS era (historical)
-
-Production left AWS for VENUS on 2026-09-27. These describe the old ECS / RDS / EC2 setup and are kept for reference.
-
-| Doc | Role |
-|-----|------|
-| [deployment-aws.md](deployment-aws.md) | Former production on ECS / RDS |
-| [dupli1-production-aws-architecture.drawio](dupli1-production-aws-architecture.drawio) | Former AWS architecture diagram (draw.io) |
-| [deployment-ec2.md](deployment-ec2.md) | Single-EC2 Compose overlay |
 
 ## Historical / plan (read status line first)
 

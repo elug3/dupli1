@@ -235,7 +235,7 @@ aws ecs update-service --cluster production --service dupli1-order --force-new-d
 | ECR / S3 / CloudWatch / Secrets | ~$5–10 |
 | **Total (Dupli1 core)** | **~$210–230/mo** |
 
-Avoid leaving the ASG at 5–6 instances (~+$240–300/mo) or idle Global Accelerators (~+$36/mo). See [docs/aws-cost-optimization.md](../../docs/aws-cost-optimization.md).
+Avoid leaving the ASG at 5–6 instances (~+$240–300/mo) or idle Global Accelerators (~+$36/mo).
 
 ## Pause / resume (cost lightening)
 

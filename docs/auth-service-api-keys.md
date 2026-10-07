@@ -463,7 +463,7 @@ Each phase ships and is verified independently; nothing is a flag day.
    win: the credential that could be phished, reused, or sprayed stops existing.
 
 Docs to update when this lands: [current-state.md](current-state.md),
-[api.md](api.md), [endpoints.md](endpoints.md), [openapi.yaml](openapi.yaml),
+[api.md](api.md), [endpoints.md](endpoints.md),
 [permissions.md](permissions.md), [auth-logging.md](auth-logging.md),
 [README.md](README.md).
 
