@@ -364,3 +364,42 @@ func TestStoreCatalogReadsFullPriceAsNotOnSale(t *testing.T) {
 		t.Fatal("officialPrice equal to price is not a markdown")
 	}
 }
+
+// Sale state is read from the SKU's effective prices, not the parent's: an
+// override can put one colourway on sale (or take it off) while its siblings
+// keep the parent's state.
+func TestStoreCatalogSaleStateFollowsSkuPriceOverride(t *testing.T) {
+	ctx := context.Background()
+	store := memory.NewProductStore()
+	seedMasters(t, store, "PRA", "1BA906", "BLK", "M")
+	seedMasters(t, store, "PRA", "1BA906", "RED", "M")
+	if _, err := store.CreateProduct(ctx, domain.Product{
+		ID: "parent-3", Name: "Galleria", Category: "bags", BrandCode: "PRA", StyleCode: "1BA906",
+		Price: 300000, OfficialPrice: 300000, Status: "active", // parent: full price
+	}); err != nil {
+		t.Fatalf("create product: %v", err)
+	}
+	pricier, official := 380000.0, 450000.0
+	for _, v := range []domain.Variant{
+		{SkuID: "sku-plain", SKU: "PRA_1BA906_BLK_M", ProductID: "parent-3", ColorCode: "BLK", SizeCode: "M", Status: "active"},
+		{SkuID: "sku-marked", SKU: "PRA_1BA906_RED_M", ProductID: "parent-3", ColorCode: "RED", SizeCode: "M", Status: "active",
+			PriceOverride: &pricier, OfficialPriceOverride: &official},
+	} {
+		if _, err := store.CreateVariant(ctx, v); err != nil {
+			t.Fatalf("create variant %s: %v", v.SKU, err)
+		}
+	}
+
+	got, err := service.NewStorePromotionCatalog(store).LineAttributes(ctx, []ports.LineRef{
+		{SkuID: "sku-plain"}, {SkuID: "sku-marked"},
+	})
+	if err != nil {
+		t.Fatalf("line attributes: %v", err)
+	}
+	if got[0].OnSale {
+		t.Fatal("SKU without an override inherits the parent's full price: not on sale")
+	}
+	if !got[1].OnSale {
+		t.Fatal("SKU whose own official price exceeds its own price is on sale")
+	}
+}

@@ -65,6 +65,8 @@ Generation: `domain.NewProductID()` / `domain.NewSkuID()` (ULID) on create; huma
 
 **Do not encode** in the SKU: product marketing name, season, price, stock qty, supplier, warehouse.
 
+**Price is not part of the SKU, but a SKU can carry its own.** A variant inherits the parent product's `price` / `officialPrice`; an optional per-SKU override (`priceOverride` / `officialPriceOverride`) replaces them for that SKU only, so colourways of one style that sell at different prices can share one parent. Reads return the effective price. See [product-price-on-parent.md](product-price-on-parent.md).
+
 Legacy rows may still use `{productId}-{color}` (e.g. `BOT-001-GRN`); they keep working. New variants under coded parents use the underscore format.
 
 ---

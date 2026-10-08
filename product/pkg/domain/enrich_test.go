@@ -160,3 +160,84 @@ func TestProductMergeUpdate_ExplicitPriceChange(t *testing.T) {
 	}
 }
 
+
+func TestApplyParentPrice_OverrideFallsBackToParent(t *testing.T) {
+	parent := domain.Product{Price: 300000, OfficialPrice: 400000}
+	own, off := 380000.0, 500000.0
+
+	inherit := domain.Variant{}
+	inherit.ApplyParentPrice(parent)
+	if inherit.Price != 300000 || inherit.OfficialPrice != 400000 {
+		t.Fatalf("no override must inherit parent: got %v/%v", inherit.Price, inherit.OfficialPrice)
+	}
+
+	priced := domain.Variant{PriceOverride: &own, OfficialPriceOverride: &off}
+	priced.ApplyParentPrice(parent)
+	if priced.Price != 380000 || priced.OfficialPrice != 500000 {
+		t.Fatalf("override must win: got %v/%v", priced.Price, priced.OfficialPrice)
+	}
+
+	partial := domain.Variant{PriceOverride: &own}
+	partial.ApplyParentPrice(parent)
+	if partial.Price != 380000 || partial.OfficialPrice != 400000 {
+		t.Fatalf("official must still inherit: got %v/%v", partial.Price, partial.OfficialPrice)
+	}
+}
+
+func TestVariantMergeUpdate_PriceOverride(t *testing.T) {
+	cur := 380000.0
+	existing := domain.Variant{SKU: "A", PriceOverride: &cur}
+
+	if got := existing.MergeUpdate(domain.Variant{Color: "Red"}); got.PriceOverride == nil || *got.PriceOverride != cur {
+		t.Fatalf("omitted override must be kept, got %v", got.PriceOverride)
+	}
+	next := 390000.0
+	if got := existing.MergeUpdate(domain.Variant{PriceOverride: &next}); *got.PriceOverride != next {
+		t.Fatalf("override not replaced: %v", *got.PriceOverride)
+	}
+	zero := 0.0
+	if got := existing.MergeUpdate(domain.Variant{PriceOverride: &zero}); got.PriceOverride != nil {
+		t.Fatalf("0 must clear the override, got %v", *got.PriceOverride)
+	}
+}
+
+func TestValidateVariantPrices(t *testing.T) {
+	ok, neg, frac := 1000.0, -1.0, 10.5
+	if err := domain.ValidateVariantPrices(domain.Variant{PriceOverride: &ok}); err != nil {
+		t.Fatalf("valid override rejected: %v", err)
+	}
+	if domain.ValidateVariantPrices(domain.Variant{PriceOverride: &neg}) == nil {
+		t.Fatal("negative override accepted")
+	}
+	if domain.ValidateVariantPrices(domain.Variant{OfficialPriceOverride: &frac}) == nil {
+		t.Fatal("fractional won accepted")
+	}
+}
+
+func TestEnrichFromVariants_PriceFrom(t *testing.T) {
+	hi := 380000.0
+	p := domain.Product{Price: 300000}
+	p.EnrichFromVariants([]domain.Variant{
+		{SKU: "A", Status: "active"},
+		{SKU: "B", Status: "active", PriceOverride: &hi},
+	}, false)
+	if p.PriceFrom != 300000 {
+		t.Fatalf("PriceFrom = %v, want 300000", p.PriceFrom)
+	}
+
+	same := domain.Product{Price: 300000}
+	same.EnrichFromVariants([]domain.Variant{{SKU: "A", Status: "active"}, {SKU: "B", Status: "active"}}, false)
+	if same.PriceFrom != 0 {
+		t.Fatalf("uniform prices must not set PriceFrom, got %v", same.PriceFrom)
+	}
+
+	cheapDraft := 100.0
+	d := domain.Product{Price: 300000}
+	d.EnrichFromVariants([]domain.Variant{
+		{SKU: "A", Status: "active"},
+		{SKU: "B", Status: "draft", PriceOverride: &cheapDraft},
+	}, false)
+	if d.PriceFrom != 0 {
+		t.Fatalf("inactive variants must not count, got %v", d.PriceFrom)
+	}
+}

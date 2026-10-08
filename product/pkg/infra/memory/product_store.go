@@ -138,7 +138,7 @@ func (s *ProductStore) SearchProducts(ctx context.Context, filter map[string]str
 		results = append(results, p)
 	}
 
-	// Enrich summary fields before sort (sort=price uses parent Price).
+	// Enrich summary fields before sort (sort=price uses the lowest effective price).
 	s.enrich(ctx, results, false)
 	sortProducts(results, filter)
 
@@ -183,7 +183,7 @@ func sortProducts(results []domain.Product, filter map[string]string) {
 		case domain.SortWishlist:
 			less = a.WishlistCount < b.WishlistCount
 		case domain.SortPrice:
-			less = a.Price < b.Price
+			less = lowestPrice(a) < lowestPrice(b)
 		case domain.SortName:
 			less = strings.ToLower(a.Name) < strings.ToLower(b.Name)
 		default:
@@ -208,7 +208,7 @@ func aEqual(sortKey string, a, b domain.Product) bool {
 	case domain.SortWishlist:
 		return a.WishlistCount == b.WishlistCount
 	case domain.SortPrice:
-		return a.Price == b.Price
+		return lowestPrice(a) == lowestPrice(b)
 	case domain.SortName:
 		return strings.EqualFold(a.Name, b.Name)
 	default:
@@ -634,7 +634,7 @@ func (s *ProductStore) CreateVariant(ctx context.Context, v domain.Variant) (*do
 	if v.SkuID == "" {
 		v.SkuID = domain.NewSkuID()
 	}
-	// Price lives on the parent product, not the SKU row.
+	// Effective price is derived on read; only the overrides are stored.
 	v.Price = 0
 	v.OfficialPrice = 0
 	for _, existing := range s.Variants {
@@ -691,4 +691,13 @@ func (s *ProductStore) DeleteVariant(ctx context.Context, sku string) error {
 		}
 	}
 	return fmt.Errorf("variant %s: %w", sku, ports.ErrNotFound)
+}
+
+// lowestPrice is what sort=price orders by: the cheapest active SKU when
+// variants differ in price (PriceFrom), else the parent's price.
+func lowestPrice(p domain.Product) float64 {
+	if p.PriceFrom > 0 {
+		return p.PriceFrom
+	}
+	return p.Price
 }

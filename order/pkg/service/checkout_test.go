@@ -706,3 +706,47 @@ func TestApplyRefusedPromotionSurfacesTheReason(t *testing.T) {
 		t.Fatalf("err = %v, want the sub-reason to travel with it", err)
 	}
 }
+
+// Colourways of one style can sell at different prices: each line is priced
+// from its own SKU (override or parent fallback, as product resolves it), a
+// client-sent unit_price_won is ignored, and the order charges the sum.
+func TestCheckout_PricesEachSkuOfOneStyleSeparately(t *testing.T) {
+	ctx := t.Context()
+	product := &fakeProduct{
+		byKey: map[string]*ports.VariantInfo{
+			"PRA_1BA906_BLK_M":  {SkuID: "ID-BLK", SKU: "PRA_1BA906_BLK_M", UnitPriceWon: 300000}, // inherits parent
+			"ID-BLK":            {SkuID: "ID-BLK", SKU: "PRA_1BA906_BLK_M", UnitPriceWon: 300000},
+			"PRA_1BA906_MNZV_M": {SkuID: "ID-MNZV", SKU: "PRA_1BA906_MNZV_M", UnitPriceWon: 380000}, // own override
+			"ID-MNZV":           {SkuID: "ID-MNZV", SKU: "PRA_1BA906_MNZV_M", UnitPriceWon: 380000},
+		},
+		strictMissing: true,
+	}
+	svc := service.NewWithCheckout(memory.NewRepository(), &fakeStock{reservationID: "res-sku"}, nil, 0).WithProduct(product)
+
+	session, err := svc.CreateCheckoutSession(ctx, service.CreateCheckoutSessionInput{CustomerID: "customer-1"})
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession: %v", err)
+	}
+	session, err = svc.SetCheckoutItems(ctx, session.ID, []domain.OrderItem{
+		{SKU: "PRA_1BA906_BLK_M", Quantity: 1, UnitPriceWon: 1},
+		{SkuID: "ID-MNZV", Quantity: 2, UnitPriceWon: 1},
+	})
+	if err != nil {
+		t.Fatalf("SetCheckoutItems: %v", err)
+	}
+	if want := int64(300000 + 2*380000); session.SubtotalWon != want {
+		t.Fatalf("subtotal = %d, want %d", session.SubtotalWon, want)
+	}
+
+	result, err := svc.CompleteCheckout(ctx, session.ID, testCompleteCheckoutInput())
+	if err != nil {
+		t.Fatalf("CompleteCheckout: %v", err)
+	}
+	prices := map[string]int64{}
+	for _, it := range result.Order.Items {
+		prices[it.SkuID] = it.UnitPriceWon
+	}
+	if prices["ID-BLK"] != 300000 || prices["ID-MNZV"] != 380000 {
+		t.Fatalf("order line prices = %v", prices)
+	}
+}
