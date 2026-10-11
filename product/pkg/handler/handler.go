@@ -29,6 +29,7 @@ type Handler struct {
 	viewStore         ports.ProductViewStore
 	wishlistStore     ports.ProductWishlistStore
 	visitorSvc        *service.VisitorService
+	catalogReportSvc  *service.CatalogReportService
 	guestCookie       GuestCookieConfig
 	settings          settings.Response
 }
@@ -64,7 +65,7 @@ type HealthResponse struct {
 
 var searchFilters = []string{
 	"category", "subcategory", "subCategory", "style", "target",
-	"brand", "color", "size", "material", "status", "q",
+	"brand", "brand_code", "color", "size", "material", "status", "q",
 }
 
 func NewHandler(svc *service.ProductSearchService, promotionSvc *service.PromotionService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {

@@ -561,6 +561,7 @@ Search **parent styles** (one row per style; colors are not duplicated). No auth
 | `style` | exact bag occasion (`casual`, `evening`, `business`, `weekend`, `statement`) — not SKU `styleCode` |
 | `target` | exact audience (`all`, `men`, `women`, `kids`) |
 | `brand` | case-insensitive substring |
+| `brand_code` | exact brand master code (what the catalog report groups by) |
 | `color` | parent has an active variant with this color |
 | `size` | parent has an active variant with this size |
 | `material` | exact |
@@ -768,6 +769,34 @@ Unique storefront visitors per week or month. Requires `product.read`. Same quer
 ```
 
 `unique_visitors` counts each browser once per period; `visitor_days` counts it once per day it came (the sum of the period's daily uniques). `total_unique_visitors` counts each browser once across the whole range, so it is not the sum of the periods. `today` is always the current KST day.
+
+---
+
+### `GET /api/v1/products/reports/catalog`
+
+Catalog overview: how many products, SKUs and units each brand, category and subcategory holds, and the brand × subcategory grid. Requires `product.read`. Optional `status=active|draft|archived` narrows every count to products of that status (anything else is `400`); `products_by_status` always covers the whole catalog.
+
+**Response `200`**
+```json
+{
+  "status": "active",
+  "totals": { "products": 112, "skus": 371, "units": 1210, "reserved": 37 },
+  "products_by_status": { "active": 112, "draft": 16, "archived": 0 },
+  "brands": [
+    { "code": "PRD", "name": "Prada", "products": 23, "skus": 74, "units": 236, "reserved": 4 },
+    { "code": "FND", "name": "Fendi", "products": 0, "skus": 0, "units": 0, "reserved": 0 }
+  ],
+  "categories": [
+    { "code": "bags", "name": "Bags", "products": 96, "skus": 314, "units": 940, "reserved": 30,
+      "sub_categories": [ { "code": "tote", "name": "Tote", "products": 24, "skus": 80, "units": 210, "reserved": 6 } ] }
+  ],
+  "cells": [
+    { "brand_code": "PRD", "brand": "Prada", "category": "bags", "sub_category": "tote", "products": 5, "skus": 16, "units": 51, "reserved": 1 }
+  ]
+}
+```
+
+Products are parents (styles); `skus` counts every variant of them whatever its status; `units` is stock on hand on those SKUs (`stock_items.quantity`), of which `reserved` is held for open orders. `brands` lists every brand master (with zeros when it has no products) plus any brand a product names without a master (`code: ""`), most products first. `categories` follows the taxonomy order and lists each of its subcategories, with zeros when empty; products with no subcategory are counted under `code: ""`. `cells` holds non-empty brand × subcategory pairs only. To list what a number counts, `GET /api/v1/products?brand_code=&category=&subcategory=&status=`.
 
 ---
 
