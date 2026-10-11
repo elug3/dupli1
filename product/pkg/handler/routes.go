@@ -32,6 +32,9 @@ const (
 	RouteVisits         = "/api/v1/products/visits"
 	RouteVisitorsReport = "/api/v1/products/reports/visitors"
 
+	// Catalog overview: products, SKUs and stock per brand and category.
+	RouteCatalogReport = "/api/v1/products/reports/catalog"
+
 	// Public variant lookups (service-prefixed).
 	RoutePublicVariants       = "/api/v1/products/variants"
 	RoutePublicVariant        = "/api/v1/products/variants/by-sku/{sku}"

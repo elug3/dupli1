@@ -339,10 +339,11 @@ Errors: `400` invalid field, `401` missing/invalid token, `404` address not foun
 | `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` | Withdraw an issued entitlement |
 | `POST` | `/api/v1/products/visits` | — (throttled) | Storefront page-load visitor beacon |
 | `GET` | `/api/v1/products/reports/visitors` | `product.read` | Unique visitors per KST week or month |
+| `GET` | `/api/v1/products/reports/catalog` | `product.read` | Products, SKUs and stock per brand, category and brand × subcategory |
 
 The pre-rename spellings `/api/v1/products/coupons…`, `/api/v1/coupons…` and the `coupon.*` permissions are still accepted for one release ([product-promotion-rename.md](product-promotion-rename.md)); write only the names above.
 
-Public search defaults to `status = active` on the **parent**. Query filters: `category`, `subcategory`, `style`, `target`, `brand`, `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** (human `sku` or canonical `skuId`) with inventory. Identity + masters: [product-sku-system.md](product-sku-system.md). Bag taxonomy: [product-master-catalog.md](product-master-catalog.md). Parent display memo: [product-attributes.md](product-attributes.md). See also [product-variants-plan.md](product-variants-plan.md).
+Public search defaults to `status = active` on the **parent**. Query filters: `category`, `subcategory`, `style`, `target`, `brand`, `brand_code` (exact master code), `material`, `tags`, `color`, `size` (color/size match any active variant). Managers may also pass `status`. Checkout uses **variant SKU** (human `sku` or canonical `skuId`) with inventory. Identity + masters: [product-sku-system.md](product-sku-system.md). Bag taxonomy: [product-master-catalog.md](product-master-catalog.md). Parent display memo: [product-attributes.md](product-attributes.md). See also [product-variants-plan.md](product-variants-plan.md).
 
 ### Catalog master data
 

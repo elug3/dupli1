@@ -116,7 +116,8 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		WithViewStore(store).
 		WithWishlistStore(store).
 		WithGuestCookie(guestCookie).
-		WithVisitorService(service.NewVisitorService(visitorStore))
+		WithVisitorService(service.NewVisitorService(visitorStore)).
+		WithCatalogReportService(service.NewCatalogReportService(store, catalogStore))
 
 	// New customers get their welcome promotional code from auth's
 	// user.registered event. Issuing is keyed on the event's user id, so a
@@ -174,6 +175,7 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	visitThrottle := newVisitRateLimiter(cfg).Middleware(nil)
 	mux.Handle("POST "+handler.RouteVisits, visitThrottle(http.HandlerFunc(h.RecordVisit)))
 	mux.Handle("GET "+handler.RouteVisitorsReport, requirePerm(permissions.ProductRead, http.HandlerFunc(h.VisitorReport)))
+	mux.Handle("GET "+handler.RouteCatalogReport, requirePerm(permissions.ProductRead, http.HandlerFunc(h.CatalogReport)))
 	mux.Handle("POST "+handler.RouteProducts, requirePerm(permissions.ProductCreate, h.CreateProductHandler()))
 	mux.Handle("PUT "+handler.RouteProductByID, requirePerm(permissions.ProductUpdate, h.SingleProductHandler()))
 	mux.Handle("DELETE "+handler.RouteProductByID, requirePerm(permissions.ProductDelete, h.SingleProductHandler()))

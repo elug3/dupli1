@@ -624,6 +624,10 @@ func buildProductSearchWhere(filter map[string]string) (string, []interface{}) {
 			query += fmt.Sprintf(" AND p.brand ILIKE $%d", idx)
 			args = append(args, "%"+value+"%")
 			idx++
+		case "brand_code":
+			query += fmt.Sprintf(" AND p.brand_code = $%d", idx)
+			args = append(args, value)
+			idx++
 		case "material":
 			query += fmt.Sprintf(" AND p.material = $%d", idx)
 			args = append(args, value)

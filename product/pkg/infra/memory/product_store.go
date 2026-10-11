@@ -112,6 +112,9 @@ func (s *ProductStore) SearchProducts(ctx context.Context, filter map[string]str
 		if brand := filter["brand"]; brand != "" && !strings.Contains(strings.ToLower(p.Brand), strings.ToLower(brand)) {
 			continue
 		}
+		if brandCode := filter["brand_code"]; brandCode != "" && p.BrandCode != brandCode {
+			continue
+		}
 		if material := filter["material"]; material != "" && p.Material != material {
 			continue
 		}

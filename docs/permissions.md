@@ -301,6 +301,7 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` |
 | `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` |
 | `GET` | `/api/v1/products/reports/visitors` | `product.read` |
+| `GET` | `/api/v1/products/reports/catalog` | `product.read` |
 | `POST` | `/api/v1/products/visits` | — (public beacon, rate-limited) |
 
 Legacy top-level aliases (`/api/v1/variants/…`, `/api/v1/catalog/…`, `/api/v1/coupons/…`) are still registered with the same permissions; see [TODO.md](TODO.md) for the migration table. The promotion routes additionally answer on the pre-rename `/api/v1/products/coupons…` spelling ([product-promotion-rename.md](product-promotion-rename.md)).
