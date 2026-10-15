@@ -352,6 +352,9 @@ services:
     environment:
       # From the Cloudflare dashboard; cloudflared exits if it's empty.
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    # The ssh.* ingress rules point at ssh://host.docker.internal:22: inside
+    # this container localhost is the container itself, not VENUS's sshd.
+    extra_hosts: ["host.docker.internal:host-gateway"]
     depends_on: [edge]
 
 volumes:
