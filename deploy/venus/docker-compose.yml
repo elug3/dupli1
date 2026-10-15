@@ -352,6 +352,10 @@ services:
     environment:
       # From the Cloudflare dashboard; cloudflared exits if it's empty.
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    # The ssh.* ingress targets ssh://host.docker.internal:22, the host's sshd;
+    # localhost here would be the container itself.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on: [edge]
 
 volumes:
