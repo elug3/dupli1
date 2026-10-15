@@ -239,7 +239,7 @@ services:
       # AWS ran notification in-memory, so approvals were lost on restart.
       DUPLI1_NOTIFICATION_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/notifications?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
-      MANAGE_WEB_URL: https://manage.dupli1.com
+      MANAGE_WEB_URL: ${MANAGE_ORIGIN:-https://manage.dupli1.com}
       NATS_URL: nats://nats.dupli1.local:4222
       # Empty until cutover: one bot token must never be polled by AWS and
       # VENUS at the same time (Telegram answers the second poller with 409).
@@ -265,7 +265,7 @@ services:
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
       JWT_SECRET: ${JWT_SECRET}
       NATS_URL: nats://nats.dupli1.local:4222
-      MANAGE_WEB_URL: https://manage.dupli1.com
+      MANAGE_WEB_URL: ${MANAGE_ORIGIN:-https://manage.dupli1.com}
       # Web chat checks product and order references through the gateway with
       # the shopper's own token, like order does.
       DUPLI1_GATEWAY_URL: http://proxy.dupli1.local:8081
