@@ -43,8 +43,12 @@ VENUS  docker compose project "dupli1"  (deploy/venus/docker-compose.yml)
 - **Same JWT keys.** JWKS is byte-identical to production, so existing customer
   and staff sessions survive the cutover.
 - **Images.** Production stored absolute CloudFront URLs; the import rewrites
-  them to `https://dupli1.com/product-images/<key>` (the product service's
-  `S3_PUBLIC_ENDPOINT`). Object keys and Content-Types are unchanged.
+  them to `/product-images/<key>` (the product service's `S3_PUBLIC_ENDPOINT`),
+  with no domain, so a domain move doesn't break them; the edge serves that
+  path on every host. Rows written while the base was `https://dupli1.com/…`
+  are converted by `deploy/venus/rewrite-image-urls.sh` (dry run by default,
+  `--apply` backs up each database first). Object keys and Content-Types are
+  unchanged.
 - **SeaweedFS, not MinIO.** MinIO no longer publishes community container
   images (Docker Hub, Quay and Bitnami all fail to pull). SeaweedFS speaks the
   same S3 API the product service's minio-go client uses. Note the repo's

@@ -18,7 +18,8 @@ DC=(docker compose -f "$HERE/docker-compose.yml" --env-file "$ENV_FILE")
 DUMPS=$BACKUP/db/dupli1-rds
 S3DIR=$BACKUP/s3/dupli1-product-images-20260712132109100000000003
 OLD_IMAGE_BASE=https://d180wegphwork2.cloudfront.net
-NEW_IMAGE_BASE=$(set -a; . "$ENV_FILE"; echo "${PUBLIC_ORIGIN:-https://dupli1.com}")/product-images
+# Domain-free, like S3_PUBLIC_ENDPOINT in docker-compose.yml.
+NEW_IMAGE_BASE=/product-images
 
 COUNT_SQL="SELECT n.nspname||'.'||c.relname||'|'||(xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', n.nspname, c.relname), false, true, '')))[1]::text FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind IN ('r','p') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' ORDER BY 1;"
 psql() { "${DC[@]}" exec -T postgres psql -X -q -v ON_ERROR_STOP=1 -U postgres "$@"; }
