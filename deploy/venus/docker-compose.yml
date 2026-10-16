@@ -150,7 +150,9 @@ services:
       NATS_URL: nats://nats.dupli1.local:4222
       S3_ENDPOINT: http://s3:8333
       S3_BUCKET: product-images
-      S3_PUBLIC_ENDPOINT: ${PUBLIC_ORIGIN:-https://dupli1.com}/product-images
+      # Domain-free, so stored image URLs survive a domain move: the edge serves
+      # /product-images/ on every host (deploy/venus/rewrite-image-urls.sh).
+      S3_PUBLIC_ENDPOINT: /product-images
       S3_ACCESS_KEY: dupli1
       S3_SECRET_KEY: ${S3_SECRET_KEY}
     depends_on: { postgres: { condition: service_healthy }, s3: { condition: service_healthy }, auth: { condition: service_started } }
