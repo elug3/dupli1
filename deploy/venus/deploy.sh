@@ -75,9 +75,15 @@ esac
 dc() { docker compose -f "$DEPLOY_DIR/deploy/venus/docker-compose.yml" --env-file "$ENV_FILE" "$@"; }
 
 # Moves the deploy checkout to a commit. Only called with the lock held.
+# -f discards stray local edits in /opt/dupli1/repo (a docs file someone
+# touched on the host, for example) so they cannot block a deploy.
+checkout_detach() {
+  git -C "$DEPLOY_DIR" checkout -qf --detach "$1"
+}
+
 checkout_ref() {
   git -C "$DEPLOY_DIR" fetch -q --depth 1 origin "$1"
-  git -C "$DEPLOY_DIR" checkout -q --detach FETCH_HEAD
+  checkout_detach FETCH_HEAD
 }
 
 env_value() { grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d "'\""; }
@@ -170,7 +176,7 @@ fi
 echo "rolling back $TARGET to $PREV (checkout ${PREV_COMMIT::7})" >&2
 dc logs --tail 50 "${SERVICES[@]}" >&2 || true
 # The previous images with the compose file and gateway config they ran with.
-git -C "$DEPLOY_DIR" checkout -q --detach "$PREV_COMMIT"
+checkout_detach "$PREV_COMMIT"
 set_tag "$PREV"
 # A service this deploy introduced is not in the previous compose file: stop
 # it and leave it out of the rollback rather than failing on "no such service".

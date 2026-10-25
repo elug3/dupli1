@@ -114,7 +114,8 @@ checks out only `deploy/venus/deploy.sh` into its own workspace and runs
 `deploy.sh --ref <commit> sha-<short>`, which, holding the deploy lock:
 
 1. moves the deploy checkout `/opt/dupli1/repo` (the compose file and gateway
-   config the stack runs from) to the pushed commit;
+   config the stack runs from) to the pushed commit, discarding any stray
+   local edits on the host so they cannot block checkout;
 2. pulls the 9 backend images (`auth product order cart payment profile
    notification support proxy`) and tags them `dupli1-prod/<name>:<tag>`;
 3. sets `DUPLI1_BACKEND_TAG=<tag>` in `/opt/dupli1/.env` and runs `up -d` for
