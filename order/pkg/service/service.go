@@ -190,9 +190,10 @@ func (s *Service) WithPaymentMethodGate(gate ports.PaymentMethodGate) *Service {
 
 // checkPaymentMethod refuses a method payment cannot take right now (its kill
 // switch is engaged, or this deployment has no way to take it), before any
-// stock is reserved. When payment cannot be asked the order is refused too: a
-// payment service that cannot answer cannot take the payment either, and an
-// order created anyway would only hold stock until it auto-cancels.
+// stock is reserved. When payment cannot be asked it lets the order through:
+// payment refuses the payment itself, so failing open here costs at most an
+// unpaid order that auto-cancels, while failing closed would turn a payment
+// blip into a checkout outage.
 func (s *Service) checkPaymentMethod(ctx context.Context, method string) error {
 	if s.methodGate == nil {
 		return nil
@@ -203,11 +204,8 @@ func (s *Service) checkPaymentMethod(ctx context.Context, method string) error {
 	}
 	disabled, message, err := s.methodGate.MethodDisabled(ctx, m)
 	if err != nil {
-		log.Printf("order: payment method lookup failed, refusing %s: %v", m, err)
-		if errors.Is(err, ports.ErrPaymentUnavailable) {
-			return err
-		}
-		return fmt.Errorf("%w: %v", ports.ErrPaymentUnavailable, err)
+		log.Printf("order: payment method lookup failed, allowing %s: %v", m, err)
+		return nil
 	}
 	if disabled {
 		return &ports.PaymentMethodDisabledError{Method: m, Message: message}

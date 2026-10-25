@@ -60,30 +60,19 @@ func TestCreateOrder_RefusesSwitchedOffMethodBeforeReserving(t *testing.T) {
 	}
 }
 
-func TestCreateOrder_GateUnreachableRefusesBeforeReserving(t *testing.T) {
-	stock := &fakeStock{}
+func TestCreateOrder_GateUnreachableLetsOrderThrough(t *testing.T) {
 	gate := &fakeMethodGate{err: ports.ErrPaymentUnavailable}
-	svc := service.New(memory.NewRepository(), stock).
+	svc := service.New(memory.NewRepository(), &fakeStock{}).
 		WithProduct(&fakeProduct{defaultKRW: 10000}).
 		WithPaymentMethodGate(gate)
 
-	_, err := svc.CreateOrder(t.Context(), service.CreateOrderInput{
-		CustomerID: "customer-1",
-		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
-	})
-	if !errors.Is(err, ports.ErrPaymentUnavailable) {
-		t.Fatalf("CreateOrder with payment unreachable: err = %v, want ErrPaymentUnavailable", err)
-	}
-	if len(stock.reservedItems) != 0 {
-		t.Fatalf("stock reserved %v with payment unreachable", stock.reservedItems)
-	}
-
-	// Any other failure to ask is refused the same way.
-	gate.err = errors.New("boom")
 	if _, err := svc.CreateOrder(t.Context(), service.CreateOrderInput{
 		CustomerID: "customer-1",
 		Items:      []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
-	}); !errors.Is(err, ports.ErrPaymentUnavailable) {
-		t.Fatalf("err = %v, want ErrPaymentUnavailable", err)
+	}); err != nil {
+		t.Fatalf("CreateOrder with payment unreachable: %v", err)
+	}
+	if len(gate.asked) != 1 {
+		t.Fatalf("gate asked %v", gate.asked)
 	}
 }
