@@ -849,6 +849,8 @@ Each route also accepts the pre-rename `coupon.*` permission and answers on `/ap
 
 `PUT /api/v1/products/{id}` and variant updates **merge**: omitted JSON fields keep their current value, so a partial body cannot blank out data. The trade-off is that a zero value is indistinguishable from an omitted one — sending `price: 0` or `officialPrice: 0` on a product is ignored rather than clearing the price. Variant updates also accept `priceOverride` / `officialPriceOverride` (whole won, non-negative; `400` otherwise): omit to keep, a positive amount to set, **`0` to clear** back to inheriting the parent's price. Variant responses carry the effective `price` / `officialPrice` plus the stored overrides; a product with differing active SKU prices also carries `priceFrom` (lowest effective price). See [product-price-on-parent.md](product-price-on-parent.md).
 
+**Auto-draft:** when a variant update moves a SKU out of `active` (to `draft` or `archived`), or an active SKU is deleted, and that leaves an `active` product with no active SKU, the product is set to `draft` and `product.updated` is published. Only that transition triggers it. Editing an already inactive SKU, or a SKU under a `draft`/`archived` product, leaves the product alone. Reactivating a SKU does not reactivate its product; do that with `PUT /api/v1/products/{id}`.
+
 **Deletes are permanent and refuse while stock is still in play** (`409`):
 
 - `DELETE /api/v1/products/{id}` removes the parent, every variant and their stock rows. It is refused while any of those SKUs has stock **reserved** for an open order, since that order could then neither ship nor release its hold. Unreserved stock on hand is deleted with the product.

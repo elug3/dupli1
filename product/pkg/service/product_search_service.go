@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -431,6 +432,9 @@ func (s *ProductSearchService) UpdateVariant(ctx context.Context, productID, sku
 	if err != nil {
 		return nil, err
 	}
+	if existing.IsActive() && !merged.IsActive() {
+		s.draftIfNoActiveVariant(ctx, productID)
+	}
 	parent, _ := s.store.GetProduct(ctx, productID)
 	if parent != nil {
 		updated.ApplyParentPrice(*parent)
@@ -469,7 +473,33 @@ func (s *ProductSearchService) DeleteVariant(ctx context.Context, productID, sku
 	if err := s.store.DeleteVariant(ctx, sku); err != nil {
 		return err
 	}
+	if existing.IsActive() {
+		s.draftIfNoActiveVariant(ctx, productID)
+	}
 	return s.publish(ctx, variantDeletedSubject, parent, sku, "")
+}
+
+// draftIfNoActiveVariant moves an active product to draft once none of its
+// SKUs is active, so the storefront never lists a style with nothing to sell.
+// Called after a SKU leaves active (status change or delete). The SKU write
+// has already succeeded by then, so a failure here is logged, not returned.
+func (s *ProductSearchService) draftIfNoActiveVariant(ctx context.Context, productID string) {
+	parent, err := s.store.GetProduct(ctx, productID)
+	if err != nil {
+		log.Printf("auto-draft: get product %s: %v", productID, err)
+		return
+	}
+	if parent.Status != "active" || parent.HasActiveVariant() {
+		return
+	}
+	parent.Status = "draft"
+	updated, err := s.store.UpdateProduct(ctx, *parent)
+	if err != nil {
+		log.Printf("auto-draft: product %s: %v", productID, err)
+		return
+	}
+	log.Printf("auto-draft: product %s has no active SKU; status set to draft", productID)
+	_ = s.publish(ctx, productUpdatedSubject, updated, "", "")
 }
 
 // refuseReservedStock answers a conflict when any of the variants has stock

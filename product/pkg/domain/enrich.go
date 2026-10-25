@@ -222,6 +222,22 @@ func priceFrom(p Product, variants []Variant) float64 {
 	return lo
 }
 
+// IsActive reports whether the variant is sellable. An unset status reads as
+// active, matching EnrichFromVariants.
+func (v Variant) IsActive() bool {
+	return v.Status == "" || v.Status == "active"
+}
+
+// HasActiveVariant reports whether any of the product's variants is sellable.
+func (p Product) HasActiveVariant() bool {
+	for _, v := range p.Variants {
+		if v.IsActive() {
+			return true
+		}
+	}
+	return false
+}
+
 // EnrichFromVariants fills summary and legacy display fields from variants.
 // Price / OfficialPrice stay on the parent. When includeVariants is false,
 // Variants is left empty (list/search cards).
