@@ -356,6 +356,89 @@ func TestUpdateVariant_Dimensions(t *testing.T) {
 	}
 }
 
+func autoDraftFixture() (*memory.ProductStore, *service.ProductSearchService) {
+	store := memory.NewProductStore()
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", Category: "bags", Status: "active", Price: 2500},
+	}
+	store.Variants = []domain.Variant{
+		{SkuID: "SKUID-GRN", SKU: "BOT-001-GRN", ProductID: "BOT-001", Color: "Green", Status: "active"},
+		{SkuID: "SKUID-BLK", SKU: "BOT-001-BLK", ProductID: "BOT-001", Color: "Black", Status: "active"},
+	}
+	return store, service.NewProductSearchService(store, nil)
+}
+
+func productStatus(t *testing.T, svc *service.ProductSearchService, id string) string {
+	t.Helper()
+	p, err := svc.GetProduct(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p.Status
+}
+
+// A product whose last active SKU is drafted or archived drops to draft;
+// while one SKU is still active it stays live.
+func TestUpdateVariant_LastActiveSKUDraftsProduct(t *testing.T) {
+	_, svc := autoDraftFixture()
+
+	if _, err := svc.UpdateVariant(t.Context(), "BOT-001", "BOT-001-GRN", domain.Variant{Status: "draft"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := productStatus(t, svc, "BOT-001"); got != "active" {
+		t.Fatalf("one SKU still active: product status = %q, want active", got)
+	}
+
+	if _, err := svc.UpdateVariant(t.Context(), "BOT-001", "BOT-001-BLK", domain.Variant{Status: "archived"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := productStatus(t, svc, "BOT-001"); got != "draft" {
+		t.Fatalf("no SKU active: product status = %q, want draft", got)
+	}
+}
+
+// Only a SKU leaving active triggers the rule: editing an already-inactive
+// SKU, or a product that is archived, is left alone.
+func TestUpdateVariant_AutoDraftOnlyOnActiveTransition(t *testing.T) {
+	store, svc := autoDraftFixture()
+	store.Variants[0].Status = "draft"
+	store.Variants[1].Status = "draft"
+
+	if _, err := svc.UpdateVariant(t.Context(), "BOT-001", "BOT-001-GRN", domain.Variant{Color: "Olive"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := productStatus(t, svc, "BOT-001"); got != "active" {
+		t.Fatalf("unrelated edit: product status = %q, want active", got)
+	}
+
+	store, svc = autoDraftFixture()
+	store.Products[0].Status = "archived"
+	store.Variants[1].Status = "draft"
+	if _, err := svc.UpdateVariant(t.Context(), "BOT-001", "BOT-001-GRN", domain.Variant{Status: "draft"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := productStatus(t, svc, "BOT-001"); got != "archived" {
+		t.Fatalf("archived product: status = %q, want archived", got)
+	}
+}
+
+func TestDeleteVariant_LastActiveSKUDraftsProduct(t *testing.T) {
+	_, svc := autoDraftFixture()
+
+	if err := svc.DeleteVariant(t.Context(), "BOT-001", "BOT-001-GRN"); err != nil {
+		t.Fatal(err)
+	}
+	if got := productStatus(t, svc, "BOT-001"); got != "active" {
+		t.Fatalf("one SKU left: product status = %q, want active", got)
+	}
+	if err := svc.DeleteVariant(t.Context(), "BOT-001", "BOT-001-BLK"); err != nil {
+		t.Fatal(err)
+	}
+	if got := productStatus(t, svc, "BOT-001"); got != "draft" {
+		t.Fatalf("no SKU left: product status = %q, want draft", got)
+	}
+}
+
 func TestGetPublicVariantsBySkuIDs(t *testing.T) {
 	store := memory.NewProductStore()
 	store.Products = []domain.Product{
