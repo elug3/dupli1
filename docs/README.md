@@ -34,6 +34,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 |-----|-------|
 | [product-sku-system.md](product-sku-system.md) | Dual SKU identity + masters |
 | [product-sku-dimensions.md](product-sku-dimensions.md) | Physical dimensions |
+| [product-moncler-padded-import.md](product-moncler-padded-import.md) | Moncler padded jackets: luxscrape fit check, size/style adaptations, production import (2026-10-20) |
 | [product-price-on-parent.md](product-price-on-parent.md) | Parent pricing |
 | [product-attributes.md](product-attributes.md) | Parent attributes memo |
 | [product-master-catalog.md](product-master-catalog.md) | Bag merchandising taxonomy |
