@@ -145,7 +145,8 @@ func Bootstrap(cfg Config) (*App, error) {
 		WithProduct(product).
 		WithShippingFee(cfg.ShippingFeeWon).
 		WithCardSurcharge(cfg.CardSurchargeBps).
-		WithPayment(payment)
+		WithPayment(payment).
+		WithPaymentMethodGate(payment)
 
 	if natsSubscriber != nil {
 		// Long-lived worker/subscriber root; cancelled on process shutdown.

@@ -543,6 +543,20 @@ func respondServiceError(w http.ResponseWriter, err error) {
 		respondJSON(w, http.StatusUnprocessableEntity, body)
 		return
 	}
+	var disabled *ports.PaymentMethodDisabledError
+	if errors.As(err, &disabled) {
+		body := map[string]any{
+			"error":  err.Error(),
+			"code":   http.StatusConflict,
+			"reason": "payment_method_disabled",
+			"method": disabled.Method,
+		}
+		if disabled.Message != "" {
+			body["message"] = disabled.Message
+		}
+		respondJSON(w, http.StatusConflict, body)
+		return
+	}
 	switch {
 	case errors.Is(err, ports.ErrNotFound):
 		respondError(w, http.StatusNotFound, err.Error())

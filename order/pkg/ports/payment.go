@@ -43,3 +43,29 @@ type PaymentClient interface {
 	// retry of the same order cancel a no-op at the payment service.
 	CancelPayment(ctx context.Context, paymentID, idempotencyKey string) error
 }
+
+// ErrPaymentMethodDisabled means an operator has engaged the payment kill
+// switch for the method an order asked to be priced for.
+var ErrPaymentMethodDisabled = errors.New("payment method is temporarily disabled")
+
+// PaymentMethodDisabledError carries the operator's shopper-facing message
+// with ErrPaymentMethodDisabled.
+type PaymentMethodDisabledError struct {
+	Method  string
+	Message string
+}
+
+func (e *PaymentMethodDisabledError) Error() string {
+	return ErrPaymentMethodDisabled.Error() + ": " + e.Method
+}
+
+func (e *PaymentMethodDisabledError) Is(target error) bool { return target == ErrPaymentMethodDisabled }
+
+// PaymentMethodGate reports whether payment's kill switch blocks a method.
+// Payment refuses the payment itself either way; order asks first so a
+// shopper is not left holding a reserved, unpayable order.
+type PaymentMethodGate interface {
+	// MethodDisabled returns whether method is switched off and the message
+	// to show for it.
+	MethodDisabled(ctx context.Context, method string) (disabled bool, message string, err error)
+}

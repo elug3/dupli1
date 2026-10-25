@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/elug3/dupli1/payment/pkg/domain"
 	"github.com/elug3/dupli1/payment/pkg/handler"
 	"github.com/elug3/dupli1/payment/pkg/infra/checkout"
 	"github.com/elug3/dupli1/payment/pkg/infra/httporder"
@@ -52,7 +53,7 @@ func (a *App) Close() error {
 }
 
 func Bootstrap(cfg Config) (*App, error) {
-	repo, closeFn, err := openRepository(cfg.DatabaseConnString)
+	repo, killSwitches, closeFn, err := openRepository(cfg.DatabaseConnString)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +106,12 @@ func Bootstrap(cfg Config) (*App, error) {
 		eventPublisher = natsPublisher
 	}
 
-	svc := service.New(repo, orders, checkoutProvider, eventPublisher)
+	svc := service.New(repo, orders, checkoutProvider, eventPublisher).
+		WithKillSwitches(killSwitches).
+		WithConfiguredMethods(map[string]bool{
+			domain.MethodCreditCard: nanoCfg.Enabled(),
+			domain.MethodBypass:     true,
+		})
 	// Long-lived worker/subscriber root; cancelled on process shutdown.
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	svc.StartOutboxWorker(workerCtx, 2*time.Second)
@@ -147,16 +153,16 @@ func Bootstrap(cfg Config) (*App, error) {
 	}, nil
 }
 
-func openRepository(connString string) (ports.Repository, func() error, error) {
+func openRepository(connString string) (ports.Repository, ports.KillSwitchStore, func() error, error) {
 	if connString == "" {
-		return memory.NewRepository(), func() error { return nil }, nil
+		return memory.NewRepository(), memory.NewKillSwitches(), func() error { return nil }, nil
 	}
 
 	pgRepo, err := pg.NewRepository(connString)
 	if err != nil {
-		return nil, nil, fmt.Errorf("payment repository: %w", err)
+		return nil, nil, nil, fmt.Errorf("payment repository: %w", err)
 	}
-	return pgRepo, func() error {
+	return pgRepo, pgRepo, func() error {
 		pgRepo.Close()
 		return nil
 	}, nil

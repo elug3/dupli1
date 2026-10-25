@@ -88,6 +88,7 @@ func (r *Repository) migrate() error {
 			last_error TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_payment_outbox_pending ON payment_outbox (created_at) WHERE published_at IS NULL`,
+		killSwitchTableDDL,
 	}
 	for _, stmt := range stmts {
 		if _, err := r.pool.Exec(ctx, stmt); err != nil {

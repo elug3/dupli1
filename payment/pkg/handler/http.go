@@ -134,6 +134,17 @@ func (h *Handler) paymentRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if parts[0] == "methods" && len(parts) == 1 {
+		h.methods(w, r)
+		return
+	}
+	if parts[0] == "kill-switches" {
+		h.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+			h.killSwitchRoutes(w, r, parts[1:])
+		})(w, r)
+		return
+	}
+
 	if len(parts) == 3 && parts[1] == "nano" && parts[2] == "checkout" && r.Method == http.MethodGet {
 		h.nanoCheckout(w, r, parts[0])
 		return
@@ -251,6 +262,14 @@ func (h *Handler) nanoCheckout(w http.ResponseWriter, r *http.Request, paymentID
 	}
 	if payment.Provider != domain.ProviderNano {
 		log.Printf("payment: nano checkout %s: provider is %s, not nano", payment.ID, payment.Provider)
+		h.failNanoReturn(w, r, cfg, payment.OrderID, payment.ID, nanoReturnCheckoutFailed)
+		return
+	}
+	// A checkout_url handed out before the card kill switch was engaged must
+	// not open the card window after it. Nothing has been charged yet, so the
+	// usual retryable failure is right: the retry is refused with the message.
+	if err := h.svc.CheckMethodAllowed(r.Context(), domain.MethodCreditCard); err != nil {
+		log.Printf("payment: nano checkout %s: %v", payment.ID, err)
 		h.failNanoReturn(w, r, cfg, payment.OrderID, payment.ID, nanoReturnCheckoutFailed)
 		return
 	}
@@ -701,7 +720,29 @@ func truncateForLog(s string, n int) string {
 }
 
 func respondServiceError(w http.ResponseWriter, err error) {
+	var disabled *ports.MethodDisabledError
+	if errors.As(err, &disabled) {
+		// reason lets order and the storefront tell an operator's block from
+		// any other conflict; message is the operator's note for shoppers.
+		body := map[string]any{
+			"error":  err.Error(),
+			"code":   http.StatusConflict,
+			"reason": "payment_method_disabled",
+			"method": disabled.Method,
+		}
+		if disabled.Message != "" {
+			body["message"] = disabled.Message
+		}
+		respondJSON(w, http.StatusConflict, body)
+		return
+	}
 	switch {
+	case errors.Is(err, domain.ErrUnknownKillSwitch):
+		respondError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, domain.ErrInvalidKillSwitch):
+		respondError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ports.ErrKillSwitchesUnavailable):
+		respondError(w, http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, ports.ErrNotFound), errors.Is(err, ports.ErrOrderNotFound):
 		respondError(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, ports.ErrOrderForbidden), errors.Is(err, ports.ErrPaymentForbidden):

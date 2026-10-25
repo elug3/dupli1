@@ -33,6 +33,8 @@ type Service struct {
 	stock          ports.StockClient
 	product        ports.ProductClient
 	payment        ports.PaymentClient
+	// methodGate asks payment whether a method's kill switch is engaged.
+	methodGate ports.PaymentMethodGate
 	eventPublisher ports.EventPublisher
 	outboxDrainer  *outbox.Drainer
 	promotionClient   ports.PromotionClient
@@ -179,6 +181,37 @@ func (s *Service) WithPayment(payment ports.PaymentClient) *Service {
 	return s
 }
 
+// WithPaymentMethodGate makes order refuse to price an order for a payment
+// method an operator has switched off.
+func (s *Service) WithPaymentMethodGate(gate ports.PaymentMethodGate) *Service {
+	s.methodGate = gate
+	return s
+}
+
+// checkPaymentMethod refuses a method whose kill switch is engaged, before any
+// stock is reserved. When payment cannot be asked it lets the order through:
+// payment refuses the payment itself, so failing open here costs at most an
+// unpaid order that auto-cancels, while failing closed would turn a payment
+// blip into a checkout outage.
+func (s *Service) checkPaymentMethod(ctx context.Context, method string) error {
+	if s.methodGate == nil {
+		return nil
+	}
+	m, err := domain.NormalizePaymentMethod(method)
+	if err != nil {
+		return err
+	}
+	disabled, message, err := s.methodGate.MethodDisabled(ctx, m)
+	if err != nil {
+		log.Printf("order: payment kill switch lookup failed, allowing %s: %v", m, err)
+		return nil
+	}
+	if disabled {
+		return &ports.PaymentMethodDisabledError{Method: m, Message: message}
+	}
+	return nil
+}
+
 func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*domain.Order, error) {
 	idemKey := strings.TrimSpace(input.IdempotencyKey)
 	reqHash := hashCreateOrderInput(input)
@@ -189,6 +222,10 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		} else if !errors.Is(err, ports.ErrNotFound) {
 			return nil, err
 		}
+	}
+
+	if err := s.checkPaymentMethod(ctx, input.PaymentMethod); err != nil {
+		return nil, err
 	}
 
 	pricedItems, err := s.priceItems(ctx, input.Items)

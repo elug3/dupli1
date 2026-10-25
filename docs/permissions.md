@@ -207,6 +207,8 @@ Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
 | `payment.read.all` | Read any payment by ID (bypass ownership check in service layer) |
 | `payment.bypass` | Mark a pending order paid without a PG (`method=bypass`). Order-manager / fulfillment; not the same as ABAC bypass. See [payment-methods-plan.md](payment-methods-plan.md) |
 | `payment.cancel` | Cancel / refund a succeeded payment at the PG (`POST /api/v1/payments/{id}/cancel`). Staff-only — no ABAC path, so customers can never refund themselves |
+| `payment.killswitch.read` | List the payment kill switches with who flipped them (`GET /api/v1/payments/kill-switches`). See [payment-kill-switches.md](payment-kill-switches.md) |
+| `payment.killswitch.manage` | Engage / release a payment kill switch (`PUT /api/v1/payments/kill-switches/{key}`); implies read |
 
 **Default storefront:** authenticated user with empty `permissions` may create/read **only their own** payments (ownership enforced in service).
 
@@ -361,6 +363,8 @@ registered as an alias.
 | `POST` | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | `GET` | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
 | `POST` | `/api/v1/payments/{id}/cancel` | `payment.cancel` (no ABAC) |
+| `GET` | `/api/v1/payments/kill-switches` | `payment.killswitch.read` or `payment.killswitch.manage` |
+| `PUT` | `/api/v1/payments/kill-switches/{key}` | `payment.killswitch.manage` |
 
 ### Notification service
 
