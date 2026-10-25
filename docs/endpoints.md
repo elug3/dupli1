@@ -426,6 +426,9 @@ See [cart-service.md](cart-service.md) for architecture, boundaries with invento
 | `POST` | `/api/v1/payments` | ABAC / `payment.create`; Bypass needs `payment.bypass` | Start payment for a pending order (`method`: `credit_card` default, or `bypass`) |
 | `GET` | `/api/v1/payments/{id}` | ABAC / `payment.read.all` | Payment status |
 | `POST` | `/api/v1/payments/{id}/cancel` | `payment.cancel` (staff only) | Full or partial refund (`amount_won`); honors `Idempotency-Key` |
+| `GET` | `/api/v1/payments/methods` | — | Methods checkout can offer now (`available`, `configured`, `disabled`, operator `message`) — [payment-kill-switches.md](payment-kill-switches.md) |
+| `GET` | `/api/v1/payments/kill-switches` | `payment.killswitch.read` / `.manage` | Every kill switch with its state |
+| `PUT` | `/api/v1/payments/kill-switches/{key}` | `payment.killswitch.manage` | Engage / release one (`{ engaged, message?, reason? }`) |
 | `GET` | `/api/v1/payments/{id}/nano/checkout` | — | Bridge into NANO certified card checkout |
 | `POST` | `/api/v1/payments/nano/return` | — | NANO form `receiveUrl` callback; always answers a browser with a redirect or a page, never JSON |
 | `POST` | `/api/v1/payments/webhooks/nano` | — | Optional NANO JSON webhook |

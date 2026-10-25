@@ -22,6 +22,9 @@ type Service struct {
 	events        ports.EventPublisher
 	outboxDrainer *outbox.Drainer
 	now           func() time.Time
+	// killSwitches and configuredMethods: see killswitch.go.
+	killSwitches      ports.KillSwitchStore
+	configuredMethods map[string]bool
 }
 
 func New(repo ports.Repository, orders ports.OrderClient, checkout ports.CheckoutProvider, events ports.EventPublisher) *Service {
@@ -68,6 +71,12 @@ func (s *Service) CreatePayment(ctx context.Context, input CreatePaymentInput) (
 
 	method, err := domain.NormalizeMethod(input.Method)
 	if err != nil {
+		return nil, err
+	}
+	// After the idempotency replay above, so a retry of a payment that already
+	// went through still returns it; before reusing an open checkout below, so
+	// a card window issued before the switch was engaged is not handed out.
+	if err := s.checkMethodAllowed(ctx, method); err != nil {
 		return nil, err
 	}
 	switch method {

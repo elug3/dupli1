@@ -15,6 +15,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [service-layout.md](service-layout.md) | Module / directory layout |
 | [TODO.md](TODO.md) | Living backlog and schedule |
 | [payment-service.md](payment-service.md) | Money path (NANO / Bypass) |
+| [payment-kill-switches.md](payment-kill-switches.md) | Operator kill switches: switch a payment method off at runtime |
 | [payment-methods-plan.md](payment-methods-plan.md) | Payment methods: Bypass + NANO card implemented, Bitcoin spec only |
 | [payment-nano-return-verification.md](payment-nano-return-verification.md) | Why v2.7 returns are unsigned, and how `receiveUrl` MAC binds them |
 | [order-service.md](order-service.md) | Order lifecycle, workers, gateway deps |

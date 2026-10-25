@@ -1124,6 +1124,9 @@ When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront calle
 | POST | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | GET | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
 | POST | `/api/v1/payments/{id}/cancel` | `payment.cancel` — **staff only, no ABAC** |
+| GET | `/api/v1/payments/methods` | — (which methods checkout can offer now; kill switches applied) |
+| GET | `/api/v1/payments/kill-switches` | `payment.killswitch.read` / `.manage` |
+| PUT | `/api/v1/payments/kill-switches/{key}` | `payment.killswitch.manage` — `{ engaged, message?, reason? }` |
 
 **Create payment**
 ```json
@@ -1349,6 +1352,8 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | GET | `/api/v1/payments/settings` | — | payment |
 | POST/GET | `/api/v1/payments` | ABAC / `payment.create` / `payment.read.all` | payment |
 | POST | `/api/v1/payments/{id}/cancel` | `payment.cancel` | payment |
+| GET | `/api/v1/payments/methods` | — | payment |
+| GET/PUT | `/api/v1/payments/kill-switches[/{key}]` | `payment.killswitch.read` / `.manage` | payment |
 | GET | `/api/v1/notification/health` | — | notification |
 | GET | `/api/v1/notification/settings` | — | notification |
 | POST | `/api/v1/notification/telegram/webhook` | webhook secret header | notification |

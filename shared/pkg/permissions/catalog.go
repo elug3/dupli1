@@ -97,6 +97,11 @@ const (
 	PaymentReadAll = "payment.read.all"
 	PaymentBypass  = "payment.bypass"
 	PaymentCancel  = "payment.cancel"
+	// PaymentKillSwitchRead lists the payment kill switches with who flipped
+	// them; PaymentKillSwitchManage engages and releases them. Shoppers see only
+	// whether a method is available, through the public methods endpoint.
+	PaymentKillSwitchRead   = "payment.killswitch.read"
+	PaymentKillSwitchManage = "payment.killswitch.manage"
 )
 
 // Notification permissions (notification service).
@@ -154,6 +159,8 @@ var Catalog = []string{
 	PaymentReadAll,
 	PaymentBypass,
 	PaymentCancel,
+	PaymentKillSwitchRead,
+	PaymentKillSwitchManage,
 	NotificationTelegramRead,
 	NotificationTelegramManage,
 	SupportRead,
