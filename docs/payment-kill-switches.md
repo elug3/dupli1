@@ -26,7 +26,7 @@ right for one replica only).
 |-------|--------|
 | payment `POST /api/v1/payments` | `409` `reason: payment_method_disabled` with `method` and the operator's `message`. Checked after the `Idempotency-Key` replay (a retry of a payment that already went through still returns it) and **before** an open checkout is reused, so a card window issued before the switch is not handed out again |
 | payment `GET …/{id}/nano/checkout` | Sends the shopper back with the usual retryable `checkout_failed`; the retry is then refused with the message |
-| order `POST /orders`, checkout complete | Same `409` body, before any stock is reserved, so a shopper is not left with an unpayable order. Order asks payment's public methods endpoint; if payment cannot be reached it **lets the order through** (payment still refuses the payment — failing closed would turn a payment blip into a checkout outage) |
+| order `POST /orders`, checkout complete | Same `409` body, before any stock is reserved, so a shopper is not left with an unpayable order. Order asks payment's public methods endpoint and refuses any method it reports not `available`: switched off, or not configured on this deployment (card without NANO credentials, which has no `message`). If payment cannot be reached it **lets the order through** (payment still refuses the payment — failing closed would turn a payment blip into a checkout outage) |
 | storefront checkout | Does not offer the method; shows the operator's message, or its generic "unavailable" copy |
 
 Never blocked: payments already captured, refunds (`…/cancel`), NANO

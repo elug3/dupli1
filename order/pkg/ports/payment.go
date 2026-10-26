@@ -61,11 +61,12 @@ func (e *PaymentMethodDisabledError) Error() string {
 
 func (e *PaymentMethodDisabledError) Is(target error) bool { return target == ErrPaymentMethodDisabled }
 
-// PaymentMethodGate reports whether payment's kill switch blocks a method.
+// PaymentMethodGate reports whether payment can take a method right now.
 // Payment refuses the payment itself either way; order asks first so a
 // shopper is not left holding a reserved, unpayable order.
 type PaymentMethodGate interface {
-	// MethodDisabled returns whether method is switched off and the message
-	// to show for it.
+	// MethodDisabled returns whether method cannot take a payment (switched
+	// off, or not configured on this deployment) and the operator's message
+	// to show for it, if any. An error means payment could not be asked.
 	MethodDisabled(ctx context.Context, method string) (disabled bool, message string, err error)
 }

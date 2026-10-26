@@ -31,6 +31,24 @@ func TestMethodDisabled(t *testing.T) {
 	}
 }
 
+func TestMethodDisabledNotConfigured(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Card without NANO credentials: no switch engaged, still unusable.
+		// Bypass from a payment build that predates "available".
+		_, _ = w.Write([]byte(`{"methods":[{"method":"credit_card","available":false,"configured":false,"disabled":false},{"method":"bypass","disabled":false}]}`))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, srv.Client(), nil)
+
+	disabled, msg, err := c.MethodDisabled(t.Context(), "credit_card")
+	if err != nil || !disabled || msg != "" {
+		t.Fatalf("unconfigured credit_card = %v %q %v", disabled, msg, err)
+	}
+	if disabled, _, err := c.MethodDisabled(t.Context(), "bypass"); err != nil || disabled {
+		t.Fatalf("bypass without available = %v %v", disabled, err)
+	}
+}
+
 func TestMethodDisabledUnavailable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)

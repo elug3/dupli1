@@ -16,8 +16,10 @@ import (
 const methodsTimeout = 3 * time.Second
 
 // MethodDisabled asks payment's public GET /api/v1/payments/methods whether
-// method's kill switch is engaged. A method payment does not list is not
-// switchable and so never disabled.
+// method can take a payment right now. It is refused when its kill switch is
+// engaged and also when this deployment cannot take it at all (card without
+// NANO credentials), since an order for it could never be paid either way. A
+// method payment does not list is not switchable and so never refused.
 func (c *Client) MethodDisabled(ctx context.Context, method string) (bool, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, methodsTimeout)
 	defer cancel()
@@ -36,18 +38,24 @@ func (c *Client) MethodDisabled(ctx context.Context, method string) (bool, strin
 	}
 	var body struct {
 		Methods []struct {
-			Method   string `json:"method"`
-			Disabled bool   `json:"disabled"`
-			Message  string `json:"message"`
+			Method    string `json:"method"`
+			Available *bool  `json:"available"`
+			Disabled  bool   `json:"disabled"`
+			Message   string `json:"message"`
 		} `json:"methods"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return false, "", fmt.Errorf("%w: decode methods: %v", ports.ErrPaymentUnavailable, err)
 	}
 	for _, m := range body.Methods {
-		if m.Method == method {
-			return m.Disabled, m.Message, nil
+		if m.Method != method {
+			continue
 		}
+		if m.Disabled {
+			return true, m.Message, nil
+		}
+		// Older payment builds do not send available; only the switch counts.
+		return m.Available != nil && !*m.Available, "", nil
 	}
 	return false, "", nil
 }
