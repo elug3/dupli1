@@ -133,7 +133,7 @@ services:
       DUPLI1_ORDER_SERVICE_API_KEY: ${DUPLI1_ORDER_SERVICE_API_KEY:?set it in /opt/dupli1/.env — docs/auth-service-api-keys.md}
       DUPLI1_WEB_SERVICE_API_KEY: ${DUPLI1_WEB_SERVICE_API_KEY:?set it in /opt/dupli1/.env — docs/auth-service-api-keys.md}
     volumes:
-      - /opt/dupli1/secrets/jwt_private_key.pem:/run/secrets/jwt_private_key.pem:ro
+      - ${DUPLI1_SECRETS_DIR:-/opt/dupli1/secrets}/jwt_private_key.pem:/run/secrets/jwt_private_key.pem:ro
     depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_started }, nats: { condition: service_started } }
     networks: { default: { aliases: [auth.dupli1.local] } }
 
