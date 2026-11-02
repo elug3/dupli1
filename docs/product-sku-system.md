@@ -131,8 +131,8 @@ Base: `/api/v1/catalog/...` (gateway → product). Auth required.
 | Sizes | `/catalog/sizes` | same |
 | Editions | `/catalog/editions` | same |
 
-- **POST** body: `{ "code", "name" }`
-- **PATCH** body: `{ "name" }` only (code immutable)
+- **POST** body: `{ "code", "name" }` (colors also take optional `hex`, `hex2`)
+- **PATCH** body: `{ "name" }` only (code immutable). Colors also take `hex` / `hex2`; each omitted field is kept and `""` clears a hex — see [product-color-swatches.md](product-color-swatches.md)
 - **DELETE**: `204` if unused; `409` if referenced by styles, products, or variants
 
 Covered by `product.*` and the `catalog_editor` bundle. See [endpoints.md](endpoints.md), [permissions.md](permissions.md).

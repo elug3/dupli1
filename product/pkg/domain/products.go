@@ -14,6 +14,10 @@ type Variant struct {
 	ColorCode   string `json:"colorCode,omitempty"`
 	EditionCode string `json:"editionCode,omitempty"` // optional VariantCode segment
 	SizeCode    string `json:"sizeCode,omitempty"`
+	// ColorHex / ColorHex2 are the swatch fills of the variant's color master
+	// (Color.Hex / Color.Hex2). Response-only; ColorHex2 set = two-tone.
+	ColorHex  string `json:"colorHex,omitempty"`
+	ColorHex2 string `json:"colorHex2,omitempty"`
 	// Dimensions is the physical size of this SKU in millimeters
 	// (e.g. width 340 × height 220 × depth 80). Distinct from Size/SizeCode
 	// letter labels (S/M/L). Optional; omitted when unknown.

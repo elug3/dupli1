@@ -23,7 +23,8 @@ type CatalogStore interface {
 	ListColors(ctx context.Context) ([]domain.Color, error)
 	GetColor(ctx context.Context, code string) (*domain.Color, error)
 	CreateColor(ctx context.Context, c domain.Color) (*domain.Color, error)
-	UpdateColorName(ctx context.Context, code, name string) (*domain.Color, error)
+	// UpdateColor replaces the name and swatch hexes of an existing color.
+	UpdateColor(ctx context.Context, c domain.Color) (*domain.Color, error)
 	DeleteColor(ctx context.Context, code string) error
 
 	ListSizes(ctx context.Context) ([]domain.Size, error)

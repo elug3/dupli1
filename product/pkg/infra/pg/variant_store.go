@@ -16,7 +16,9 @@ const variantSelectCols = `sku_id, sku, product_id, color, size,
 	COALESCE(color_code, ''), COALESCE(edition_code, ''), COALESCE(size_code, ''),
 	width_mm, height_mm, depth_mm,
 	price_won, official_price_won,
-	status, image_urls, COALESCE(listing_image_urls, '{}'), created_at`
+	status, image_urls, COALESCE(listing_image_urls, '{}'), created_at,
+	COALESCE((SELECT c.hex FROM colors c WHERE c.code = product_variants.color_code), ''),
+	COALESCE((SELECT c.hex2 FROM colors c WHERE c.code = product_variants.color_code), '')`
 
 func scanVariant(scan func(...any) error) (domain.Variant, error) {
 	var v domain.Variant
@@ -30,6 +32,7 @@ func scanVariant(scan func(...any) error) (domain.Variant, error) {
 		&widthMm, &heightMm, &depthMm,
 		&v.PriceOverride, &v.OfficialPriceOverride,
 		&v.Status, &imageURLs, &listingImageURLs, &createdAt,
+		&v.ColorHex, &v.ColorHex2,
 	)
 	if err != nil {
 		return domain.Variant{}, err

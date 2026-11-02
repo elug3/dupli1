@@ -57,11 +57,24 @@ func (s *CatalogService) ListColors(ctx context.Context) ([]domain.Color, error)
 }
 
 func (s *CatalogService) CreateColor(ctx context.Context, c domain.Color) (*domain.Color, error) {
+	if err := c.NormalizeSwatch(); err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
 	return s.store.CreateColor(ctx, c)
 }
 
-func (s *CatalogService) UpdateColorName(ctx context.Context, code, name string) (*domain.Color, error) {
-	return s.store.UpdateColorName(ctx, code, name)
+// UpdateColor applies a partial update: omitted fields are kept, an empty
+// hex clears it. A color left with hex2 but no hex is refused.
+func (s *CatalogService) UpdateColor(ctx context.Context, code string, patch domain.ColorPatch) (*domain.Color, error) {
+	current, err := s.store.GetColor(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	next := patch.Apply(*current)
+	if err := next.NormalizeSwatch(); err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
+	return s.store.UpdateColor(ctx, next)
 }
 
 func (s *CatalogService) DeleteColor(ctx context.Context, code string) error {

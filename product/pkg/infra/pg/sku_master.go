@@ -22,6 +22,9 @@ func (s *ProductSearchStore) migrateSKUMasters(ctx context.Context) error {
 			code TEXT NOT NULL UNIQUE,
 			name TEXT NOT NULL DEFAULT ''
 		)`,
+		// Swatch fills (docs/product-color-swatches.md): "" = none.
+		`ALTER TABLE colors ADD COLUMN IF NOT EXISTS hex TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE colors ADD COLUMN IF NOT EXISTS hex2 TEXT NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS sizes (
 			id   BIGSERIAL PRIMARY KEY,
 			code TEXT NOT NULL UNIQUE,
@@ -230,8 +233,11 @@ func (s *ProductSearchStore) seedSKUMasters(ctx context.Context) error {
 	}
 	for _, c := range domain.SeedColors {
 		if _, err := s.pool.Exec(ctx,
-			`INSERT INTO colors (code, name) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING`,
-			c.Code, c.Name,
+			// A seed color without a hex gets the seeded one; a hex staff
+			// set (or changed) is left alone.
+			`INSERT INTO colors (code, name, hex) VALUES ($1, $2, $3)
+			 ON CONFLICT (code) DO UPDATE SET hex = EXCLUDED.hex WHERE colors.hex = ''`,
+			c.Code, c.Name, c.Hex,
 		); err != nil {
 			return fmt.Errorf("seed color %s: %w", c.Code, err)
 		}

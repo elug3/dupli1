@@ -16,9 +16,23 @@ type Style struct {
 }
 
 // Color is a master color entity. Code is reused across all products.
+//
+// Hex is the swatch fill the storefront draws for this color ("#rrggbb");
+// Hex2 is the second color of a two-tone color (black body, brown trim).
+// Hex2 needs Hex. With neither, the storefront draws a neutral "no color
+// data" swatch. See docs/product-color-swatches.md.
 type Color struct {
 	Code string `json:"code"`
 	Name string `json:"name"`
+	Hex  string `json:"hex,omitempty"`
+	Hex2 string `json:"hex2,omitempty"`
+}
+
+// ColorPatch is a partial color update: a nil field is kept, "" clears a hex.
+type ColorPatch struct {
+	Name *string
+	Hex  *string
+	Hex2 *string
 }
 
 // Size is a master size / capacity entity.
@@ -52,25 +66,28 @@ var SeedBrands = []Brand{
 }
 
 // Well-known color seeds.
+//
+// Hex values match the swatch fills the storefront used before colors carried
+// one, so seeding them changes nothing a shopper sees.
 var SeedColors = []Color{
-	{Code: "BLK", Name: "Black"},
-	{Code: "WHT", Name: "White"},
-	{Code: "CRM", Name: "Cream"},
-	{Code: "BRN", Name: "Brown"},
-	{Code: "GRN", Name: "Green"},
-	{Code: "RED", Name: "Red"},
-	{Code: "BLU", Name: "Blue"},
-	{Code: "BGE", Name: "Beige"},
-	{Code: "NVY", Name: "Navy"},
-	{Code: "PNK", Name: "Pink"},
-	{Code: "GRY", Name: "Grey"},
-	{Code: "GLD", Name: "Gold"},
-	{Code: "SLV", Name: "Silver"},
-	{Code: "ORG", Name: "Orange"},
-	{Code: "YLW", Name: "Yellow"},
-	{Code: "PRP", Name: "Purple"},
-	{Code: "TAN", Name: "Tan"},
-	{Code: "OLV", Name: "Olive"},
+	{Code: "BLK", Name: "Black", Hex: "#0a0a0a"},
+	{Code: "WHT", Name: "White", Hex: "#ffffff"},
+	{Code: "CRM", Name: "Cream", Hex: "#efe6d2"},
+	{Code: "BRN", Name: "Brown", Hex: "#6b4226"},
+	{Code: "GRN", Name: "Green", Hex: "#3f6b4a"},
+	{Code: "RED", Name: "Red", Hex: "#b3261e"},
+	{Code: "BLU", Name: "Blue", Hex: "#2f5d9a"},
+	{Code: "BGE", Name: "Beige", Hex: "#d8c3a5"},
+	{Code: "NVY", Name: "Navy", Hex: "#1f2a44"},
+	{Code: "PNK", Name: "Pink", Hex: "#e8b4bc"},
+	{Code: "GRY", Name: "Grey", Hex: "#8e8e8e"},
+	{Code: "GLD", Name: "Gold", Hex: "#c8a96e"},
+	{Code: "SLV", Name: "Silver", Hex: "#c0c3c7"},
+	{Code: "ORG", Name: "Orange", Hex: "#d9772b"},
+	{Code: "YLW", Name: "Yellow", Hex: "#e6c34a"},
+	{Code: "PRP", Name: "Purple", Hex: "#5e3d7a"},
+	{Code: "TAN", Name: "Tan", Hex: "#c19a6b"},
+	{Code: "OLV", Name: "Olive", Hex: "#6b6b3a"},
 }
 
 // Well-known size seeds (apparel + bag capacity shorthand).

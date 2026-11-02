@@ -46,10 +46,19 @@ func (s *ProductStore) variantsFor(productID string) []domain.Variant {
 	var out []domain.Variant
 	for _, v := range s.Variants {
 		if v.ProductID == productID {
-			out = append(out, v)
+			out = append(out, s.withSwatch(v))
 		}
 	}
 	return out
+}
+
+// withSwatch fills the variant's swatch hexes from its color master, as the
+// Postgres variant reads do.
+func (s *ProductStore) withSwatch(v domain.Variant) domain.Variant {
+	if c, ok := s.catalog().Colors[domain.NormalizeCode(v.ColorCode)]; ok && v.ColorCode != "" {
+		v.ColorHex, v.ColorHex2 = c.Hex, c.Hex2
+	}
+	return v
 }
 
 func (s *ProductStore) enrichMasterNames(ctx context.Context, products []domain.Product) {
@@ -545,7 +554,7 @@ func (s *ProductStore) ListVariants(ctx context.Context, productID string) ([]do
 func (s *ProductStore) GetVariant(ctx context.Context, sku string) (*domain.Variant, error) {
 	for _, v := range s.Variants {
 		if v.SKU == sku {
-			out := v
+			out := s.withSwatch(v)
 			return &out, nil
 		}
 	}
@@ -555,7 +564,7 @@ func (s *ProductStore) GetVariant(ctx context.Context, sku string) (*domain.Vari
 func (s *ProductStore) GetVariantBySkuID(ctx context.Context, skuID string) (*domain.Variant, error) {
 	for _, v := range s.Variants {
 		if v.SkuID == skuID {
-			out := v
+			out := s.withSwatch(v)
 			return &out, nil
 		}
 	}
@@ -573,7 +582,7 @@ func (s *ProductStore) GetVariantsBySkuIDs(ctx context.Context, skuIDs []string)
 	var results []domain.Variant
 	for _, v := range s.Variants {
 		if _, ok := want[v.SkuID]; ok {
-			out := v
+			out := s.withSwatch(v)
 			results = append(results, out)
 		}
 	}
