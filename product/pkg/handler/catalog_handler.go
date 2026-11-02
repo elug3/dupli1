@@ -126,12 +126,12 @@ func (h *Handler) ListColors(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateColor(w http.ResponseWriter, r *http.Request) {
-	var body codeNameBody
+	var body domain.Color
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	created, err := h.catalogSvc.CreateColor(r.Context(), domain.Color{Code: body.Code, Name: body.Name})
+	created, err := h.catalogSvc.CreateColor(r.Context(), body)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -139,13 +139,20 @@ func (h *Handler) CreateColor(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusCreated, created)
 }
 
+// UpdateColor is a PATCH: each of name, hex and hex2 is kept when omitted,
+// and "" clears a hex.
 func (h *Handler) UpdateColor(w http.ResponseWriter, r *http.Request) {
-	var body nameBody
+	var body struct {
+		Name *string `json:"name"`
+		Hex  *string `json:"hex"`
+		Hex2 *string `json:"hex2"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	updated, err := h.catalogSvc.UpdateColorName(r.Context(), r.PathValue("code"), body.Name)
+	updated, err := h.catalogSvc.UpdateColor(r.Context(), r.PathValue("code"),
+		domain.ColorPatch{Name: body.Name, Hex: body.Hex, Hex2: body.Hex2})
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

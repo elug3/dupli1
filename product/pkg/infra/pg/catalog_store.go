@@ -201,7 +201,7 @@ func (s *CatalogStore) DeleteStyle(ctx context.Context, brandCode, code string) 
 }
 
 func (s *CatalogStore) ListColors(ctx context.Context) ([]domain.Color, error) {
-	rows, err := s.pool.Query(ctx, `SELECT code, name FROM colors ORDER BY code`)
+	rows, err := s.pool.Query(ctx, `SELECT code, name, hex, hex2 FROM colors ORDER BY code`)
 	if err != nil {
 		return nil, wrapDB("list colors", err)
 	}
@@ -209,7 +209,7 @@ func (s *CatalogStore) ListColors(ctx context.Context) ([]domain.Color, error) {
 	var out []domain.Color
 	for rows.Next() {
 		var c domain.Color
-		if err := rows.Scan(&c.Code, &c.Name); err != nil {
+		if err := rows.Scan(&c.Code, &c.Name, &c.Hex, &c.Hex2); err != nil {
 			return nil, wrapDB("list colors", err)
 		}
 		out = append(out, c)
@@ -220,8 +220,8 @@ func (s *CatalogStore) ListColors(ctx context.Context) ([]domain.Color, error) {
 func (s *CatalogStore) GetColor(ctx context.Context, code string) (*domain.Color, error) {
 	var c domain.Color
 	err := s.pool.QueryRow(ctx,
-		`SELECT code, name FROM colors WHERE code = $1`, domain.NormalizeCode(code),
-	).Scan(&c.Code, &c.Name)
+		`SELECT code, name, hex, hex2 FROM colors WHERE code = $1`, domain.NormalizeCode(code),
+	).Scan(&c.Code, &c.Name, &c.Hex, &c.Hex2)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrMasterNotFound
@@ -241,7 +241,7 @@ func (s *CatalogStore) CreateColor(ctx context.Context, c domain.Color) (*domain
 		return nil, ports.Invalid("name is required")
 	}
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO colors (code, name) VALUES ($1, $2)`, c.Code, c.Name)
+		`INSERT INTO colors (code, name, hex, hex2) VALUES ($1, $2, $3, $4)`, c.Code, c.Name, c.Hex, c.Hex2)
 	if isUniqueViolation(err) {
 		return nil, domain.ErrMasterExists
 	}
@@ -251,21 +251,21 @@ func (s *CatalogStore) CreateColor(ctx context.Context, c domain.Color) (*domain
 	return &c, nil
 }
 
-func (s *CatalogStore) UpdateColorName(ctx context.Context, code, name string) (*domain.Color, error) {
-	code = domain.NormalizeCode(code)
-	name = strings.TrimSpace(name)
-	if name == "" {
+func (s *CatalogStore) UpdateColor(ctx context.Context, c domain.Color) (*domain.Color, error) {
+	c.Code = domain.NormalizeCode(c.Code)
+	c.Name = strings.TrimSpace(c.Name)
+	if c.Name == "" {
 		return nil, ports.Invalid("name is required")
 	}
 	cmd, err := s.pool.Exec(ctx,
-		`UPDATE colors SET name = $2 WHERE code = $1`, code, name)
+		`UPDATE colors SET name = $2, hex = $3, hex2 = $4 WHERE code = $1`, c.Code, c.Name, c.Hex, c.Hex2)
 	if err != nil {
 		return nil, wrapDB("update color", err)
 	}
 	if cmd.RowsAffected() == 0 {
 		return nil, domain.ErrMasterNotFound
 	}
-	return &domain.Color{Code: code, Name: name}, nil
+	return &c, nil
 }
 
 func (s *CatalogStore) DeleteColor(ctx context.Context, code string) error {

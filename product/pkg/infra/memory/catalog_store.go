@@ -257,19 +257,17 @@ func (s *CatalogStore) CreateColor(ctx context.Context, c domain.Color) (*domain
 	return &c, nil
 }
 
-func (s *CatalogStore) UpdateColorName(ctx context.Context, code, name string) (*domain.Color, error) {
+func (s *CatalogStore) UpdateColor(ctx context.Context, c domain.Color) (*domain.Color, error) {
 	_ = ctx
-	code = domain.NormalizeCode(code)
-	c, ok := s.Colors[code]
-	if !ok {
+	c.Code = domain.NormalizeCode(c.Code)
+	if _, ok := s.Colors[c.Code]; !ok {
 		return nil, domain.ErrMasterNotFound
 	}
-	name = strings.TrimSpace(name)
-	if name == "" {
+	c.Name = strings.TrimSpace(c.Name)
+	if c.Name == "" {
 		return nil, ports.Invalid("name is required")
 	}
-	c.Name = name
-	s.Colors[code] = c
+	s.Colors[c.Code] = c
 	return &c, nil
 }
 

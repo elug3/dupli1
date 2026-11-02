@@ -101,3 +101,73 @@ func TestCatalogColorRenameAndDelete(t *testing.T) {
 		t.Fatalf("delete color: want 204, got %d", rec.Code)
 	}
 }
+
+func TestCatalogColorSwatchHex(t *testing.T) {
+	store := memory.NewProductStore()
+	seedCatalogStyle(t, store.Catalog, "BOT", "CAS001", "Cassette")
+	mux, _ := newFullMux(store)
+
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		t.Helper()
+		var buf bytes.Buffer
+		if body != nil {
+			json.NewEncoder(&buf).Encode(body)
+		}
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(method, path, &buf))
+		return rec
+	}
+	decode := func(rec *httptest.ResponseRecorder) domain.Color {
+		t.Helper()
+		var c domain.Color
+		json.NewDecoder(rec.Body).Decode(&c)
+		return c
+	}
+
+	rec := do(http.MethodPost, handler.RouteCatalogColors, map[string]string{"code": "BKB", "name": "Black / Brown", "hex": "0A0A0A", "hex2": "#6B4226"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if c := decode(rec); c.Hex != "#0a0a0a" || c.Hex2 != "#6b4226" {
+		t.Fatalf("create normalizes hex: got %+v", c)
+	}
+
+	// Renaming keeps the hexes.
+	rec = do(http.MethodPatch, "/api/v1/products/catalog/colors/BKB", map[string]string{"name": "Noir / Brun"})
+	if c := decode(rec); rec.Code != http.StatusOK || c.Hex != "#0a0a0a" || c.Hex2 != "#6b4226" {
+		t.Fatalf("rename keeps hex: %d %+v", rec.Code, c)
+	}
+
+	for name, body := range map[string]map[string]string{
+		"bad hex":          {"hex": "brown"},
+		"hex2 without hex": {"hex": ""},
+	} {
+		if rec := do(http.MethodPatch, "/api/v1/products/catalog/colors/BKB", body); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: want 400, got %d: %s", name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// "" clears hex2: back to a solid swatch.
+	rec = do(http.MethodPatch, "/api/v1/products/catalog/colors/BKB", map[string]string{"hex2": ""})
+	if c := decode(rec); rec.Code != http.StatusOK || c.Hex != "#0a0a0a" || c.Hex2 != "" {
+		t.Fatalf("clear hex2: %d %+v", rec.Code, c)
+	}
+	do(http.MethodPatch, "/api/v1/products/catalog/colors/BKB", map[string]string{"hex2": "#6b4226"})
+
+	// The PDP carries each variant's swatch fills.
+	store.Products = []domain.Product{{ID: "BOT-001", Name: "Cassette", BrandCode: "BOT", StyleCode: "CAS001", Status: "active"}}
+	store.Variants = []domain.Variant{
+		{SKU: "BOT_CAS001_BKB_OS", ProductID: "BOT-001", Color: "Black / Brown", ColorCode: "BKB", SizeCode: "OS", Status: "active"},
+		{SKU: "BOT_CAS001_BLK_OS", ProductID: "BOT-001", Color: "Black", ColorCode: "BLK", SizeCode: "OS", Status: "active"},
+	}
+	rec = do(http.MethodGet, "/api/v1/products/BOT-001", nil)
+	var p domain.Product
+	json.NewDecoder(rec.Body).Decode(&p)
+	got := map[string][2]string{}
+	for _, v := range p.Variants {
+		got[v.ColorCode] = [2]string{v.ColorHex, v.ColorHex2}
+	}
+	if got["BKB"] != [2]string{"#0a0a0a", "#6b4226"} || got["BLK"] != [2]string{"#0a0a0a", ""} {
+		t.Fatalf("PDP swatch hexes: %+v", got)
+	}
+}

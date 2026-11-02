@@ -91,11 +91,11 @@ Items from the 2026-10-31 meeting. h-global product registration should work in 
 - [ ] Reviews feature
 
 ### PDP color display
-- [ ] Sample design for the PDP Color Swatch
-- [ ] Sample design for the two-tone color swatch (products with two-color combinations)
+- [x] Sample design for the PDP Color Swatch (SER-99) — [Figma](https://www.figma.com/design/tqtyEpto8TYyJqqN2HjWth)
+- [x] Sample design for the two-tone color swatch (SER-100) — option A, diagonal split, chosen 2026-11-02
 
 ### Master catalog
-- [ ] Review adding a hex color field to the master catalog (for swatch rendering; include how to store two values for two-tone) — see [product-master-catalog.md](product-master-catalog.md)
+- [x] Hex color field on the master catalog: `hex` + optional `hex2` (two-tone) on colors, `colorHex` / `colorHex2` on variant reads — see [product-color-swatches.md](product-color-swatches.md)
 
 ## Storefront UX (`dupli1-web` — reviewed 2026-09-08)
 
