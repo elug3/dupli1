@@ -72,6 +72,31 @@ Guest cart, refunds, co-view, legacy alias removal, manager settings, Redis cach
 
 - [ ] **Promo / referral codes** — single-user one-time + global once-each; flexible conditions (price, category, shipping, …); ledger + attribution; no separate referral service — [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md)
 
+## Meeting follow-ups (2026-10-31)
+
+Items from the 2026-10-31 meeting. h-global product registration should work in a similar way to Dupli1's photos + description + specs input.
+
+### Input form
+- [ ] Finalize required fields: photos / description / specs (price, size, etc.)
+- [ ] Organize size and color variant input (swipe sideways to add more)
+- [ ] Color attribute field (e.g. Black)
+- [ ] Upload UX that makes it easy for sellers to add photos themselves
+- [ ] Document the standard input form
+
+### Storefront
+- [ ] Hide the original price: do not display Official Price
+- [ ] Inspection photo/video section at the bottom of the PDP, plus the shooting and upload process at time of sale
+- [ ] 1:1 chat module in the site (replaces KakaoTalk) — see [support-web-chat.md](support-web-chat.md)
+- [ ] Customs flow: order -> inspection -> enter/verify overseas customs number -> shipping
+- [ ] Reviews feature
+
+### PDP color display
+- [ ] Sample design for the PDP Color Swatch
+- [ ] Sample design for the two-tone color swatch (products with two-color combinations)
+
+### Master catalog
+- [ ] Review adding a hex color field to the master catalog (for swatch rendering; include how to store two values for two-tone) — see [product-master-catalog.md](product-master-catalog.md)
+
 ## Storefront UX (`dupli1-web` — reviewed 2026-09-08)
 
 Live review of https://dupli1.com (desktop + mobile). Primary owner: `dupli1-web`; some items need backend/policy pages. Guest cart was already deferred to v1.2 — kept here so the UX list is complete.
