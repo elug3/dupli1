@@ -224,7 +224,7 @@ Unchanged from [product-flat-sellable-model-plan.md](product-flat-sellable-model
 
 ## 8. Catalog findings deferred to v2
 
-Found while reviewing the catalog master (2026-11-04). Three bugs were fixed in v1 without changing the wire shape: every category size is seeded into the size master, display names resolve against the master tables instead of the compiled-in seeds, and variant codes can't change after create. A fourth, storefront swatches from `colorHex` / `colorHex2`, is a dupli1-web change. Everything below changes what clients send or receive, or needs several repos to move together, so it waits for v2.
+Found while reviewing the catalog master (2026-11-04). Three bugs were fixed in v1 without changing the wire shape: every category size is seeded into the size master, display names resolve against the master tables instead of the compiled-in seeds, and variant codes can't change after create. Everything below changes what clients send or receive, or needs several repos to move together, so it waits for v2.
 
 | Item | Today | v2 |
 |---|---|---|
