@@ -69,7 +69,7 @@ All inside `product/`; v1 JSON stays byte-identical, which the existing handler 
 
 | Change | Detail |
 |---|---|
-| Money | `type Won int64` in `shared/pkg/money` (it already owns whole-won rules; `FromProductPrice` becomes unnecessary once product stops emitting floats internally). Price columns go from `NUMERIC(10,2)` to `BIGINT`. Inline migrations can't make breaking changes, so it is additive: add the `BIGINT` columns, backfill, switch reads and writes, drop the old columns a release later. v1 still writes JSON numbers, which serialize the same for whole values |
+| Money | **Done (2026-11-04)**, except the drop. `type Won int64` in `shared/pkg/money`. It unmarshals any whole JSON number (`1000.0`, `1e3`) and refuses a fractional one, so a fractional parent price is now a `400`, as an override already was. `FromProductPrice` stays until productclient and notification stop reading v1's float `price`. Price columns are `BIGINT` (`products.price_won` / `official_price_won`, `product_variants.price_override_won` / `official_price_override_won`). Inline migrations can't make breaking changes, so the change is additive: reads use `BIGINT`, writes keep the `NUMERIC` columns in step for a rollback, and every start copies `NUMERIC` → `BIGINT` for rows older code wrote. The `NUMERIC` columns are dropped a release later ([product-price-on-parent.md](product-price-on-parent.md) § Migration). v1 JSON is unchanged: a whole `Won` serializes like the float did |
 | Enums | `type Status string` (`draft`, `active`, `archived`) with `Valid()`; same for category codes. Parse at the handler, reject there |
 | Time | `time.Time` in the domain; RFC 3339 formatting only in views |
 | Entity vs view | `domain.Variant` / `domain.Product` hold stored fields only. Effective price, stock, colour hexes, product name and counters move to `handler` view types built from the entity plus lookups |
@@ -264,7 +264,8 @@ Found while reviewing the catalog master (2026-11-04). Three bugs were fixed in 
 - [ ] D4 `style` → `occasion`
 
 **Step 1 — domain cleanup**
-- [ ] `money.Won`; product price columns to `BIGINT`
+- [x] `money.Won`; product price columns to `BIGINT` (2026-11-04; `NUMERIC` copies kept in step for one release)
+- [ ] Drop the `NUMERIC` price columns, the startup copy and the dual write (the release after)
 - [ ] `Status` / category enums; `time.Time`
 - [ ] Entity / view / input / patch types; `MergeUpdate` removed; JSON tags out of `domain`
 - [x] Variant codes immutable on update (v1 `400`) — landed early with the catalog master fixes

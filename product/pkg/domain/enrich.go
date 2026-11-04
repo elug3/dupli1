@@ -2,8 +2,9 @@ package domain
 
 import (
 	"fmt"
-	"math"
 	"strings"
+
+	"github.com/elug3/dupli1/shared/pkg/money"
 )
 
 const listingThumbSuffix = ".w600.jpg"
@@ -87,7 +88,7 @@ func (existing Variant) MergeUpdate(incoming Variant) Variant {
 }
 
 // mergeOverride keeps current when incoming is nil, clears on 0, else replaces.
-func mergeOverride(current, incoming *float64) *float64 {
+func mergeOverride(current, incoming *money.Won) *money.Won {
 	if incoming == nil {
 		return current
 	}
@@ -98,19 +99,33 @@ func mergeOverride(current, incoming *float64) *float64 {
 	return &v
 }
 
-// ValidateVariantPrices rejects negative or fractional SKU price overrides
-// (KRW is whole won).
+// WholeWonError is the refusal for a price field that is negative or not a
+// whole won amount. A fractional amount can't reach the domain (money.Won is
+// whole), so the handler reports one it refused while decoding with this same
+// message, naming the field as the client spelled it.
+func WholeWonError(field string) error {
+	return fmt.Errorf("%s must be a non-negative whole won amount", field)
+}
+
+// ValidateVariantPrices rejects negative SKU price overrides. Fractional won
+// can't be represented in money.Won.
 func ValidateVariantPrices(v Variant) error {
-	for name, p := range map[string]*float64{
-		"priceOverride":         v.PriceOverride,
-		"officialPriceOverride": v.OfficialPriceOverride,
-	} {
-		if p == nil {
-			continue
-		}
-		if *p < 0 || *p != math.Trunc(*p) {
-			return fmt.Errorf("%s must be a non-negative whole won amount", name)
-		}
+	if v.PriceOverride != nil && *v.PriceOverride < 0 {
+		return WholeWonError("priceOverride")
+	}
+	if v.OfficialPriceOverride != nil && *v.OfficialPriceOverride < 0 {
+		return WholeWonError("officialPriceOverride")
+	}
+	return nil
+}
+
+// ValidateProductPrices rejects a negative parent price or official price.
+func ValidateProductPrices(p Product) error {
+	if p.Price < 0 {
+		return WholeWonError("price")
+	}
+	if p.OfficialPrice < 0 {
+		return WholeWonError("officialPrice")
 	}
 	return nil
 }
@@ -200,8 +215,8 @@ func (v *Variant) ApplyParentPrice(p Product) {
 
 // priceFrom returns the lowest effective price across active variants, or 0
 // when they all share one price (nothing to show "from" for).
-func priceFrom(p Product, variants []Variant) float64 {
-	var lo, hi float64
+func priceFrom(p Product, variants []Variant) money.Won {
+	var lo, hi money.Won
 	seen := false
 	for _, v := range variants {
 		if v.Status != "" && v.Status != "active" {

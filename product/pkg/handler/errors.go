@@ -8,7 +8,20 @@ import (
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/money"
 )
+
+// respondBodyError answers a product or variant body that failed to decode.
+// A price money.Won refused (fractional or out of range) gets the same 400 a
+// negative price gets from the service, naming the field; anything else is
+// the generic invalid-body answer.
+func (h *Handler) respondBodyError(w http.ResponseWriter, err error) {
+	if ute, ok := money.IsWonNumberError(err); ok {
+		h.respondServiceError(w, ports.Invalid(domain.WholeWonError(ute.Field).Error()))
+		return
+	}
+	h.respondError(w, http.StatusBadRequest, "invalid request body")
+}
 
 // respondServiceError maps classified service/store errors to HTTP responses.
 // Known client errors expose their message; unexpected failures (including raw

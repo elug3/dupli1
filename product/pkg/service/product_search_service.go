@@ -271,9 +271,15 @@ func (s *ProductSearchService) CreateProduct(ctx context.Context, p domain.Produ
 		return nil, ports.Invalid(err.Error())
 	}
 	p.SizeChart = chart
-	for _, v := range p.Variants {
+	if err := domain.ValidateProductPrices(p); err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
+	for i, v := range p.Variants {
 		if err := domain.CheckVariantSize(p.Category, v.SizeCode); err != nil {
 			return nil, ports.Invalid(err.Error())
+		}
+		if err := domain.ValidateVariantPrices(v); err != nil {
+			return nil, ports.Invalid(fmt.Sprintf("variants[%d]: %v", i, err))
 		}
 	}
 	created, err := s.store.CreateProduct(ctx, p)
@@ -315,6 +321,9 @@ func (s *ProductSearchService) UpdateProduct(ctx context.Context, p domain.Produ
 		return nil, ports.Invalid(err.Error())
 	}
 	merged.SizeChart = chart
+	if err := domain.ValidateProductPrices(merged); err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
 	if merged.Category != existing.Category {
 		// Moving a style into a sized category: its SKUs must already be
 		// in that category's sizes.
@@ -635,9 +644,11 @@ func (s *ProductSearchService) publish(ctx context.Context, subject string, prod
 		Brand:     product.Brand,
 		Category:  product.Category,
 		Status:    product.Status,
-		Price:     product.Price,
-		ImageURL:  imageURL,
-		Occurred:  s.now(),
+		// The event contract (shared/pkg/events) still carries a float
+		// price, which notification reads; a whole Won encodes the same.
+		Price:    float64(product.Price),
+		ImageURL: imageURL,
+		Occurred: s.now(),
 	})
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/elug3/dupli1/product/pkg/infra/memory"
 	"github.com/elug3/dupli1/product/pkg/ports"
 	"github.com/elug3/dupli1/product/pkg/service"
+	"github.com/elug3/dupli1/shared/pkg/money"
 )
 
 // fakeCatalog records what it was asked and answers from a fixed table.
@@ -379,7 +380,7 @@ func TestStoreCatalogSaleStateFollowsSkuPriceOverride(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create product: %v", err)
 	}
-	pricier, official := 380000.0, 450000.0
+	pricier, official := money.Won(380000), money.Won(450000)
 	for _, v := range []domain.Variant{
 		{SkuID: "sku-plain", SKU: "PRA_1BA906_BLK_M", ProductID: "parent-3", ColorCode: "BLK", SizeCode: "M", Status: "active"},
 		{SkuID: "sku-marked", SKU: "PRA_1BA906_RED_M", ProductID: "parent-3", ColorCode: "RED", SizeCode: "M", Status: "active",

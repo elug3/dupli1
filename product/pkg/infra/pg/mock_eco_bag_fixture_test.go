@@ -87,7 +87,8 @@ func (s *ProductSearchStore) SeedMockEcoBag(ctx context.Context, stock *Inventor
 		UPDATE products
 		   SET name = $2,
 		       description = $3,
-		       price = $4,
+		       price = $4::BIGINT,
+		       price_won = $4::BIGINT,
 		       status = 'active',
 		       category = 'bags',
 		       sub_category = 'tote',

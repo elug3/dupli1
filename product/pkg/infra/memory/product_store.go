@@ -10,6 +10,7 @@ import (
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/money"
 )
 
 // ProductStore is an in-memory implementation of ports.ProductStore, for use in tests.
@@ -716,7 +717,7 @@ func (s *ProductStore) DeleteVariant(ctx context.Context, sku string) error {
 
 // lowestPrice is what sort=price orders by: the cheapest active SKU when
 // variants differ in price (PriceFrom), else the parent's price.
-func lowestPrice(p domain.Product) float64 {
+func lowestPrice(p domain.Product) money.Won {
 	if p.PriceFrom > 0 {
 		return p.PriceFrom
 	}

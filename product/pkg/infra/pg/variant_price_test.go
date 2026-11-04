@@ -2,6 +2,8 @@ package pg
 
 import (
 	"testing"
+
+	"github.com/elug3/dupli1/shared/pkg/money"
 )
 
 // A SKU override is stored and read back as nil (inherit) or a value, and
@@ -31,7 +33,7 @@ func TestVariantPriceOverride_RoundTrip(t *testing.T) {
 		t.Fatalf("fresh variant must inherit, got %v/%v", v.PriceOverride, v.OfficialPriceOverride)
 	}
 
-	own, official := 380000.0, 450000.0
+	own, official := money.Won(380000), money.Won(450000)
 	v.PriceOverride, v.OfficialPriceOverride = &own, &official
 	if _, err := store.UpdateVariant(ctx, *v); err != nil {
 		t.Fatalf("update: %v", err)

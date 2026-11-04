@@ -10,12 +10,16 @@ import (
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
+	"github.com/elug3/dupli1/shared/pkg/money"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 type ProductSearchStore struct {
 	pool *pgxpool.Pool
+	// legacyPrices is true while the NUMERIC price columns still exist; writes
+	// then keep them in step with the BIGINT ones. See migrateWonPrices.
+	legacyPrices bool
 }
 
 func NewProductStore(connString string) (*ProductSearchStore, error) {
@@ -150,6 +154,9 @@ func (s *ProductSearchStore) migrate() error {
 		return err
 	}
 	if err := s.migrateParentPrices(ctx); err != nil {
+		return err
+	}
+	if err := s.migrateWonPrices(ctx); err != nil {
 		return err
 	}
 	if err := s.migrateProductViews(ctx); err != nil {
@@ -438,7 +445,7 @@ func scanAttributesJSON(raw []byte) map[string]string {
 	return out
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price, official_price, status, capacity, tags, attributes, size_chart, view_count, sold_count, wishlist_count, created_at, updated_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price_won, official_price_won, status, capacity, tags, attributes, size_chart, view_count, sold_count, wishlist_count, created_at, updated_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -448,16 +455,18 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	var brandCode, styleCode *string
 	var subCategory, bagStyle, target string
 	var attrsRaw, sizeChartRaw []byte
+	var price, officialPrice int64
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
 		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category,
 		&subCategory, &bagStyle, &target,
-		&p.Price, &p.OfficialPrice,
+		&price, &officialPrice,
 		&p.Status, &capacity, &tags, &attrsRaw, &sizeChartRaw, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &updatedAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err
 	}
+	p.Price, p.OfficialPrice = money.Won(price), money.Won(officialPrice)
 	if brandCode != nil {
 		p.BrandCode = *brandCode
 	}
@@ -581,8 +590,8 @@ func buildProductSearchOrder(filter map[string]string) string {
 	case domain.SortWishlist:
 		return fmt.Sprintf(" ORDER BY p.wishlist_count %s, p.id ASC", dir)
 	case domain.SortPrice:
-		return fmt.Sprintf(` ORDER BY COALESCE((SELECT MIN(COALESCE(v.price_won, p.price)) FROM product_variants v
-			WHERE v.product_id = p.id AND v.status = 'active'), p.price) %s, p.id ASC`, dir)
+		return fmt.Sprintf(` ORDER BY COALESCE((SELECT MIN(COALESCE(v.price_override_won, p.price_won)) FROM product_variants v
+			WHERE v.product_id = p.id AND v.status = 'active'), p.price_won) %s, p.id ASC`, dir)
 	case domain.SortName:
 		return fmt.Sprintf(" ORDER BY LOWER(p.name) %s, p.id ASC", dir)
 	default:
@@ -765,12 +774,16 @@ func (s *ProductSearchStore) CreateProduct(ctx context.Context, p domain.Product
 		p.Brand = s.brandName(ctx, p.BrandCode)
 	}
 
+	legacyCols, legacyVals := "", ""
+	if s.legacyPrices {
+		legacyCols, legacyVals = ", price, official_price", ", $4::BIGINT, $5::BIGINT"
+	}
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO products (id, name, description, price, official_price, brand, brand_code, style_code, color, material, stock, category, sub_category, bag_style, target, status, image_urls, capacity, tags, attributes, created_by, size_chart)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+		`INSERT INTO products (id, name, description, price_won, official_price_won, brand, brand_code, style_code, color, material, stock, category, sub_category, bag_style, target, status, image_urls, capacity, tags, attributes, created_by, size_chart`+legacyCols+`)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22`+legacyVals+`)
 		 RETURNING created_at`,
-		p.ID, p.Name, p.Description, p.Price, p.OfficialPrice,
+		p.ID, p.Name, p.Description, int64(p.Price), int64(p.OfficialPrice),
 		p.Brand, nullEmpty(p.BrandCode), nullEmpty(p.StyleCode), p.Color, p.Material, p.Stock, p.Category,
 		p.SubCategory, p.Style, p.Target, p.Status,
 		toTextArray(p.ImageURLs), p.Capacity, toTextArray(p.Tags), attributesJSON(p.Attributes), p.CreatedBy, sizeChartJSON(p.SizeChart),
@@ -807,17 +820,21 @@ func (s *ProductSearchStore) CreateProduct(ctx context.Context, p domain.Product
 }
 
 func (s *ProductSearchStore) UpdateProduct(ctx context.Context, p domain.Product) (*domain.Product, error) {
+	legacySet := ""
+	if s.legacyPrices {
+		legacySet = ", price=$10::BIGINT, official_price=$11::BIGINT"
+	}
 	var createdAt time.Time
 	err := s.pool.QueryRow(ctx,
 		`UPDATE products
 		 SET name=$2, description=$3, brand=$4, material=$5, category=$6,
-		     sub_category=$7, bag_style=$8, target=$9, price=$10, official_price=$11,
-		     status=$12, capacity=$13, tags=$14, attributes=$15, size_chart=$16, updated_at=NOW()
+		     sub_category=$7, bag_style=$8, target=$9, price_won=$10, official_price_won=$11,
+		     status=$12, capacity=$13, tags=$14, attributes=$15, size_chart=$16, updated_at=NOW()`+legacySet+`
 		 WHERE id=$1
 		 RETURNING created_at`,
 		p.ID, p.Name, p.Description,
 		p.Brand, p.Material, p.Category,
-		p.SubCategory, p.Style, p.Target, p.Price, p.OfficialPrice,
+		p.SubCategory, p.Style, p.Target, int64(p.Price), int64(p.OfficialPrice),
 		p.Status, p.Capacity, toTextArray(p.Tags), attributesJSON(p.Attributes), sizeChartJSON(p.SizeChart),
 	).Scan(&createdAt)
 	if err != nil {

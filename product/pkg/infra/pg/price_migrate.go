@@ -3,6 +3,9 @@ package pg
 import (
 	"context"
 	"fmt"
+	"log"
+
+	"github.com/elug3/dupli1/shared/pkg/money"
 )
 
 // migrateParentPrices makes products.price + products.official_price the only
@@ -98,6 +101,81 @@ func (s *ProductSearchStore) migrateParentPrices(ctx context.Context) error {
 	return nil
 }
 
+// migrateWonPrices moves prices onto whole-won BIGINT columns (step 1 of
+// docs/product-api-v2-plan.md):
+//
+//	products.price                      NUMERIC(10,2) → products.price_won                            BIGINT NOT NULL
+//	products.official_price             NUMERIC(10,2) → products.official_price_won                   BIGINT NOT NULL
+//	product_variants.price_won          NUMERIC(10,2) → product_variants.price_override_won           BIGINT, NULL = inherit
+//	product_variants.official_price_won NUMERIC(10,2) → product_variants.official_price_override_won  BIGINT, NULL = inherit
+//
+// Inline migrations can't make breaking changes, so this release is
+// additive: the store reads the BIGINT columns and, while the NUMERIC ones
+// exist, writes both. Code from before this release reads and writes only the
+// NUMERIC columns, so a rollback finds them current; and every start copies
+// NUMERIC → BIGINT for any row such code wrote in the meantime, rounding half
+// away from zero the way money.FromProductPrice already rounds for cart and
+// order. The NUMERIC columns are dropped a release later.
+//
+// Legacy mode needs products.price, which only CREATE TABLE makes. A rollback
+// to this release after the drop therefore runs on the BIGINT columns alone,
+// instead of copying zeros out of NUMERIC columns that migrate() re-adds.
+func (s *ProductSearchStore) migrateWonPrices(ctx context.Context) error {
+	for _, stmt := range []string{
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS price_won BIGINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE products ADD COLUMN IF NOT EXISTS official_price_won BIGINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS price_override_won BIGINT`,
+		`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS official_price_override_won BIGINT`,
+	} {
+		if _, err := s.pool.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("migrate won prices: %s: %w", stmt, err)
+		}
+	}
+
+	s.legacyPrices = true
+	for _, col := range [][2]string{
+		{"products", "price"},
+		{"products", "official_price"},
+		{"product_variants", "price_won"},
+		{"product_variants", "official_price_won"},
+	} {
+		exists, err := s.columnExists(ctx, col[0], col[1])
+		if err != nil {
+			return err
+		}
+		if !exists {
+			s.legacyPrices = false
+			return nil
+		}
+	}
+
+	parents, err := s.pool.Exec(ctx, `
+		UPDATE products
+		   SET price_won = ROUND(price)::BIGINT,
+		       official_price_won = ROUND(official_price)::BIGINT
+		 WHERE price_won <> ROUND(price)::BIGINT
+		    OR official_price_won <> ROUND(official_price)::BIGINT
+	`)
+	if err != nil {
+		return fmt.Errorf("copy products NUMERIC prices to BIGINT: %w", err)
+	}
+	variants, err := s.pool.Exec(ctx, `
+		UPDATE product_variants
+		   SET price_override_won = ROUND(price_won)::BIGINT,
+		       official_price_override_won = ROUND(official_price_won)::BIGINT
+		 WHERE price_override_won IS DISTINCT FROM ROUND(price_won)::BIGINT
+		    OR official_price_override_won IS DISTINCT FROM ROUND(official_price_won)::BIGINT
+	`)
+	if err != nil {
+		return fmt.Errorf("copy product_variants NUMERIC prices to BIGINT: %w", err)
+	}
+	if n := parents.RowsAffected() + variants.RowsAffected(); n > 0 {
+		log.Printf("product migrate: copied %d products and %d variants from NUMERIC to BIGINT prices",
+			parents.RowsAffected(), variants.RowsAffected())
+	}
+	return nil
+}
+
 func (s *ProductSearchStore) columnExists(ctx context.Context, table, column string) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx, `
@@ -113,4 +191,22 @@ func (s *ProductSearchStore) columnExists(ctx context.Context, table, column str
 		return false, fmt.Errorf("check column %s.%s: %w", table, column, err)
 	}
 	return exists, nil
+}
+
+// wonArg passes an optional price to Postgres: nil is NULL (inherit).
+func wonArg(w *money.Won) *int64 {
+	if w == nil {
+		return nil
+	}
+	v := int64(*w)
+	return &v
+}
+
+// wonFromNullable reads an optional BIGINT price back; NULL is nil.
+func wonFromNullable(v *int64) *money.Won {
+	if v == nil {
+		return nil
+	}
+	w := money.Won(*v)
+	return &w
 }

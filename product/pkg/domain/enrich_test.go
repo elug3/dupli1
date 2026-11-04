@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/shared/pkg/money"
 )
 
 func TestEnrichFromVariantsSummaries(t *testing.T) {
@@ -160,10 +161,9 @@ func TestProductMergeUpdate_ExplicitPriceChange(t *testing.T) {
 	}
 }
 
-
 func TestApplyParentPrice_OverrideFallsBackToParent(t *testing.T) {
 	parent := domain.Product{Price: 300000, OfficialPrice: 400000}
-	own, off := 380000.0, 500000.0
+	own, off := money.Won(380000), money.Won(500000)
 
 	inherit := domain.Variant{}
 	inherit.ApplyParentPrice(parent)
@@ -185,37 +185,58 @@ func TestApplyParentPrice_OverrideFallsBackToParent(t *testing.T) {
 }
 
 func TestVariantMergeUpdate_PriceOverride(t *testing.T) {
-	cur := 380000.0
+	cur := money.Won(380000)
 	existing := domain.Variant{SKU: "A", PriceOverride: &cur}
 
 	if got := existing.MergeUpdate(domain.Variant{Color: "Red"}); got.PriceOverride == nil || *got.PriceOverride != cur {
 		t.Fatalf("omitted override must be kept, got %v", got.PriceOverride)
 	}
-	next := 390000.0
+	next := money.Won(390000)
 	if got := existing.MergeUpdate(domain.Variant{PriceOverride: &next}); *got.PriceOverride != next {
 		t.Fatalf("override not replaced: %v", *got.PriceOverride)
 	}
-	zero := 0.0
+	zero := money.Won(0)
 	if got := existing.MergeUpdate(domain.Variant{PriceOverride: &zero}); got.PriceOverride != nil {
 		t.Fatalf("0 must clear the override, got %v", *got.PriceOverride)
 	}
 }
 
+// A fractional won can't be represented in money.Won at all; what is left to
+// refuse is a negative amount.
 func TestValidateVariantPrices(t *testing.T) {
-	ok, neg, frac := 1000.0, -1.0, 10.5
+	ok, neg := money.Won(1000), money.Won(-1)
 	if err := domain.ValidateVariantPrices(domain.Variant{PriceOverride: &ok}); err != nil {
 		t.Fatalf("valid override rejected: %v", err)
 	}
-	if domain.ValidateVariantPrices(domain.Variant{PriceOverride: &neg}) == nil {
-		t.Fatal("negative override accepted")
+	if err := domain.ValidateVariantPrices(domain.Variant{PriceOverride: &neg}); err == nil ||
+		err.Error() != "priceOverride must be a non-negative whole won amount" {
+		t.Fatalf("negative override: err = %v", err)
 	}
-	if domain.ValidateVariantPrices(domain.Variant{OfficialPriceOverride: &frac}) == nil {
-		t.Fatal("fractional won accepted")
+	if err := domain.ValidateVariantPrices(domain.Variant{OfficialPriceOverride: &neg}); err == nil ||
+		err.Error() != "officialPriceOverride must be a non-negative whole won amount" {
+		t.Fatalf("negative official override: err = %v", err)
+	}
+}
+
+func TestValidateProductPrices(t *testing.T) {
+	if err := domain.ValidateProductPrices(domain.Product{Price: 300000, OfficialPrice: 390000}); err != nil {
+		t.Fatalf("valid prices rejected: %v", err)
+	}
+	if err := domain.ValidateProductPrices(domain.Product{}); err != nil {
+		t.Fatalf("zero prices rejected: %v", err)
+	}
+	if err := domain.ValidateProductPrices(domain.Product{Price: -5}); err == nil ||
+		err.Error() != "price must be a non-negative whole won amount" {
+		t.Fatalf("negative price: err = %v", err)
+	}
+	if err := domain.ValidateProductPrices(domain.Product{OfficialPrice: -1}); err == nil ||
+		err.Error() != "officialPrice must be a non-negative whole won amount" {
+		t.Fatalf("negative official price: err = %v", err)
 	}
 }
 
 func TestEnrichFromVariants_PriceFrom(t *testing.T) {
-	hi := 380000.0
+	hi := money.Won(380000)
 	p := domain.Product{Price: 300000}
 	p.EnrichFromVariants([]domain.Variant{
 		{SKU: "A", Status: "active"},
@@ -231,7 +252,7 @@ func TestEnrichFromVariants_PriceFrom(t *testing.T) {
 		t.Fatalf("uniform prices must not set PriceFrom, got %v", same.PriceFrom)
 	}
 
-	cheapDraft := 100.0
+	cheapDraft := money.Won(100)
 	d := domain.Product{Price: 300000}
 	d.EnrichFromVariants([]domain.Variant{
 		{SKU: "A", Status: "active"},

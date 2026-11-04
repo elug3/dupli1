@@ -188,7 +188,7 @@ run twice each for idempotency); the two structural items are intentionally left
 
 ### Consistency with project conventions
 
-- [ ] **`products.price` / `official_price` break the KRW `*_won` convention** — stored as `NUMERIC(10,2)` (`product/pkg/infra/pg/product_store.go`) while every other money field in the codebase (`orders.*_won`, `payments.amount_won`, `order_items.unit_price_won`) is a whole-won `BIGINT`, per the "Currency: KRW only" rule in `CLAUDE.md`. Deliberately **not fixed** — needs its own migration plan (domain struct, JSON API shape, search/sort queries, possibly frontend consumers); too invasive for a routine schema cleanup, especially on v1.0 release day.
+- [ ] **`products.price` / `official_price` break the KRW `*_won` convention** — were `NUMERIC(10,2)` while every other money field (`orders.*_won`, `payments.amount_won`, `order_items.unit_price_won`) is a whole-won `BIGINT`. **Mostly fixed 2026-11-04** (v2 plan step 1): product reads `BIGINT` `price_won` / `official_price_won` and `price_override_won` / `official_price_override_won` as `money.Won`, v1 JSON unchanged. Still open: drop the `NUMERIC` columns, the startup copy and the dual write one release later ([product-price-on-parent.md](product-price-on-parent.md) § Migration).
 - [ ] **Two different ID-sequencing mechanisms** — order and product use a hand-rolled `id_sequences` table; payment uses a native Postgres `SEQUENCE`. Both work; pick one pattern for new services to avoid a third variant appearing. Not fixed — no functional benefit to migrating existing services, just a convention pick for the future.
 
 ### Missing indexes / cleanup gaps

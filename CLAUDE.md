@@ -84,7 +84,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/settings` | `GET /settings` response helpers used by all services |
 | `shared/pkg/outbox` | Transactional outbox drain/retry loop (`Drainer`), used by `order` and `payment`; each service keeps its own outbox table/SQL behind the `Store` interface |
 | `shared/pkg/events` | NATS subject constants + payload structs for cross-service events (`order.*`, `payment.succeeded`, `product.*`, `support.inquiry_opened`, `support.message_created|inquiry_updated`); one canonical contract per publisher/subscriber pair instead of redeclaring subject strings and payload shapes on each side |
-| `shared/pkg/money` | The one storefront currency (`krw`) and whole-won amount helpers; its package comment is the record of the `*_cents` → `*_krw` → `*_won` renames |
+| `shared/pkg/money` | The one storefront currency (`krw`), the whole-won amount type `Won` (used by `product`; unmarshals any whole JSON number, refuses a fractional one) and amount helpers; its package comment is the record of the `*_cents` → `*_krw` → `*_won` renames |
 | `shared/pkg/natsauth` | Adds `nats.Token(NATS_TOKEN)` to a NATS connection when the env var is set (the broker runs with `--auth` in Compose) |
 | `shared/pkg/pgsslmode` | Picks `sslmode` for a Postgres connection string (local/docker hosts → `disable`, everything else including RDS → `require`); used by every service's DB bootstrap so the local-hostname list can't drift out of sync per service again |
 | `shared/pkg/natspublisher` | JSON-marshaling NATS event publisher (`New`, `Publish`, `Close`), used by `auth`, `order`, `product`, and `payment` |
@@ -114,7 +114,7 @@ Products have two levels: **parent** (style, e.g. "Prada Galleria") and **varian
 - `sku`: human string `Brand_Style_Color[_Edition]_Size`
 - `skuId`: canonical ULID (preferred in cart, checkout, inventory)
 
-Price lives on the **parent**; a variant inherits it unless it carries an optional override (`price_won` / `official_price_won` on `product_variants`, JSON `priceOverride` / `officialPriceOverride`, `NULL` = inherit, `0` on update clears). Variant reads return the *effective* price in `price` / `officialPrice` — that is what cart, order and promotions use, so none of them look at overrides. Never put a price on a variant by any other route, and never charge from the parent price when a variant read is available. See [docs/product-price-on-parent.md](docs/product-price-on-parent.md).
+Price lives on the **parent**; a variant inherits it unless it carries an optional override (`price_override_won` / `official_price_override_won` on `product_variants`, JSON `priceOverride` / `officialPriceOverride`, `NULL` = inherit, `0` on update clears). Prices are `money.Won` (`shared/pkg/money`) in Go and `BIGINT` whole won in Postgres (`products.price_won` / `official_price_won`); the old `NUMERIC` columns are written alongside for one release and then dropped (`migrateWonPrices`). Variant reads return the *effective* price in `price` / `officialPrice` — that is what cart, order and promotions use, so none of them look at overrides. Never put a price on a variant by any other route, and never charge from the parent price when a variant read is available. See [docs/product-price-on-parent.md](docs/product-price-on-parent.md).
 
 ### Order lifecycle & money path
 

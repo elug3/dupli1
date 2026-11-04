@@ -1,5 +1,7 @@
 package domain
 
+import "github.com/elug3/dupli1/shared/pkg/money"
+
 // Variant is a sellable option (SKU) under a parent product style.
 // There is no separate Sku{} type — dual identity lives here as SkuID + SKU.
 // Target model folds these fields onto Product; see docs/product-structure-final-review.md.
@@ -25,15 +27,15 @@ type Variant struct {
 	// Price and OfficialPrice are the effective prices on read: the SKU's
 	// override when it has one, otherwise the parent product's. Response-only;
 	// the stored values are PriceOverride / OfficialPriceOverride.
-	OfficialPrice float64 `json:"officialPrice,omitempty"`
-	Price         float64 `json:"price,omitempty"`
+	OfficialPrice money.Won `json:"officialPrice,omitempty"`
+	Price         money.Won `json:"price,omitempty"`
 	// PriceOverride / OfficialPriceOverride are the optional SKU-level prices
 	// (whole won). nil means inherit the parent's. On update, a value of 0
 	// clears the override; omitting the field leaves it unchanged.
-	PriceOverride         *float64 `json:"priceOverride,omitempty"`
-	OfficialPriceOverride *float64 `json:"officialPriceOverride,omitempty"`
-	Status                string   `json:"status"` // "active" | "draft" | "archived"
-	ImageURLs             []string `json:"imageUrls,omitempty"`
+	PriceOverride         *money.Won `json:"priceOverride,omitempty"`
+	OfficialPriceOverride *money.Won `json:"officialPriceOverride,omitempty"`
+	Status                string     `json:"status"` // "active" | "draft" | "archived"
+	ImageURLs             []string   `json:"imageUrls,omitempty"`
 	// ListingImageURLs are ~600px JPEG thumbs parallel to ImageURLs (same index).
 	// Used by category/home cards; full ImageURLs stay on the PDP gallery.
 	ListingImageURLs []string `json:"listingImageUrls,omitempty"`
@@ -67,17 +69,17 @@ type Product struct {
 	// Target is audience (all, men, women, kids).
 	Target string `json:"target,omitempty"`
 	// OfficialPrice is the reference / list price in KRW won (not charged).
-	OfficialPrice float64 `json:"officialPrice,omitempty"`
+	OfficialPrice money.Won `json:"officialPrice,omitempty"`
 	// Price is the actual sale price in KRW won after discounts (whole won).
 	// Stored on the parent; a variant inherits it unless it carries its own
 	// PriceOverride.
-	Price float64 `json:"price"`
+	Price money.Won `json:"price"`
 	// PriceFrom is the lowest effective price across active variants. Set
 	// only when active variants differ in price, so cards can show "from".
-	PriceFrom float64  `json:"priceFrom,omitempty"`
-	Status    string   `json:"status"` // "active" | "draft" | "archived"
-	Capacity  string   `json:"capacity,omitempty"`
-	Tags      []string `json:"tags,omitempty"`
+	PriceFrom money.Won `json:"priceFrom,omitempty"`
+	Status    string    `json:"status"` // "active" | "draft" | "archived"
+	Capacity  string    `json:"capacity,omitempty"`
+	Tags      []string  `json:"tags,omitempty"`
 	// Attributes is a free-form string key/value memo for PDP display
 	// (condition, care, authenticity notes, etc.). Not used for search,
 	// pricing, or checkout. Managers write; storefront treats as read-only.

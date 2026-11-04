@@ -4,6 +4,8 @@ import (
 	"math"
 	"sort"
 	"strings"
+
+	"github.com/elug3/dupli1/shared/pkg/money"
 )
 
 const (
@@ -114,10 +116,11 @@ func tagOverlap(a, b []string) int {
 	return n
 }
 
-func inPriceBand(seedPrice, candidatePrice float64) bool {
-	if seedPrice <= 0 || candidatePrice <= 0 {
+func inPriceBand(seed, candidate money.Won) bool {
+	if seed <= 0 || candidate <= 0 {
 		return false
 	}
+	seedPrice, candidatePrice := float64(seed), float64(candidate)
 	lo := seedPrice * (1 - recommendPriceBand)
 	hi := seedPrice * (1 + recommendPriceBand)
 	return candidatePrice >= lo && candidatePrice <= hi

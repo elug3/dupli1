@@ -436,7 +436,7 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	var p domain.Product
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		h.respondBodyError(w, err)
 		return
 	}
 	if claims, ok := authjwt.FromContext(r.Context()); ok {
@@ -458,7 +458,7 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	var p domain.Product
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		h.respondBodyError(w, err)
 		return
 	}
 	p.ID = id
@@ -712,7 +712,7 @@ func (h *Handler) CreateVariant(w http.ResponseWriter, r *http.Request) {
 	}
 	var v domain.Variant
 	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
-		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		h.respondBodyError(w, err)
 		return
 	}
 	created, err := h.svc.CreateVariant(r.Context(), id, v)
@@ -732,7 +732,7 @@ func (h *Handler) UpdateVariant(w http.ResponseWriter, r *http.Request) {
 	}
 	var v domain.Variant
 	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
-		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		h.respondBodyError(w, err)
 		return
 	}
 	updated, err := h.svc.UpdateVariant(r.Context(), id, sku, v)
