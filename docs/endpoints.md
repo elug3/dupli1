@@ -298,7 +298,7 @@ Errors: `400` invalid field, `401` missing/invalid token, `404` address not foun
 | `DELETE` | `/api/v1/products/{id}` | `product.delete` | Delete parent (cascades variants) |
 | `POST` | `/api/v1/products/{id}/images` | `product.image.upload` | Upload image to default variant |
 | `POST` | `/api/v1/products/{id}/variants` | `product.variant.create` | Create variant (SKU; requires existing color/size codes) |
-| `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` | Update variant |
+| `PUT` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` | Update variant (color/size/edition codes fixed: `400`) |
 | `DELETE` | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` | Delete variant |
 | `POST` | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` | Upload image for variant |
 | `GET` | `/api/v1/products/catalog/brands` | `product.master.read` | List brand codes (legacy: `/api/v1/catalog/...`) |

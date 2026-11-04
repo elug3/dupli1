@@ -207,6 +207,9 @@ func (s *ProductSearchStore) CreateVariant(ctx context.Context, v domain.Variant
 		return nil, fmt.Errorf("%w: parent product missing brandCode/styleCode", domain.ErrMissingSKUCodes)
 	}
 
+	if err := s.resolveVariantCodesByName(ctx, &v); err != nil {
+		return nil, err
+	}
 	if err := domain.RequireVariantSKUCodes(&v); err != nil {
 		return nil, err
 	}

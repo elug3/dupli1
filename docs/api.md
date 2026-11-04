@@ -837,7 +837,7 @@ Routes below require `Authorization: Bearer <access_token>`. Product validates R
 | DELETE | `/api/v1/products/{id}` | `product.delete` |
 | POST | `/api/v1/products/{id}/images` | `product.image.upload` |
 | POST | `/api/v1/products/{id}/variants` | `product.variant.create` |
-| PUT | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` |
+| PUT | `/api/v1/products/{id}/variants/{sku}` | `product.variant.update` (`colorCode` / `sizeCode` / `editionCode` cannot change: `400`) |
 | DELETE | `/api/v1/products/{id}/variants/{sku}` | `product.variant.delete` |
 | POST | `/api/v1/products/{id}/variants/{sku}/images` | `product.image.upload` |
 | GET | `/api/v1/products/promotions` | `promotion.read` |

@@ -49,7 +49,7 @@ func NewCatalogStore() *CatalogStore {
 	for _, c := range domain.SeedColors {
 		s.Colors[c.Code] = c
 	}
-	for _, sz := range domain.SeedSizes {
+	for _, sz := range domain.SizeMasterSeeds() {
 		s.Sizes[sz.Code] = sz
 	}
 	for _, e := range domain.SeedEditions {
@@ -65,6 +65,41 @@ func NewCatalogStore() *CatalogStore {
 		s.Targets[t.Code] = t
 	}
 	return s
+}
+
+// codeByName mirrors the Postgres store: the master code a display name (or
+// code) refers to — an exact code first, then a case-insensitive name, the
+// smallest code winning a tie. "" when nothing matches.
+func codeByName[T any](entries map[string]T, name string, nameOf func(T) string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return ""
+	}
+	if _, ok := entries[domain.NormalizeCode(trimmed)]; ok {
+		return domain.NormalizeCode(trimmed)
+	}
+	best := ""
+	for code, e := range entries {
+		if strings.EqualFold(nameOf(e), trimmed) && (best == "" || code < best) {
+			best = code
+		}
+	}
+	return best
+}
+
+// BrandCodeByName resolves a brand display name against the brand master.
+func (s *CatalogStore) BrandCodeByName(name string) string {
+	return codeByName(s.Brands, name, func(b domain.Brand) string { return b.Name })
+}
+
+// ColorCodeByName resolves a color display name against the color master.
+func (s *CatalogStore) ColorCodeByName(name string) string {
+	return codeByName(s.Colors, name, func(c domain.Color) string { return c.Name })
+}
+
+// SizeCodeByName resolves a size display name against the size master.
+func (s *CatalogStore) SizeCodeByName(name string) string {
+	return codeByName(s.Sizes, name, func(sz domain.Size) string { return sz.Name })
 }
 
 func styleKey(brand, code string) string {

@@ -242,7 +242,7 @@ func (s *ProductSearchStore) seedSKUMasters(ctx context.Context) error {
 			return fmt.Errorf("seed color %s: %w", c.Code, err)
 		}
 	}
-	for _, sz := range domain.SeedSizes {
+	for _, sz := range domain.SizeMasterSeeds() {
 		if _, err := s.pool.Exec(ctx,
 			`INSERT INTO sizes (code, name) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING`,
 			sz.Code, sz.Name,
