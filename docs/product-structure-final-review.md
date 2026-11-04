@@ -1,6 +1,6 @@
 # Final review: `Product{}` and sellable SKU structure
 
-**Status:** Accepted — authoritative field ownership and naming for the catalog model.  
+**Status:** Accepted — authoritative field ownership and naming for the catalog model. **Partly superseded** by [product-api-v2-plan.md](product-api-v2-plan.md) (2026-11-04): the §4 target struct, an in-place v1 shape, is replaced by v2 §6.2. The §5 locks still hold, except the `siblings` / `variants` mirror: v1 becomes a translator and the v2 PDP reads `products`. See [quality-design-consistency-review.md](quality-design-consistency-review.md) §5.  
 **Code today:** `domain.Product` (parent) + `domain.Variant` (sellable SKU). There is **no** `Sku{}` / `SKU{}` Go type.  
 **Target:** fold the sellable SKU into `Product` per [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md).  
 **Related:** [product-sku-system.md](product-sku-system.md), [product-sale-unit-reflection.md](product-sale-unit-reflection.md), [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md), [product-multi-category-design.md](product-multi-category-design.md), [product-sku-dimensions.md](product-sku-dimensions.md).

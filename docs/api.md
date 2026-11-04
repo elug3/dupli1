@@ -1281,6 +1281,8 @@ Some auth errors add a string `code` (e.g. `account_type_not_allowed`).
 { "error": "human-readable message" }
 ```
 
+Support's web chat and product-question routes add a string `code` (e.g. `customer_required`), the same way as auth. The shapes still differ between services; see [quality-design-consistency-review.md](quality-design-consistency-review.md) §3.2.
+
 ---
 
 ## Quick reference

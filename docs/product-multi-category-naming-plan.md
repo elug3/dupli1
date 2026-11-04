@@ -1,6 +1,6 @@
 # Reflection: Product naming for multi-category catalog
 
-**Status:** Reflection / decision plan (no code change yet).  
+**Status:** Reflection / decision plan (no code change yet). The answer below (no `Bag` / `BagSku`; keep the core types category-agnostic) still stands. Its other conclusion, that `Product` means the parent, is reversed by [product-api-v2-plan.md](product-api-v2-plan.md): after the flatten the parent is a `Style` and `Product` is the sellable unit.  
 **Question:** Other product types may arrive later (wallets, clothing, …). Today the catalog is bag-shaped. Can we rename `Product{}` → `Bag{}` and `SKU{}` → `BagSku{}`?  
 **Related:** [product-sale-unit-reflection.md](product-sale-unit-reflection.md), [product-variants-plan.md](product-variants-plan.md), [product-sku-system.md](product-sku-system.md), [product-master-catalog.md](product-master-catalog.md), [current-state.md](current-state.md).
 

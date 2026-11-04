@@ -85,4 +85,5 @@ These retain design history. Prefer the living docs above for current behavior.
 | [support-telegram-bot.md](support-telegram-bot.md) | Customer-facing Telegram inquiry bot: menus, conversation state, staff handoff, manager inbox — implemented, deployed on VENUS (bot inert until its token is set) |
 | [frontend-product-variants-migration.md](frontend-product-variants-migration.md) | Sibling frontend migration notes |
 | [quality-performance-review.md](quality-performance-review.md) | Jul 2026 audit (mostly fixed) |
+| [quality-design-consistency-review.md](quality-design-consistency-review.md) | Nov 2026: the other services measured against the product v2 plan — error shapes, pagination, patch semantics, contracts v2 misses |
 | [quality-bugs-fix-plan.md](quality-bugs-fix-plan.md) | Remaining: Redis cache, frontend paths (H6 done) |

@@ -2,7 +2,7 @@
 
 **Status:** Proposed (2026-11-04). Not implemented. Open decisions in §3 need an answer before Step 3.
 **Supersedes:** the API surface of [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md) (§3 target struct, §5, and phases 3–4/6 as they reshape v1). That plan's storage migration (§4, §6, phases 1, 2, 5) still applies and is Step 2 here.
-**Related:** [product-structure-final-review.md](product-structure-final-review.md) (Phase 0 locks), [product-sku-system.md](product-sku-system.md), [product-price-on-parent.md](product-price-on-parent.md), [product-master-catalog.md](product-master-catalog.md), [frontend-product-variants-migration.md](frontend-product-variants-migration.md).
+**Related:** [product-structure-final-review.md](product-structure-final-review.md) (Phase 0 locks), [product-sku-system.md](product-sku-system.md), [product-price-on-parent.md](product-price-on-parent.md), [product-master-catalog.md](product-master-catalog.md), [frontend-product-variants-migration.md](frontend-product-variants-migration.md), [quality-design-consistency-review.md](quality-design-consistency-review.md) (the other services measured against this plan).
 
 ---
 
@@ -58,6 +58,8 @@ Each step ships on its own and can be rolled back on its own. Step 1 alone remov
 | D2 | When v1 product routes are removed | One release after both web apps ship on v2, with a date set when v2 ships (the way [product-promotion-rename.md](product-promotion-rename.md) did) |
 | D3 | Optimistic locking on writes | `ETag` from `updated_at`, `If-Match` required on `PATCH`. A style edit fans out to every color, so two managers overwriting each other costs more than it does today |
 | D4 | Rename the occasion field | `style` → `occasion` in v2 (filter `occasion=casual`). Frees "style" to mean the design family only |
+
+The [cross-service review](quality-design-consistency-review.md) raises more questions to settle before Step 3. They cover the error envelope against v1.1 Slice 1 (§3.2), cursor drift on counter sorts and `total` (§3.3), and the style identity, `product.*` events and PDP view recording (§4).
 
 ---
 

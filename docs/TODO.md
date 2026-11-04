@@ -161,6 +161,18 @@ Completeness / code-quality follow-ups for `dupli1-notification`. Design: [notif
 - [ ] **PG repository tests** — upsert pending, accept/reject, unique chat/user constraints.
 - [ ] **Structured logging (v1.1)** — replace `log.Printf` with shared zerolog (covered under v1.1 logging slice).
 
+## Design consistency (reviewed 2026-11-04)
+
+The other services measured against [product-api-v2-plan.md](product-api-v2-plan.md). Full write-up: [quality-design-consistency-review.md](quality-design-consistency-review.md). No code changed in the review.
+
+- [ ] **Reservations drop `sku_id`** — order sends `sku_id`, but product's reservation body decodes `skuId`, so product reserves by human `sku` only. Accept `sku_id` (keep `skuId` one release) and add a contract test (review §4.1)
+- [ ] **One error envelope** — six shapes are live, and v1.1 Slice 1 and v2 §6.1 set two different targets. Pick v1.1's flat `error` + string `code`, plus v2's `field`, and build it as the shared helper before v2 Step 3 (§3.2)
+- [ ] **v2 open questions** — style identity for wishlist, recommendations, views and promotion `line.productId`; the `product.*` event contract; side-effect-free PDP reads; cursor drift on counter sorts and `total` (§3.3, §4)
+- [ ] **Unbounded / truncated admin lists** — `GET /api/v1/orders` (all) and `GET /api/v1/auth/users` have no limit; the support inbox shows the newest 100 with no way to page (§3.3)
+- [ ] **profile address `PATCH` can't clear** — `label`, `address_line2` and `pccc` treat `""` as keep (§3.4)
+- [ ] **v2 helpers in `shared/`** — cursor, strict decoding (`400 unknown_field`), merge patch, `ETag` — so other services adopt them instead of copying (§3.3–3.6)
+- [ ] **Smaller drift** — order's computed policy fields on `domain.Order`; `*KRW` Go identifiers in order and payment; infra imports in payment and notification handler/service; 23 files not `gofmt`-clean (§3.5, §3.7, §7)
+
 ## Database schema (reviewed 2026-08-30)
 
 Cross-service review of each service's inline Postgres schema (auth, cart, order, payment,
