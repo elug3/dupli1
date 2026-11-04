@@ -154,6 +154,12 @@ Covered by `product.*` and the `catalog_editor` bundle. See [endpoints.md](endpo
 
 No silent invent-on-create. Reads enrich blank `brand` / `color` / `size` display names from master tables (`enrichMasterNames`).
 
+A create that sends a display name without its code (`"brand": "Maison Margiela"`, `"color": "Ivory"`, `"size": "Medium"`) is resolved against the master tables as they are now — exact code first, then a case-insensitive name — so a brand, color or size added at runtime works by name like a seeded one. Only when no master matches does it fall back to the seed lists and then a derived code, which then fails the existence check (`404`).
+
+### Codes are fixed after create
+
+`colorCode`, `sizeCode` and `editionCode` cannot change on `PUT /products/{id}/variants/{sku}`: the human `sku` was composed from them and never changes, so a new code would leave it naming another color or size. Changing one is `400` naming the field and the sku; a different option is a new variant. Omitting the codes or resending the current ones is fine, and so is giving a legacy row (sku not in the `Brand_Style_…` format) a code it lacks. On a composed sku with no edition, adding one is a change.
+
 ---
 
 ## API fields (product / variant JSON)

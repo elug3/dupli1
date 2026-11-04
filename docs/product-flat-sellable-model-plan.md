@@ -1,6 +1,6 @@
 # Plan: Product as the sellable unit (SKU folded into Product)
 
-**Status:** Accepted migration plan (no schema cutover yet). Phase 0 decisions are **locked** in [product-structure-final-review.md](product-structure-final-review.md) §5.  
+**Status:** Accepted migration plan (no schema cutover yet), **partially superseded** by [product-api-v2-plan.md](product-api-v2-plan.md) (2026-11-04): the storage migration here (§4, §6, phases 1, 2, 5) still applies; the target struct (§3), the API surface (§5) and phases 3–4 and 6, as far as they reshape v1, are replaced by a separate `/api/v2`. Phase 0 decisions are **locked** in [product-structure-final-review.md](product-structure-final-review.md) §5.  
 **Intent:** Make **`Product` the unit of sale**. Every current variant (SKU) becomes a `Product` row; the human `sku` and its segment codes become **fields on `Product`**. The old parent keeps only what is genuinely shared across colors, under a new name (**style**).  
 **Related:** [product-structure-final-review.md](product-structure-final-review.md) (final field ownership), [product-variants-plan.md](product-variants-plan.md) (the model this revises), [product-sku-system.md](product-sku-system.md), [product-price-on-parent.md](product-price-on-parent.md), [product-multi-category-naming-plan.md](product-multi-category-naming-plan.md), [current-state.md](current-state.md).
 
@@ -44,6 +44,8 @@ Everything below assumes **A**, implemented as `SELECT DISTINCT ON (brand_code, 
 ---
 
 ## 3. Target shape
+
+> **Superseded** by [product-api-v2-plan.md](product-api-v2-plan.md) §4 and §6.2: the domain types there use typed money, enums and time, keep JSON tags off the domain, and join master names instead of storing `Brand`. The field ownership below still holds.
 
 ### `Product` (sellable)
 
@@ -125,6 +127,8 @@ Under option B, all three move to the sellable product.
 ---
 
 ## 5. API surface
+
+> **Superseded** by [product-api-v2-plan.md](product-api-v2-plan.md) §6: new shapes go to `/api/v2` instead of dual fields on v1 (`id` + `skuId`, `variants` mirroring `siblings`); v1 is translated from the flat model and keeps today's shape until it is removed.
 
 | Endpoint | Change |
 |----------|--------|

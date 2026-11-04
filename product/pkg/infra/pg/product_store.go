@@ -745,6 +745,13 @@ func (s *ProductSearchStore) CreateProduct(ctx context.Context, p domain.Product
 	if p.Status == "" {
 		p.Status = "active"
 	}
+	if p.BrandCode == "" && strings.TrimSpace(p.Brand) != "" {
+		code, err := s.codeByName(ctx, "brands", p.Brand)
+		if err != nil {
+			return nil, err
+		}
+		p.BrandCode = code
+	}
 	if err := domain.RequireProductSKUCodes(&p); err != nil {
 		return nil, err
 	}

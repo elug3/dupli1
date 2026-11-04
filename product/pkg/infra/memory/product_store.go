@@ -340,10 +340,13 @@ func (s *ProductStore) CreateProduct(ctx context.Context, p domain.Product) (*do
 	if p.Status == "" {
 		p.Status = "active"
 	}
+	cat := s.catalog()
+	if p.BrandCode == "" {
+		p.BrandCode = cat.BrandCodeByName(p.Brand)
+	}
 	if err := domain.RequireProductSKUCodes(&p); err != nil {
 		return nil, err
 	}
-	cat := s.catalog()
 	if _, err := cat.GetBrand(ctx, p.BrandCode); err != nil {
 		return nil, fmt.Errorf("%w: brand %s", domain.ErrMasterNotFound, p.BrandCode)
 	}
@@ -611,10 +614,16 @@ func (s *ProductStore) CreateVariant(ctx context.Context, v domain.Variant) (*do
 	if v.Status == "" {
 		v.Status = "active"
 	}
+	cat := s.catalog()
+	if v.ColorCode == "" {
+		v.ColorCode = cat.ColorCodeByName(v.Color)
+	}
+	if v.SizeCode == "" {
+		v.SizeCode = cat.SizeCodeByName(v.Size)
+	}
 	if err := domain.RequireVariantSKUCodes(&v); err != nil {
 		return nil, err
 	}
-	cat := s.catalog()
 	if _, err := cat.GetColor(ctx, v.ColorCode); err != nil {
 		return nil, fmt.Errorf("%w: color %s", domain.ErrMasterNotFound, v.ColorCode)
 	}

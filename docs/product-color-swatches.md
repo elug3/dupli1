@@ -49,8 +49,11 @@ by-SKU and by-SKU-id lookups) carries the color master's fills as
 
 ## Clients
 
-- **dupli1-web:** `colorHex` / `colorHex2` decide the swatch. A variant without
-  `colorHex` (a color created on the fly from a variant's name) still falls
-  back to the old name list, then to the unknown swatch.
+- **dupli1-web:** not yet. The picker still draws swatches from its own
+  name → hex list (`app/lib/product-variants.ts`) and ignores `colorHex` /
+  `colorHex2`, so a hex edited in manage-web, or a two-tone color, does not
+  reach shoppers yet. Planned: `colorHex` / `colorHex2` decide the swatch, and
+  a variant without `colorHex` falls back to the name list, then to the
+  unknown swatch.
 - **dupli1-manage-web:** `/catalog` → Colors edits `hex` and `hex2` with a live
   swatch preview.

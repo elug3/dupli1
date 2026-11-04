@@ -106,6 +106,27 @@ var SeedSizes = []Size{
 	{Code: "OS", Name: "One Size"},
 }
 
+// SizeMasterSeeds is every size the size master is seeded with: SeedSizes,
+// then each size a category sells that SeedSizes lacks, named by its code
+// (48R, 4XL). Without these a clothing SKU in a size its category allows
+// still fails the master lookup on create.
+func SizeMasterSeeds() []Size {
+	out := append([]Size(nil), SeedSizes...)
+	seen := make(map[string]bool, len(out))
+	for _, s := range out {
+		seen[s.Code] = true
+	}
+	for _, c := range SeedCategories {
+		for _, code := range c.Sizes {
+			if !seen[code] {
+				seen[code] = true
+				out = append(out, Size{Code: code, Name: code})
+			}
+		}
+	}
+	return out
+}
+
 // Well-known edition (VariantCode) seeds.
 var SeedEditions = []Edition{
 	{Code: "V", Name: "Standard"},

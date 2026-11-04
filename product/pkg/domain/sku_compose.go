@@ -54,6 +54,37 @@ func ComposeVariantSKU(productID, brandCode, styleCode string, v *Variant) strin
 	return BuildVariantSKUBase(productID, v.Color, v.Size)
 }
 
+// CheckVariantCodesUnchanged refuses an update that changes a variant's
+// color, size or edition code. The human sku is composed from those codes on
+// create and never changes, so a new code would leave the sku naming a
+// different color or size; a different option is a new variant. Omitting a
+// code or resending the current one is allowed, and so is giving a legacy
+// row (sku not in the Brand_Style_… format) a code it lacks — its sku was
+// never composed from codes. On a composed sku an absent edition is a value
+// too: adding one is a change.
+func CheckVariantCodesUnchanged(existing, incoming Variant) error {
+	_, err := ParseSKU(existing.SKU)
+	composed := err == nil
+	for _, f := range []struct{ name, current, incoming string }{
+		{"colorCode", existing.ColorCode, incoming.ColorCode},
+		{"sizeCode", existing.SizeCode, incoming.SizeCode},
+		{"editionCode", existing.EditionCode, incoming.EditionCode},
+	} {
+		in := NormalizeCode(f.incoming)
+		cur := NormalizeCode(f.current)
+		if in == "" || in == cur || (cur == "" && !composed) {
+			continue
+		}
+		from := cur
+		if from == "" {
+			from = "none"
+		}
+		return fmt.Errorf("%s is part of sku %s and cannot change (%s → %s); create a new variant instead",
+			f.name, existing.SKU, from, in)
+	}
+	return nil
+}
+
 // AssignProductCodes sets BrandCode / StyleCode on a new or backfilled product
 // when they are blank. Style is derived from legacy ids only (BOT-001 → S001);
 // ULID product ids require an explicit styleCode.

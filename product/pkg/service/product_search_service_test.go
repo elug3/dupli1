@@ -552,7 +552,7 @@ func TestClothingSizesAndSizeChart(t *testing.T) {
 		t.Fatalf("M jacket: %v", err)
 	}
 	if _, err := svc.UpdateVariant(t.Context(), "JKT-1", v.SKU, domain.Variant{SizeCode: "LRG"}); !errors.Is(err, ports.ErrInvalid) {
-		t.Fatalf("resize to a bag size: want ErrInvalid, got %v", err)
+		t.Fatalf("change the size code: want ErrInvalid, got %v", err)
 	}
 
 	updated, err := svc.UpdateProduct(t.Context(), domain.Product{ID: "JKT-1", SizeChart: []domain.SizeChartRow{{Size: "m", ChestCm: 112}}})
