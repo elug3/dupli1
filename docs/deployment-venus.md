@@ -100,7 +100,9 @@ the tunnel. Direct clients can't spoof their IP: only the tunnel listener
 ## Deploying new code
 
 `.github/workflows/images.yml` builds every backend image on each pull request
-(build only) and publishes on pushes to `main`, `v*` tags and manual runs:
+(build only; a `preview/*` branch also publishes and deploys to the separate
+preview stack, [deployment-preview.md](deployment-preview.md)) and publishes on
+pushes to `main`, `v*` tags and manual runs:
 
 | Tag | Meaning |
 |-----|---------|

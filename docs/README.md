@@ -25,6 +25,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [profile-service.md](profile-service.md) | Customer commerce profile + saved addresses |
 | [notification-telegram-bot.md](notification-telegram-bot.md) | Ops Telegram alerts |
 | [deployment-venus.md](deployment-venus.md) | **Production** — self-hosted on VENUS behind a Cloudflare Tunnel since 2026-09-27; deploy and rollback runbook |
+| [deployment-preview.md](deployment-preview.md) | **Preview** — the shared preview stack on VENUS (`preview.dupli1.com`, `manage-preview.dupli1.com`) that `preview/*` pull requests deploy to |
 | [auth-logging.md](auth-logging.md) | Auth zerolog events (as-built) |
 | [sentry-monitoring.md](sentry-monitoring.md) | Sentry error and log reporting for the Go services and both web apps |
 
