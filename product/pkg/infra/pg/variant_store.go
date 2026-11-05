@@ -18,14 +18,9 @@ const variantSelectCols = `sku_id, sku, product_id, color, size,
 	price_won, official_price_won,
 	status, image_urls, COALESCE(listing_image_urls, '{}'), created_at,
 	COALESCE((SELECT c.base_code FROM colors c WHERE c.code = product_variants.color_code), ''),
-	COALESCE((SELECT c.base2_code FROM colors c WHERE c.code = product_variants.color_code), ''),
-	-- Swatch: the colorway's own hex, else its base color's; the second base
-	-- color's, else the legacy two-tone hex2.
+	-- Swatch: the colorway's own hex, else its base color's.
 	COALESCE((SELECT COALESCE(NULLIF(c.hex, ''), b.hex) FROM colors c
 		LEFT JOIN base_colors b ON b.code = c.base_code
-		WHERE c.code = product_variants.color_code), ''),
-	COALESCE((SELECT COALESCE(NULLIF(b2.hex, ''), c.hex2) FROM colors c
-		LEFT JOIN base_colors b2 ON b2.code = c.base2_code
 		WHERE c.code = product_variants.color_code), '')`
 
 func scanVariant(scan func(...any) error) (domain.Variant, error) {
@@ -40,7 +35,7 @@ func scanVariant(scan func(...any) error) (domain.Variant, error) {
 		&widthMm, &heightMm, &depthMm,
 		&v.PriceOverride, &v.OfficialPriceOverride,
 		&v.Status, &imageURLs, &listingImageURLs, &createdAt,
-		&v.BaseColorCode, &v.BaseColor2Code, &v.ColorHex, &v.ColorHex2,
+		&v.BaseColorCode, &v.ColorHex,
 	)
 	if err != nil {
 		return domain.Variant{}, err

@@ -37,7 +37,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [product-price-on-parent.md](product-price-on-parent.md) | Parent pricing |
 | [product-attributes.md](product-attributes.md) | Parent attributes memo |
 | [product-master-catalog.md](product-master-catalog.md) | Bag merchandising taxonomy |
-| [product-color-swatches.md](product-color-swatches.md) | Color swatch hexes, two-tone colors (`hex` / `hex2`) |
+| [product-color-swatches.md](product-color-swatches.md) | Color swatch hexes, base colors, one color per color master row |
 | [product-rich-search.md](product-rich-search.md) | Search / sort / wishlist |
 | [product-recommendations.md](product-recommendations.md) | PDP recommendations |
 | [product-sold-count.md](product-sold-count.md) | `soldCount` on ship |

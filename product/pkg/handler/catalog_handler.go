@@ -125,13 +125,27 @@ func (h *Handler) ListColors(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, list)
 }
 
+// colorSecondColorFields are the two-color fields a color master row no
+// longer has. A non-empty one is a 400 (domain.RejectSecondColor).
+type colorSecondColorFields struct {
+	Hex2      *string `json:"hex2"`
+	Base2Code *string `json:"base2Code"`
+}
+
 func (h *Handler) CreateColor(w http.ResponseWriter, r *http.Request) {
-	var body domain.Color
+	var body struct {
+		domain.Color
+		colorSecondColorFields
+	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	created, err := h.catalogSvc.CreateColor(r.Context(), body)
+	if err := domain.RejectSecondColor(body.Hex2, body.Base2Code); err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	created, err := h.catalogSvc.CreateColor(r.Context(), body.Color)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -139,22 +153,25 @@ func (h *Handler) CreateColor(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusCreated, created)
 }
 
-// UpdateColor is a PATCH: each of name, hex and hex2 is kept when omitted,
-// and "" clears a hex.
+// UpdateColor is a PATCH: each of name, hex and baseCode is kept when
+// omitted, and "" clears it. A non-empty hex2 or base2Code is a 400.
 func (h *Handler) UpdateColor(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name      *string `json:"name"`
-		Hex       *string `json:"hex"`
-		Hex2      *string `json:"hex2"`
-		BaseCode  *string `json:"baseCode"`
-		Base2Code *string `json:"base2Code"`
+		Name     *string `json:"name"`
+		Hex      *string `json:"hex"`
+		BaseCode *string `json:"baseCode"`
+		colorSecondColorFields
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
+	if err := domain.RejectSecondColor(body.Hex2, body.Base2Code); err != nil {
+		h.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	updated, err := h.catalogSvc.UpdateColor(r.Context(), r.PathValue("code"), domain.ColorPatch{
-		Name: body.Name, Hex: body.Hex, Hex2: body.Hex2, BaseCode: body.BaseCode, Base2Code: body.Base2Code,
+		Name: body.Name, Hex: body.Hex, BaseCode: body.BaseCode,
 	})
 	if err != nil {
 		h.respondServiceError(w, err)

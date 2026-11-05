@@ -273,11 +273,9 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 			colorSeen[v.Color] = true
 			colors = append(colors, v.Color)
 		}
-		for _, b := range []string{v.BaseColorCode, v.BaseColor2Code} {
-			if b != "" && !baseSeen[b] {
-				baseSeen[b] = true
-				baseColors = append(baseColors, b)
-			}
+		if b := v.BaseColorCode; b != "" && !baseSeen[b] {
+			baseSeen[b] = true
+			baseColors = append(baseColors, b)
 		}
 		if v.Size != "" && !sizeSeen[v.Size] {
 			sizeSeen[v.Size] = true
