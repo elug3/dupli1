@@ -52,20 +52,24 @@ func (s *ProductStore) variantsFor(productID string) []domain.Variant {
 	return out
 }
 
-// withSwatch fills the variant's base color and swatch hex from its
-// colorway, as the Postgres variant reads do: the colorway's own hex, else
-// its base color's.
+// withSwatch fills the variant's base colors and swatch hexes from its
+// first and second color, as the Postgres variant reads do: each color's own
+// hex, else its base color's.
 func (s *ProductStore) withSwatch(v domain.Variant) domain.Variant {
 	cat := s.catalog()
-	c, ok := cat.Colors[domain.NormalizeCode(v.ColorCode)]
-	if !ok || v.ColorCode == "" {
-		return v
+	fill := func(code string) (base, hex string) {
+		c, ok := cat.Colors[domain.NormalizeCode(code)]
+		if !ok || code == "" {
+			return "", ""
+		}
+		hex = c.Hex
+		if hex == "" {
+			hex = cat.BaseColors[c.BaseCode].Hex
+		}
+		return c.BaseCode, hex
 	}
-	v.BaseColorCode = c.BaseCode
-	v.ColorHex = c.Hex
-	if v.ColorHex == "" {
-		v.ColorHex = cat.BaseColors[c.BaseCode].Hex
-	}
+	v.BaseColorCode, v.ColorHex = fill(v.ColorCode)
+	v.BaseColor2Code, v.ColorHex2 = fill(v.Color2Code)
 	return v
 }
 
@@ -638,6 +642,11 @@ func (s *ProductStore) CreateVariant(ctx context.Context, v domain.Variant) (*do
 	if _, err := cat.GetColor(ctx, v.ColorCode); err != nil {
 		return nil, fmt.Errorf("%w: color %s", domain.ErrMasterNotFound, v.ColorCode)
 	}
+	if v.Color2Code != "" {
+		if _, err := cat.GetColor(ctx, v.Color2Code); err != nil {
+			return nil, fmt.Errorf("%w: color %s", domain.ErrMasterNotFound, v.Color2Code)
+		}
+	}
 	if _, err := cat.GetSize(ctx, v.SizeCode); err != nil {
 		return nil, fmt.Errorf("%w: size %s", domain.ErrMasterNotFound, v.SizeCode)
 	}
@@ -682,6 +691,9 @@ func (s *ProductStore) CreateVariant(ctx context.Context, v domain.Variant) (*do
 	}
 	s.Variants = append(s.Variants, v)
 	cat.VariantColorCodes[v.SKU] = v.ColorCode
+	if v.Color2Code != "" {
+		cat.VariantColor2Codes[v.SKU] = v.Color2Code
+	}
 	cat.VariantSizeCodes[v.SKU] = v.SizeCode
 	if v.EditionCode != "" {
 		cat.VariantEditionCodes[v.SKU] = v.EditionCode
@@ -703,12 +715,23 @@ func (s *ProductStore) CreateVariant(ctx context.Context, v domain.Variant) (*do
 // UpdateVariant updates a variant by its (immutable) sku. SkuID is always
 // preserved from the existing row regardless of what the caller passed in.
 func (s *ProductStore) UpdateVariant(ctx context.Context, v domain.Variant) (*domain.Variant, error) {
+	cat := s.catalog()
+	if v.Color2Code != "" {
+		if _, err := cat.GetColor(ctx, v.Color2Code); err != nil {
+			return nil, fmt.Errorf("%w: color %s", domain.ErrMasterNotFound, v.Color2Code)
+		}
+	}
 	for i, existing := range s.Variants {
 		if existing.SKU == v.SKU {
 			v.SkuID = existing.SkuID
 			v.ProductID = existing.ProductID
 			v.CreatedAt = existing.CreatedAt
 			s.Variants[i] = v
+			if v.Color2Code != "" {
+				cat.VariantColor2Codes[v.SKU] = v.Color2Code
+			} else {
+				delete(cat.VariantColor2Codes, v.SKU)
+			}
 			return &v, nil
 		}
 	}
@@ -734,11 +757,11 @@ func lowestPrice(p domain.Product) float64 {
 	return p.Price
 }
 
-// hasActiveBaseColor reports whether an active variant's colorway has base
-// color code.
+// hasActiveBaseColor reports whether an active variant has base color code
+// as the base of its first or second color.
 func hasActiveBaseColor(variants []domain.Variant, code string) bool {
 	for _, v := range variants {
-		if (v.Status == "" || v.Status == "active") && v.BaseColorCode == code {
+		if (v.Status == "" || v.Status == "active") && (v.BaseColorCode == code || v.BaseColor2Code == code) {
 			return true
 		}
 	}

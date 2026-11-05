@@ -40,6 +40,10 @@ func (s *ProductSearchStore) migrateSKUMasters(ctx context.Context) error {
 		`ALTER TABLE colors DROP CONSTRAINT IF EXISTS colors_base2_check`,
 		`ALTER TABLE colors DROP COLUMN IF EXISTS base2_code`,
 		`ALTER TABLE colors DROP COLUMN IF EXISTS hex2`,
+		// The second color of a two-color sku: another one-color master
+		// row. Not part of the sku string. NULL = one color.
+		`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS color2_code TEXT
+			REFERENCES colors(code) ON DELETE RESTRICT`,
 		`CREATE TABLE IF NOT EXISTS sizes (
 			id   BIGSERIAL PRIMARY KEY,
 			code TEXT NOT NULL UNIQUE,
@@ -147,6 +151,10 @@ func (s *ProductSearchStore) migrateStylesAndFKs(ctx context.Context) error {
 			ALTER TABLE product_variants
 			ADD CONSTRAINT variants_color_fk
 			FOREIGN KEY (color_code) REFERENCES colors(code) ON DELETE RESTRICT`},
+		{"variants_color2_check", `
+			ALTER TABLE product_variants
+			ADD CONSTRAINT variants_color2_check
+			CHECK (color2_code IS NULL OR color2_code <> color_code)`},
 		{"variants_size_fk", `
 			ALTER TABLE product_variants
 			ADD CONSTRAINT variants_size_fk

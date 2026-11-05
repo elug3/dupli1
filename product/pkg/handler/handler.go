@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -730,10 +731,22 @@ func (h *Handler) UpdateVariant(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusBadRequest, "missing product id or sku")
 		return
 	}
-	var v domain.Variant
-	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+	var v domain.Variant
+	if err := json.Unmarshal(raw, &v); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	// An omitted field keeps its value; "color2Code": "" clears the second color.
+	var color2 struct {
+		Color2Code *string `json:"color2Code"`
+	}
+	if json.Unmarshal(raw, &color2) == nil && domain.ExplicitColor2Clear(color2.Color2Code) {
+		v.Color2Code = domain.Color2Clear
 	}
 	updated, err := h.svc.UpdateVariant(r.Context(), id, sku, v)
 	if err != nil {

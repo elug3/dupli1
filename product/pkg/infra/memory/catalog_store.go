@@ -25,6 +25,7 @@ type CatalogStore struct {
 	// Optional back-refs for delete-in-use checks (set by tests or product store).
 	ProductBrandStyles  map[string]string // productID -> brandCode+"|"+styleCode
 	VariantColorCodes   map[string]string // sku -> colorCode
+	VariantColor2Codes  map[string]string // sku -> color2Code (two-color skus)
 	VariantSizeCodes    map[string]string // sku -> sizeCode
 	VariantEditionCodes map[string]string
 }
@@ -42,6 +43,7 @@ func NewCatalogStore() *CatalogStore {
 		Targets:             map[string]domain.CatalogTerm{},
 		ProductBrandStyles:  map[string]string{},
 		VariantColorCodes:   map[string]string{},
+		VariantColor2Codes:  map[string]string{},
 		VariantSizeCodes:    map[string]string{},
 		VariantEditionCodes: map[string]string{},
 	}
@@ -387,9 +389,11 @@ func (s *CatalogStore) DeleteColor(ctx context.Context, code string) error {
 	if _, ok := s.Colors[code]; !ok {
 		return domain.ErrMasterNotFound
 	}
-	for _, c := range s.VariantColorCodes {
-		if c == code {
-			return domain.ErrMasterInUse
+	for _, refs := range []map[string]string{s.VariantColorCodes, s.VariantColor2Codes} {
+		for _, c := range refs {
+			if c == code {
+				return domain.ErrMasterInUse
+			}
 		}
 	}
 	delete(s.Colors, code)

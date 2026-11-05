@@ -179,3 +179,72 @@ func TestColorTwoToneColumnsDropped(t *testing.T) {
 		t.Fatalf("third migrate: %v", err)
 	}
 }
+
+// A two-color sku stores its second color in color2_code: reads carry both
+// fills, search finds it by either base, the second color can be cleared,
+// a color used as a second color cannot be deleted, and the database
+// refuses a second color equal to the first.
+func TestVariantSecondColor(t *testing.T) {
+	dsn := requireProductDSN(t)
+	pool := freshProductSchema(t, dsn, "variant_color2_test")
+	ctx := t.Context()
+
+	store := &ProductSearchStore{pool: pool}
+	if err := store.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	stock, err := NewInventoryStore(pool)
+	if err != nil {
+		t.Fatalf("inventory migrate: %v", err)
+	}
+	if err := store.SeedMockEcoBag(ctx, stock); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := store.migrate(); err != nil { // a restart keeps everything
+		t.Fatalf("re-migrate: %v", err)
+	}
+	catalog := NewCatalogStore(pool)
+
+	v, err := store.GetVariant(ctx, "DUP_ECO01_BLK_OS")
+	if err != nil {
+		t.Fatalf("get variant: %v", err)
+	}
+	if v.Color2Code != "" || v.ColorHex2 != "" {
+		t.Fatalf("seed variant is one color: %+v", v)
+	}
+
+	v.Color2Code = "BRN"
+	if _, err := store.UpdateVariant(ctx, *v); err != nil {
+		t.Fatalf("set second color: %v", err)
+	}
+	got, err := store.GetVariant(ctx, v.SKU)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.SKU != "DUP_ECO01_BLK_OS" || got.Color2Code != "BRN" || got.BaseColor2Code != "BRN" || got.ColorHex2 != "#6b4226" || got.ColorHex != "#0a0a0a" {
+		t.Fatalf("two-color read: %+v", got)
+	}
+	for base, want := range map[string]int{"BRN": 1, "BLK": 1, "GRN": 0} {
+		if _, total, err := store.SearchProducts(ctx, map[string]string{"base_color": base}); err != nil || total != want {
+			t.Errorf("search base_color=%s: got %d (%v), want %d", base, total, err, want)
+		}
+	}
+	if err := catalog.DeleteColor(ctx, "BRN"); err != domain.ErrMasterInUse {
+		t.Fatalf("delete second color in use: want ErrMasterInUse, got %v", err)
+	}
+	v.Color2Code = "ZZZ"
+	if _, err := store.UpdateVariant(ctx, *v); !errors.Is(err, domain.ErrMasterNotFound) {
+		t.Fatalf("unknown second color: want ErrMasterNotFound, got %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE product_variants SET color2_code = color_code WHERE sku = 'DUP_ECO01_BLK_OS'`); err == nil {
+		t.Fatal("color2_code = color_code: want check violation")
+	}
+
+	v.Color2Code = ""
+	if _, err := store.UpdateVariant(ctx, *v); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if got, _ := store.GetVariant(ctx, v.SKU); got.Color2Code != "" || got.ColorHex2 != "" {
+		t.Fatalf("after clear: %+v", got)
+	}
+}

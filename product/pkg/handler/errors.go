@@ -25,6 +25,7 @@ func (h *Handler) respondServiceError(w http.ResponseWriter, err error) {
 		h.respondError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ports.ErrInvalid),
 		errors.Is(err, domain.ErrMissingSKUCodes),
+		errors.Is(err, domain.ErrInvalidColor2),
 		errors.Is(err, service.ErrInvalidSKU),
 		errors.Is(err, service.ErrInvalidQuantity),
 		errors.Is(err, service.ErrInsufficientStock),
