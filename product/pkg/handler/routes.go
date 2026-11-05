@@ -74,16 +74,18 @@ const (
 	RouteInventoryReservationRelease = "/api/v1/products/inventory/reservations/{id}/release"
 
 	// Catalog master data under products.
-	RouteCatalogBrands        = "/api/v1/products/catalog/brands"
-	RouteCatalogBrandByCode   = "/api/v1/products/catalog/brands/{code}"
-	RouteCatalogStyles        = "/api/v1/products/catalog/brands/{code}/styles"
-	RouteCatalogStyleByCode   = "/api/v1/products/catalog/brands/{code}/styles/{styleCode}"
-	RouteCatalogColors        = "/api/v1/products/catalog/colors"
-	RouteCatalogColorByCode   = "/api/v1/products/catalog/colors/{code}"
-	RouteCatalogSizes         = "/api/v1/products/catalog/sizes"
-	RouteCatalogSizeByCode    = "/api/v1/products/catalog/sizes/{code}"
-	RouteCatalogEditions      = "/api/v1/products/catalog/editions"
-	RouteCatalogEditionByCode = "/api/v1/products/catalog/editions/{code}"
+	RouteCatalogBrands          = "/api/v1/products/catalog/brands"
+	RouteCatalogBrandByCode     = "/api/v1/products/catalog/brands/{code}"
+	RouteCatalogStyles          = "/api/v1/products/catalog/brands/{code}/styles"
+	RouteCatalogStyleByCode     = "/api/v1/products/catalog/brands/{code}/styles/{styleCode}"
+	RouteCatalogBaseColors      = "/api/v1/products/catalog/base-colors"
+	RouteCatalogBaseColorByCode = "/api/v1/products/catalog/base-colors/{code}"
+	RouteCatalogColors          = "/api/v1/products/catalog/colors"
+	RouteCatalogColorByCode     = "/api/v1/products/catalog/colors/{code}"
+	RouteCatalogSizes           = "/api/v1/products/catalog/sizes"
+	RouteCatalogSizeByCode      = "/api/v1/products/catalog/sizes/{code}"
+	RouteCatalogEditions        = "/api/v1/products/catalog/editions"
+	RouteCatalogEditionByCode   = "/api/v1/products/catalog/editions/{code}"
 
 	// Merchandising taxonomy (storefront filters; not SKU segment masters).
 	RouteCatalogCategories    = "/api/v1/products/catalog/categories"

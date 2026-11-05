@@ -256,6 +256,8 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 	colors := make([]string, 0)
 	sizes := make([]string, 0)
 	colorSeen := map[string]bool{}
+	baseColors := make([]string, 0)
+	baseSeen := map[string]bool{}
 	sizeSeen := map[string]bool{}
 	var defaultVariant *Variant
 
@@ -271,6 +273,12 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 			colorSeen[v.Color] = true
 			colors = append(colors, v.Color)
 		}
+		for _, b := range []string{v.BaseColorCode, v.BaseColor2Code} {
+			if b != "" && !baseSeen[b] {
+				baseSeen[b] = true
+				baseColors = append(baseColors, b)
+			}
+		}
 		if v.Size != "" && !sizeSeen[v.Size] {
 			sizeSeen[v.Size] = true
 			sizes = append(sizes, v.Size)
@@ -279,6 +287,7 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 
 	p.PriceFrom = priceFrom(*p, variants)
 	p.AvailableColors = colors
+	p.AvailableBaseColors = baseColors
 	p.AvailableSizes = sizes
 	if defaultVariant != nil {
 		p.Color = defaultVariant.Color

@@ -200,16 +200,32 @@ func (s *CatalogStore) DeleteStyle(ctx context.Context, brandCode, code string) 
 	return nil
 }
 
+const colorCols = `code, name, hex, hex2, COALESCE(base_code, ''), COALESCE(base2_code, '')`
+
+func scanColor(scan func(...any) error) (domain.Color, error) {
+	var c domain.Color
+	err := scan(&c.Code, &c.Name, &c.Hex, &c.Hex2, &c.BaseCode, &c.Base2Code)
+	return c, err
+}
+
+// baseColorFK maps a write that names a base color that does not exist.
+func baseColorFK(op string, err error) error {
+	if isFKViolation(err) {
+		return fmt.Errorf("%w: base color", domain.ErrMasterNotFound)
+	}
+	return wrapDB(op, err)
+}
+
 func (s *CatalogStore) ListColors(ctx context.Context) ([]domain.Color, error) {
-	rows, err := s.pool.Query(ctx, `SELECT code, name, hex, hex2 FROM colors ORDER BY code`)
+	rows, err := s.pool.Query(ctx, `SELECT `+colorCols+` FROM colors ORDER BY code`)
 	if err != nil {
 		return nil, wrapDB("list colors", err)
 	}
 	defer rows.Close()
 	var out []domain.Color
 	for rows.Next() {
-		var c domain.Color
-		if err := rows.Scan(&c.Code, &c.Name, &c.Hex, &c.Hex2); err != nil {
+		c, err := scanColor(rows.Scan)
+		if err != nil {
 			return nil, wrapDB("list colors", err)
 		}
 		out = append(out, c)
@@ -218,10 +234,9 @@ func (s *CatalogStore) ListColors(ctx context.Context) ([]domain.Color, error) {
 }
 
 func (s *CatalogStore) GetColor(ctx context.Context, code string) (*domain.Color, error) {
-	var c domain.Color
-	err := s.pool.QueryRow(ctx,
-		`SELECT code, name, hex, hex2 FROM colors WHERE code = $1`, domain.NormalizeCode(code),
-	).Scan(&c.Code, &c.Name, &c.Hex, &c.Hex2)
+	c, err := scanColor(s.pool.QueryRow(ctx,
+		`SELECT `+colorCols+` FROM colors WHERE code = $1`, domain.NormalizeCode(code),
+	).Scan)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrMasterNotFound
@@ -241,12 +256,13 @@ func (s *CatalogStore) CreateColor(ctx context.Context, c domain.Color) (*domain
 		return nil, ports.Invalid("name is required")
 	}
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO colors (code, name, hex, hex2) VALUES ($1, $2, $3, $4)`, c.Code, c.Name, c.Hex, c.Hex2)
+		`INSERT INTO colors (code, name, hex, hex2, base_code, base2_code) VALUES ($1, $2, $3, $4, $5, $6)`,
+		c.Code, c.Name, c.Hex, c.Hex2, nullEmpty(c.BaseCode), nullEmpty(c.Base2Code))
 	if isUniqueViolation(err) {
 		return nil, domain.ErrMasterExists
 	}
 	if err != nil {
-		return nil, wrapDB("create color", err)
+		return nil, baseColorFK("create color", err)
 	}
 	return &c, nil
 }
@@ -258,9 +274,10 @@ func (s *CatalogStore) UpdateColor(ctx context.Context, c domain.Color) (*domain
 		return nil, ports.Invalid("name is required")
 	}
 	cmd, err := s.pool.Exec(ctx,
-		`UPDATE colors SET name = $2, hex = $3, hex2 = $4 WHERE code = $1`, c.Code, c.Name, c.Hex, c.Hex2)
+		`UPDATE colors SET name = $2, hex = $3, hex2 = $4, base_code = $5, base2_code = $6 WHERE code = $1`,
+		c.Code, c.Name, c.Hex, c.Hex2, nullEmpty(c.BaseCode), nullEmpty(c.Base2Code))
 	if err != nil {
-		return nil, wrapDB("update color", err)
+		return nil, baseColorFK("update color", err)
 	}
 	if cmd.RowsAffected() == 0 {
 		return nil, domain.ErrMasterNotFound
@@ -276,6 +293,72 @@ func (s *CatalogStore) DeleteColor(ctx context.Context, code string) error {
 	}
 	if err != nil {
 		return wrapDB("delete color", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return domain.ErrMasterNotFound
+	}
+	return nil
+}
+
+func (s *CatalogStore) ListBaseColors(ctx context.Context) ([]domain.BaseColor, error) {
+	rows, err := s.pool.Query(ctx, `SELECT code, name, hex FROM base_colors ORDER BY code`)
+	if err != nil {
+		return nil, wrapDB("list base colors", err)
+	}
+	defer rows.Close()
+	var out []domain.BaseColor
+	for rows.Next() {
+		var b domain.BaseColor
+		if err := rows.Scan(&b.Code, &b.Name, &b.Hex); err != nil {
+			return nil, wrapDB("list base colors", err)
+		}
+		out = append(out, b)
+	}
+	return out, wrapDB("list base colors", rows.Err())
+}
+
+func (s *CatalogStore) GetBaseColor(ctx context.Context, code string) (*domain.BaseColor, error) {
+	var b domain.BaseColor
+	err := s.pool.QueryRow(ctx, `SELECT code, name, hex FROM base_colors WHERE code = $1`,
+		domain.NormalizeCode(code)).Scan(&b.Code, &b.Name, &b.Hex)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrMasterNotFound
+	}
+	if err != nil {
+		return nil, wrapDB("get base color", err)
+	}
+	return &b, nil
+}
+
+func (s *CatalogStore) CreateBaseColor(ctx context.Context, b domain.BaseColor) (*domain.BaseColor, error) {
+	_, err := s.pool.Exec(ctx, `INSERT INTO base_colors (code, name, hex) VALUES ($1, $2, $3)`, b.Code, b.Name, b.Hex)
+	if isUniqueViolation(err) {
+		return nil, domain.ErrMasterExists
+	}
+	if err != nil {
+		return nil, wrapDB("create base color", err)
+	}
+	return &b, nil
+}
+
+func (s *CatalogStore) UpdateBaseColor(ctx context.Context, b domain.BaseColor) (*domain.BaseColor, error) {
+	cmd, err := s.pool.Exec(ctx, `UPDATE base_colors SET name = $2, hex = $3 WHERE code = $1`, b.Code, b.Name, b.Hex)
+	if err != nil {
+		return nil, wrapDB("update base color", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return nil, domain.ErrMasterNotFound
+	}
+	return &b, nil
+}
+
+func (s *CatalogStore) DeleteBaseColor(ctx context.Context, code string) error {
+	cmd, err := s.pool.Exec(ctx, `DELETE FROM base_colors WHERE code = $1`, domain.NormalizeCode(code))
+	if isFKViolation(err) {
+		return domain.ErrMasterInUse
+	}
+	if err != nil {
+		return wrapDB("delete base color", err)
 	}
 	if cmd.RowsAffected() == 0 {
 		return domain.ErrMasterNotFound

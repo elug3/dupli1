@@ -52,11 +52,22 @@ func (s *ProductStore) variantsFor(productID string) []domain.Variant {
 	return out
 }
 
-// withSwatch fills the variant's swatch hexes from its color master, as the
-// Postgres variant reads do.
+// withSwatch fills the variant's base colors and swatch hexes from its
+// colorway, as the Postgres variant reads do: the colorway's own hex, else
+// its base color's; the second base color's, else the legacy hex2.
 func (s *ProductStore) withSwatch(v domain.Variant) domain.Variant {
-	if c, ok := s.catalog().Colors[domain.NormalizeCode(v.ColorCode)]; ok && v.ColorCode != "" {
-		v.ColorHex, v.ColorHex2 = c.Hex, c.Hex2
+	cat := s.catalog()
+	c, ok := cat.Colors[domain.NormalizeCode(v.ColorCode)]
+	if !ok || v.ColorCode == "" {
+		return v
+	}
+	v.BaseColorCode, v.BaseColor2Code = c.BaseCode, c.Base2Code
+	v.ColorHex, v.ColorHex2 = c.Hex, c.Hex2
+	if v.ColorHex == "" {
+		v.ColorHex = cat.BaseColors[c.BaseCode].Hex
+	}
+	if b2, ok := cat.BaseColors[c.Base2Code]; ok && c.Base2Code != "" && b2.Hex != "" {
+		v.ColorHex2 = b2.Hex
 	}
 	return v
 }
@@ -135,6 +146,9 @@ func (s *ProductStore) SearchProducts(ctx context.Context, filter map[string]str
 			continue
 		}
 		if size := filter["size"]; size != "" && !hasActiveOption(variants, "size", size) {
+			continue
+		}
+		if base := domain.NormalizeCode(filter["base_color"]); base != "" && !hasActiveBaseColor(variants, base) {
 			continue
 		}
 		if after := filter["created_after"]; after != "" {
@@ -721,4 +735,15 @@ func lowestPrice(p domain.Product) float64 {
 		return p.PriceFrom
 	}
 	return p.Price
+}
+
+// hasActiveBaseColor reports whether an active variant's colorway has base
+// color code as either of its base colors.
+func hasActiveBaseColor(variants []domain.Variant, code string) bool {
+	for _, v := range variants {
+		if (v.Status == "" || v.Status == "active") && (v.BaseColorCode == code || v.BaseColor2Code == code) {
+			return true
+		}
+	}
+	return false
 }

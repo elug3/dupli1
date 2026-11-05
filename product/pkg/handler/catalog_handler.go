@@ -143,16 +143,19 @@ func (h *Handler) CreateColor(w http.ResponseWriter, r *http.Request) {
 // and "" clears a hex.
 func (h *Handler) UpdateColor(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name *string `json:"name"`
-		Hex  *string `json:"hex"`
-		Hex2 *string `json:"hex2"`
+		Name      *string `json:"name"`
+		Hex       *string `json:"hex"`
+		Hex2      *string `json:"hex2"`
+		BaseCode  *string `json:"baseCode"`
+		Base2Code *string `json:"base2Code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		h.respondError(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	updated, err := h.catalogSvc.UpdateColor(r.Context(), r.PathValue("code"),
-		domain.ColorPatch{Name: body.Name, Hex: body.Hex, Hex2: body.Hex2})
+	updated, err := h.catalogSvc.UpdateColor(r.Context(), r.PathValue("code"), domain.ColorPatch{
+		Name: body.Name, Hex: body.Hex, Hex2: body.Hex2, BaseCode: body.BaseCode, Base2Code: body.Base2Code,
+	})
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -162,6 +165,58 @@ func (h *Handler) UpdateColor(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteColor(w http.ResponseWriter, r *http.Request) {
 	if err := h.catalogSvc.DeleteColor(r.Context(), r.PathValue("code")); err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Base colors ---
+
+func (h *Handler) ListBaseColors(w http.ResponseWriter, r *http.Request) {
+	list, err := h.catalogSvc.ListBaseColors(r.Context())
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	h.respondJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) CreateBaseColor(w http.ResponseWriter, r *http.Request) {
+	var body domain.BaseColor
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	created, err := h.catalogSvc.CreateBaseColor(r.Context(), body)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	h.respondJSON(w, http.StatusCreated, created)
+}
+
+// UpdateBaseColor is a PATCH: name and hex are kept when omitted.
+func (h *Handler) UpdateBaseColor(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name *string `json:"name"`
+		Hex  *string `json:"hex"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.respondError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	updated, err := h.catalogSvc.UpdateBaseColor(r.Context(), r.PathValue("code"),
+		domain.BaseColorPatch{Name: body.Name, Hex: body.Hex})
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	h.respondJSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteBaseColor(w http.ResponseWriter, r *http.Request) {
+	if err := h.catalogSvc.DeleteBaseColor(r.Context(), r.PathValue("code")); err != nil {
 		h.respondServiceError(w, err)
 		return
 	}

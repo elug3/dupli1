@@ -12,14 +12,15 @@ import (
 
 // CatalogStore is an in-memory ports.CatalogStore for tests.
 type CatalogStore struct {
-	Brands         map[string]domain.Brand
-	Styles         map[string]domain.Style // key: brandCode+"|"+code
-	Colors         map[string]domain.Color
-	Sizes          map[string]domain.Size
-	Editions       map[string]domain.Edition
-	SubCategories  map[string]domain.CatalogTerm
-	BagStyles      map[string]domain.CatalogTerm
-	Targets        map[string]domain.CatalogTerm
+	Brands        map[string]domain.Brand
+	Styles        map[string]domain.Style // key: brandCode+"|"+code
+	Colors        map[string]domain.Color
+	BaseColors    map[string]domain.BaseColor
+	Sizes         map[string]domain.Size
+	Editions      map[string]domain.Edition
+	SubCategories map[string]domain.CatalogTerm
+	BagStyles     map[string]domain.CatalogTerm
+	Targets       map[string]domain.CatalogTerm
 
 	// Optional back-refs for delete-in-use checks (set by tests or product store).
 	ProductBrandStyles  map[string]string // productID -> brandCode+"|"+styleCode
@@ -33,6 +34,7 @@ func NewCatalogStore() *CatalogStore {
 		Brands:              map[string]domain.Brand{},
 		Styles:              map[string]domain.Style{},
 		Colors:              map[string]domain.Color{},
+		BaseColors:          map[string]domain.BaseColor{},
 		Sizes:               map[string]domain.Size{},
 		Editions:            map[string]domain.Edition{},
 		SubCategories:       map[string]domain.CatalogTerm{},
@@ -46,7 +48,11 @@ func NewCatalogStore() *CatalogStore {
 	for _, b := range domain.SeedBrands {
 		s.Brands[b.Code] = b
 	}
+	for _, b := range domain.SeedBaseColors() {
+		s.BaseColors[b.Code] = b
+	}
 	for _, c := range domain.SeedColors {
+		c.BaseCode = c.Code // each seed colorway is its own base color
 		s.Colors[c.Code] = c
 	}
 	for _, sz := range domain.SizeMasterSeeds() {
@@ -288,6 +294,9 @@ func (s *CatalogStore) CreateColor(ctx context.Context, c domain.Color) (*domain
 	if _, ok := s.Colors[c.Code]; ok {
 		return nil, domain.ErrMasterExists
 	}
+	if err := s.requireBases(c); err != nil {
+		return nil, err
+	}
 	s.Colors[c.Code] = c
 	return &c, nil
 }
@@ -302,8 +311,76 @@ func (s *CatalogStore) UpdateColor(ctx context.Context, c domain.Color) (*domain
 	if c.Name == "" {
 		return nil, ports.Invalid("name is required")
 	}
+	if err := s.requireBases(c); err != nil {
+		return nil, err
+	}
 	s.Colors[c.Code] = c
 	return &c, nil
+}
+
+// requireBases mirrors the Postgres foreign keys from colors to base_colors.
+func (s *CatalogStore) requireBases(c domain.Color) error {
+	for _, code := range []string{c.BaseCode, c.Base2Code} {
+		if code == "" {
+			continue
+		}
+		if _, ok := s.BaseColors[code]; !ok {
+			return fmt.Errorf("%w: base color %s", domain.ErrMasterNotFound, code)
+		}
+	}
+	return nil
+}
+
+func (s *CatalogStore) ListBaseColors(ctx context.Context) ([]domain.BaseColor, error) {
+	_ = ctx
+	out := make([]domain.BaseColor, 0, len(s.BaseColors))
+	for _, b := range s.BaseColors {
+		out = append(out, b)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Code < out[j].Code })
+	return out, nil
+}
+
+func (s *CatalogStore) GetBaseColor(ctx context.Context, code string) (*domain.BaseColor, error) {
+	_ = ctx
+	b, ok := s.BaseColors[domain.NormalizeCode(code)]
+	if !ok {
+		return nil, domain.ErrMasterNotFound
+	}
+	return &b, nil
+}
+
+func (s *CatalogStore) CreateBaseColor(ctx context.Context, b domain.BaseColor) (*domain.BaseColor, error) {
+	_ = ctx
+	if _, ok := s.BaseColors[b.Code]; ok {
+		return nil, domain.ErrMasterExists
+	}
+	s.BaseColors[b.Code] = b
+	return &b, nil
+}
+
+func (s *CatalogStore) UpdateBaseColor(ctx context.Context, b domain.BaseColor) (*domain.BaseColor, error) {
+	_ = ctx
+	if _, ok := s.BaseColors[b.Code]; !ok {
+		return nil, domain.ErrMasterNotFound
+	}
+	s.BaseColors[b.Code] = b
+	return &b, nil
+}
+
+func (s *CatalogStore) DeleteBaseColor(ctx context.Context, code string) error {
+	_ = ctx
+	code = domain.NormalizeCode(code)
+	if _, ok := s.BaseColors[code]; !ok {
+		return domain.ErrMasterNotFound
+	}
+	for _, c := range s.Colors {
+		if c.BaseCode == code || c.Base2Code == code {
+			return domain.ErrMasterInUse
+		}
+	}
+	delete(s.BaseColors, code)
+	return nil
 }
 
 func (s *CatalogStore) DeleteColor(ctx context.Context, code string) error {

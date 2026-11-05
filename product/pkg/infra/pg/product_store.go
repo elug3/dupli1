@@ -651,6 +651,15 @@ func buildProductSearchWhere(filter map[string]string) (string, []interface{}) {
 			)`, idx)
 			args = append(args, value)
 			idx++
+		case "base_color":
+			// Either base color of an active variant's colorway.
+			query += fmt.Sprintf(` AND EXISTS (
+				SELECT 1 FROM product_variants v JOIN colors c ON c.code = v.color_code
+				WHERE v.product_id = p.id AND v.status = 'active'
+				  AND (c.base_code = $%d OR c.base2_code = $%d)
+			)`, idx, idx)
+			args = append(args, domain.NormalizeCode(value))
+			idx++
 		case "size":
 			query += fmt.Sprintf(` AND EXISTS (
 				SELECT 1 FROM product_variants v

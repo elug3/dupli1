@@ -14,8 +14,13 @@ type Variant struct {
 	ColorCode   string `json:"colorCode,omitempty"`
 	EditionCode string `json:"editionCode,omitempty"` // optional VariantCode segment
 	SizeCode    string `json:"sizeCode,omitempty"`
-	// ColorHex / ColorHex2 are the swatch fills of the variant's color master
-	// (Color.Hex / Color.Hex2). Response-only; ColorHex2 set = two-tone.
+	// BaseColorCode / BaseColor2Code are the plain colors of the variant's
+	// colorway (Color.BaseCode / Base2Code). Response-only.
+	BaseColorCode  string `json:"baseColorCode,omitempty"`
+	BaseColor2Code string `json:"baseColor2Code,omitempty"`
+	// ColorHex / ColorHex2 are the swatch fills: the colorway's own hex, else
+	// its base color's; the second base color's (else the legacy Color.Hex2).
+	// Response-only; ColorHex2 set = two-tone.
 	ColorHex  string `json:"colorHex,omitempty"`
 	ColorHex2 string `json:"colorHex2,omitempty"`
 	// Dimensions is the physical size of this SKU in millimeters
@@ -103,10 +108,13 @@ type Product struct {
 	DefaultImageURL string `json:"defaultImageUrl,omitempty"`
 	// DefaultListingImageURL is the listing-size JPEG for category/home cards
 	// (from the default active variant's first listingImageUrls entry).
-	DefaultListingImageURL string    `json:"defaultListingImageUrl,omitempty"`
-	AvailableColors        []string  `json:"availableColors,omitempty"`
-	AvailableSizes         []string  `json:"availableSizes,omitempty"`
-	Variants               []Variant `json:"variants,omitempty"`
+	DefaultListingImageURL string   `json:"defaultListingImageUrl,omitempty"`
+	AvailableColors        []string `json:"availableColors,omitempty"`
+	// AvailableBaseColors are the base color codes of the active variants
+	// (both colors of a two-tone one), for a shopper-facing color filter.
+	AvailableBaseColors []string  `json:"availableBaseColors,omitempty"`
+	AvailableSizes      []string  `json:"availableSizes,omitempty"`
+	Variants            []Variant `json:"variants,omitempty"`
 
 	// Legacy display fields mirrored from the default active variant.
 	Color string `json:"color,omitempty"`

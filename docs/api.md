@@ -563,6 +563,7 @@ Search **parent styles** (one row per style; colors are not duplicated). No auth
 | `brand` | case-insensitive substring |
 | `brand_code` | exact brand master code (what the catalog report groups by) |
 | `color` | parent has an active variant with this color |
+| `baseColor` (alias `base_color`) | parent has an active variant whose colorway has this base color (either base), e.g. `BLK`; see [product-color-swatches.md](product-color-swatches.md) |
 | `size` | parent has an active variant with this size |
 | `material` | exact |
 | `tags` | parent must include all listed tags (comma-separated or repeated) |
@@ -725,7 +726,7 @@ Failures carry machine-readable reason codes (`invalid_code`, `expired`, `alread
 
 ### `GET /api/v1/products/{id}`
 
-Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, and `availableSizes`. Cart lines use each variant's `sku` / `skuId` (inventory key). Parent `price` is the charged amount; `officialPrice` is display-only. Each variant may include `dimensions` (`widthMm` / `heightMm` / `depthMm` in millimeters) — distinct from letter `size`/`sizeCode`; see [product-sku-dimensions.md](product-sku-dimensions.md). A parent may include `sizeChart` (`[{ size, chestCm, lengthCm, shoulderCm, sleeveCm }]`, centimetres) for the size guide; see [product-master-catalog.md](product-master-catalog.md#size-chart).
+Public PDP. No authentication required. Returns an active **parent** with `variants[]`, `availableColors`, `availableBaseColors` (base color codes), and `availableSizes`. Cart lines use each variant's `sku` / `skuId` (inventory key). Parent `price` is the charged amount; `officialPrice` is display-only. Each variant may include `dimensions` (`widthMm` / `heightMm` / `depthMm` in millimeters) — distinct from letter `size`/`sizeCode`; see [product-sku-dimensions.md](product-sku-dimensions.md). A parent may include `sizeChart` (`[{ size, chestCm, lengthCm, shoulderCm, sleeveCm }]`, centimetres) for the size guide; see [product-master-catalog.md](product-master-catalog.md#size-chart).
 
 Each embedded variant includes stock enrichment: `availableQty` (`max(0, quantity − reserved)`) and `inStock` (`availableQty > 0`). Every sellable SKU has a `stock_items` row (created with qty 0 on variant create; see [product-stock-tracking-plan.md](product-stock-tracking-plan.md)). Legacy parent `stock` is omitted from responses.
 
@@ -857,7 +858,7 @@ Each route also accepts the pre-rename `coupon.*` permission and answers on `/ap
 - `DELETE /api/v1/products/{id}/variants/{sku}` needs the SKU's stock row empty: set its quantity to `0` first, and wait for reserved stock to ship or be released. The empty row goes with the variant.
 - Product delete publishes `product.deleted` (a Telegram ops alert for chats with `alert_product`) and cascades the product's wishlist entries and view counts; variant delete publishes `product.variant_deleted`. Past orders keep their own snapshot (`product_name`, image), uploaded images stay in object storage, and cart lines naming a removed SKU come back as unavailable.
 
-New parent `id`s are ULIDs (`domain.NewProductID()`); legacy brand-prefixed ids (e.g. `BOT-001`) remain valid. Human identity is `brandCode` + `styleCode`. Dual variant identity and master dictionaries: [product-sku-system.md](product-sku-system.md) — ULID `skuId` (canonical) + human `sku` (`Brand_Style_Color[_Edition]_Size`). Catalog CRUD at `/api/v1/products/catalog/…` (legacy alias `/api/v1/catalog/…`). Product/variant create requires existing master codes (Phase C). See also [product-variants-plan.md](product-variants-plan.md).
+New parent `id`s are ULIDs (`domain.NewProductID()`); legacy brand-prefixed ids (e.g. `BOT-001`) remain valid. Human identity is `brandCode` + `styleCode`. Dual variant identity and master dictionaries: [product-sku-system.md](product-sku-system.md) — ULID `skuId` (canonical) + human `sku` (`Brand_Style_Color[_Edition]_Size`). Catalog CRUD at `/api/v1/products/catalog/…` (legacy alias `/api/v1/catalog/…`; base colors at `/api/v1/products/catalog/base-colors` only). Product/variant create requires existing master codes (Phase C). See also [product-variants-plan.md](product-variants-plan.md).
 
 ---
 

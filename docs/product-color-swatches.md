@@ -8,49 +8,80 @@ storefront. Design: [Figma](https://www.figma.com/design/tqtyEpto8TYyJqqN2HjWth)
 
 ## Data
 
-`colors` (the SKU color master, [product-sku-system.md](product-sku-system.md))
-has two columns, both `TEXT NOT NULL DEFAULT ''`:
+Two tables:
+
+- **`colors`** (the SKU color master, [product-sku-system.md](product-sku-system.md))
+  holds **colorways**: the code the sku carries, usually the brand's own
+  (Bottega `1139` "블랙", Prada `F0002` "블랙"). Two colorways may share a
+  name and stay distinct; a style can sell both.
+- **`base_colors`** holds the **plain colors** shoppers recognize (`BLK`
+  Black, `BRN` Brown), seeded from `domain.SeedColors`. Each colorway points
+  at one (`base_code`) or, for a two-tone colorway (black body, brown trim),
+  two (`base2_code`). `NULL` = not assigned yet. Foreign keys are
+  `RESTRICT`, and `base2_code` needs `base_code` and must differ from it.
 
 | Column / JSON | Meaning |
 |---|---|
-| `hex` | The swatch fill, lowercase `#rrggbb`. `""` = no swatch color yet. |
-| `hex2` | The second color of a **two-tone** color (black body, brown trim). Needs `hex`. |
+| `base_colors.hex` | The base color's swatch fill, lowercase `#rrggbb`. |
+| `colors.base_code` / `baseCode` | The colorway's (main) base color. |
+| `colors.base2_code` / `base2Code` | Second base color of a two-tone colorway. |
+| `colors.hex` | Optional colorway-specific fill that overrides its base color's. |
+| `colors.hex2` | **Retired** two-tone fill: read if present, never set (`400`); `""` clears it. |
 
-| `hex` | `hex2` | Swatch |
-|---|---|---|
-| set | `""` | Solid |
-| set | set | Two-tone: diagonal split, `hex` top-left, `hex2` bottom-right |
-| `""` | `""` | Unknown: dashed neutral circle ("no color data", add a hex) |
+Swatch fills on a variant read: `colorHex` = the colorway's own `hex`, else
+its base color's; `colorHex2` = the second base color's, else a legacy
+`hex2`.
 
-A two-tone color is its own color master row (for example `BKB` "Black /
-Brown"), so a SKU still has exactly one `colorCode`. Name it with both colors
-joined by ` / `; the storefront shows that name in the picker legend.
+| Colorway | Swatch |
+|---|---|
+| one base (or own hex) | Solid |
+| two bases | Two-tone: diagonal split, main top-left, second bottom-right |
+| no base, no hex | Unknown: dashed neutral circle ("no color data") |
 
-Input accepts `#RRGGBB` or `RRGGBB` in any case and stores `#rrggbb`. Anything
-else, or `hex2` without `hex`, is `400`.
-
-Seed colors carry the fills the storefront used before (`domain.SeedColors`).
-On startup a seed color whose `hex` is `""` gets the seeded one; a hex staff set
-or changed is never overwritten, so a seed color cannot be left without a hex.
+Hex input accepts `#RRGGBB` or `RRGGBB` in any case and stores `#rrggbb`.
+Each seed colorway is its own base color (`BLK` → `BLK`). On startup a seed
+color or base color whose `hex` is `""` gets the seeded one; a hex staff set
+is never overwritten.
 
 ## API
 
-- `GET /api/v1/products/catalog/colors` → `[{ code, name, hex?, hex2? }]`
-- `POST …/catalog/colors` `{ code, name, hex?, hex2? }`
-- `PATCH …/catalog/colors/{code}` `{ name?, hex?, hex2? }`: an omitted field is
-  kept, `""` clears a hex. Clearing `hex` while `hex2` is set is `400`.
-
 Permissions are unchanged (`product.master.read|write`).
 
+- `GET /api/v1/products/catalog/base-colors` → `[{ code, name, hex? }]`
+- `POST …/catalog/base-colors` `{ code, name, hex? }`;
+  `PATCH …/catalog/base-colors/{code}` `{ name?, hex? }`;
+  `DELETE …` is `409` while a colorway points at it.
+- `GET /api/v1/products/catalog/colors` → `[{ code, name, hex?, baseCode?, base2Code?, hex2? }]`
+- `POST …/catalog/colors` `{ code, name, hex?, baseCode?, base2Code? }`
+- `PATCH …/catalog/colors/{code}` `{ name?, hex?, baseCode?, base2Code?, hex2? }`:
+  an omitted field is kept, `""` clears it; a non-empty `hex2`, a `base2Code`
+  without `baseCode` or equal to it is `400`, an unknown base color `404`.
+
 Every variant read (PDP `variants[]`, `GET /products/{id}/variants`,
-by-SKU and by-SKU-id lookups) carries the color master's fills as
-`colorHex` / `colorHex2`, omitted when empty. They are response-only, read from
-`colors` at query time, so editing a color changes every product at once.
+by-SKU and by-SKU-id lookups) carries `baseColorCode` / `baseColor2Code` and
+the swatch fills `colorHex` / `colorHex2`, omitted when empty. They are
+response-only, read from `colors` and `base_colors` at query time, so editing
+either changes every product at once.
+
+Products carry `availableBaseColors` (base color codes of their active
+variants, both colors of a two-tone one), and search takes
+`?baseColor=BLK` (alias `base_color`), matching a product with an active
+variant whose colorway has that base color as either base.
 
 ## Clients
 
 - **dupli1-web:** `colorHex` / `colorHex2` decide the swatch. A variant without
-  `colorHex` (a color created on the fly from a variant's name) still falls
-  back to the old name list, then to the unknown swatch.
-- **dupli1-manage-web:** `/catalog` → Colors edits `hex` and `hex2` with a live
-  swatch preview.
+  `colorHex` still falls back to the old name list, then to the unknown
+  swatch. A shopper-facing color filter should list base colors
+  (`availableBaseColors`, `?baseColor=`), not colorway names.
+- **dupli1-manage-web:** `/catalog` → Colors should pick `baseCode` /
+  `base2Code` from the base colors instead of editing `hex2`, and a Base
+  colors tab edits the palette.
+
+## Assigning base colors
+
+Colorways created before base colors existed have none. An operator script
+outside this repo guesses them from colorway names ("다크 캐러멜" → `TAN`,
+"블랙/브라운" → `BLK` + `BRN`), writes a plan for review, then sets them through
+`PATCH …/catalog/colors/{code}`; names with no plain color word ("오팔린") are
+left for staff.
