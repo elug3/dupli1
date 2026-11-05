@@ -81,7 +81,7 @@ Items from the 2026-10-31 meeting. h-global product registration should work in 
 - [ ] Organize size and color variant input (swipe sideways to add more)
 - [ ] Color attribute field (e.g. Black)
 - [ ] Upload UX that makes it easy for sellers to add photos themselves
-- [ ] Document the standard input form
+- [x] Document the standard input form — [product-input-form.md](product-input-form.md)
 
 ### Storefront
 - [ ] Hide the original price: do not display Official Price

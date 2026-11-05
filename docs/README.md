@@ -33,6 +33,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | Doc | Topic |
 |-----|-------|
 | [product-sku-system.md](product-sku-system.md) | Dual SKU identity + masters |
+| [product-input-form.md](product-input-form.md) | Admin product input form (parent, SKU, color, photos) |
 | [product-sku-dimensions.md](product-sku-dimensions.md) | Physical dimensions |
 | [product-price-on-parent.md](product-price-on-parent.md) | Parent pricing |
 | [product-attributes.md](product-attributes.md) | Parent attributes memo |
