@@ -12,7 +12,7 @@ Two tables:
 
 - **`colors`** (the SKU color master, [product-sku-system.md](product-sku-system.md))
   holds **colorways**: the code the sku carries, usually the brand's own
-  (Bottega `1139` "블랙", Prada `F0002` "블랙"). Two colorways may share a
+  (`1139` "블랙", `F0002` "블랙"). Two colorways may share a
   name and stay distinct; a style can sell both.
 - **`base_colors`** holds the **plain colors** shoppers recognize (`BLK`
   Black, `BRN` Brown), seeded from `domain.SeedColors`. Each colorway points

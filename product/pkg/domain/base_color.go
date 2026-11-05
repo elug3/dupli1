@@ -7,7 +7,7 @@ import (
 
 // BaseColor is a plain color a shopper recognizes (Black, Brown), shared by
 // every brand. A color master row (Color) is a brand's colorway: its code is
-// what the sku carries (Bottega 1139, Prada F0002) and stays distinct even
+// what the sku carries (1139, F0002) and stays distinct even
 // when two colorways are both "black". Each colorway points at one base
 // color, or two for a two-tone colorway (black body, brown trim), and the
 // storefront filters and draws swatches by base color.
