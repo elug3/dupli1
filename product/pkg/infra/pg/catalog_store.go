@@ -200,11 +200,11 @@ func (s *CatalogStore) DeleteStyle(ctx context.Context, brandCode, code string) 
 	return nil
 }
 
-const colorCols = `code, name, hex, hex2, COALESCE(base_code, ''), COALESCE(base2_code, '')`
+const colorCols = `code, name, hex, COALESCE(base_code, '')`
 
 func scanColor(scan func(...any) error) (domain.Color, error) {
 	var c domain.Color
-	err := scan(&c.Code, &c.Name, &c.Hex, &c.Hex2, &c.BaseCode, &c.Base2Code)
+	err := scan(&c.Code, &c.Name, &c.Hex, &c.BaseCode)
 	return c, err
 }
 
@@ -256,8 +256,8 @@ func (s *CatalogStore) CreateColor(ctx context.Context, c domain.Color) (*domain
 		return nil, ports.Invalid("name is required")
 	}
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO colors (code, name, hex, hex2, base_code, base2_code) VALUES ($1, $2, $3, $4, $5, $6)`,
-		c.Code, c.Name, c.Hex, c.Hex2, nullEmpty(c.BaseCode), nullEmpty(c.Base2Code))
+		`INSERT INTO colors (code, name, hex, base_code) VALUES ($1, $2, $3, $4)`,
+		c.Code, c.Name, c.Hex, nullEmpty(c.BaseCode))
 	if isUniqueViolation(err) {
 		return nil, domain.ErrMasterExists
 	}
@@ -274,8 +274,8 @@ func (s *CatalogStore) UpdateColor(ctx context.Context, c domain.Color) (*domain
 		return nil, ports.Invalid("name is required")
 	}
 	cmd, err := s.pool.Exec(ctx,
-		`UPDATE colors SET name = $2, hex = $3, hex2 = $4, base_code = $5, base2_code = $6 WHERE code = $1`,
-		c.Code, c.Name, c.Hex, c.Hex2, nullEmpty(c.BaseCode), nullEmpty(c.Base2Code))
+		`UPDATE colors SET name = $2, hex = $3, base_code = $4 WHERE code = $1`,
+		c.Code, c.Name, c.Hex, nullEmpty(c.BaseCode))
 	if err != nil {
 		return nil, baseColorFK("update color", err)
 	}

@@ -8,8 +8,26 @@ import (
 // ErrInvalidHex is returned for a swatch color that is not "#rrggbb".
 var ErrInvalidHex = errors.New(`hex must be a 6-digit color such as "#1f2a44"`)
 
-// ErrHex2WithoutHex is returned when a color has a second hex but no first.
-var ErrHex2WithoutHex = errors.New("hex2 needs hex: a two-tone color needs its main color first")
+// ErrHex2Removed is returned when a client sets hex2 on a color. A color
+// master row is one color; there is no second fill.
+var ErrHex2Removed = errors.New("hex2 is not supported: a color master row is one color")
+
+// ErrBase2Removed is returned when a client sets base2Code on a color. A
+// color master row is one color, so it has one base color.
+var ErrBase2Removed = errors.New("base2Code is not supported: a color master row is one color")
+
+// RejectSecondColor refuses a non-empty hex2 or base2Code in a color write.
+// An empty or absent one is accepted and ignored: it asks for no second
+// color, which is the only kind there is. Older clients still send hex2 "".
+func RejectSecondColor(hex2, base2Code *string) error {
+	if hex2 != nil && strings.TrimSpace(*hex2) != "" {
+		return ErrHex2Removed
+	}
+	if base2Code != nil && strings.TrimSpace(*base2Code) != "" {
+		return ErrBase2Removed
+	}
+	return nil
+}
 
 // NormalizeHex returns s as lowercase "#rrggbb". The leading "#" is optional
 // on input; "" stays "" (no swatch color).
@@ -30,21 +48,13 @@ func NormalizeHex(s string) (string, error) {
 	return "#" + s, nil
 }
 
-// NormalizeSwatch normalizes Hex and Hex2 in place and checks that a second
-// color only comes with a first.
+// NormalizeSwatch normalizes Hex in place.
 func (c *Color) NormalizeSwatch() error {
 	hex, err := NormalizeHex(c.Hex)
 	if err != nil {
 		return err
 	}
-	hex2, err := NormalizeHex(c.Hex2)
-	if err != nil {
-		return err
-	}
-	if hex == "" && hex2 != "" {
-		return ErrHex2WithoutHex
-	}
-	c.Hex, c.Hex2 = hex, hex2
+	c.Hex = hex
 	return nil
 }
 
@@ -56,20 +66,8 @@ func (p ColorPatch) Apply(c Color) Color {
 	if p.Hex != nil {
 		c.Hex = *p.Hex
 	}
-	if p.Hex2 != nil {
-		c.Hex2 = *p.Hex2
-	}
 	if p.BaseCode != nil {
 		c.BaseCode = *p.BaseCode
 	}
-	if p.Base2Code != nil {
-		c.Base2Code = *p.Base2Code
-	}
 	return c
-}
-
-// SetsHex2 reports whether the patch gives the color a (non-empty) hex2.
-// Clearing one ("") is still allowed.
-func (p ColorPatch) SetsHex2() bool {
-	return p.Hex2 != nil && strings.TrimSpace(*p.Hex2) != ""
 }

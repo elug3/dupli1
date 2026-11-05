@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
@@ -58,9 +57,6 @@ func (s *CatalogService) ListColors(ctx context.Context) ([]domain.Color, error)
 }
 
 func (s *CatalogService) CreateColor(ctx context.Context, c domain.Color) (*domain.Color, error) {
-	if strings.TrimSpace(c.Hex2) != "" {
-		return nil, ports.Invalid(domain.ErrHex2Retired.Error())
-	}
 	if err := c.NormalizeSwatch(); err != nil {
 		return nil, ports.Invalid(err.Error())
 	}
@@ -71,12 +67,8 @@ func (s *CatalogService) CreateColor(ctx context.Context, c domain.Color) (*doma
 }
 
 // UpdateColor applies a partial update: omitted fields are kept, "" clears a
-// hex or a base color. hex2 can only be cleared (it is retired); a second
-// base color needs a first, different one.
+// hex or the base color.
 func (s *CatalogService) UpdateColor(ctx context.Context, code string, patch domain.ColorPatch) (*domain.Color, error) {
-	if patch.SetsHex2() {
-		return nil, ports.Invalid(domain.ErrHex2Retired.Error())
-	}
 	current, err := s.store.GetColor(ctx, code)
 	if err != nil {
 		return nil, err

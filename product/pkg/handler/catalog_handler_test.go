@@ -141,12 +141,12 @@ func TestCatalogColorSwatchHex(t *testing.T) {
 		t.Fatalf("base colors: %+v", byBase)
 	}
 
-	// Brand colorways: two "블랙" stay distinct codes with the same base;
-	// a two-tone colorway has two bases. No hex of their own.
+	// Brand colorways: two "블랙" stay distinct codes with the same base.
+	// Each is one color, with no hex of its own.
 	for _, c := range []map[string]string{
 		{"code": "1139", "name": "블랙", "baseCode": "BLK"},
 		{"code": "1249", "name": "블랙", "baseCode": "blk"},
-		{"code": "1081", "name": "블랙/브라운", "baseCode": "BLK", "base2Code": "BRN"},
+		{"code": "1081", "name": "브라운", "baseCode": "BRN"},
 		{"code": "2934", "name": "앨지"},
 	} {
 		if rec := do(http.MethodPost, handler.RouteCatalogColors, c); rec.Code != http.StatusCreated {
@@ -158,43 +158,57 @@ func TestCatalogColorSwatchHex(t *testing.T) {
 		body         map[string]string
 		want         int
 	}{
-		"hex2 on create":  {http.MethodPost, handler.RouteCatalogColors, map[string]string{"code": "BKB", "name": "x", "hex": "#000000", "hex2": "#111111"}, 400},
-		"hex2 on update":  {http.MethodPatch, "/api/v1/products/catalog/colors/1139", map[string]string{"hex2": "#111111"}, 400},
-		"base2 alone":     {http.MethodPatch, "/api/v1/products/catalog/colors/2934", map[string]string{"base2Code": "BRN"}, 400},
-		"same base twice": {http.MethodPatch, "/api/v1/products/catalog/colors/1139", map[string]string{"base2Code": "BLK"}, 400},
-		"unknown base":    {http.MethodPatch, "/api/v1/products/catalog/colors/2934", map[string]string{"baseCode": "ZZZ"}, 404},
-		"base in use":     {http.MethodDelete, "/api/v1/products/catalog/base-colors/BRN", nil, 409},
-		"bad base hex":    {http.MethodPatch, "/api/v1/products/catalog/base-colors/IVR", map[string]string{"hex": "ivory"}, 400},
+		// A color master row is one color: no second fill, no second base.
+		"hex2 on create":      {http.MethodPost, handler.RouteCatalogColors, map[string]string{"code": "BKB", "name": "x", "hex": "#000000", "hex2": "#111111"}, 400},
+		"hex2 on update":      {http.MethodPatch, "/api/v1/products/catalog/colors/1139", map[string]string{"hex2": "#111111"}, 400},
+		"base2Code on create": {http.MethodPost, handler.RouteCatalogColors, map[string]string{"code": "1206", "name": "블랙/폰단트", "baseCode": "BLK", "base2Code": "BRN"}, 400},
+		"base2Code on update": {http.MethodPatch, "/api/v1/products/catalog/colors/1139", map[string]string{"base2Code": "BRN"}, 400},
+		// Older clients (dupli1-manage-web) always send hex2 "": accepted.
+		"empty hex2 on create": {http.MethodPost, handler.RouteCatalogColors, map[string]string{"code": "1990", "name": "에스프레소", "hex2": "", "base2Code": ""}, 201},
+		"empty hex2 on update": {http.MethodPatch, "/api/v1/products/catalog/colors/1249", map[string]string{"name": "블랙", "hex": "", "hex2": ""}, 200},
+		"unknown base":         {http.MethodPatch, "/api/v1/products/catalog/colors/2934", map[string]string{"baseCode": "ZZZ"}, 404},
+		"base in use":          {http.MethodDelete, "/api/v1/products/catalog/base-colors/BRN", nil, 409},
+		"bad base hex":         {http.MethodPatch, "/api/v1/products/catalog/base-colors/IVR", map[string]string{"hex": "ivory"}, 400},
 	} {
 		if rec := do(tc.method, tc.path, tc.body); rec.Code != tc.want {
 			t.Errorf("%s: want %d, got %d: %s", name, tc.want, rec.Code, rec.Body.String())
 		}
 	}
+	// A refused write leaves the colorway as it was, and colors are never
+	// listed with a second color.
+	rec = do(http.MethodGet, handler.RouteCatalogColors, nil)
+	if body := rec.Body.String(); strings.Contains(body, "hex2") || strings.Contains(body, "base2Code") {
+		t.Fatalf("colors list carries a second color: %s", body)
+	}
+	if strings.Contains(rec.Body.String(), `"BKB"`) || strings.Contains(rec.Body.String(), `"1206"`) {
+		t.Fatalf("refused create was stored: %s", rec.Body.String())
+	}
+
 	// Assign a base later; "" clears one.
 	rec = do(http.MethodPatch, "/api/v1/products/catalog/colors/2934", map[string]string{"baseCode": "GRN"})
 	if c := decode(rec); rec.Code != http.StatusOK || c.BaseCode != "GRN" {
 		t.Fatalf("assign base: %d %+v", rec.Code, c)
 	}
 
-	// Variant reads carry base colors and swatch fills from the bases; the
-	// product lists its base colors, and search filters by either base.
+	// Variant reads carry the base color and swatch fill from the base; the
+	// product lists its base colors, and search filters by base.
 	store.Products = []domain.Product{
 		{ID: "BOT-001", Name: "Cassette", BrandCode: "BOT", StyleCode: "CAS001", Status: "active"},
 		{ID: "BOT-002", Name: "Other", BrandCode: "BOT", StyleCode: "CAS001", Status: "active"},
 	}
 	store.Variants = []domain.Variant{
 		{SKU: "BOT_CAS001_1139_OS", ProductID: "BOT-001", Color: "블랙", ColorCode: "1139", SizeCode: "OS", Status: "active"},
-		{SKU: "BOT_CAS001_1081_OS", ProductID: "BOT-001", Color: "블랙/브라운", ColorCode: "1081", SizeCode: "OS", Status: "active"},
+		{SKU: "BOT_CAS001_1081_OS", ProductID: "BOT-001", Color: "브라운", ColorCode: "1081", SizeCode: "OS", Status: "active"},
 		{SKU: "BOT_CAS001_2934_OS", ProductID: "BOT-002", Color: "앨지", ColorCode: "2934", SizeCode: "OS", Status: "active"},
 	}
 	rec = do(http.MethodGet, "/api/v1/products/BOT-001", nil)
 	var p domain.Product
 	json.NewDecoder(rec.Body).Decode(&p)
-	got := map[string][4]string{}
+	got := map[string][2]string{}
 	for _, v := range p.Variants {
-		got[v.ColorCode] = [4]string{v.BaseColorCode, v.BaseColor2Code, v.ColorHex, v.ColorHex2}
+		got[v.ColorCode] = [2]string{v.BaseColorCode, v.ColorHex}
 	}
-	if got["1139"] != [4]string{"BLK", "", "#0a0a0a", ""} || got["1081"] != [4]string{"BLK", "BRN", "#0a0a0a", "#6b4226"} {
+	if got["1139"] != [2]string{"BLK", "#0a0a0a"} || got["1081"] != [2]string{"BRN", "#6b4226"} {
 		t.Fatalf("PDP base colors / swatch: %+v", got)
 	}
 	if strings.Join(p.AvailableBaseColors, ",") != "BLK,BRN" {

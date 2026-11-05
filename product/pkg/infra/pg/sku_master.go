@@ -24,9 +24,8 @@ func (s *ProductSearchStore) migrateSKUMasters(ctx context.Context) error {
 		)`,
 		// Swatch fills (docs/product-color-swatches.md): "" = none.
 		`ALTER TABLE colors ADD COLUMN IF NOT EXISTS hex TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE colors ADD COLUMN IF NOT EXISTS hex2 TEXT NOT NULL DEFAULT ''`,
-		// Base colors: the plain colors (Black, Brown) each colorway is, one
-		// or two (two-tone). NULL = not assigned yet.
+		// Base colors: the plain colors (Black, Brown) a colorway is. One
+		// per colorway; NULL = not assigned yet.
 		`CREATE TABLE IF NOT EXISTS base_colors (
 			id   BIGSERIAL PRIMARY KEY,
 			code TEXT NOT NULL UNIQUE,
@@ -35,8 +34,12 @@ func (s *ProductSearchStore) migrateSKUMasters(ctx context.Context) error {
 		)`,
 		`ALTER TABLE colors ADD COLUMN IF NOT EXISTS base_code TEXT
 			REFERENCES base_colors(code) ON DELETE RESTRICT`,
-		`ALTER TABLE colors ADD COLUMN IF NOT EXISTS base2_code TEXT
-			REFERENCES base_colors(code) ON DELETE RESTRICT`,
+		// A color master row is one color: the two-tone columns are gone
+		// (docs/product-color-swatches.md). Dropping base2_code also drops
+		// colors_base2_check.
+		`ALTER TABLE colors DROP CONSTRAINT IF EXISTS colors_base2_check`,
+		`ALTER TABLE colors DROP COLUMN IF EXISTS base2_code`,
+		`ALTER TABLE colors DROP COLUMN IF EXISTS hex2`,
 		`CREATE TABLE IF NOT EXISTS sizes (
 			id   BIGSERIAL PRIMARY KEY,
 			code TEXT NOT NULL UNIQUE,
@@ -144,10 +147,6 @@ func (s *ProductSearchStore) migrateStylesAndFKs(ctx context.Context) error {
 			ALTER TABLE product_variants
 			ADD CONSTRAINT variants_color_fk
 			FOREIGN KEY (color_code) REFERENCES colors(code) ON DELETE RESTRICT`},
-		{"colors_base2_check", `
-			ALTER TABLE colors
-			ADD CONSTRAINT colors_base2_check
-			CHECK (base2_code IS NULL OR (base_code IS NOT NULL AND base2_code <> base_code))`},
 		{"variants_size_fk", `
 			ALTER TABLE product_variants
 			ADD CONSTRAINT variants_size_fk

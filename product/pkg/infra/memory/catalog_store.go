@@ -318,15 +318,13 @@ func (s *CatalogStore) UpdateColor(ctx context.Context, c domain.Color) (*domain
 	return &c, nil
 }
 
-// requireBases mirrors the Postgres foreign keys from colors to base_colors.
+// requireBases mirrors the Postgres foreign key from colors to base_colors.
 func (s *CatalogStore) requireBases(c domain.Color) error {
-	for _, code := range []string{c.BaseCode, c.Base2Code} {
-		if code == "" {
-			continue
-		}
-		if _, ok := s.BaseColors[code]; !ok {
-			return fmt.Errorf("%w: base color %s", domain.ErrMasterNotFound, code)
-		}
+	if c.BaseCode == "" {
+		return nil
+	}
+	if _, ok := s.BaseColors[c.BaseCode]; !ok {
+		return fmt.Errorf("%w: base color %s", domain.ErrMasterNotFound, c.BaseCode)
 	}
 	return nil
 }
@@ -375,7 +373,7 @@ func (s *CatalogStore) DeleteBaseColor(ctx context.Context, code string) error {
 		return domain.ErrMasterNotFound
 	}
 	for _, c := range s.Colors {
-		if c.BaseCode == code || c.Base2Code == code {
+		if c.BaseCode == code {
 			return domain.ErrMasterInUse
 		}
 	}

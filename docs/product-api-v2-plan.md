@@ -117,7 +117,7 @@ Unchanged from [product-flat-sellable-model-plan.md](product-flat-sellable-model
     "code": "CAS001",
     "name": "Cassette"
   },
-  "color":   { "code": "BLK", "name": "Black", "hex": "#0a0a0a", "hex2": null },
+  "color":   { "code": "BLK", "name": "Black", "hex": "#0a0a0a" },
   "size":    { "code": "MED", "name": "Medium" },
   "edition": { "code": "V", "name": "Standard" },
   "status": "active",
@@ -203,7 +203,7 @@ Unchanged from [product-flat-sellable-model-plan.md](product-flat-sellable-model
 | `imageUrls` + `listingImageUrls` | `images[].url` + `images[].listing_url` |
 | `availableQty` / `inStock` | `availability.qty` / `availability.in_stock` |
 | `viewCount` / `wishlistCount` / `soldCount` | `stats.views` / `stats.wishlists` / `stats.sold` |
-| `colorHex` / `colorHex2` | `color.hex` / `color.hex2` |
+| `colorHex` | `color.hex` |
 | `Product.color`, `Product.imageUrls`, `Product.stock` | removed |
 | `limit` / `offset` | `limit` / `cursor` |
 
