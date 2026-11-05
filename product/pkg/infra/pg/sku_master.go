@@ -188,7 +188,7 @@ func (s *ProductSearchStore) backfillVariantSegmentCodes(ctx context.Context) er
 	defer rows.Close()
 
 	type row struct {
-		sku, color, size string
+		sku, color, size                 string
 		colorCode, sizeCode, editionCode *string
 	}
 	var list []row
