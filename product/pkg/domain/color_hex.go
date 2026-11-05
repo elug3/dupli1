@@ -59,5 +59,17 @@ func (p ColorPatch) Apply(c Color) Color {
 	if p.Hex2 != nil {
 		c.Hex2 = *p.Hex2
 	}
+	if p.BaseCode != nil {
+		c.BaseCode = *p.BaseCode
+	}
+	if p.Base2Code != nil {
+		c.Base2Code = *p.Base2Code
+	}
 	return c
+}
+
+// SetsHex2 reports whether the patch gives the color a (non-empty) hex2.
+// Clearing one ("") is still allowed.
+func (p ColorPatch) SetsHex2() bool {
+	return p.Hex2 != nil && strings.TrimSpace(*p.Hex2) != ""
 }

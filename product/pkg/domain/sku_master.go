@@ -15,24 +15,32 @@ type Style struct {
 	Name      string `json:"name"`
 }
 
-// Color is a master color entity. Code is reused across all products.
+// Color is a master color entity: a brand's colorway. Code is what the sku
+// carries and is reused across all products; two colorways may share a name
+// ("블랙") and stay distinct.
 //
-// Hex is the swatch fill the storefront draws for this color ("#rrggbb");
-// Hex2 is the second color of a two-tone color (black body, brown trim).
-// Hex2 needs Hex. With neither, the storefront draws a neutral "no color
-// data" swatch. See docs/product-color-swatches.md.
+// BaseCode / Base2Code are the plain colors it is (BaseColor): one, or two
+// for a two-tone colorway. Hex is an optional colorway-specific swatch fill
+// ("#rrggbb") that overrides the base color's; with neither, the storefront
+// draws a neutral "no color data" swatch. Hex2 is the retired two-tone fill:
+// still read, never set by clients. See docs/product-color-swatches.md.
 type Color struct {
-	Code string `json:"code"`
-	Name string `json:"name"`
-	Hex  string `json:"hex,omitempty"`
-	Hex2 string `json:"hex2,omitempty"`
+	Code      string `json:"code"`
+	Name      string `json:"name"`
+	Hex       string `json:"hex,omitempty"`
+	Hex2      string `json:"hex2,omitempty"`
+	BaseCode  string `json:"baseCode,omitempty"`
+	Base2Code string `json:"base2Code,omitempty"`
 }
 
-// ColorPatch is a partial color update: a nil field is kept, "" clears a hex.
+// ColorPatch is a partial color update: a nil field is kept, "" clears a hex
+// or a base color. Hex2 may only be cleared (ErrHex2Retired).
 type ColorPatch struct {
-	Name *string
-	Hex  *string
-	Hex2 *string
+	Name      *string
+	Hex       *string
+	Hex2      *string
+	BaseCode  *string
+	Base2Code *string
 }
 
 // Size is a master size / capacity entity.

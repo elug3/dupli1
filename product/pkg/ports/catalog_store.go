@@ -20,10 +20,19 @@ type CatalogStore interface {
 	UpdateStyleName(ctx context.Context, brandCode, code, name string) (*domain.Style, error)
 	DeleteStyle(ctx context.Context, brandCode, code string) error
 
+	// Base colors: the plain-color palette colorways point at.
+	ListBaseColors(ctx context.Context) ([]domain.BaseColor, error)
+	GetBaseColor(ctx context.Context, code string) (*domain.BaseColor, error)
+	CreateBaseColor(ctx context.Context, b domain.BaseColor) (*domain.BaseColor, error)
+	UpdateBaseColor(ctx context.Context, b domain.BaseColor) (*domain.BaseColor, error)
+	// DeleteBaseColor fails with ErrMasterInUse while a colorway points at it.
+	DeleteBaseColor(ctx context.Context, code string) error
+
 	ListColors(ctx context.Context) ([]domain.Color, error)
 	GetColor(ctx context.Context, code string) (*domain.Color, error)
 	CreateColor(ctx context.Context, c domain.Color) (*domain.Color, error)
-	// UpdateColor replaces the name and swatch hexes of an existing color.
+	// UpdateColor replaces the name, swatch hexes and base colors of an
+	// existing color. An unknown base color is ErrMasterNotFound.
 	UpdateColor(ctx context.Context, c domain.Color) (*domain.Color, error)
 	DeleteColor(ctx context.Context, code string) error
 

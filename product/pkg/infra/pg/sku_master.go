@@ -25,6 +25,18 @@ func (s *ProductSearchStore) migrateSKUMasters(ctx context.Context) error {
 		// Swatch fills (docs/product-color-swatches.md): "" = none.
 		`ALTER TABLE colors ADD COLUMN IF NOT EXISTS hex TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE colors ADD COLUMN IF NOT EXISTS hex2 TEXT NOT NULL DEFAULT ''`,
+		// Base colors: the plain colors (Black, Brown) each colorway is, one
+		// or two (two-tone). NULL = not assigned yet.
+		`CREATE TABLE IF NOT EXISTS base_colors (
+			id   BIGSERIAL PRIMARY KEY,
+			code TEXT NOT NULL UNIQUE,
+			name TEXT NOT NULL DEFAULT '',
+			hex  TEXT NOT NULL DEFAULT ''
+		)`,
+		`ALTER TABLE colors ADD COLUMN IF NOT EXISTS base_code TEXT
+			REFERENCES base_colors(code) ON DELETE RESTRICT`,
+		`ALTER TABLE colors ADD COLUMN IF NOT EXISTS base2_code TEXT
+			REFERENCES base_colors(code) ON DELETE RESTRICT`,
 		`CREATE TABLE IF NOT EXISTS sizes (
 			id   BIGSERIAL PRIMARY KEY,
 			code TEXT NOT NULL UNIQUE,
@@ -132,6 +144,10 @@ func (s *ProductSearchStore) migrateStylesAndFKs(ctx context.Context) error {
 			ALTER TABLE product_variants
 			ADD CONSTRAINT variants_color_fk
 			FOREIGN KEY (color_code) REFERENCES colors(code) ON DELETE RESTRICT`},
+		{"colors_base2_check", `
+			ALTER TABLE colors
+			ADD CONSTRAINT colors_base2_check
+			CHECK (base2_code IS NULL OR (base_code IS NOT NULL AND base2_code <> base_code))`},
 		{"variants_size_fk", `
 			ALTER TABLE product_variants
 			ADD CONSTRAINT variants_size_fk
@@ -144,7 +160,10 @@ func (s *ProductSearchStore) migrateStylesAndFKs(ctx context.Context) error {
 	for _, fk := range fks {
 		var exists bool
 		if err := s.pool.QueryRow(ctx,
-			`SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conname = $1)`, fk.name,
+			// Scoped to this schema: a same-named constraint in another
+			// schema (test schemas share a database) must not skip ours.
+			`SELECT EXISTS(SELECT 1 FROM pg_constraint
+			  WHERE conname = $1 AND connamespace = current_schema()::regnamespace)`, fk.name,
 		).Scan(&exists); err != nil {
 			return fmt.Errorf("check fk %s: %w", fk.name, err)
 		}
@@ -169,7 +188,7 @@ func (s *ProductSearchStore) backfillVariantSegmentCodes(ctx context.Context) er
 	defer rows.Close()
 
 	type row struct {
-		sku, color, size string
+		sku, color, size                 string
 		colorCode, sizeCode, editionCode *string
 	}
 	var list []row
@@ -240,6 +259,23 @@ func (s *ProductSearchStore) seedSKUMasters(ctx context.Context) error {
 			c.Code, c.Name, c.Hex,
 		); err != nil {
 			return fmt.Errorf("seed color %s: %w", c.Code, err)
+		}
+	}
+	for _, b := range domain.SeedBaseColors() {
+		if _, err := s.pool.Exec(ctx,
+			// Like seed colors: a base color without a hex gets the seeded
+			// one; a hex staff set is left alone.
+			`INSERT INTO base_colors (code, name, hex) VALUES ($1, $2, $3)
+			 ON CONFLICT (code) DO UPDATE SET hex = EXCLUDED.hex WHERE base_colors.hex = ''`,
+			b.Code, b.Name, b.Hex,
+		); err != nil {
+			return fmt.Errorf("seed base color %s: %w", b.Code, err)
+		}
+		// Each seed colorway is its own base color (BLK → BLK) until staff say otherwise.
+		if _, err := s.pool.Exec(ctx,
+			`UPDATE colors SET base_code = $1 WHERE code = $1 AND base_code IS NULL`, b.Code,
+		); err != nil {
+			return fmt.Errorf("seed base of color %s: %w", b.Code, err)
 		}
 	}
 	for _, sz := range domain.SizeMasterSeeds() {

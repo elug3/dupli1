@@ -65,7 +65,7 @@ type HealthResponse struct {
 
 var searchFilters = []string{
 	"category", "subcategory", "subCategory", "style", "target",
-	"brand", "brand_code", "color", "size", "material", "status", "q",
+	"brand", "brand_code", "color", "baseColor", "base_color", "size", "material", "status", "q",
 }
 
 func NewHandler(svc *service.ProductSearchService, promotionSvc *service.PromotionService, inventorySvc *service.InventoryService, catalogSvc *service.CatalogService) *Handler {
@@ -821,7 +821,11 @@ func (h *Handler) extractFilters(r *http.Request) map[string]string {
 			filter[f] = value
 		}
 	}
-	// Normalize camelCase alias onto the canonical filter key.
+	// Normalize camelCase aliases onto the canonical filter keys.
+	if v := filter["baseColor"]; v != "" {
+		filter["base_color"] = v
+		delete(filter, "baseColor")
+	}
 	if v := filter["subCategory"]; v != "" {
 		filter["subcategory"] = v
 		delete(filter, "subCategory")

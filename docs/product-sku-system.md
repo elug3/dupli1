@@ -88,7 +88,8 @@ sku_editions          (optional construction / VariantCode)
 |--------|-------|------------|---------|
 | Brand | `brands` | 2–3 uppercase letters | `BOT` → Bottega Veneta |
 | Style | `styles` | Unique within brand; alphanumeric | `CAS001` → Cassette |
-| Color | `colors` | Alphanumeric, reused across products | `BLK` → Black |
+| Color | `colors` | Alphanumeric, reused across products; a brand's colorway | `BLK` → Black, `1139` → 블랙 |
+| Base color | `base_colors` | Not in the sku; the plain color(s) a colorway is | `BLK` → Black |
 | Size | `sizes` | Alphanumeric | `MED` → Medium |
 | Edition | `sku_editions` | Optional VariantCode segment | `V` → Standard |
 
@@ -128,11 +129,12 @@ Base: `/api/v1/catalog/...` (gateway → product). Auth required.
 | Brands | `GET/POST /catalog/brands`, `PATCH/DELETE /catalog/brands/{code}` | `product.master.read` / `product.master.write` |
 | Styles | `…/brands/{code}/styles`, `…/styles/{styleCode}` | same |
 | Colors | `/catalog/colors` | same |
+| Base colors | `/catalog/base-colors` | same (canonical path only) |
 | Sizes | `/catalog/sizes` | same |
 | Editions | `/catalog/editions` | same |
 
-- **POST** body: `{ "code", "name" }` (colors also take optional `hex`, `hex2`)
-- **PATCH** body: `{ "name" }` only (code immutable). Colors also take `hex` / `hex2`; each omitted field is kept and `""` clears a hex — see [product-color-swatches.md](product-color-swatches.md)
+- **POST** body: `{ "code", "name" }` (colors also take optional `hex`, `baseCode`, `base2Code`; base colors `hex`)
+- **PATCH** body: `{ "name" }` only (code immutable). Colors also take `hex` / `baseCode` / `base2Code`, base colors `hex`; each omitted field is kept and `""` clears it. `hex2` is retired (can only be cleared) — see [product-color-swatches.md](product-color-swatches.md)
 - **DELETE**: `204` if unused; `409` if referenced by styles, products, or variants
 
 Covered by `product.*` and the `catalog_editor` bundle. See [endpoints.md](endpoints.md), [permissions.md](permissions.md).

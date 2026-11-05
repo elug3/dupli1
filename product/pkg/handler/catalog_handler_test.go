@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
@@ -124,50 +125,107 @@ func TestCatalogColorSwatchHex(t *testing.T) {
 		return c
 	}
 
-	rec := do(http.MethodPost, handler.RouteCatalogColors, map[string]string{"code": "BKB", "name": "Black / Brown", "hex": "0A0A0A", "hex2": "#6B4226"})
+	// The base palette is seeded; a base color can be added.
+	rec := do(http.MethodPost, handler.RouteCatalogBaseColors, map[string]string{"code": "ivr", "name": "Ivory", "hex": "F4EEDC"})
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("create: want 201, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("create base color: %d %s", rec.Code, rec.Body.String())
 	}
-	if c := decode(rec); c.Hex != "#0a0a0a" || c.Hex2 != "#6b4226" {
-		t.Fatalf("create normalizes hex: got %+v", c)
+	rec = do(http.MethodGet, handler.RouteCatalogBaseColors, nil)
+	var bases []domain.BaseColor
+	json.NewDecoder(rec.Body).Decode(&bases)
+	byBase := map[string]domain.BaseColor{}
+	for _, b := range bases {
+		byBase[b.Code] = b
+	}
+	if byBase["BLK"].Hex != "#0a0a0a" || byBase["IVR"].Hex != "#f4eedc" {
+		t.Fatalf("base colors: %+v", byBase)
 	}
 
-	// Renaming keeps the hexes.
-	rec = do(http.MethodPatch, "/api/v1/products/catalog/colors/BKB", map[string]string{"name": "Noir / Brun"})
-	if c := decode(rec); rec.Code != http.StatusOK || c.Hex != "#0a0a0a" || c.Hex2 != "#6b4226" {
-		t.Fatalf("rename keeps hex: %d %+v", rec.Code, c)
-	}
-
-	for name, body := range map[string]map[string]string{
-		"bad hex":          {"hex": "brown"},
-		"hex2 without hex": {"hex": ""},
+	// Brand colorways: two "블랙" stay distinct codes with the same base;
+	// a two-tone colorway has two bases. No hex of their own.
+	for _, c := range []map[string]string{
+		{"code": "1139", "name": "블랙", "baseCode": "BLK"},
+		{"code": "1249", "name": "블랙", "baseCode": "blk"},
+		{"code": "1081", "name": "블랙/브라운", "baseCode": "BLK", "base2Code": "BRN"},
+		{"code": "2934", "name": "앨지"},
 	} {
-		if rec := do(http.MethodPatch, "/api/v1/products/catalog/colors/BKB", body); rec.Code != http.StatusBadRequest {
-			t.Errorf("%s: want 400, got %d: %s", name, rec.Code, rec.Body.String())
+		if rec := do(http.MethodPost, handler.RouteCatalogColors, c); rec.Code != http.StatusCreated {
+			t.Fatalf("create colorway %s: %d %s", c["code"], rec.Code, rec.Body.String())
 		}
 	}
-
-	// "" clears hex2: back to a solid swatch.
-	rec = do(http.MethodPatch, "/api/v1/products/catalog/colors/BKB", map[string]string{"hex2": ""})
-	if c := decode(rec); rec.Code != http.StatusOK || c.Hex != "#0a0a0a" || c.Hex2 != "" {
-		t.Fatalf("clear hex2: %d %+v", rec.Code, c)
+	for name, tc := range map[string]struct {
+		method, path string
+		body         map[string]string
+		want         int
+	}{
+		"hex2 on create":  {http.MethodPost, handler.RouteCatalogColors, map[string]string{"code": "BKB", "name": "x", "hex": "#000000", "hex2": "#111111"}, 400},
+		"hex2 on update":  {http.MethodPatch, "/api/v1/products/catalog/colors/1139", map[string]string{"hex2": "#111111"}, 400},
+		"base2 alone":     {http.MethodPatch, "/api/v1/products/catalog/colors/2934", map[string]string{"base2Code": "BRN"}, 400},
+		"same base twice": {http.MethodPatch, "/api/v1/products/catalog/colors/1139", map[string]string{"base2Code": "BLK"}, 400},
+		"unknown base":    {http.MethodPatch, "/api/v1/products/catalog/colors/2934", map[string]string{"baseCode": "ZZZ"}, 404},
+		"base in use":     {http.MethodDelete, "/api/v1/products/catalog/base-colors/BRN", nil, 409},
+		"bad base hex":    {http.MethodPatch, "/api/v1/products/catalog/base-colors/IVR", map[string]string{"hex": "ivory"}, 400},
+	} {
+		if rec := do(tc.method, tc.path, tc.body); rec.Code != tc.want {
+			t.Errorf("%s: want %d, got %d: %s", name, tc.want, rec.Code, rec.Body.String())
+		}
 	}
-	do(http.MethodPatch, "/api/v1/products/catalog/colors/BKB", map[string]string{"hex2": "#6b4226"})
+	// Assign a base later; "" clears one.
+	rec = do(http.MethodPatch, "/api/v1/products/catalog/colors/2934", map[string]string{"baseCode": "GRN"})
+	if c := decode(rec); rec.Code != http.StatusOK || c.BaseCode != "GRN" {
+		t.Fatalf("assign base: %d %+v", rec.Code, c)
+	}
 
-	// The PDP carries each variant's swatch fills.
-	store.Products = []domain.Product{{ID: "BOT-001", Name: "Cassette", BrandCode: "BOT", StyleCode: "CAS001", Status: "active"}}
+	// Variant reads carry base colors and swatch fills from the bases; the
+	// product lists its base colors, and search filters by either base.
+	store.Products = []domain.Product{
+		{ID: "BOT-001", Name: "Cassette", BrandCode: "BOT", StyleCode: "CAS001", Status: "active"},
+		{ID: "BOT-002", Name: "Other", BrandCode: "BOT", StyleCode: "CAS001", Status: "active"},
+	}
 	store.Variants = []domain.Variant{
-		{SKU: "BOT_CAS001_BKB_OS", ProductID: "BOT-001", Color: "Black / Brown", ColorCode: "BKB", SizeCode: "OS", Status: "active"},
-		{SKU: "BOT_CAS001_BLK_OS", ProductID: "BOT-001", Color: "Black", ColorCode: "BLK", SizeCode: "OS", Status: "active"},
+		{SKU: "BOT_CAS001_1139_OS", ProductID: "BOT-001", Color: "블랙", ColorCode: "1139", SizeCode: "OS", Status: "active"},
+		{SKU: "BOT_CAS001_1081_OS", ProductID: "BOT-001", Color: "블랙/브라운", ColorCode: "1081", SizeCode: "OS", Status: "active"},
+		{SKU: "BOT_CAS001_2934_OS", ProductID: "BOT-002", Color: "앨지", ColorCode: "2934", SizeCode: "OS", Status: "active"},
 	}
 	rec = do(http.MethodGet, "/api/v1/products/BOT-001", nil)
 	var p domain.Product
 	json.NewDecoder(rec.Body).Decode(&p)
-	got := map[string][2]string{}
+	got := map[string][4]string{}
 	for _, v := range p.Variants {
-		got[v.ColorCode] = [2]string{v.ColorHex, v.ColorHex2}
+		got[v.ColorCode] = [4]string{v.BaseColorCode, v.BaseColor2Code, v.ColorHex, v.ColorHex2}
 	}
-	if got["BKB"] != [2]string{"#0a0a0a", "#6b4226"} || got["BLK"] != [2]string{"#0a0a0a", ""} {
-		t.Fatalf("PDP swatch hexes: %+v", got)
+	if got["1139"] != [4]string{"BLK", "", "#0a0a0a", ""} || got["1081"] != [4]string{"BLK", "BRN", "#0a0a0a", "#6b4226"} {
+		t.Fatalf("PDP base colors / swatch: %+v", got)
+	}
+	if strings.Join(p.AvailableBaseColors, ",") != "BLK,BRN" {
+		t.Fatalf("availableBaseColors: %v", p.AvailableBaseColors)
+	}
+	search := func(q string) []string {
+		rec := do(http.MethodGet, "/api/v1/products?"+q, nil)
+		var body struct {
+			Results []domain.Product `json:"results"`
+		}
+		json.NewDecoder(rec.Body).Decode(&body)
+		ids := []string{}
+		for _, r := range body.Results {
+			ids = append(ids, r.ID)
+		}
+		return ids
+	}
+	if ids := search("baseColor=brn"); strings.Join(ids, ",") != "BOT-001" {
+		t.Errorf("baseColor=brn: %v", ids)
+	}
+	if ids := search("base_color=GRN"); strings.Join(ids, ",") != "BOT-002" {
+		t.Errorf("base_color=GRN: %v", ids)
+	}
+
+	// A colorway's own hex overrides its base color's.
+	do(http.MethodPatch, "/api/v1/products/catalog/colors/1139", map[string]string{"hex": "#111111"})
+	rec = do(http.MethodGet, "/api/v1/products/BOT-001", nil)
+	json.NewDecoder(rec.Body).Decode(&p)
+	for _, v := range p.Variants {
+		if v.ColorCode == "1139" && v.ColorHex != "#111111" {
+			t.Errorf("own hex override: %+v", v)
+		}
 	}
 }
