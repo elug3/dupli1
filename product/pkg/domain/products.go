@@ -14,12 +14,19 @@ type Variant struct {
 	ColorCode   string `json:"colorCode,omitempty"`
 	EditionCode string `json:"editionCode,omitempty"` // optional VariantCode segment
 	SizeCode    string `json:"sizeCode,omitempty"`
-	// BaseColorCode is the plain color of the variant's colorway
-	// (Color.BaseCode). Response-only.
-	BaseColorCode string `json:"baseColorCode,omitempty"`
-	// ColorHex is the swatch fill: the colorway's own hex, else its base
-	// color's. Response-only.
-	ColorHex string `json:"colorHex,omitempty"`
+	// Color2Code is the second color of a two-color sku (black body, brown
+	// trim): another color master code. It is not part of the sku string and
+	// may change on update; "" = one color. See NormalizeColor2.
+	Color2Code string `json:"color2Code,omitempty"`
+	// BaseColorCode / BaseColor2Code are the plain colors of the variant's
+	// first and second color (Color.BaseCode). Response-only.
+	BaseColorCode  string `json:"baseColorCode,omitempty"`
+	BaseColor2Code string `json:"baseColor2Code,omitempty"`
+	// ColorHex / ColorHex2 are the swatch fills of the first and second
+	// color: the color's own hex, else its base color's. Response-only;
+	// ColorHex2 set = two-tone swatch.
+	ColorHex  string `json:"colorHex,omitempty"`
+	ColorHex2 string `json:"colorHex2,omitempty"`
 	// Dimensions is the physical size of this SKU in millimeters
 	// (e.g. width 340 × height 220 × depth 80). Distinct from Size/SizeCode
 	// letter labels (S/M/L). Optional; omitted when unknown.

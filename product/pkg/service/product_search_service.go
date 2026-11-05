@@ -393,7 +393,8 @@ func (s *ProductSearchService) CreateVariant(ctx context.Context, productID stri
 // priceOverride / officialPriceOverride set the SKU's own price (0 clears it
 // back to the parent's); omitting them leaves the override unchanged.
 // colorCode / sizeCode / editionCode cannot change: they are what the sku
-// was composed from.
+// was composed from. color2Code (the second color) is not in the sku: it
+// can be set, changed, or cleared with domain.Color2Clear.
 func (s *ProductSearchService) UpdateVariant(ctx context.Context, productID, sku string, v domain.Variant) (*domain.Variant, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
@@ -409,6 +410,9 @@ func (s *ProductSearchService) UpdateVariant(ctx context.Context, productID, sku
 		return nil, ports.Invalid(err.Error())
 	}
 	merged := existing.MergeUpdate(v)
+	if err := domain.NormalizeColor2(&merged); err != nil {
+		return nil, ports.Invalid(err.Error())
+	}
 	if len(v.ImageURLs) > 0 && len(v.ListingImageURLs) == 0 {
 		merged.ListingImageURLs = domain.SyncListingImageURLs(
 			existing.ImageURLs, existing.ListingImageURLs, merged.ImageURLs,

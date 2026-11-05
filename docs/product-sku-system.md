@@ -160,6 +160,8 @@ A create that sends a display name without its code (`"brand": "Maison Margiela"
 
 ### Codes are fixed after create
 
+The optional second color of a two-color sku, `color2Code`, is not part of the sku and can be set, changed or cleared (`""`) on update — see [product-color-swatches.md](product-color-swatches.md#two-color-skus).
+
 `colorCode`, `sizeCode` and `editionCode` cannot change on `PUT /products/{id}/variants/{sku}`: the human `sku` was composed from them and never changes, so a new code would leave it naming another color or size. Changing one is `400` naming the field and the sku; a different option is a new variant. Omitting the codes or resending the current ones is fine, and so is giving a legacy row (sku not in the `Brand_Style_…` format) a code it lacks. On a composed sku with no edition, adding one is a change.
 
 ---
@@ -167,7 +169,7 @@ A create that sends a display name without its code (`"brand": "Maison Margiela"
 ## API fields (product / variant JSON)
 
 **Product (parent):** `id` (ULID), `brand`, `brandCode`, `styleCode`, …  
-**Variant:** `skuId`, `sku`, `color`, `size`, `colorCode`, `editionCode`, `sizeCode`, optional `dimensions` `{widthMm, heightMm, depthMm}` (mm; see [product-sku-dimensions.md](product-sku-dimensions.md)), …
+**Variant:** `skuId`, `sku`, `color`, `size`, `colorCode`, optional `color2Code` (second color, not in the sku), `editionCode`, `sizeCode`, optional `dimensions` `{widthMm, heightMm, depthMm}` (mm; see [product-sku-dimensions.md](product-sku-dimensions.md)), …
 
 Lookup:
 

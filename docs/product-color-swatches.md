@@ -17,6 +17,23 @@ Until 2026-11-05 a row could carry a second color (`hex2`, then
 `base2_code`). Both columns are dropped on startup, and the API refuses them
 (see below).
 
+## Two-color skus
+
+A sku in two colors names its second color itself:
+`product_variants.color2_code` / `color2Code`, another color master code
+(one color, like every row). `NULL` = one color.
+
+- The **sku string does not change**: it is composed from `colorCode` only
+  (`BOT_CAS001_1081_OS`), and `color2Code` is not part of it. A brand
+  colorway whose name is already a combination ("블랙/브라운") keeps its code
+  as `colorCode` and gets the other color as `color2Code`.
+- Unlike the sku codes, `color2Code` **can change** on
+  `PUT /products/{id}/variants/{sku}`: omitted keeps it, a code replaces it,
+  `""` clears it.
+- It must be a valid code (`400`), an existing color (`404`), and differ
+  from `colorCode` (`400`; also a database check). A color used as a second
+  color cannot be deleted (`409`, `RESTRICT` foreign key).
+
 ## Data
 
 Two tables:
@@ -66,25 +83,34 @@ Permissions are unchanged (`product.master.read|write`).
   `hex2: ""`.
 
 Every variant read (PDP `variants[]`, `GET /products/{id}/variants`,
-by-SKU and by-SKU-id lookups) carries `baseColorCode` and the swatch fill
-`colorHex`, omitted when empty. They are response-only, read from `colors`
-and `base_colors` at query time, so editing either changes every product at
-once. `baseColor2Code` and `colorHex2` are no longer returned.
+by-SKU and by-SKU-id lookups) carries `color2Code`, the base colors
+`baseColorCode` / `baseColor2Code` and the swatch fills `colorHex` /
+`colorHex2` (each color's own hex, else its base color's), omitted when
+empty. The base colors and fills are response-only, read from `colors` and
+`base_colors` at query time, so editing either changes every product at
+once.
 
-Products carry `availableBaseColors` (base color codes of their active
-variants), and search takes `?baseColor=BLK` (alias `base_color`), matching
-a product with an active variant whose colorway has that base color.
+| Variant | Swatch |
+|---|---|
+| `colorHex` only | Solid |
+| `colorHex` + `colorHex2` | Two-tone: diagonal split, first color top-left, second bottom-right |
+| neither | Unknown: dashed neutral circle |
+
+Products carry `availableBaseColors` (base color codes of both colors of
+their active variants), and search takes `?baseColor=BLK` (alias
+`base_color`), matching a product with an active variant whose first or
+second color has that base color.
 
 ## Clients
 
-- **dupli1-web:** `colorHex` decides the swatch. A variant without
-  `colorHex` still falls back to the old name list, then to the unknown
-  swatch. Without `colorHex2` the two-tone branch is never taken. A
-  shopper-facing color filter should list base colors
-  (`availableBaseColors`, `?baseColor=`), not colorway names.
-- **dupli1-manage-web:** `/catalog` → Colors should pick one `baseCode`
-  from the base colors and stop offering a second fill (`hex2`); a Base
-  colors tab edits the palette.
+- **dupli1-web:** `colorHex` / `colorHex2` decide the swatch (its two-tone
+  branch draws `colorHex2` again). A variant without `colorHex` still falls
+  back to the old name list, then to the unknown swatch. A shopper-facing
+  color filter should list base colors (`availableBaseColors`,
+  `?baseColor=`), not colorway names.
+- **dupli1-manage-web:** `/catalog` → Colors edits one `hex` per color. A
+  SKU editor field for `color2Code` is not built yet; until then it is set
+  through the API.
 
 ## Assigning base colors
 

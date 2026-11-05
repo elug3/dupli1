@@ -61,6 +61,14 @@ func (existing Variant) MergeUpdate(incoming Variant) Variant {
 	if incoming.EditionCode != "" {
 		merged.EditionCode = incoming.EditionCode
 	}
+	// Color2Code: "" keeps, Color2Clear clears, anything else replaces.
+	switch incoming.Color2Code {
+	case "":
+	case Color2Clear:
+		merged.Color2Code = ""
+	default:
+		merged.Color2Code = incoming.Color2Code
+	}
 	if incoming.SizeCode != "" {
 		merged.SizeCode = incoming.SizeCode
 	}
@@ -273,9 +281,11 @@ func (p *Product) EnrichFromVariants(variants []Variant, includeVariants bool) {
 			colorSeen[v.Color] = true
 			colors = append(colors, v.Color)
 		}
-		if b := v.BaseColorCode; b != "" && !baseSeen[b] {
-			baseSeen[b] = true
-			baseColors = append(baseColors, b)
+		for _, b := range []string{v.BaseColorCode, v.BaseColor2Code} {
+			if b != "" && !baseSeen[b] {
+				baseSeen[b] = true
+				baseColors = append(baseColors, b)
+			}
 		}
 		if v.Size != "" && !sizeSeen[v.Size] {
 			sizeSeen[v.Size] = true

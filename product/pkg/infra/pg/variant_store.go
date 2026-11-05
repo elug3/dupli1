@@ -21,7 +21,13 @@ const variantSelectCols = `sku_id, sku, product_id, color, size,
 	-- Swatch: the colorway's own hex, else its base color's.
 	COALESCE((SELECT COALESCE(NULLIF(c.hex, ''), b.hex) FROM colors c
 		LEFT JOIN base_colors b ON b.code = c.base_code
-		WHERE c.code = product_variants.color_code), '')`
+		WHERE c.code = product_variants.color_code), ''),
+	-- Second color of a two-color sku, its base color and swatch fill.
+	COALESCE(color2_code, ''),
+	COALESCE((SELECT c.base_code FROM colors c WHERE c.code = product_variants.color2_code), ''),
+	COALESCE((SELECT COALESCE(NULLIF(c.hex, ''), b.hex) FROM colors c
+		LEFT JOIN base_colors b ON b.code = c.base_code
+		WHERE c.code = product_variants.color2_code), '')`
 
 func scanVariant(scan func(...any) error) (domain.Variant, error) {
 	var v domain.Variant
@@ -36,6 +42,7 @@ func scanVariant(scan func(...any) error) (domain.Variant, error) {
 		&v.PriceOverride, &v.OfficialPriceOverride,
 		&v.Status, &imageURLs, &listingImageURLs, &createdAt,
 		&v.BaseColorCode, &v.ColorHex,
+		&v.Color2Code, &v.BaseColor2Code, &v.ColorHex2,
 	)
 	if err != nil {
 		return domain.Variant{}, err
@@ -219,6 +226,11 @@ func (s *ProductSearchStore) CreateVariant(ctx context.Context, v domain.Variant
 	if err := s.requireColor(ctx, v.ColorCode); err != nil {
 		return nil, err
 	}
+	if v.Color2Code != "" {
+		if err := s.requireColor(ctx, v.Color2Code); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.requireSize(ctx, v.SizeCode); err != nil {
 		return nil, err
 	}
@@ -253,13 +265,15 @@ func (s *ProductSearchStore) CreateVariant(ctx context.Context, v domain.Variant
 	w, h, d := dimensionArgs(v.Dimensions)
 	err = tx.QueryRow(ctx,
 		`INSERT INTO product_variants (sku_id, sku, product_id, color, size, color_code, edition_code, size_code,
-		     width_mm, height_mm, depth_mm, price_won, official_price_won, status, image_urls, listing_image_urls)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		     width_mm, height_mm, depth_mm, price_won, official_price_won, status, image_urls, listing_image_urls,
+		     color2_code)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		 RETURNING created_at`,
 		v.SkuID, v.SKU, v.ProductID, v.Color, v.Size,
 		nullEmpty(v.ColorCode), nullEmpty(v.EditionCode), nullEmpty(v.SizeCode),
 		w, h, d, v.PriceOverride, v.OfficialPriceOverride,
 		v.Status, toTextArray(v.ImageURLs), toTextArray(v.ListingImageURLs),
+		nullEmpty(v.Color2Code),
 	).Scan(&createdAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -290,6 +304,11 @@ func (s *ProductSearchStore) CreateVariant(ctx context.Context, v domain.Variant
 // UpdateVariant updates a variant by its (immutable) sku. sku_id and sku are never
 // rewritten — codes may be filled when previously blank, but the human sku stays stable.
 func (s *ProductSearchStore) UpdateVariant(ctx context.Context, v domain.Variant) (*domain.Variant, error) {
+	if v.Color2Code != "" {
+		if err := s.requireColor(ctx, v.Color2Code); err != nil {
+			return nil, err
+		}
+	}
 	var createdAt time.Time
 	w, h, d := dimensionArgs(v.Dimensions)
 	err := s.pool.QueryRow(ctx,
@@ -297,13 +316,15 @@ func (s *ProductSearchStore) UpdateVariant(ctx context.Context, v domain.Variant
 		 SET color=$2, size=$3, color_code=$4, edition_code=$5, size_code=$6,
 		     width_mm=$7, height_mm=$8, depth_mm=$9,
 		     price_won=$10, official_price_won=$11,
-		     status=$12, image_urls=$13, listing_image_urls=$14
+		     status=$12, image_urls=$13, listing_image_urls=$14,
+		     color2_code=$15
 		 WHERE sku=$1
 		 RETURNING sku_id, product_id, created_at`,
 		v.SKU, v.Color, v.Size,
 		nullEmpty(v.ColorCode), nullEmpty(v.EditionCode), nullEmpty(v.SizeCode),
 		w, h, d, v.PriceOverride, v.OfficialPriceOverride,
 		v.Status, toTextArray(v.ImageURLs), toTextArray(v.ListingImageURLs),
+		nullEmpty(v.Color2Code),
 	).Scan(&v.SkuID, &v.ProductID, &createdAt)
 	if err != nil {
 		return nil, wrapDB("update variant", err)

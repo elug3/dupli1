@@ -135,5 +135,8 @@ func RequireVariantSKUCodes(v *Variant) error {
 	if v.EditionCode != "" && !ValidSegmentCode(v.EditionCode) {
 		return fmt.Errorf("%w: invalid editionCode", ErrMissingSKUCodes)
 	}
-	return nil
+	if v.Color2Code == Color2Clear {
+		v.Color2Code = ""
+	}
+	return NormalizeColor2(v)
 }
