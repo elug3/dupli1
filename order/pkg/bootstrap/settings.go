@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"github.com/elug3/dupli1/order/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/money"
 	"github.com/elug3/dupli1/shared/pkg/settings"
 )
@@ -15,6 +16,8 @@ func BuildSettings(cfg Config) settings.Response {
 		"payment_consumer":      cfg.NATSURL != "",
 		"pending_expiry_worker": true,
 		"checkout_sessions":     true,
+		// Shipping needs an inspection video; false means none can be stored.
+		"inspection_video": cfg.S3Endpoint != "",
 	}
 	resp.Limits = map[string]any{
 		"currency": money.Currency, // *_won amounts are whole KRW won
@@ -25,6 +28,8 @@ func BuildSettings(cfg Config) settings.Response {
 		// Card surcharge in basis points (1000 = 10%) of the goods after
 		// discounts plus delivery, rounded down to the won. 0 means none.
 		"card_surcharge_bps": cfg.CardSurchargeBps,
+		// Largest inspection video upload accepted, in bytes.
+		"inspection_video_max_bytes": inspectionVideoMaxBytes(cfg),
 	}
 	apiBase, _ := resolveAPIBaseURL(cfg)
 	authBase := cfg.AuthURL
@@ -36,6 +41,14 @@ func BuildSettings(cfg Config) settings.Response {
 		"product": settings.Dep(apiBase), // via gateway (or deprecated direct URL)
 		"auth":    settings.Dep(authBase),
 		"nats":    {Configured: cfg.NATSURL != ""},
+		"s3":      {Configured: cfg.S3Endpoint != ""},
 	}
 	return resp
+}
+
+func inspectionVideoMaxBytes(cfg Config) int64 {
+	if cfg.InspectionVideoMaxBytes > 0 {
+		return cfg.InspectionVideoMaxBytes
+	}
+	return service.DefaultInspectionVideoMaxBytes
 }

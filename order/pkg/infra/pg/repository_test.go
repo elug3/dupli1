@@ -235,6 +235,8 @@ func TestSaveAndLoadOrderShipmentTracking(t *testing.T) {
 		CarrierNote:    "DHL Express",
 	}
 	shipAt := now.Add(time.Minute)
+	// Ship needs the inspection video; it is stored apart from the order row.
+	order.InspectionVideo = &domain.InspectionVideo{ObjectKey: "orders/x/inspection.mp4"}
 	if err := order.Ship("manager-1", tracking, shipAt); err != nil {
 		t.Fatalf("Ship: %v", err)
 	}

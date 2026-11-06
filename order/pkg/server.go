@@ -24,19 +24,24 @@ type Server struct {
 // once failed to reach the service while everything still compiled.
 func BootstrapConfig(opts ServerOptions) bootstrap.Config {
 	return bootstrap.Config{
-		GatewayURL:         opts.GatewayURL,
-		ProductURL:         opts.ProductURL,
-		InventoryURL:       opts.InventoryURL,
-		AuthURL:            opts.AuthURL,
-		OrderServiceAPIKey: opts.OrderServiceAPIKey,
-		StockBearerToken:   opts.StockBearerToken,
-		DatabaseConnString: opts.DatabaseConnString,
-		JWTSecret:          opts.JWTSecret,
-		JWKSURL:            opts.JWKSURL,
-		NATSURL:            opts.NATSURL,
-		ShippingFeeWon:     opts.ShippingFeeWon,
-		CardSurchargeBps:   opts.CardSurchargeBps,
-		HTTPClient:         bootstrap.DefaultHTTPClient(),
+		GatewayURL:              opts.GatewayURL,
+		ProductURL:              opts.ProductURL,
+		InventoryURL:            opts.InventoryURL,
+		AuthURL:                 opts.AuthURL,
+		OrderServiceAPIKey:      opts.OrderServiceAPIKey,
+		StockBearerToken:        opts.StockBearerToken,
+		DatabaseConnString:      opts.DatabaseConnString,
+		JWTSecret:               opts.JWTSecret,
+		JWKSURL:                 opts.JWKSURL,
+		NATSURL:                 opts.NATSURL,
+		ShippingFeeWon:          opts.ShippingFeeWon,
+		CardSurchargeBps:        opts.CardSurchargeBps,
+		S3Endpoint:              opts.S3Endpoint,
+		S3AccessKey:             opts.S3AccessKey,
+		S3SecretKey:             opts.S3SecretKey,
+		S3Bucket:                opts.S3Bucket,
+		InspectionVideoMaxBytes: opts.InspectionVideoMaxBytes,
+		HTTPClient:              bootstrap.DefaultHTTPClient(),
 	}
 }
 

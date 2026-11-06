@@ -113,6 +113,16 @@ func (r *Repository) migrate() error {
 			last_error TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_order_outbox_pending ON order_outbox (created_at) WHERE published_at IS NULL`,
+		// The inspection video (검수영상) lives in its own table so the
+		// whole-row upsert in SaveWithOutbox can never drop or overwrite it.
+		`CREATE TABLE IF NOT EXISTS order_inspection_videos (
+			order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+			object_key TEXT NOT NULL,
+			content_type TEXT NOT NULL,
+			size_bytes BIGINT NOT NULL,
+			uploaded_by TEXT NOT NULL DEFAULT '',
+			uploaded_at TIMESTAMPTZ NOT NULL
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := r.pool.Exec(ctx, stmt); err != nil {
@@ -657,6 +667,11 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 		return nil, err
 	}
 	order.Items = items
+	videos, err := r.loadInspectionVideosBatch(ctx, []string{id})
+	if err != nil {
+		return nil, err
+	}
+	order.InspectionVideo = videos[id]
 	return &order, nil
 }
 
@@ -694,6 +709,80 @@ func (r *Repository) loadOrderItemsBatch(ctx context.Context, orderIDs []string)
 		out[orderID] = append(out[orderID], item)
 	}
 	return out, rows.Err()
+}
+
+func (r *Repository) loadInspectionVideosBatch(ctx context.Context, orderIDs []string) (map[string]*domain.InspectionVideo, error) {
+	out := make(map[string]*domain.InspectionVideo, len(orderIDs))
+	if len(orderIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT order_id, object_key, content_type, size_bytes, uploaded_by, uploaded_at
+		FROM order_inspection_videos
+		WHERE order_id = ANY($1)
+	`, toTextArray(orderIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var orderID string
+		var video domain.InspectionVideo
+		if err := rows.Scan(&orderID, &video.ObjectKey, &video.ContentType, &video.SizeBytes, &video.UploadedBy, &video.UploadedAt); err != nil {
+			return nil, err
+		}
+		out[orderID] = &video
+	}
+	return out, rows.Err()
+}
+
+// SetInspectionVideo locks the order row, re-checks that its status still
+// takes a video, and upserts the video. Holding the row lock serializes it
+// with a concurrent fulfil (whose upsert waits on the same row), so a
+// replacement can never land on an order that has just closed.
+func (r *Repository) SetInspectionVideo(ctx context.Context, orderID string, video domain.InspectionVideo) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+
+	var status domain.OrderStatus
+	err = tx.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1 FOR UPDATE`, orderID).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ports.ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if err := domain.InspectionVideoEditable(status); err != nil {
+		return "", err
+	}
+
+	var previous string
+	err = tx.QueryRow(ctx, `SELECT object_key FROM order_inspection_videos WHERE order_id = $1`, orderID).Scan(&previous)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO order_inspection_videos (order_id, object_key, content_type, size_bytes, uploaded_by, uploaded_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (order_id) DO UPDATE SET
+			object_key = EXCLUDED.object_key,
+			content_type = EXCLUDED.content_type,
+			size_bytes = EXCLUDED.size_bytes,
+			uploaded_by = EXCLUDED.uploaded_by,
+			uploaded_at = EXCLUDED.uploaded_at
+	`, orderID, video.ObjectKey, video.ContentType, video.SizeBytes, video.UploadedBy, video.UploadedAt); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return previous, nil
 }
 
 func toTextArray(ss []string) pgtype.TextArray {
@@ -772,8 +861,13 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	if err != nil {
 		return nil, err
 	}
+	videos, err := r.loadInspectionVideosBatch(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 	for i := range orders {
 		orders[i].Items = itemsByOrder[orders[i].ID]
+		orders[i].InspectionVideo = videos[orders[i].ID]
 	}
 	return orders, nil
 }
@@ -839,8 +933,13 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 	if err != nil {
 		return nil, err
 	}
+	videos, err := r.loadInspectionVideosBatch(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 	for i := range orders {
 		orders[i].Items = itemsByOrder[orders[i].ID]
+		orders[i].InspectionVideo = videos[orders[i].ID]
 	}
 	return orders, nil
 }

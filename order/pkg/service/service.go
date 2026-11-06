@@ -46,6 +46,11 @@ type Service struct {
 	// cardSurchargeBps is the card surcharge in basis points (1000 = 10%)
 	// added to an order paid by card. Zero means no surcharge.
 	cardSurchargeBps int64
+	// videos stores inspection videos; nil means uploads answer
+	// ErrInspectionVideoStorageUnavailable (and nothing can ship).
+	videos ports.InspectionVideoStore
+	// videoMaxBytes caps one inspection video upload.
+	videoMaxBytes int64
 	now            func() time.Time
 }
 
@@ -502,6 +507,9 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string, trac
 	// Validate before touching stock — CommitReservation is irreversible.
 	if order.Status != domain.StatusConfirmed {
 		return nil, domain.ErrInvalidTransition
+	}
+	if !order.HasInspectionVideo() {
+		return nil, domain.ErrInspectionVideoRequired
 	}
 	if err := s.commitReservationForShip(ctx, order.ReservationID); err != nil {
 		return nil, err

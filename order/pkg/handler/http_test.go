@@ -106,7 +106,8 @@ func (f *fakeProduct) GetVariantBySkuID(_ context.Context, skuID string) (*ports
 func newTestHandler(t *testing.T) (*handler.Handler, *service.Service) {
 	t.Helper()
 	repo := memory.NewRepository()
-	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000})
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).
+		WithInspectionVideos(memory.NewVideoStore(), 0)
 	validator := authjwt.NewHMACValidator(testSecret)
 	return handler.New(svc, validator), svc
 }
@@ -562,6 +563,11 @@ func seedConfirmedOrder(t *testing.T, svc *service.Service, customerID string) s
 	orderID := seedPaidOrder(t, svc, customerID)
 	if _, err := svc.ConfirmOrder(t.Context(), orderID); err != nil {
 		t.Fatalf("ConfirmOrder: %v", err)
+	}
+	if _, err := svc.UploadInspectionVideo(t.Context(), service.UploadInspectionVideoInput{
+		OrderID: orderID, UploadedBy: "manager-1", ContentType: "video/mp4", SizeBytes: 3, Body: strings.NewReader("mp4"),
+	}); err != nil {
+		t.Fatalf("UploadInspectionVideo: %v", err)
 	}
 	return orderID
 }
@@ -1316,7 +1322,8 @@ func TestReportNotReceivedAndResolveDisputeHTTP(t *testing.T) {
 func TestCancelDisputedOrderRefundsHTTP(t *testing.T) {
 	pay := &recordingPayment{}
 	repo := memory.NewRepository()
-	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay)
+	svc := service.New(repo, &fakeStock{}).WithProduct(&fakeProduct{price: 1000}).WithPayment(pay).
+		WithInspectionVideos(memory.NewVideoStore(), 0)
 	h := handler.New(svc, authjwt.NewHMACValidator(testSecret))
 	mux := newMux(h)
 

@@ -91,6 +91,10 @@ func TestShipRequiresConfirmedOrder(t *testing.T) {
 	if err := order.Ship("", tracking, now); !errors.Is(err, domain.ErrInvalidOrder) {
 		t.Fatalf("empty shippedBy err = %v, want ErrInvalidOrder", err)
 	}
+	if err := order.Ship("manager-1", tracking, now); !errors.Is(err, domain.ErrInspectionVideoRequired) {
+		t.Fatalf("Ship without an inspection video error = %v, want ErrInspectionVideoRequired", err)
+	}
+	attachVideo(order)
 	if err := order.Ship("manager-1", domain.ShipmentTracking{}, now); !errors.Is(err, domain.ErrInvalidShipment) {
 		t.Fatalf("empty tracking err = %v, want ErrInvalidShipment", err)
 	}
@@ -163,6 +167,7 @@ func TestCancelAndFulfillTransitions(t *testing.T) {
 	if err := paid.Confirm(now); err != nil {
 		t.Fatalf("Confirm: %v", err)
 	}
+	attachVideo(paid)
 	if err := paid.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-1"}, now); err != nil {
 		t.Fatalf("Ship: %v", err)
 	}
@@ -189,6 +194,7 @@ func TestCancelAndFulfillTransitions(t *testing.T) {
 	if err := inTransit.Confirm(now); err != nil {
 		t.Fatalf("Confirm: %v", err)
 	}
+	attachVideo(inTransit)
 	if err := inTransit.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-2"}, now); err != nil {
 		t.Fatalf("Ship: %v", err)
 	}
@@ -211,7 +217,8 @@ func TestDeliveryReceiptAndDispute(t *testing.T) {
 		if err := o.Confirm(now); err != nil {
 			t.Fatalf("Confirm: %v", err)
 		}
-		if err := o.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-1"}, now); err != nil {
+		attachVideo(o)
+	if err := o.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-1"}, now); err != nil {
 			t.Fatalf("Ship: %v", err)
 		}
 		return o
@@ -420,6 +427,7 @@ func TestReportNotReceivedClearsPendingCancelRequest(t *testing.T) {
 	if err := o.Confirm(now); err != nil {
 		t.Fatalf("Confirm: %v", err)
 	}
+	attachVideo(o)
 	if err := o.Ship("manager-1", domain.ShipmentTracking{Carrier: domain.CarrierHanjin, TrackingNumber: "HN-1"}, now); err != nil {
 		t.Fatalf("Ship: %v", err)
 	}
@@ -442,4 +450,9 @@ func TestReportNotReceivedClearsPendingCancelRequest(t *testing.T) {
 	if o.CancelConfirmDueAtTime() != nil {
 		t.Fatal("a disputed order must not carry a cancel-response due time")
 	}
+}
+
+// attachVideo stands in for a staff upload: Ship needs a video.
+func attachVideo(o *domain.Order) {
+	o.InspectionVideo = &domain.InspectionVideo{ObjectKey: "orders/" + o.ID + "/inspection.mp4", ContentType: "video/mp4", SizeBytes: 3}
 }

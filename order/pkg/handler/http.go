@@ -220,6 +220,11 @@ func (h *Handler) order(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "inspection-video" {
+		h.inspectionVideo(w, r, parts[0])
+		return
+	}
+
 	if len(parts) == 2 && parts[1] == "confirm" && r.Method == http.MethodPost {
 		h.confirmOrder(w, r, parts[0])
 		return
@@ -555,6 +560,14 @@ func respondServiceError(w http.ResponseWriter, err error) {
 			body["message"] = disabled.Message
 		}
 		respondJSON(w, http.StatusConflict, body)
+		return
+	}
+	if status, ok := inspectionVideoErrorStatus(err); ok {
+		respondJSON(w, status, map[string]any{
+			"error":  err.Error(),
+			"code":   status,
+			"reason": inspectionVideoReason(err),
+		})
 		return
 	}
 	switch {

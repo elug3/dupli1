@@ -176,7 +176,15 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       # The order service account's API key (same value auth seeds).
       DUPLI1_ORDER_SERVICE_API_KEY: ${DUPLI1_ORDER_SERVICE_API_KEY:?set it in /opt/dupli1/.env — docs/auth-service-api-keys.md}
-    depends_on: { postgres: { condition: service_healthy }, auth: { condition: service_started } }
+      # Inspection videos (검수영상): a private bucket on the same SeaweedFS.
+      # Anonymous reads stay limited to product-images, so nothing in it is
+      # public; order streams each video after its own ownership check.
+      # Shipping needs a video, so without these nothing ships.
+      DUPLI1_ORDER_S3_ENDPOINT: http://s3:8333
+      DUPLI1_ORDER_S3_ACCESS_KEY: dupli1
+      DUPLI1_ORDER_S3_SECRET_KEY: ${S3_SECRET_KEY}
+      DUPLI1_ORDER_S3_BUCKET: order-inspection-videos
+    depends_on: { postgres: { condition: service_healthy }, s3: { condition: service_healthy }, auth: { condition: service_started } }
     networks: { default: { aliases: [order.dupli1.local] } }
 
   cart:

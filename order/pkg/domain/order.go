@@ -138,6 +138,13 @@ type Order struct {
 	// payment reinstates it. A cancel of an order with PaidAt set is a
 	// refund, and the sales report counts it in the period of CanceledAt.
 	CanceledAt *time.Time `json:"canceled_at,omitempty"`
+	// InspectionVideo is the pre-shipment inspection film (검수영상). Required
+	// before Ship; replaceable until the order is fulfilled or canceled.
+	// Stored apart from the order row, so Save never touches it.
+	InspectionVideo *InspectionVideo `json:"inspection_video,omitempty"`
+	// InspectionVideoLocked is computed (ApplyRefundPolicy): true once the
+	// video can no longer be attached or replaced.
+	InspectionVideoLocked bool `json:"inspection_video_locked,omitempty"`
 	// Computed refund/delivery-policy flags — populated by ApplyRefundPolicy,
 	// not stored.
 	ConfirmationDueAt      *time.Time `json:"confirmation_due_at,omitempty"`
@@ -249,6 +256,9 @@ func (o *Order) Ship(shippedBy string, tracking ShipmentTracking, now time.Time)
 	}
 	if tracking.Carrier == "" || tracking.TrackingNumber == "" {
 		return fmt.Errorf("%w: carrier and tracking_number are required", ErrInvalidShipment)
+	}
+	if !o.HasInspectionVideo() {
+		return ErrInspectionVideoRequired
 	}
 	if _, ok := ValidCarriers[tracking.Carrier]; !ok {
 		return fmt.Errorf("%w: unknown carrier %q", ErrInvalidShipment, tracking.Carrier)
@@ -486,6 +496,7 @@ func (o *Order) ApplyRefundPolicy(now time.Time) {
 		return
 	}
 	o.ConfirmationDueAt = o.ConfirmationDueAtTime()
+	o.InspectionVideoLocked = errors.Is(InspectionVideoEditable(o.Status), ErrInspectionVideoLocked)
 	o.ConfirmationOverdue = o.ConfirmationOverdueAt(now)
 	o.CancelConfirmDueAt = o.CancelConfirmDueAtTime()
 	o.CancelConfirmOverdue = o.CancelConfirmOverdueAt(now)
