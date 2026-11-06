@@ -12,6 +12,10 @@ const DefaultShippingFeeWon int64 = 0
 // DUPLI1_ORDER_CARD_SURCHARGE_BPS is not set.
 const DefaultCardSurchargeBps int64 = 1000
 
+// DefaultInspectionVideoBucket is the private bucket inspection videos go in
+// when DUPLI1_ORDER_S3_BUCKET is not set.
+const DefaultInspectionVideoBucket = "order-inspection-videos"
+
 type ServerOptions struct {
 	Addr string
 
@@ -46,6 +50,18 @@ type ServerOptions struct {
 	// DUPLI1_ORDER_CARD_SURCHARGE_BPS to change it; 0 turns it off.
 	CardSurchargeBps int64
 
+	// Inspection video (검수영상) storage: MinIO or any S3 API, private
+	// bucket. Endpoint unset means uploads answer 503 and nothing can ship.
+	// Env: DUPLI1_ORDER_S3_ENDPOINT, DUPLI1_ORDER_S3_ACCESS_KEY,
+	// DUPLI1_ORDER_S3_SECRET_KEY, DUPLI1_ORDER_S3_BUCKET.
+	S3Endpoint  string
+	S3AccessKey string
+	S3SecretKey string
+	S3Bucket    string
+	// InspectionVideoMaxBytes caps one upload
+	// (DUPLI1_ORDER_INSPECTION_VIDEO_MAX_BYTES); 0 keeps the service default.
+	InspectionVideoMaxBytes int64
+
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
@@ -64,6 +80,7 @@ func NewServerOptions() *ServerOptions {
 		ShippingFeeWon: DefaultShippingFeeWon,
 		// 10% on card payments; DUPLI1_ORDER_CARD_SURCHARGE_BPS overrides.
 		CardSurchargeBps: DefaultCardSurchargeBps,
+		S3Bucket:         DefaultInspectionVideoBucket,
 		ReadTimeout:      5 * time.Second,
 		// WriteTimeout covers paid cancel, which waits on NANO through payment.
 		WriteTimeout:    25 * time.Second,

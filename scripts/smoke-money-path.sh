@@ -206,6 +206,14 @@ for _ in $(seq 1 15); do
 done
 check "order status" "$order_status" paid
 
+step "Confirm and attach the inspection video (ship needs both)"
+check "confirmed" "$(api POST "/api/v1/orders/$ORDER_ID/confirm" "$OWNER" | field 'd["status"]')" confirmed
+check "ship without a video refused" \
+  "$(status_of POST "/api/v1/orders/$ORDER_ID/ship" "$OWNER" '{"carrier":"cj","tracking_number":"123456789012"}')" 409
+video=$(curl -s -X PUT "$BASE/api/v1/orders/$ORDER_ID/inspection-video" \
+  -H "Authorization: Bearer $OWNER" -H "Content-Type: video/mp4" --data-binary "smoke-test-video")
+check "inspection video stored" "$(echo "$video" | field 'd["inspection_video"]["size_bytes"]')" 16
+
 step "Ship (commits the reservation)"
 shipped=$(api POST "/api/v1/orders/$ORDER_ID/ship" "$OWNER" \
   '{"carrier":"cj","tracking_number":"123456789012"}')

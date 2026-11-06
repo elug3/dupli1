@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
 	natsinfra "github.com/elug3/dupli1/order/pkg/infra/nats"
 	"github.com/elug3/dupli1/order/pkg/infra/pg"
+	s3store "github.com/elug3/dupli1/order/pkg/infra/s3"
 	"github.com/elug3/dupli1/order/pkg/livefeed"
 	"github.com/elug3/dupli1/order/pkg/ports"
 	"github.com/elug3/dupli1/order/pkg/service"
@@ -50,6 +52,14 @@ type Config struct {
 	// CardSurchargeBps is added to an order paid by card, in basis points
 	// (1000 = 10%). Zero means no surcharge.
 	CardSurchargeBps int64
+
+	// Inspection video storage (MinIO / S3 API). Empty S3Endpoint: uploads
+	// answer 503 and, since shipping needs a video, nothing ships.
+	S3Endpoint              string
+	S3AccessKey             string
+	S3SecretKey             string
+	S3Bucket                string
+	InspectionVideoMaxBytes int64
 
 	HTTPClient *http.Client
 }
@@ -147,6 +157,31 @@ func Bootstrap(cfg Config) (*App, error) {
 		WithCardSurcharge(cfg.CardSurchargeBps).
 		WithPayment(payment).
 		WithPaymentMethodGate(payment)
+
+	if cfg.S3Endpoint != "" {
+		videoStore, err := s3store.NewVideoStore(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket)
+		if err != nil {
+			if natsSubscriber != nil {
+				natsSubscriber.Close()
+			}
+			if natsPublisher != nil {
+				natsPublisher.Close()
+			}
+			closeFn()
+			return nil, fmt.Errorf("inspection video store: %w", err)
+		}
+		// Not fatal: storage may come up after order. Uploads fail with 503
+		// until it does, and the bucket may already exist under another owner.
+		bucketCtx, cancelBucket := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := videoStore.EnsureBucket(bucketCtx); err != nil {
+			log.Printf("order: inspection video bucket not ready: %v", err)
+		}
+		cancelBucket()
+		svc.WithInspectionVideos(videoStore, cfg.InspectionVideoMaxBytes)
+	} else {
+		log.Printf("order: DUPLI1_ORDER_S3_ENDPOINT unset; inspection video uploads are off and orders cannot ship")
+		svc.WithInspectionVideos(nil, cfg.InspectionVideoMaxBytes)
+	}
 
 	if natsSubscriber != nil {
 		// Long-lived worker/subscriber root; cancelled on process shutdown.

@@ -23,11 +23,14 @@ type outboxEntry struct {
 }
 
 type Repository struct {
-	mu           sync.RWMutex
-	orders       map[string]*domain.Order
-	sessions     map[string]*domain.CheckoutSession
-	idempotency  map[string]idempotencyEntry // key: customerID+"\x00"+idemKey
-	outbox       map[int64]*outboxEntry
+	mu          sync.RWMutex
+	orders      map[string]*domain.Order
+	sessions    map[string]*domain.CheckoutSession
+	idempotency map[string]idempotencyEntry // key: customerID+"\x00"+idemKey
+	outbox      map[int64]*outboxEntry
+	// videos holds each order's inspection video apart from the order, like
+	// pg's order_inspection_videos table: a whole-order save never touches it.
+	videos       map[string]domain.InspectionVideo
 	nextID       int
 	nextOutboxID int64
 }
@@ -38,6 +41,7 @@ func NewRepository() *Repository {
 		sessions:    make(map[string]*domain.CheckoutSession),
 		idempotency: make(map[string]idempotencyEntry),
 		outbox:      make(map[int64]*outboxEntry),
+		videos:      make(map[string]domain.InspectionVideo),
 	}
 }
 
@@ -95,7 +99,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 		}
 	}
 
-	r.orders[order.ID] = cloneOrder(order)
+	r.orders[order.ID] = storedOrder(order)
 	now := time.Now().UTC()
 	for _, ev := range events {
 		r.nextOutboxID++
@@ -210,7 +214,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 	if !ok {
 		return nil, ports.ErrNotFound
 	}
-	return cloneOrder(order), nil
+	return r.readOrder(order), nil
 }
 
 func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error) {
@@ -224,7 +228,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 	var orders []domain.Order
 	for _, order := range r.orders {
 		if order.CustomerID == customerID {
-			orders = append(orders, *cloneOrder(order))
+			orders = append(orders, *r.readOrder(order))
 		}
 	}
 	return orders, nil
@@ -240,7 +244,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 
 	var orders []domain.Order
 	for _, order := range r.orders {
-		orders = append(orders, *cloneOrder(order))
+		orders = append(orders, *r.readOrder(order))
 	}
 	return orders, nil
 }
@@ -256,7 +260,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 	var orders []domain.Order
 	for _, order := range r.orders {
 		if order.Status == domain.StatusPending && now.After(order.PaymentDueAt) {
-			orders = append(orders, *cloneOrder(order))
+			orders = append(orders, *r.readOrder(order))
 		}
 	}
 	return orders, nil
@@ -277,7 +281,7 @@ func (r *Repository) ListSalesActivity(ctx context.Context, start, end time.Time
 			continue
 		}
 		if in(order.PaidAt) || (order.Status == domain.StatusCanceled && in(order.CanceledAt)) {
-			orders = append(orders, *cloneOrder(order))
+			orders = append(orders, *r.readOrder(order))
 		}
 	}
 	return orders, nil
@@ -342,7 +346,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 	order.Status = domain.StatusCanceled
 	order.CanceledAt = &now
 	order.UpdatedAt = now
-	r.orders[orderID] = cloneOrder(order)
+	r.orders[orderID] = storedOrder(order)
 
 	for _, ev := range events {
 		r.nextOutboxID++
@@ -359,7 +363,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 		}
 	}
 
-	return cloneOrder(order), true, nil
+	return r.readOrder(order), true, nil
 }
 
 func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now time.Time, events []ports.OutboxEvent) (*domain.Order, bool, error) {
@@ -381,7 +385,7 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 	order.Status = domain.StatusCanceled
 	order.CanceledAt = &now
 	order.UpdatedAt = now
-	r.orders[orderID] = cloneOrder(order)
+	r.orders[orderID] = storedOrder(order)
 
 	for _, ev := range events {
 		r.nextOutboxID++
@@ -398,7 +402,7 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 		}
 	}
 
-	return cloneOrder(order), true, nil
+	return r.readOrder(order), true, nil
 }
 
 func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, paymentID string, now time.Time, events []ports.OutboxEvent) (*domain.Order, bool, error) {
@@ -414,16 +418,16 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 		return nil, false, nil
 	}
 	if order.Status != domain.StatusPaid && order.Status != domain.StatusConfirmed {
-		return cloneOrder(order), false, nil
+		return r.readOrder(order), false, nil
 	}
 	if paymentID == "" || order.PaymentID != paymentID {
-		return cloneOrder(order), false, nil
+		return r.readOrder(order), false, nil
 	}
 
 	order.Status = domain.StatusCanceled
 	order.CanceledAt = &now
 	order.UpdatedAt = now
-	r.orders[orderID] = cloneOrder(order)
+	r.orders[orderID] = storedOrder(order)
 
 	for _, ev := range events {
 		r.nextOutboxID++
@@ -440,7 +444,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 		}
 	}
 
-	return cloneOrder(order), true, nil
+	return r.readOrder(order), true, nil
 }
 
 func (r *Repository) SavePaidIfPending(ctx context.Context, order *domain.Order, events []ports.OutboxEvent) (bool, error) {
@@ -459,7 +463,7 @@ func (r *Repository) SavePaidIfPending(ctx context.Context, order *domain.Order,
 		return false, nil
 	}
 
-	r.orders[order.ID] = cloneOrder(order)
+	r.orders[order.ID] = storedOrder(order)
 
 	for _, ev := range events {
 		r.nextOutboxID++
@@ -495,7 +499,7 @@ func (r *Repository) SavePaidIfCanceled(ctx context.Context, order *domain.Order
 		return false, nil
 	}
 
-	r.orders[order.ID] = cloneOrder(order)
+	r.orders[order.ID] = storedOrder(order)
 
 	for _, ev := range events {
 		r.nextOutboxID++
@@ -531,7 +535,7 @@ func (r *Repository) ConfirmIfPaid(ctx context.Context, order *domain.Order, eve
 		return false, nil
 	}
 
-	r.orders[order.ID] = cloneOrder(order)
+	r.orders[order.ID] = storedOrder(order)
 
 	for _, ev := range events {
 		r.nextOutboxID++
@@ -567,7 +571,7 @@ func (r *Repository) ShipIfConfirmed(ctx context.Context, order *domain.Order, e
 		return false, nil
 	}
 
-	r.orders[order.ID] = cloneOrder(order)
+	r.orders[order.ID] = storedOrder(order)
 
 	for _, ev := range events {
 		r.nextOutboxID++
@@ -607,7 +611,50 @@ func cloneOrder(order *domain.Order) *domain.Order {
 	copied.Items = make([]domain.OrderItem, len(order.Items))
 	copy(copied.Items, order.Items)
 	copied.ShippingAddress = order.ShippingAddress
+	if order.InspectionVideo != nil {
+		video := *order.InspectionVideo
+		copied.InspectionVideo = &video
+	}
 	return &copied
+}
+
+// storedOrder is the copy kept in r.orders: never with a video, which lives
+// in r.videos.
+func storedOrder(order *domain.Order) *domain.Order {
+	copied := cloneOrder(order)
+	copied.InspectionVideo = nil
+	return copied
+}
+
+// readOrder is the copy handed to a caller, with its video attached. The
+// caller holds r.mu.
+func (r *Repository) readOrder(order *domain.Order) *domain.Order {
+	copied := cloneOrder(order)
+	if video, ok := r.videos[order.ID]; ok {
+		copied.InspectionVideo = &video
+	} else {
+		copied.InspectionVideo = nil
+	}
+	return copied
+}
+
+func (r *Repository) SetInspectionVideo(ctx context.Context, orderID string, video domain.InspectionVideo) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	order, ok := r.orders[orderID]
+	if !ok {
+		return "", ports.ErrNotFound
+	}
+	if err := domain.InspectionVideoEditable(order.Status); err != nil {
+		return "", err
+	}
+	previous := r.videos[orderID].ObjectKey
+	r.videos[orderID] = video
+	return previous, nil
 }
 
 func cloneCheckoutSession(session *domain.CheckoutSession) *domain.CheckoutSession {

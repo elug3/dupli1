@@ -17,19 +17,24 @@ import (
 // option added to both structs but forgotten in the mapping fails here.
 func TestBootstrapConfig_CarriesEveryMatchingOption(t *testing.T) {
 	opts := order.ServerOptions{
-		Addr:               ":8083",
-		GatewayURL:         "http://gateway.test",
-		ProductURL:         "http://product.test",
-		InventoryURL:       "http://inventory.test",
-		AuthURL:            "http://auth.test",
-		OrderServiceAPIKey: "dk_test_svc-key",
-		StockBearerToken:   "stock-token",
-		DatabaseConnString: "postgres://user:pass@db.test/orders",
-		JWTSecret:          "jwt-secret",
-		JWKSURL:            "http://auth.test/jwks.json",
-		NATSURL:            "nats://nats.test:4222",
-		ShippingFeeWon:     30000,
-		CardSurchargeBps:   1000,
+		Addr:                    ":8083",
+		GatewayURL:              "http://gateway.test",
+		ProductURL:              "http://product.test",
+		InventoryURL:            "http://inventory.test",
+		AuthURL:                 "http://auth.test",
+		OrderServiceAPIKey:      "dk_test_svc-key",
+		StockBearerToken:        "stock-token",
+		DatabaseConnString:      "postgres://user:pass@db.test/orders",
+		JWTSecret:               "jwt-secret",
+		JWKSURL:                 "http://auth.test/jwks.json",
+		NATSURL:                 "nats://nats.test:4222",
+		ShippingFeeWon:          30000,
+		CardSurchargeBps:        1000,
+		S3Endpoint:              "http://minio.test:9000",
+		S3AccessKey:             "access",
+		S3SecretKey:             "secret",
+		S3Bucket:                "videos",
+		InspectionVideoMaxBytes: 1 << 20,
 	}
 
 	cfg := order.BootstrapConfig(opts)

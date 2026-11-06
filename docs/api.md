@@ -1076,7 +1076,9 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |
 | POST | `/api/v1/orders/{id}/confirm` | `order.status.update` — manager accepts a paid order (`paid` → `confirmed`; 2-hour SLA from `paid_at`, auto-confirmed by the sweep otherwise) |
-| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship a confirmed order (`confirmed` → `in_transit`); body requires `carrier` + `tracking_number` (`carrier_note` when `carrier=other`) |
+| POST | `/api/v1/orders/{id}/ship` | `order.ship` — ship a confirmed order (`confirmed` → `in_transit`); body requires `carrier` + `tracking_number` (`carrier_note` when `carrier=other`). Refused with `409` (`reason: inspection_video_required`) until an inspection video is attached |
+| PUT | `/api/v1/orders/{id}/inspection-video` | `order.ship` — upload or replace the pre-shipment inspection video (검수영상). Raw body, `Content-Type` `video/mp4`, `video/quicktime` or `video/webm`, `Content-Length` required, 100 MB by default. Allowed from `paid` until the order is `fulfilled` or `canceled` (`409`, `reason: inspection_video_locked`). Returns the order with `inspection_video` metadata — [order-inspection-video.md](order-inspection-video.md) |
+| GET | `/api/v1/orders/{id}/inspection-video` | Staff with `order.read.all`, or the order's customer once it has shipped — streams the video (`Range` supported, `Cache-Control: private, no-store`) |
 | POST | `/api/v1/orders/{id}/deliver` | `order.ship` — carrier/manager marks delivered (`in_transit` → `delivered`) |
 | POST | `/api/v1/orders/{id}/receipt/confirm` | Customer ABAC — confirms receipt (`delivered` → `fulfilled`) |
 | POST | `/api/v1/orders/{id}/receipt/dispute` | Customer ABAC — reports non-receipt (`delivered` → `disputed`); optional `{ "reason": "…" }` |

@@ -104,6 +104,7 @@ func applyEnv(opts *order.ServerOptions) {
 	}
 	applyShippingFeeEnv(opts)
 	applyCardSurchargeEnv(opts)
+	applyInspectionVideoEnv(opts)
 	if v := os.Getenv("DUPLI1_ORDER_NATS_URL"); v != "" {
 		opts.NATSURL = v
 	} else if v := os.Getenv("NATS_URL"); v != "" {
@@ -153,6 +154,33 @@ func applyCardSurchargeEnv(opts *order.ServerOptions) {
 		return
 	}
 	opts.CardSurchargeBps = bps
+}
+
+// applyInspectionVideoEnv reads the object storage for inspection videos and
+// the per-upload size cap. An invalid or non-positive cap is logged and
+// ignored so the service default stays in place.
+func applyInspectionVideoEnv(opts *order.ServerOptions) {
+	if v := strings.TrimSpace(os.Getenv("DUPLI1_ORDER_S3_ENDPOINT")); v != "" {
+		opts.S3Endpoint = v
+	}
+	if v := os.Getenv("DUPLI1_ORDER_S3_ACCESS_KEY"); v != "" {
+		opts.S3AccessKey = v
+	}
+	if v := os.Getenv("DUPLI1_ORDER_S3_SECRET_KEY"); v != "" {
+		opts.S3SecretKey = v
+	}
+	if v := strings.TrimSpace(os.Getenv("DUPLI1_ORDER_S3_BUCKET")); v != "" {
+		opts.S3Bucket = v
+	}
+	const name = "DUPLI1_ORDER_INSPECTION_VIDEO_MAX_BYTES"
+	if v := os.Getenv(name); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n <= 0 {
+			log.Printf("order: ignoring invalid %s=%q", name, v)
+		} else {
+			opts.InspectionVideoMaxBytes = n
+		}
+	}
 }
 
 func splitAddr(addr string) (string, int, error) {

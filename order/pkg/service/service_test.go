@@ -22,6 +22,17 @@ type fakeStock struct {
 	commitErr     error
 }
 
+// attachTestVideo uploads a tiny inspection video, which ShipOrder requires.
+func attachTestVideo(t *testing.T, svc *service.Service, orderID string) {
+	t.Helper()
+	svc.WithInspectionVideos(memory.NewVideoStore(), 0)
+	if _, err := svc.UploadInspectionVideo(context.Background(), service.UploadInspectionVideoInput{
+		OrderID: orderID, UploadedBy: "manager-1", ContentType: "video/mp4", SizeBytes: 3, Body: strings.NewReader("mp4"),
+	}); err != nil {
+		t.Fatalf("UploadInspectionVideo: %v", err)
+	}
+}
+
 func testShipTracking() domain.ShipmentTracking {
 	return domain.ShipmentTracking{Carrier: domain.CarrierCJ, TrackingNumber: "123456789012"}
 }
@@ -262,6 +273,7 @@ func TestMarkOrderPaidThenShipCommitsStock(t *testing.T) {
 		t.Fatalf("order status = %q, want confirmed", order.Status)
 	}
 
+	attachTestVideo(t, svc, order.ID)
 	order, err = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	if err != nil {
 		t.Fatalf("ShipOrder returned error: %v", err)
@@ -300,7 +312,7 @@ func TestMarkOrderPaidReplayAfterShipIsNoOp(t *testing.T) {
 		advance func() error
 		want    domain.OrderStatus
 	}{
-		{"in_transit", func() error { _, err := svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking()); return err }, domain.StatusInTransit},
+		{"in_transit", func() error { attachTestVideo(t, svc, order.ID); _, err := svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking()); return err }, domain.StatusInTransit},
 		{"delivered", func() error { _, err := svc.DeliverOrder(ctx, order.ID, "driver-1"); return err }, domain.StatusDelivered},
 		{"fulfilled", func() error { _, err := svc.FulfillOrder(ctx, order.ID); return err }, domain.StatusFulfilled},
 	} {
@@ -458,6 +470,7 @@ func TestShipOrderRejectsInvalidTrackingWithoutCommittingStock(t *testing.T) {
 		t.Fatalf("MarkOrderPaid returned error: %v", err)
 	}
 
+	attachTestVideo(t, svc, order.ID)
 	_, err = svc.ShipOrder(ctx, order.ID, "manager-1", domain.ShipmentTracking{
 		Carrier:        "fedex",
 		TrackingNumber: "123456789012",
@@ -588,6 +601,7 @@ func TestShipOrderRetriesWhenReservationAlreadyCommitted(t *testing.T) {
 	// Simulate a prior ShipOrder that committed stock but failed before saving status.
 	stock.committed = order.ReservationID
 
+	attachTestVideo(t, svc, order.ID)
 	shipped, err := svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	if err != nil {
 		t.Fatalf("ShipOrder retry returned error: %v", err)
@@ -780,6 +794,7 @@ func TestCancelOrderAtomicGuardBeatsConcurrentShip(t *testing.T) {
 	}
 	svc = service.New(repo, raceStock).WithProduct(&fakeProduct{defaultKRW: 5000}).WithPayment(pay)
 
+	attachTestVideo(t, svc, order.ID)
 	_, err = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	if !errors.Is(err, domain.ErrInvalidTransition) {
 		t.Fatalf("ShipOrder error = %v, want ErrInvalidTransition", err)
@@ -826,6 +841,7 @@ func TestCancelOrderConcurrentShipDuringRefund(t *testing.T) {
 	}()
 
 	<-started
+	attachTestVideo(t, svc, order.ID)
 	_, _ = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	close(proceed)
 	if err := <-errCh; err != nil {
@@ -870,6 +886,7 @@ func TestShipOrderDoesNotOverwriteRefundCancel(t *testing.T) {
 	}
 	svc = service.New(repo, raceStock).WithProduct(&fakeProduct{defaultKRW: 5000})
 
+	attachTestVideo(t, svc, order.ID)
 	_, err = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	if !errors.Is(err, domain.ErrInvalidTransition) {
 		t.Fatalf("ShipOrder error = %v, want ErrInvalidTransition", err)
@@ -909,6 +926,7 @@ func TestShipOrderRejectsReleasedReservation(t *testing.T) {
 	// (e.g. expiry race saved paid with a stale reservation_id).
 	stock.released = order.ReservationID
 
+	attachTestVideo(t, svc, order.ID)
 	_, err = svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking())
 	if !errors.Is(err, ports.ErrReservationAlreadyReleased) {
 		t.Fatalf("ShipOrder error = %v, want ErrReservationAlreadyReleased", err)
@@ -1133,6 +1151,7 @@ func TestCancelInTransitOrderRefundsWithoutReleasingStock(t *testing.T) {
 	if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
 		t.Fatalf("ConfirmOrder: %v", err)
 	}
+	attachTestVideo(t, svc, order.ID)
 	if _, err := svc.ShipOrder(ctx, order.ID, "manager-1", testShipTracking()); err != nil {
 		t.Fatalf("ShipOrder: %v", err)
 	}
@@ -1648,6 +1667,7 @@ func TestEnforceDeliveryPolicyAutoFulfills(t *testing.T) {
 		if _, err := svc.ConfirmOrder(ctx, order.ID); err != nil {
 			t.Fatalf("ConfirmOrder: %v", err)
 		}
+		attachTestVideo(t, svc, order.ID)
 		if _, err := svc.ShipOrder(ctx, order.ID, "mgr-1", testShipTracking()); err != nil {
 			t.Fatalf("ShipOrder: %v", err)
 		}

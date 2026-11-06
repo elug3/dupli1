@@ -126,7 +126,7 @@ POST /orders → pending → paid → confirmed → in_transit → delivered →
 ```
 
 - `paid → confirmed`: manager accepts the order for fulfillment (`POST /orders/{id}/confirm`), auto-confirmed after a 2-hour SLA if the manager doesn't act (`EnforceRefundPolicy`).
-- `confirmed → in_transit`: manager ships (`POST /orders/{id}/ship`), which commits the inventory reservation.
+- `confirmed → in_transit`: manager ships (`POST /orders/{id}/ship`), which commits the inventory reservation. Ship needs the pre-shipment inspection video (검수영상) attached first (`PUT /orders/{id}/inspection-video`, `409 inspection_video_required` otherwise); it can be replaced until the order is fulfilled or canceled. Stored in a private bucket via `DUPLI1_ORDER_S3_*` — unset means nothing ships. See [docs/order-inspection-video.md](docs/order-inspection-video.md).
 - `in_transit → delivered`: carrier or manager marks delivered (`POST /orders/{id}/deliver`).
 - `delivered → fulfilled`: customer confirms receipt (`POST /orders/{id}/receipt/confirm`), a manager override (`PUT /orders/{id}/status`), or auto-fulfilled 14 days after delivery with no response (`EnforceDeliveryPolicy`).
 - `delivered → disputed`: customer reports non-receipt (`POST /orders/{id}/receipt/dispute`). A manager resolves it either way — `POST /orders/{id}/dispute/resolve` closes it fulfilled (proof of delivery), or `PUT /orders/{id}/status` → `canceled` refunds it like any other cancel.

@@ -11,6 +11,7 @@ import (
 var ErrNotFound = errors.New("not found")
 
 type Repository interface {
+	InspectionVideoRepository
 	NextOrderID(ctx context.Context) (string, error)
 	Save(ctx context.Context, order *domain.Order) error
 	// SaveWithOutbox persists the order, optional idempotency row, and outbox events in one transaction.
