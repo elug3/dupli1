@@ -355,8 +355,7 @@ func (s *ProductSearchStore) DeleteVariant(ctx context.Context, sku string) erro
 
 	cmd, err := tx.Exec(ctx, `DELETE FROM product_variants WHERE sku = $1`, sku)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+		if isFKViolation(err) {
 			return ports.Conflict(fmt.Sprintf("cannot delete variant %s: it still has stock on hand or reserved", sku))
 		}
 		return wrapDB("delete variant", err)

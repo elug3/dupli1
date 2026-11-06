@@ -34,6 +34,14 @@ func TestWrapDBFKViolation(t *testing.T) {
 	}
 }
 
+func TestWrapDBRestrictViolation(t *testing.T) {
+	// PostgreSQL 18 reports a delete blocked by ON DELETE RESTRICT as 23001.
+	err := wrapDB("delete color", &pgconn.PgError{Code: "23001", Message: "restrict"})
+	if !errors.Is(err, ports.ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
+	}
+}
+
 func TestWrapDBUnexpectedKeepsCause(t *testing.T) {
 	cause := errors.New("connection reset")
 	err := wrapDB("search products", cause)
