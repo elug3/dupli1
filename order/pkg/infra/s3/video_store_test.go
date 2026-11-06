@@ -13,7 +13,7 @@ import (
 // Runs against a real MinIO (or any S3 API) when ORDER_S3_TEST_ENDPOINT is
 // set, e.g.:
 //
-//	docker run -d -p 9000:9000 minio/minio server /data
+//	docker run -d -p 9000:9000 cgr.dev/chainguard/minio server /data
 //	ORDER_S3_TEST_ENDPOINT=http://localhost:9000 go test ./pkg/infra/s3/
 //
 // Credentials default to MinIO's minioadmin/minioadmin.

@@ -51,9 +51,8 @@ VENUS  docker compose project "dupli1"  (deploy/venus/docker-compose.yml)
   unchanged.
 - **SeaweedFS, not MinIO.** MinIO no longer publishes community container
   images (Docker Hub, Quay and Bitnami all fail to pull). SeaweedFS speaks the
-  same S3 API the product service's minio-go client uses. Note the repo's
-  local `docker-compose.yml` still points at `minio/minio:latest` and will fail
-  to pull on a fresh machine.
+  same S3 API the product service's minio-go client uses. The local
+  `docker-compose.yml` keeps MinIO, from `cgr.dev/chainguard/minio`.
 - **Kept as production had it:** redis and NATS JetStream have no volumes.
   This is a pre-existing gap, not a migration change. `support`, which ECS
   never ran, is deployed here for the first time — see

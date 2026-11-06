@@ -159,8 +159,12 @@ services:
       timeout: 3s
       retries: 10
 
+  # MinIO stopped publishing community images (minio/minio and minio/mc no
+  # longer pull); Chainguard's build carries the server, sh and mc, so it
+  # serves both minio and minio-init. Root so it can write the volume.
   minio:
-    image: minio/minio:latest
+    image: cgr.dev/chainguard/minio:latest
+    user: "0:0"
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -177,7 +181,8 @@ services:
       retries: 5
 
   minio-init:
-    image: minio/mc:latest
+    image: cgr.dev/chainguard/minio:latest
+    user: "0:0"
     depends_on:
       minio:
         condition: service_healthy
