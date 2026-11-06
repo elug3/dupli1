@@ -339,7 +339,10 @@ services:
       SENTRY_DSN: ${SENTRY_DSN_MANAGE_WEB:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
       SENTRY_RELEASE: ${DUPLI1_MANAGE_WEB_TAG:-}
-      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+      # Its own rate, so the console's browser page-load timings can be traced
+      # without also tracing the backend and storefront; unset falls back to
+      # the shared SENTRY_TRACES_SAMPLE_RATE.
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE_MANAGE_WEB:-${SENTRY_TRACES_SAMPLE_RATE:-0}}
 
   # Replaces the ALB: host/path routing plus /product-images/ (was CloudFront).
   edge:

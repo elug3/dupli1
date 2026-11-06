@@ -41,7 +41,10 @@ SENTRY_DSN_MANAGE_WEB=https://<key>@<host>/<project>  # dupli1-manage-web
 # optional
 SENTRY_ENVIRONMENT=production
 SENTRY_TRACES_SAMPLE_RATE=0
+SENTRY_TRACES_SAMPLE_RATE_MANAGE_WEB=0.1  # manage-web only; unset = the shared rate
 ```
+
+manage-web passes its rate to the browser SDK too, so a non-zero value there records console page loads and navigations (with their fetches) as well as server requests.
 
 Then recreate the containers (`docker compose -f deploy/venus/docker-compose.yml --env-file /opt/dupli1/.env up -d`). A browser DSN is public by design; the web apps hand it to the page through the root loader. The `support` service is not on VENUS yet (Phase 7), so it reports only once it is.
 
