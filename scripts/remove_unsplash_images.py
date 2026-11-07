@@ -158,7 +158,7 @@ def remove_minio_prefixes(prefixes: list[str], dry_run: bool) -> int:
             "dupli1_default",
             "--entrypoint",
             "/bin/sh",
-            "minio/mc:latest",
+            "cgr.dev/chainguard/minio:latest",
             "-c",
             cmd,
         ]
