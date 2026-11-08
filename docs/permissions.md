@@ -147,6 +147,7 @@ Manager-tier and `customer` / `service` accounts still use the normal lockout.
 | `product.image.upload` | Upload image on parent default variant or specific variant |
 | `product.master.read` | List SKU master dictionaries (brands, styles, colors, sizes, editions) |
 | `product.master.write` | Create / rename / delete SKU master dictionary rows |
+| `product.review.moderate` | List every review (hidden ones included, with the author's account id) and hide / unhide one — [product-reviews-plan.md](product-reviews-plan.md). In the `support_agent` bundle |
 
 Public `GET /api/v1/products` and `GET /api/v1/products/{id}` stay **unauthenticated**. `product.read` only widens manager view when a valid token is present (same as today's `product_manager` optional-auth behaviour).
 
@@ -304,6 +305,12 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` |
 | `GET` | `/api/v1/products/reports/visitors` | `product.read` |
 | `GET` | `/api/v1/products/reports/catalog` | `product.read` |
+| `GET` | `/api/v1/products/{id}/reviews`, `…/reviews/photos` | — (public) |
+| `POST` | `/api/v1/products/{id}/reviews`, `/api/v1/products/reviews/photos` | Bearer; ABAC: buyer of a fulfilled order |
+| `GET` | `/api/v1/products/reviews/me` | Bearer (own) |
+| `PATCH` / `DELETE` | `/api/v1/products/reviews/by-id/{reviewId}` | Bearer; author only |
+| `GET` | `/api/v1/products/reviews` | `product.review.moderate` |
+| `POST` | `/api/v1/products/reviews/by-id/{reviewId}/hide` | `product.review.moderate` |
 | `POST` | `/api/v1/products/visits` | — (public beacon, rate-limited) |
 
 Legacy top-level aliases (`/api/v1/variants/…`, `/api/v1/catalog/…`, `/api/v1/coupons/…`) are still registered with the same permissions; see [TODO.md](TODO.md) for the migration table. The promotion routes additionally answer on the pre-rename `/api/v1/products/coupons…` spelling ([product-promotion-rename.md](product-promotion-rename.md)).
@@ -449,9 +456,9 @@ Code-defined sets for common job functions. Assigning a bundle expands to explic
 | `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass`, `payment.cancel` |
 | `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update`, `user.delete`, `user.apikey.read`, `user.apikey.manage` |
 | `customer_registrar` | `user.create` |
-| `support_agent` | `support.read`, `support.reply`, `order.read.all` |
+| `support_agent` | `support.read`, `support.reply`, `order.read.all`, `product.review.moderate` |
 
-`order.read.all` joined `support_agent` with web consultation chat (2026-10-03): the console's context panel shows the chatting shopper's orders and purchase history, and order has no endpoint scoped to "the customer I am talking to". A bundle is expanded when it is granted, so an agent granted it before then holds only the two `support.*` permissions until it is granted again ([support-web-chat.md](support-web-chat.md)).
+`order.read.all` joined `support_agent` with web consultation chat (2026-10-03): the console's context panel shows the chatting shopper's orders and purchase history, and order has no endpoint scoped to "the customer I am talking to". A bundle is expanded when it is granted, so an agent granted it before then holds only the two `support.*` permissions until it is granted again ([support-web-chat.md](support-web-chat.md)). `product.review.moderate` joined it with reviews (2026-11-08) on the same terms: agents granted the bundle earlier need it granted again.
 
 API exposure of bundles is deferred; Phase 2 seeds and migrations use these expansions directly.
 

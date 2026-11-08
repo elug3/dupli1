@@ -61,6 +61,9 @@ var bundles = map[string][]string{
 		// transcript, and order admits another customer's orders only to this
 		// permission (docs/support-web-chat.md).
 		OrderReadAll,
+		// The people who answer 상품 문의 are the ones reading reviews, so
+		// they hide the spam and abuse too.
+		ProductReviewModerate,
 	},
 }
 

@@ -67,3 +67,15 @@ func (s *ImageStore) PublicURL(objectKey string) string {
 	key := strings.TrimLeft(objectKey, "/")
 	return fmt.Sprintf("%s/%s", s.publicBase, key)
 }
+
+// Delete removes an object. A missing object is not an error.
+func (s *ImageStore) Delete(ctx context.Context, objectKey string) error {
+	key := strings.TrimLeft(objectKey, "/")
+	if key == "" {
+		return nil
+	}
+	if err := s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{}); err != nil {
+		return fmt.Errorf("delete object: %w", err)
+	}
+	return nil
+}

@@ -43,6 +43,10 @@ const (
 	ProductImageUpload   = "product.image.upload"
 	ProductMasterRead    = "product.master.read"
 	ProductMasterWrite   = "product.master.write"
+	// ProductReviewModerate lists every review, hidden ones included, and
+	// hides or unhides one. Writing a review needs no permission: it is ABAC
+	// on the buyer of a fulfilled order (docs/product-reviews-plan.md).
+	ProductReviewModerate = "product.review.moderate"
 )
 
 // Promotional code permissions (product service).
@@ -137,6 +141,7 @@ var Catalog = []string{
 	ProductImageUpload,
 	ProductMasterRead,
 	ProductMasterWrite,
+	ProductReviewModerate,
 	PromotionRead,
 	PromotionCreate,
 	PromotionUpdate,

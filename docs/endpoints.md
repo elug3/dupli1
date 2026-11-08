@@ -382,9 +382,13 @@ Remove from wishlist.
 
 List current owner's wishlisted public parents.
 
+### Reviews — /api/v1/products/{id}/reviews, /api/v1/products/reviews/…
+
+`GET /{id}/reviews` and `GET /{id}/reviews/photos` are public. `POST /{id}/reviews`, `POST /reviews/photos`, `GET /reviews/me`, `PATCH|DELETE /reviews/by-id/{reviewId}` need a Bearer token (ABAC on the buyer). `GET /reviews` and `POST /reviews/by-id/{reviewId}/hide` need `product.review.moderate` — [product-reviews-plan.md](product-reviews-plan.md).
+
 ### GET /api/v1/products/{id}
 
-Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. Cart/checkout use each variant's `sku`. Sets `dupli1_guest` when absent and increments unique `viewCount` — [product-guest-views-plan.md](product-guest-views-plan.md). Includes `soldCount` (units committed on ship) — [product-sold-count.md](product-sold-count.md). Includes `wishlistCount`. Parent `price` / `officialPrice` are source of truth (also echoed on variants).
+Public PDP: parent plus `variants[]` (active only), `availableColors`, `availableSizes`. Returns `404` for draft/archived parents. Cart/checkout use each variant's `sku`. Sets `dupli1_guest` when absent and increments unique `viewCount` — [product-guest-views-plan.md](product-guest-views-plan.md). Includes `soldCount` (units committed on ship) — [product-sold-count.md](product-sold-count.md). Includes `wishlistCount`, `reviewCount` and `ratingAverage`. Parent `price` / `officialPrice` are source of truth (also echoed on variants).
 
 ### GET /api/v1/products/{id}/recommendations
 

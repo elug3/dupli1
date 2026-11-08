@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/elug3/dupli1/product/pkg/handler"
+	"github.com/elug3/dupli1/product/pkg/infra/gateway"
 	natsinfra "github.com/elug3/dupli1/product/pkg/infra/nats"
 	"github.com/elug3/dupli1/product/pkg/infra/pg"
 	"github.com/elug3/dupli1/product/pkg/infra/ratelimit"
@@ -110,6 +111,22 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 
+	// Reviews (docs/product-reviews-plan.md). The order check and the
+	// author's name go through the gateway with the shopper's own token.
+	reviewStore, err := pg.NewReviewStore(store.Pool())
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
+	reviewSvc := service.NewReviewService(reviewStore, store)
+	if objects, ok := imgStore.(ports.ReviewObjectStore); ok && imgStore != nil {
+		reviewSvc.WithObjects(objects)
+	}
+	if gw := strings.TrimSpace(cfg.GatewayURL); gw != "" {
+		reviewSvc.WithGateway(gateway.NewOrderReader(gw, nil), gateway.NewProfileReader(gw, nil))
+	} else {
+		log.Printf("product: DUPLI1_GATEWAY_URL is not set; new reviews are refused with 503")
+	}
 	guestCookie := handler.GuestCookieConfigFromEnv()
 	h := handler.NewHandler(svc, promotionSvc, inventorySvc, catalogSvc).
 		WithSettings(BuildSettings(cfg, guestCookie.Enabled)).
@@ -117,7 +134,8 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		WithWishlistStore(store).
 		WithGuestCookie(guestCookie).
 		WithVisitorService(service.NewVisitorService(visitorStore)).
-		WithCatalogReportService(service.NewCatalogReportService(store, catalogStore))
+		WithCatalogReportService(service.NewCatalogReportService(store, catalogStore)).
+		WithReviewService(reviewSvc)
 
 	// New customers get their welcome promotional code from auth's
 	// user.registered event. Issuing is keyed on the event's user id, so a
@@ -131,6 +149,16 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 			natsPublisher.Close()
 			store.Close()
 			return nil, fmt.Errorf("subscribe welcome promotion issuer: %w", err)
+		}
+	}
+
+	// A deleted account's reviews, ratings and photos go with it.
+	if natsSubscriber != nil {
+		if err := reviewSvc.Register(ctx, natsSubscriber); err != nil {
+			natsSubscriber.Close()
+			natsPublisher.Close()
+			store.Close()
+			return nil, fmt.Errorf("subscribe review account deletion: %w", err)
 		}
 	}
 
@@ -263,10 +291,24 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	handler.Mount(mux, "POST", handler.RouteInventoryReservationCommit, internalOrder(permissions.InventoryReservationManage, h.CommitReservationHandler()), handler.LegacyRouteInventoryReservationCommit)
 	handler.Mount(mux, "POST", handler.RouteInventoryReservationRelease, internalOrder(permissions.InventoryReservationManage, h.ReleaseReservationHandler()), handler.LegacyRouteInventoryReservationRelease)
 
+	h.RegisterReviewRoutes(mux, handler.ReviewMiddleware{
+		Auth:      func(next http.Handler) http.Handler { return middleware.RequireAuth(validator, next) },
+		Moderator: middleware.RequireAnyPermission(permissions.ProductReviewModerate),
+		// Per account, not per IP: every shopper reaches product through the
+		// storefront's server, so an IP budget would be one budget for all.
+		WriteLimit:  accountLimit(newRateLimiter(cfg, "review", 10, "review rate limit")),
+		UploadLimit: accountLimit(newRateLimiter(cfg, "review-photo", 30, "review photo rate limit")),
+	})
+
+	// Uploads no review took within a day are deleted, row and objects.
+	backgroundCtx, stopBackground := context.WithCancel(context.Background())
+	reviewSvc.StartOrphanPhotoSweeper(backgroundCtx, time.Hour)
+
 	return &App{
 		Handler:       mux,
 		natsPublisher: natsPublisher,
 		close: func() error {
+			stopBackground()
 			if natsSubscriber != nil {
 				natsSubscriber.Close()
 			}
@@ -309,6 +351,22 @@ func newRateLimiter(cfg Config, prefix string, maxAttempts int, name string) *ra
 		return ratelimit.New(ratelimit.NewMemoryCounter(), maxAttempts, window)
 	}
 	return ratelimit.New(ratelimit.NewRedisCounter(redis.NewClient(opts), prefix), maxAttempts, window)
+}
+
+// accountLimit budgets a signed-in account. It runs after RequireAuth.
+func accountLimit(l *ratelimit.Limiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if id := customerIDFromRequest(r); id != "" && !l.Allow(r.Context(), "cust:"+id) {
+				w.Header().Set("Retry-After", "60")
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = w.Write([]byte(`{"error":"too many requests","code":429,"reason":"rate_limited"}`))
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // customerIDFromRequest reads the caller's identity when the request happens to

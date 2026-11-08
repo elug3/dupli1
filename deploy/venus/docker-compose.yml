@@ -155,6 +155,9 @@ services:
       S3_PUBLIC_ENDPOINT: /product-images
       S3_ACCESS_KEY: dupli1
       S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # Reviews read the shopper's order and display name through the gateway
+      # with the shopper's own token (docs/product-reviews-plan.md).
+      DUPLI1_GATEWAY_URL: http://proxy.dupli1.local:8081
     depends_on: { postgres: { condition: service_healthy }, s3: { condition: service_healthy }, auth: { condition: service_started } }
     networks: { default: { aliases: [product.dupli1.local] } }
 

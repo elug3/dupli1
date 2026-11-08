@@ -15,4 +15,8 @@ type Config struct {
 	// Unset falls back to a per-process window, so local dev needs no
 	// infrastructure — see pkg/infra/ratelimit.
 	RedisURL string
+	// GatewayURL is the internal nginx gateway. Reviews check the shopper's
+	// order and read their display name through it, with the shopper's own
+	// token. Empty refuses new reviews with 503.
+	GatewayURL string
 }

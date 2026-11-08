@@ -630,6 +630,23 @@ List/search/home clients should prefer `defaultListingImageUrl` (≈600px JPEG s
 | `DELETE` | `/api/v1/products/{id}/wishlist` | Remove |
 | `GET` | `/api/v1/products/wishlist` | List current owner's items |
 
+### Reviews (리뷰)
+
+Public reviews from buyers of fulfilled orders, with photos and staff moderation — contract in [product-reviews-plan.md](product-reviews-plan.md). Errors add a machine-readable `reason` to product's `{ error, code }`.
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| `GET` | `/api/v1/products/{id}/reviews` | — | `{ summary, reviews, nextCursor }`; `?sort=latest\|rating_desc\|rating_asc`, `?photo=true`, `?rating=`, `?limit=` (≤20), `?cursor=` |
+| `GET` | `/api/v1/products/{id}/reviews/photos` | — | Photos of visible reviews, newest first |
+| `POST` | `/api/v1/products/reviews/photos` | Bearer | Multipart `photo` (JPEG/PNG/WebP, ≤10 MB) → `201 { photoId, url, thumbUrl }` |
+| `POST` | `/api/v1/products/{id}/reviews` | Bearer | `{ orderId, skuId, rating, body, fit?, photoIds? }`; the order must be the caller's and `fulfilled` (checked against order with the caller's token) |
+| `GET` | `/api/v1/products/reviews/me` | Bearer | The caller's reviews; `?orderId=` |
+| `PATCH` / `DELETE` | `/api/v1/products/reviews/by-id/{reviewId}` | Bearer (author) | Edit / delete |
+| `GET` | `/api/v1/products/reviews` | `product.review.moderate` | Staff list; `?status=visible\|hidden`, `?productId=`, `?rating=` |
+| `POST` | `/api/v1/products/reviews/by-id/{reviewId}/hide` | `product.review.moderate` | `{ hidden, reason }` |
+
+Parents also carry `reviewCount` and `ratingAverage` (`null` with no reviews).
+
 ---
 
 ### `POST /api/v1/products/promotions/redeem`

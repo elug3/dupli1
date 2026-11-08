@@ -88,7 +88,7 @@ Items from the 2026-10-31 meeting. h-global product registration should work in 
 - [ ] Inspection photo/video section at the bottom of the PDP, plus the shooting and upload process at time of sale
 - [ ] 1:1 chat module in the site (replaces KakaoTalk) — see [support-web-chat.md](support-web-chat.md)
 - [ ] Customs flow: order -> inspection -> enter/verify overseas customs number -> shipping
-- [ ] Reviews feature
+- [ ] Reviews feature — plan: [product-reviews-plan.md](product-reviews-plan.md)
 
 ### PDP color display
 - [x] Sample design for the PDP Color Swatch (SER-99) — [Figma](https://www.figma.com/design/tqtyEpto8TYyJqqN2HjWth)

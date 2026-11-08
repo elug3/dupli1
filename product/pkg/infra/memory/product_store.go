@@ -412,6 +412,8 @@ func (s *ProductStore) UpdateProduct(ctx context.Context, p domain.Product) (*do
 			p.ViewCount = existing.ViewCount
 			p.SoldCount = existing.SoldCount
 			p.WishlistCount = existing.WishlistCount
+			p.ReviewCount = existing.ReviewCount
+			p.RatingAverage = existing.RatingAverage
 			s.Products[i] = p
 			return s.GetProduct(ctx, p.ID)
 		}
