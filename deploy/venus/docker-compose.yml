@@ -210,16 +210,12 @@ services:
       DUPLI1_PAYMENT_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/payments?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
       DUPLI1_ORDER_URL: http://order.dupli1.local:8080
-      # NANO's receiveUrl, the checkout bridge and the shopper's return pages all
-      # hang off PUBLIC_ORIGIN, so a card payment comes back to the domain the
-      # shopper's session cookie lives on. dupli1.com only redirects there now
-      # (nginx-edge.conf).
-      DUPLI1_PAYMENT_PUBLIC_URL: ${PUBLIC_ORIGIN:-https://dupli2.com}
+      DUPLI1_PAYMENT_PUBLIC_URL: ${PUBLIC_ORIGIN:-https://dupli1.com}
       NATS_URL: nats://nats.dupli1.local:4222
       JWT_SECRET: ${JWT_SECRET}
       NANO_BASE_URL: https://pay.nanopay.co.kr
-      NANO_SUCCESS_URL: ${PUBLIC_ORIGIN:-https://dupli2.com}/checkout/confirmation
-      NANO_FAILURE_URL: ${PUBLIC_ORIGIN:-https://dupli2.com}/checkout
+      NANO_SUCCESS_URL: ${PUBLIC_ORIGIN:-https://dupli1.com}/checkout/confirmation
+      NANO_FAILURE_URL: ${PUBLIC_ORIGIN:-https://dupli1.com}/checkout
       NANO_API_KEY: ${NANO_API_KEY:-}
       NANO_LOGIN_ID: ${NANO_LOGIN_ID:-}
       NANO_SHOPCODE: ${NANO_SHOPCODE:-}
@@ -253,7 +249,7 @@ services:
       # AWS ran notification in-memory, so approvals were lost on restart.
       DUPLI1_NOTIFICATION_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/notifications?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
-      MANAGE_WEB_URL: ${MANAGE_ORIGIN:-https://manage.dupli2.com}
+      MANAGE_WEB_URL: ${MANAGE_ORIGIN:-https://manage.dupli1.com}
       NATS_URL: nats://nats.dupli1.local:4222
       # Empty until cutover: one bot token must never be polled by AWS and
       # VENUS at the same time (Telegram answers the second poller with 409).
@@ -279,14 +275,14 @@ services:
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
       JWT_SECRET: ${JWT_SECRET}
       NATS_URL: nats://nats.dupli1.local:4222
-      MANAGE_WEB_URL: ${MANAGE_ORIGIN:-https://manage.dupli2.com}
+      MANAGE_WEB_URL: ${MANAGE_ORIGIN:-https://manage.dupli1.com}
       # Web chat checks product and order references through the gateway with
       # the shopper's own token, like order does.
       DUPLI1_GATEWAY_URL: http://proxy.dupli1.local:8081
-      DUPLI1_STOREFRONT_URL: ${PUBLIC_ORIGIN:-https://dupli2.com}
+      DUPLI1_STOREFRONT_URL: ${PUBLIC_ORIGIN:-https://dupli1.com}
       DUPLI1_SUPPORT_MESSAGE_RETENTION_DAYS: ${DUPLI1_SUPPORT_MESSAGE_RETENTION_DAYS:-180}
       # Empty token: the bot stays off and web chat and the inbox still work.
-      # Set the webhook URL (https://dupli2.com/api/v1/support/telegram/webhook)
+      # Set the webhook URL (https://dupli1.com/api/v1/support/telegram/webhook)
       # only together with its secret — support refuses to start with the URL
       # alone. Without a URL the bot long-polls instead.
       TELEGRAM_SUPPORT_BOT_TOKEN: ${TELEGRAM_SUPPORT_BOT_TOKEN:-}

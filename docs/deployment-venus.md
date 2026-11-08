@@ -305,36 +305,6 @@ lists each connector with its start time; a connector on another machine on the
 home network shows the same origin IP. Rotating the tunnel token also cuts off
 every connector that isn't using the new one.
 
-## Domain: dupli2.com
-
-**dupli2.com replaced dupli1.com** as the storefront and console domain. In
-[`docker-compose.yml`](../deploy/venus/docker-compose.yml), `PUBLIC_ORIGIN`
-defaults to `https://dupli2.com` and `MANAGE_ORIGIN` to `https://manage.dupli2.com`.
-NANO card payments use `PUBLIC_ORIGIN` for the checkout bridge, `receiveUrl` and
-the success and failure pages, so a payment returns the shopper to the domain
-their session cookie is on. Support's storefront links and the manage-web links
-in alerts use the same variables. Drop any `PUBLIC_ORIGIN` / `MANAGE_ORIGIN`
-override from `/opt/dupli1/.env`, or set it to the dupli2 value.
-
-The edge ([`nginx-edge.conf`](../deploy/venus/nginx-edge.conf)) answers
-`dupli1.com`, `www.dupli1.com` and `manage.dupli1.com` with a `308` to the same
-path on dupli2. The exceptions are `/api/` and `/gateway/`, which dupli1.com
-still serves. A NANO `receiveUrl` issued before the switch points at dupli1.com,
-and NANO sends the approval as a form POST, so redirecting it would drop the
-body and leave the payment unconfirmed. Login cookies belong to one host, so
-shoppers and staff sign in again once on dupli2.
-
-Outside this repo:
-- The tunnel's *Published application routes* need `dupli2.com`,
-  `www.dupli2.com` and `manage.dupli2.com` → `http://edge:8080`. Keep the
-  dupli1 routes so the redirects and the `/api/` paths keep working.
-- If `TELEGRAM_SUPPORT_WEBHOOK_URL` is on dupli1.com it still works. Move it
-  to dupli2.com when convenient.
-- Ask NANO whether the merchant (`NANO_SHOPCODE`) has a registered site domain
-  or return-URL allowlist, and add dupli2.com before switching.
-- After deploying, make one low-value card payment on dupli2.com. It should
-  come back to `https://dupli2.com/checkout/confirmation` still signed in.
-
 ## After cutover (separate, later)
 
 - Decommission AWS (ECS, RDS — final snapshot optional, ALB, NAT gateway, ECR,
