@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -897,5 +899,25 @@ func assertNanoCheckoutFailed(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 	if reason := got.Query().Get("error"); reason != "checkout_failed" {
 		t.Fatalf("error = %q, want checkout_failed; Location = %s", reason, rec.Header().Get("Location"))
+	}
+}
+
+// NANO answered the 2026-11-08 checkout with a numeric resultCode (999). It must
+// be treated as a rejection and its resultMsg logged, not read as "0000 with no
+// pay URL".
+func TestNanoCheckout_NumericResultCodeLogsResultMsg(t *testing.T) {
+	mux, created, _ := nanoCheckoutAgainst(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"resultCode":999,"resultMsg":"unregistered domain"}`))
+	}))
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	rec := getNanoCheckout(t, mux, created.ID)
+	assertNanoCheckoutFailed(t, rec)
+	if got := buf.String(); !strings.Contains(got, "rejected: resultCode=999 resultMsg=unregistered domain") {
+		t.Fatalf("log = %q, want the rejection with resultMsg", got)
 	}
 }
