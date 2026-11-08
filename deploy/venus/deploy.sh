@@ -51,23 +51,23 @@ case $TARGET in
     for s in "${SERVICES[@]}"; do GHCR[$s]=dupli1-$s; LOCAL[$s]=dupli1-prod/$s; done
     TAG_VAR=DUPLI1_BACKEND_TAG
     # Gateway routes that reach each service's health handler (notification has none).
-    HEALTH=("proxy dupli2.com /gateway/health" "auth dupli2.com /api/v1/auth/health"
-      "product dupli2.com /api/v1/products/health" "order dupli2.com /api/v1/orders/health"
-      "cart dupli2.com /api/v1/cart/health" "payment dupli2.com /api/v1/payments/health"
-      "profile dupli2.com /api/v1/profile/health" "support dupli2.com /api/v1/support/health")
+    HEALTH=("proxy dupli1.com /gateway/health" "auth dupli1.com /api/v1/auth/health"
+      "product dupli1.com /api/v1/products/health" "order dupli1.com /api/v1/orders/health"
+      "cart dupli1.com /api/v1/cart/health" "payment dupli1.com /api/v1/payments/health"
+      "profile dupli1.com /api/v1/profile/health" "support dupli1.com /api/v1/support/health")
     INTERNAL_GATEWAY=1
     ;;
   web)
     SERVICES=(web)
     GHCR[web]=dupli1-web; LOCAL[web]=dupli1-prod/web
     TAG_VAR=DUPLI1_WEB_TAG
-    HEALTH=("web dupli2.com /" "web dupli2.com /login")
+    HEALTH=("web dupli1.com /" "web dupli1.com /login")
     ;;
   manage-web)
     SERVICES=(manage-web)
     GHCR[manage-web]=dupli1-manage-web; LOCAL[manage-web]=dupli1-prod/manage-web-container
     TAG_VAR=DUPLI1_MANAGE_WEB_TAG
-    HEALTH=("manage-web manage.dupli2.com /" "manage-web manage.dupli2.com /login")
+    HEALTH=("manage-web manage.dupli1.com /" "manage-web manage.dupli1.com /login")
     ;;
   *) echo "unknown target: $TARGET (backend, web or manage-web)" >&2; exit 2 ;;
 esac

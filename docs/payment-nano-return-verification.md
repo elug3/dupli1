@@ -138,7 +138,7 @@ stack also exposes the seeded owner account (`admin@dupli1.com` / `password`),
 so change that first or tunnel only the payment service.
 
 Local Compose still cannot receive a real NANO form POST (`CallbackReachable()`
-rejects loopback). Production `DUPLI1_PAYMENT_PUBLIC_URL=https://dupli2.com` (VENUS `PUBLIC_ORIGIN`) is
+rejects loopback). Production `DUPLI1_PAYMENT_PUBLIC_URL=https://dupli1.com` is
 reachable. A tunnel is only needed to exercise the return locally.
 
 ---
