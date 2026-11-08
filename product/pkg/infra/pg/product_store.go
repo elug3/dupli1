@@ -216,6 +216,15 @@ func (s *ProductSearchStore) migrateProductWishlists(ctx context.Context) error 
 	); err != nil {
 		return fmt.Errorf("migrate products.wishlist_count: %w", err)
 	}
+	// Review counters (docs/product-reviews-plan.md) are read with every
+	// parent, so they are added here and not only by the review store.
+	for _, col := range reviewCounterColumns {
+		if _, err := s.pool.Exec(ctx,
+			`ALTER TABLE products ADD COLUMN IF NOT EXISTS `+col+` BIGINT NOT NULL DEFAULT 0`,
+		); err != nil {
+			return fmt.Errorf("migrate products.%s: %w", col, err)
+		}
+	}
 	for _, idx := range []struct {
 		name string
 		sql  string
@@ -438,7 +447,7 @@ func scanAttributesJSON(raw []byte) map[string]string {
 	return out
 }
 
-const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price, official_price, status, capacity, tags, attributes, size_chart, view_count, sold_count, wishlist_count, created_at, updated_at, created_by`
+const parentSelectCols = `id, name, description, brand, brand_code, style_code, material, category, sub_category, bag_style, target, price, official_price, status, capacity, tags, attributes, size_chart, view_count, sold_count, wishlist_count, review_count, review_rating_sum, created_at, updated_at, created_by`
 
 func scanParent(scan func(...any) error) (domain.Product, error) {
 	var p domain.Product
@@ -448,12 +457,13 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	var brandCode, styleCode *string
 	var subCategory, bagStyle, target string
 	var attrsRaw, sizeChartRaw []byte
+	var reviewRatingSum int64
 	err := scan(
 		&p.ID, &p.Name, &p.Description,
 		&p.Brand, &brandCode, &styleCode, &p.Material, &p.Category,
 		&subCategory, &bagStyle, &target,
 		&p.Price, &p.OfficialPrice,
-		&p.Status, &capacity, &tags, &attrsRaw, &sizeChartRaw, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &createdAt, &updatedAt, &p.CreatedBy,
+		&p.Status, &capacity, &tags, &attrsRaw, &sizeChartRaw, &p.ViewCount, &p.SoldCount, &p.WishlistCount, &p.ReviewCount, &reviewRatingSum, &createdAt, &updatedAt, &p.CreatedBy,
 	)
 	if err != nil {
 		return domain.Product{}, err
@@ -471,6 +481,7 @@ func scanParent(scan func(...any) error) (domain.Product, error) {
 	p.Tags = scanTextArray(tags)
 	p.Attributes = scanAttributesJSON(attrsRaw)
 	p.SizeChart = scanSizeChartJSON(sizeChartRaw)
+	p.RatingAverage = domain.RatingAverage(p.ReviewCount, reviewRatingSum)
 	p.CreatedAt = createdAt.Format(time.RFC3339)
 	p.UpdatedAt = updatedAt.Format(time.RFC3339)
 	return p, nil

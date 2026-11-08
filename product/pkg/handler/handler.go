@@ -31,6 +31,7 @@ type Handler struct {
 	wishlistStore     ports.ProductWishlistStore
 	visitorSvc        *service.VisitorService
 	catalogReportSvc  *service.CatalogReportService
+	reviewSvc         *service.ReviewService
 	guestCookie       GuestCookieConfig
 	settings          settings.Response
 }

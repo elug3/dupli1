@@ -36,6 +36,10 @@ type ServerOptions struct {
 	S3SecretKey        string
 	S3Bucket           string
 	RedisURL           string
+	// GatewayURL is the internal nginx gateway (DUPLI1_GATEWAY_URL). Reviews
+	// read the shopper's order and profile through it; empty refuses new
+	// reviews with 503 and leaves everything else working.
+	GatewayURL string
 }
 
 var DefaultServerOptions = ServerOptions{

@@ -70,6 +70,9 @@ func applyEnv(opts *product.ServerOptions) {
 	if v := os.Getenv("REDIS_URL"); v != "" {
 		opts.RedisURL = v
 	}
+	if v := os.Getenv("DUPLI1_GATEWAY_URL"); v != "" {
+		opts.GatewayURL = v
+	}
 	if v := os.Getenv("DUPLI1_PRODUCT_NATS_URL"); v != "" {
 		opts.NATSURL = v
 	} else if v := os.Getenv("NATS_URL"); v != "" {

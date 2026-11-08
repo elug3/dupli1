@@ -101,8 +101,13 @@ type Product struct {
 	// Incremented when a reservation is committed (order ship → in_transit), not on payment.
 	SoldCount int64 `json:"soldCount"`
 	// WishlistCount is unique owners who wishlisted this parent (denormalized).
-	WishlistCount int64  `json:"wishlistCount"`
-	CreatedAt     string `json:"createdAt"`
+	WishlistCount int64 `json:"wishlistCount"`
+	// ReviewCount and RatingAverage summarise the parent's visible reviews
+	// (denormalized; docs/product-reviews-plan.md). RatingAverage is null
+	// with no reviews.
+	ReviewCount   int64    `json:"reviewCount"`
+	RatingAverage *float64 `json:"ratingAverage"`
+	CreatedAt     string   `json:"createdAt"`
 	// UpdatedAt is server-set on every write (create and update); never taken
 	// from an incoming request body.
 	UpdatedAt string `json:"updatedAt,omitempty"`
