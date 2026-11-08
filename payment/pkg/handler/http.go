@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -353,7 +354,7 @@ func (h *Handler) nanoCheckout(w http.ResponseWriter, r *http.Request, paymentID
 					return
 				}
 			}
-			if code, _ := parsed["resultCode"].(string); code != "" && code != "0000" {
+			if code := nanoResultCode(parsed["resultCode"]); code != "" && code != "0000" {
 				msg, _ := parsed["resultMsg"].(string)
 				// NANO's resultMsg is an operator diagnostic — it carries their
 				// internal identifiers (mbrNo, mbrRefNo) and means nothing to a
@@ -390,6 +391,21 @@ func (h *Handler) nanoCheckout(w http.ResponseWriter, r *http.Request, paymentID
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(respBody)
+}
+
+// nanoResultCode reads NANO's resultCode whether it arrives as a JSON string
+// ("0000") or a bare number (999). The checkout rejection on 2026-11-08 was a
+// number, so a string-only check took it for a success without a pay URL and
+// dropped resultMsg — the one field that says why NANO refused.
+func nanoResultCode(v any) string {
+	switch c := v.(type) {
+	case string:
+		return strings.TrimSpace(c)
+	case float64:
+		return strconv.FormatFloat(c, 'f', -1, 64)
+	default:
+		return ""
+	}
 }
 
 const (
