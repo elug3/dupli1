@@ -290,7 +290,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 			RequestHash: reqHash,
 		}
 	}
-	events, err := s.outboxEvents(order, orderCreatedSubject)
+	events, err := s.outboxEvents(order, nil, orderCreatedSubject)
 	if err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
@@ -408,7 +408,11 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 			}
 		}
 	}
-	events, err := s.outboxEvents(order, orderPaidSubject, orderUpdatedSubject)
+	paidFrom := domain.StatusPending
+	if reinstatedReservation != "" {
+		paidFrom = domain.StatusCanceled
+	}
+	events, err := s.outboxEvents(order, s.change(ctx, paidFrom, events.OrderChangePaid), orderPaidSubject, orderUpdatedSubject)
 	if err != nil {
 		if reinstatedReservation != "" {
 			_ = s.stock.ReleaseReservation(ctx, reinstatedReservation)
@@ -450,7 +454,7 @@ func (s *Service) MarkOrderPaid(ctx context.Context, orderID, paymentID string, 
 			_ = s.stock.ReleaseReservation(ctx, reservationID)
 			return nil, err
 		}
-		events, err = s.outboxEvents(fresh, orderPaidSubject, orderUpdatedSubject)
+		events, err = s.outboxEvents(fresh, s.change(ctx, domain.StatusCanceled, orderChangePaid), orderPaidSubject, orderUpdatedSubject)
 		if err != nil {
 			_ = s.stock.ReleaseReservation(ctx, reservationID)
 			return nil, err
@@ -514,10 +518,11 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string, trac
 	if err := s.commitReservationForShip(ctx, order.ReservationID); err != nil {
 		return nil, err
 	}
+	shipFrom := order.Status
 	if err := order.Ship(shippedBy, normalized, s.now()); err != nil {
 		return nil, err
 	}
-	events, err := s.outboxEvents(order, orderUpdatedSubject)
+	events, err := s.outboxEvents(order, s.change(ctx, shipFrom, events.OrderChangeShipped), orderUpdatedSubject)
 	if err != nil {
 		return nil, err
 	}
@@ -544,6 +549,12 @@ func (s *Service) ShipOrder(ctx context.Context, orderID, shippedBy string, trac
 }
 
 func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, error) {
+	return s.cancelOrder(ctx, id, events.OrderChangeCanceled)
+}
+
+// cancelOrder is CancelOrder recording action as the change: a plain cancel,
+// or the approval of a customer's cancel request.
+func (s *Service) cancelOrder(ctx context.Context, id, action string) (*domain.Order, error) {
 	order, err := s.repo.Get(ctx, strings.TrimSpace(id))
 	if err != nil {
 		return nil, err
@@ -583,7 +594,7 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 	if err := cancelled.Cancel(now); err != nil {
 		return nil, err
 	}
-	events, err := s.outboxEvents(cancelled, orderUpdatedSubject)
+	events, err := s.outboxEvents(cancelled, s.change(ctx, order.Status, action), orderUpdatedSubject)
 	if err != nil {
 		return nil, err
 	}
@@ -635,7 +646,7 @@ func (s *Service) CancelOrder(ctx context.Context, id string) (*domain.Order, er
 		}
 		return nil, domain.ErrInvalidTransition
 	}
-	saved, err := s.saveStatusChange(ctx, cancelled)
+	saved, err := s.saveStatusChange(ctx, cancelled, s.change(ctx, order.Status, action))
 	if err != nil {
 		return nil, err
 	}
@@ -662,7 +673,7 @@ func (s *Service) ConfirmOrder(ctx context.Context, id string) (*domain.Order, e
 	if err := confirmed.Confirm(now); err != nil {
 		return nil, err
 	}
-	events, err := s.outboxEvents(confirmed, orderUpdatedSubject)
+	events, err := s.outboxEvents(confirmed, s.change(ctx, order.Status, events.OrderChangeConfirmed), orderUpdatedSubject)
 	if err != nil {
 		return nil, err
 	}
@@ -691,10 +702,11 @@ func (s *Service) DeliverOrder(ctx context.Context, id, deliveredBy string) (*do
 	if err != nil {
 		return nil, err
 	}
+	from := order.Status
 	if err := order.Deliver(deliveredBy, s.now()); err != nil {
 		return nil, err
 	}
-	return s.saveStatusChange(ctx, order)
+	return s.saveStatusChange(ctx, order, s.change(ctx, from, events.OrderChangeDelivered))
 }
 
 // ConfirmReceipt is the customer acknowledging they received a delivered
@@ -704,10 +716,11 @@ func (s *Service) ConfirmReceipt(ctx context.Context, id string) (*domain.Order,
 	if err != nil {
 		return nil, err
 	}
+	from := order.Status
 	if err := order.ConfirmReceipt(s.now()); err != nil {
 		return nil, err
 	}
-	return s.saveStatusChange(ctx, order)
+	return s.saveStatusChange(ctx, order, s.change(ctx, from, events.OrderChangeReceiptConfirmed))
 }
 
 // ReportNotReceived is the customer disputing a delivered order they say
@@ -717,10 +730,11 @@ func (s *Service) ReportNotReceived(ctx context.Context, id, reason string) (*do
 	if err != nil {
 		return nil, err
 	}
+	from := order.Status
 	if err := order.ReportNotReceived(reason, s.now()); err != nil {
 		return nil, err
 	}
-	return s.saveStatusChange(ctx, order)
+	return s.saveStatusChange(ctx, order, s.change(ctx, from, events.OrderChangeDisputed))
 }
 
 // ResolveDisputeFulfilled closes a dispute in the delivery's favor — a
@@ -732,10 +746,11 @@ func (s *Service) ResolveDisputeFulfilled(ctx context.Context, id string) (*doma
 	if err != nil {
 		return nil, err
 	}
+	from := order.Status
 	if err := order.ResolveDisputeFulfilled(s.now()); err != nil {
 		return nil, err
 	}
-	return s.saveStatusChange(ctx, order)
+	return s.saveStatusChange(ctx, order, s.change(ctx, from, events.OrderChangeDisputeResolved))
 }
 
 // CustomerCancel immediately refunds before manager confirmation, and otherwise
@@ -751,10 +766,11 @@ func (s *Service) CustomerCancel(ctx context.Context, id, reason string) (*domai
 	if order.CancelRequestedAt != nil {
 		return s.present(order), nil
 	}
+	from := order.Status
 	if err := order.RequestCancel(reason, s.now()); err != nil {
 		return nil, err
 	}
-	return s.saveStatusChange(ctx, order)
+	return s.saveStatusChange(ctx, order, s.change(ctx, from, events.OrderChangeCancelRequested))
 }
 
 // ApproveCancelRequest refunds and cancels after a customer request (or the
@@ -767,7 +783,7 @@ func (s *Service) ApproveCancelRequest(ctx context.Context, id string) (*domain.
 	if order.CancelRequestedAt == nil {
 		return nil, domain.ErrInvalidTransition
 	}
-	return s.CancelOrder(ctx, order.ID)
+	return s.cancelOrder(ctx, order.ID, events.OrderChangeCancelApproved)
 }
 
 // RejectCancelRequest leaves the order in place and clears the customer request.
@@ -776,10 +792,11 @@ func (s *Service) RejectCancelRequest(ctx context.Context, id string) (*domain.O
 	if err != nil {
 		return nil, err
 	}
+	from := order.Status
 	if err := order.RejectCancelRequest(s.now()); err != nil {
 		return nil, err
 	}
-	return s.saveStatusChange(ctx, order)
+	return s.saveStatusChange(ctx, order, s.change(ctx, from, events.OrderChangeCancelRejected))
 }
 
 func (s *Service) refundCapturedPayment(ctx context.Context, order *domain.Order) error {
@@ -800,14 +817,15 @@ func (s *Service) FulfillOrder(ctx context.Context, id string) (*domain.Order, e
 	if err != nil {
 		return nil, err
 	}
+	from := order.Status
 	if err := order.Fulfill(s.now()); err != nil {
 		return nil, err
 	}
-	return s.saveStatusChange(ctx, order)
+	return s.saveStatusChange(ctx, order, s.change(ctx, from, events.OrderChangeFulfilled))
 }
 
-func (s *Service) saveStatusChange(ctx context.Context, order *domain.Order) (*domain.Order, error) {
-	events, err := s.outboxEvents(order, orderUpdatedSubject)
+func (s *Service) saveStatusChange(ctx context.Context, order *domain.Order, change *orderChange) (*domain.Order, error) {
+	events, err := s.outboxEvents(order, change, orderUpdatedSubject)
 	if err != nil {
 		return nil, err
 	}
@@ -871,10 +889,10 @@ func hashCreateOrderInput(input CreateOrderInput) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (s *Service) outboxEvents(order *domain.Order, subjects ...string) ([]ports.OutboxEvent, error) {
+func (s *Service) outboxEvents(order *domain.Order, change *orderChange, subjects ...string) ([]ports.OutboxEvent, error) {
 	events := make([]ports.OutboxEvent, 0, len(subjects))
 	for _, subject := range subjects {
-		payload, err := s.marshalOrderEvent(subject, order)
+		payload, err := s.marshalOrderEvent(subject, order, change)
 		if err != nil {
 			return nil, err
 		}
@@ -887,7 +905,7 @@ func (s *Service) outboxEvents(order *domain.Order, subjects ...string) ([]ports
 	return events, nil
 }
 
-func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte, error) {
+func (s *Service) marshalOrderEvent(subject string, order *domain.Order, change *orderChange) ([]byte, error) {
 	items := make([]events.OrderItem, len(order.Items))
 	for i, item := range order.Items {
 		items[i] = events.OrderItem{
@@ -897,7 +915,7 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 			UnitPriceWon: item.UnitPriceWon,
 		}
 	}
-	payload, err := json.Marshal(events.Order{
+	event := events.Order{
 		EventType:      subject,
 		OrderID:        order.ID,
 		CustomerID:     order.CustomerID,
@@ -909,7 +927,9 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order) ([]byte
 		Items:          items,
 		CreatedAt:      order.CreatedAt,
 		Occurred:       s.now(),
-	})
+	}
+	change.apply(&event, order)
+	payload, err := json.Marshal(event)
 	if err != nil {
 		return nil, fmt.Errorf("marshal %s event: %w", subject, err)
 	}

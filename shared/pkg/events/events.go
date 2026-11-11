@@ -122,7 +122,50 @@ type Order struct {
 	Items          []OrderItem `json:"items"`
 	CreatedAt      time.Time   `json:"created_at"`
 	Occurred       time.Time   `json:"occurred_at"`
+
+	// The fields below say what this event changed, so an alert can read
+	// "확인됨 → 배송 중" instead of only the status the order ended in. All
+	// are optional: order.created carries none of them, and an event written
+	// before they existed decodes with them empty.
+
+	// PreviousStatus is the status the order had before this change. Equal
+	// to Status for a change that leaves the status alone (a cancel request
+	// opened or rejected).
+	PreviousStatus string `json:"previous_status,omitempty"`
+	// Change names the action: one of the OrderChange* constants.
+	Change string `json:"change,omitempty"`
+	// Automatic is true when a policy worker made the change (the 2-hour
+	// auto-confirm or auto-approve, the 14-day auto-fulfill, the unpaid
+	// expiry) rather than a person.
+	Automatic bool `json:"automatic,omitempty"`
+	// Reason is the shopper's reason, for a cancel request or a dispute.
+	Reason string `json:"reason,omitempty"`
+	// Carrier, CarrierNote and TrackingNumber are set when the order ships.
+	Carrier        string `json:"carrier,omitempty"`
+	CarrierNote    string `json:"carrier_note,omitempty"`
+	TrackingNumber string `json:"tracking_number,omitempty"`
 }
+
+// Order change actions, carried in Order.Change.
+const (
+	OrderChangePaid             = "paid"
+	OrderChangeConfirmed        = "confirmed"
+	OrderChangeShipped          = "shipped"
+	OrderChangeDelivered        = "delivered"
+	OrderChangeReceiptConfirmed = "receipt_confirmed"
+	OrderChangeDisputed         = "disputed"
+	OrderChangeDisputeResolved  = "dispute_resolved"
+	OrderChangeFulfilled        = "fulfilled"
+	OrderChangeCanceled         = "canceled"
+	OrderChangeCancelRequested  = "cancel_requested"
+	OrderChangeCancelApproved   = "cancel_approved"
+	OrderChangeCancelRejected   = "cancel_rejected"
+	// OrderChangePaymentExpired is an unpaid order canceled at its deadline.
+	OrderChangePaymentExpired = "payment_expired"
+	// OrderChangeRefunded is an order canceled because its payment was fully
+	// refunded from the payment side.
+	OrderChangeRefunded = "refunded"
+)
 
 func (e *Order) UnmarshalJSON(data []byte) error {
 	type itemWire struct {
@@ -149,6 +192,13 @@ func (e *Order) UnmarshalJSON(data []byte) error {
 		Items          []itemWire `json:"items"`
 		CreatedAt      time.Time  `json:"created_at"`
 		Occurred       time.Time  `json:"occurred_at"`
+		PreviousStatus string     `json:"previous_status"`
+		Change         string     `json:"change"`
+		Automatic      bool       `json:"automatic"`
+		Reason         string     `json:"reason"`
+		Carrier        string     `json:"carrier"`
+		CarrierNote    string     `json:"carrier_note"`
+		TrackingNumber string     `json:"tracking_number"`
 	}
 	var w wire
 	if err := json.Unmarshal(data, &w); err != nil {
@@ -160,6 +210,13 @@ func (e *Order) UnmarshalJSON(data []byte) error {
 	e.Status = w.Status
 	e.CreatedAt = w.CreatedAt
 	e.Occurred = w.Occurred
+	e.PreviousStatus = w.PreviousStatus
+	e.Change = w.Change
+	e.Automatic = w.Automatic
+	e.Reason = w.Reason
+	e.Carrier = w.Carrier
+	e.CarrierNote = w.CarrierNote
+	e.TrackingNumber = w.TrackingNumber
 	if v, ok := pickWon(w.SubtotalWon, w.SubtotalKRW, nil); ok {
 		e.SubtotalWon = v
 	}
@@ -197,7 +254,31 @@ type Product struct {
 	Price     float64   `json:"price"`
 	ImageURL  string    `json:"image_url,omitempty"`
 	Occurred  time.Time `json:"occurred_at"`
+	// Changes lists what a product.updated event changed, each with the value
+	// before and after, so an alert can say "가격: ₩1,200,000 → ₩990,000"
+	// rather than only the price it ended at. Empty on the other subjects, on
+	// an update that saved the same values, and on events written before the
+	// field existed.
+	Changes []FieldChange `json:"changes,omitempty"`
+	// Reason is set when the system rather than a manager made the update:
+	// ProductUpdateAutoDraft.
+	Reason string `json:"reason,omitempty"`
 }
+
+// FieldChange is one field a product update changed. Field is the product's
+// JSON field name ("price", "status", …), or "attributes.<key>" for one
+// attribute. Before and After are the values as text: prices are whole won
+// written as digits, so the reader formats them; an empty side means the field
+// was unset.
+type FieldChange struct {
+	Field  string `json:"field"`
+	Before string `json:"before"`
+	After  string `json:"after"`
+}
+
+// ProductUpdateAutoDraft marks product.updated published when product moved
+// an active style to draft because none of its SKUs is active any more.
+const ProductUpdateAutoDraft = "auto_draft"
 
 // PaymentSucceededEvent is the payload for PaymentSucceeded — published by
 // payment, consumed by order.
