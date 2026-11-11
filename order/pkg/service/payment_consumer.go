@@ -91,6 +91,7 @@ func (s *Service) StartRefundPolicyWorker(ctx context.Context, interval time.Dur
 }
 
 func (s *Service) EnforceRefundPolicy(ctx context.Context) error {
+	ctx = withAutomatic(ctx)
 	orders, err := s.repo.ListAll(ctx)
 	if err != nil {
 		return err
@@ -135,6 +136,7 @@ func (s *Service) StartFulfillmentPolicyWorker(ctx context.Context, interval tim
 }
 
 func (s *Service) EnforceDeliveryPolicy(ctx context.Context) error {
+	ctx = withAutomatic(ctx)
 	orders, err := s.repo.ListAll(ctx)
 	if err != nil {
 		return err
@@ -167,7 +169,7 @@ func (s *Service) cancelExpiredPendingOrder(ctx context.Context, orderID string)
 	if err := cancelled.Cancel(now); err != nil {
 		return err
 	}
-	events, err := s.outboxEvents(cancelled, orderUpdatedSubject)
+	events, err := s.outboxEvents(cancelled, s.change(withAutomatic(ctx), order.Status, events.OrderChangePaymentExpired), orderUpdatedSubject)
 	if err != nil {
 		return err
 	}
@@ -278,7 +280,7 @@ func (s *Service) CancelOrderForRefund(ctx context.Context, orderID, paymentID s
 	if err := cancelled.Cancel(now); err != nil {
 		return fmt.Errorf("cancel refunded order %s: %w", order.ID, err)
 	}
-	events, err := s.outboxEvents(cancelled, orderUpdatedSubject)
+	events, err := s.outboxEvents(cancelled, s.change(ctx, order.Status, events.OrderChangeRefunded), orderUpdatedSubject)
 	if err != nil {
 		return err
 	}

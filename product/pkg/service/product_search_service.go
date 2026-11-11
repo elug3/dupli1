@@ -328,7 +328,7 @@ func (s *ProductSearchService) UpdateProduct(ctx context.Context, p domain.Produ
 	if err != nil {
 		return nil, err
 	}
-	if err := s.publish(ctx, productUpdatedSubject, updated, "", ""); err != nil {
+	if err := s.publishUpdate(ctx, existing, updated, ""); err != nil {
 		return nil, err
 	}
 	return updated, nil
@@ -501,6 +501,7 @@ func (s *ProductSearchService) draftIfNoActiveVariant(ctx context.Context, produ
 	if parent.Status != "active" || parent.HasActiveVariant() {
 		return
 	}
+	before := *parent
 	parent.Status = "draft"
 	updated, err := s.store.UpdateProduct(ctx, *parent)
 	if err != nil {
@@ -508,7 +509,7 @@ func (s *ProductSearchService) draftIfNoActiveVariant(ctx context.Context, produ
 		return
 	}
 	log.Printf("auto-draft: product %s has no active SKU; status set to draft", productID)
-	_ = s.publish(ctx, productUpdatedSubject, updated, "", "")
+	_ = s.publishUpdate(ctx, &before, updated, events.ProductUpdateAutoDraft)
 }
 
 // refuseReservedStock answers a conflict when any of the variants has stock
@@ -631,7 +632,27 @@ func (s *ProductSearchService) publish(ctx context.Context, subject string, prod
 	if s.eventPublisher == nil || product == nil {
 		return nil
 	}
-	return s.eventPublisher.Publish(ctx, subject, events.Product{
+	return s.eventPublisher.Publish(ctx, subject, s.productEvent(subject, product, sku, imageURL))
+}
+
+// publishUpdate publishes product.updated with what changed between before
+// and after, so the ops alert can show each changed field's old and new value.
+func (s *ProductSearchService) publishUpdate(ctx context.Context, before, after *domain.Product, reason string) error {
+	if s.eventPublisher == nil || after == nil {
+		return nil
+	}
+	event := s.productEvent(productUpdatedSubject, after, "", "")
+	event.Reason = reason
+	if before != nil {
+		for _, c := range domain.ProductChanges(*before, *after) {
+			event.Changes = append(event.Changes, events.FieldChange{Field: c.Field, Before: c.Before, After: c.After})
+		}
+	}
+	return s.eventPublisher.Publish(ctx, productUpdatedSubject, event)
+}
+
+func (s *ProductSearchService) productEvent(subject string, product *domain.Product, sku, imageURL string) events.Product {
+	return events.Product{
 		EventType: subject,
 		ProductID: product.ID,
 		SKU:       sku,
@@ -642,7 +663,7 @@ func (s *ProductSearchService) publish(ctx context.Context, subject string, prod
 		Price:     product.Price,
 		ImageURL:  imageURL,
 		Occurred:  s.now(),
-	})
+	}
 }
 
 func (s *ProductSearchService) ensureStockRow(ctx context.Context, skuID, sku string, quantity int) error {

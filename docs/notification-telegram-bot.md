@@ -265,12 +265,12 @@ CREATE TABLE notification_telegram_allowed_users (
 | NATS subject | Destination chat | Message summary |
 |--------------|------------------|-----------------|
 | `order.created` | Order | 신규 주문, `created_at`, manage-web link, status, customer, items, total (KRW) |
-| `order.status_updated` | Order | 주문 변경 |
+| `order.status_updated` | Order | **주문 변경 · {동작}** (출고, 주문 확정, 취소 요청 접수, …) — status **before → after**, `(자동)` and the policy when a worker did it, tracking on ship, the shopper's reason on a cancel request or dispute |
 | `order.paid` | Order | **주문 결제 완료 — 조치 필요** (준비되면 출고) |
 | `payment.canceled` | Order | **환불** — 전액 (주문 취소, 재고 해제) 또는 부분 (주문은 그대로, 잔여 결제 유지), 금액·사유·처리자 |
 | `payment.callback_rejected` | Order | **PG가 결제를 승인했으나 시스템에서 거부** — 예상/보고 금액, PG 거래번호, 원인. 다른 이벤트가 없어 이 알림이 유일한 신호 |
 | `product.created` | Product | 상품 등록, brand, category, price |
-| `product.updated` | Product | 상품 수정 |
+| `product.updated` | Product | **상품 수정** — one line per changed field, **before → after** (판매가, 정가, 상태, 상품명, 카테고리, 속성 …, 사이즈 가이드); **상품 자동 초안 전환** when product drafted it for having no active SKU |
 | `product.deleted` | Product | 상품 삭제 |
 | `product.image_uploaded` | Product | 이미지 URL |
 
@@ -287,6 +287,32 @@ Messages use **HTML** (`parse_mode: HTML`) and are written in **Korean** (ops st
 상품: 1× BAG-BV-CASSETTE-BLACK, 2× BAG-CH-CLASSIC-TAN
 합계: ₩3,450,000
 ```
+
+**Before and after.** `order.status_updated` carries `previous_status`, `change` (the action: `paid`, `confirmed`, `shipped`, `delivered`, `receipt_confirmed`, `disputed`, `dispute_resolved`, `fulfilled`, `canceled`, `cancel_requested`, `cancel_approved`, `cancel_rejected`, `payment_expired`, `refunded`), `automatic`, and when they apply `reason` and `carrier` / `carrier_note` / `tracking_number`. `product.updated` carries `changes: [{ field, before, after }]` (prices as whole-won digits, `attributes.<key>` per attribute) and `reason: "auto_draft"`. All are optional, so an event from before they existed renders the old way. Constants live in `shared/pkg/events`.
+
+**Example `order.status_updated` message:**
+
+```text
+📦 주문 변경 · 출고 ORD-2026-0042
+주문 시각: 2026-08-05 19:30 KST
+관리자에서 주문 보기
+상태: 확인됨 → 배송 중
+송장: CJ대한통운 123456789012
+고객: cust_01JAY6Z9K3F8QW1G7H2T5X0ABC
+합계: ₩3,450,000
+```
+
+**Example `product.updated` message:**
+
+```text
+✏️ 상품 수정
+BOT-001 — Cassette (Bottega Veneta)
+
+판매가: ₩1,200,000 → ₩990,000
+상태: 활성 → 초안
+```
+
+SKU edits (including a SKU's own price override) still send no alert: product publishes `product.variant_*`, which notification does not subscribe to.
 
 The manage-web link uses `MANAGE_WEB_URL` (default `https://manage.dupli1.com`) + `/orders/{order_id}`.
 

@@ -451,11 +451,12 @@ func formatOrderMessage(subject string, event events.Order, manageWebURL string)
 		)
 	default:
 		return fmt.Sprintf(
-			"📦 <b>주문 변경</b> %s\n%s%s상태: <b>%s</b>\n고객: %s\n합계: <b>%s</b>",
+			"📦 <b>%s</b> %s\n%s%s%s고객: %s\n합계: <b>%s</b>",
+			orderChangeTitle(event),
 			tg.EscapeHTML(event.OrderID),
 			createdLine,
 			manageLink,
-			status,
+			formatOrderChangeLines(event),
 			tg.EscapeHTML(event.CustomerID),
 			total,
 		)
@@ -488,6 +489,9 @@ func formatManageOrderLink(manageWebURL, orderID string) string {
 }
 
 func formatProductMessage(subject string, event events.Product) string {
+	if subject == SubjectProductUpdated {
+		return formatProductUpdatedMessage(event)
+	}
 	price := money.FormatWon(money.FromProductPrice(event.Price))
 	name := tg.EscapeHTML(event.Name)
 	brand := tg.EscapeHTML(event.Brand)
@@ -498,9 +502,6 @@ func formatProductMessage(subject string, event events.Product) string {
 	case SubjectProductCreated:
 		return fmt.Sprintf("📦 <b>상품 등록</b>\n%s — %s (%s)\n카테고리: %s\n상태: %s\n가격: %s",
 			id, name, brand, tg.EscapeHTML(event.Category), status, price)
-	case SubjectProductUpdated:
-		return fmt.Sprintf("✏️ <b>상품 수정</b>\n%s — %s (%s)\n상태: %s\n가격: %s",
-			id, name, brand, status, price)
 	case SubjectProductDeleted:
 		return fmt.Sprintf("🗑️ <b>상품 삭제</b>\n%s — %s", id, name)
 	case SubjectProductImage:
