@@ -924,6 +924,7 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order, change 
 		DiscountWon:    order.DiscountWon,
 		ShippingFeeWon: order.ShippingFeeWon,
 		TotalWon:       order.TotalWon,
+		PaymentMethod:  order.PaymentMethod,
 		Items:          items,
 		CreatedAt:      order.CreatedAt,
 		Occurred:       s.now(),

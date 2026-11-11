@@ -168,3 +168,39 @@ func TestPolicyWorkerChangesAreAutomatic(t *testing.T) {
 	wantChange(t, byOrder[paid.ID], "paid", "confirmed", events.OrderChangeConfirmed, true)
 	wantChange(t, byOrder[requested.ID], "confirmed", "canceled", events.OrderChangeCancelApproved, true)
 }
+
+// Order events carry the payment method, so ops alerts can mark a bypass
+// order instead of presenting it as a card sale.
+func TestOrderEventsCarryPaymentMethod(t *testing.T) {
+	ctx := t.Context()
+	pub := &recordedPublisher{}
+	svc := newSvc(&fakeStock{reservationID: "res-1"}, &fakeProduct{defaultKRW: 5000}, pub)
+
+	order, err := svc.CreateOrder(ctx, service.CreateOrderInput{
+		CustomerID:    "customer-1",
+		Items:         []domain.OrderItem{{SKU: "bag-1", Quantity: 1}},
+		PaymentMethod: domain.PaymentMethodBypass,
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	if _, err := svc.MarkOrderPaid(ctx, order.ID, "pay-1", order.TotalWon); err != nil {
+		t.Fatalf("MarkOrderPaid: %v", err)
+	}
+	if len(pub.events) < 3 {
+		t.Fatalf("published %v, want created, paid and status_updated", pub.subjects)
+	}
+	for i, ev := range pub.events {
+		raw, err := json.Marshal(ev)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var e events.Order
+		if err := json.Unmarshal(raw, &e); err != nil {
+			t.Fatal(err)
+		}
+		if e.PaymentMethod != events.PaymentMethodBypass {
+			t.Fatalf("%s payment_method = %q, want bypass", pub.subjects[i], e.PaymentMethod)
+		}
+	}
+}
