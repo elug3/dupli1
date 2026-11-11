@@ -586,6 +586,7 @@ func (s *Service) paymentCanceledOutbox(payment *domain.Payment, amountKRW int64
 		RemainingWon: payment.RemainingCancelableKRW(),
 		Reason:       payment.CancelReason,
 		CanceledBy:   payment.CanceledBy,
+		Method:       payment.Method,
 		Occurred:     s.now(),
 	})
 	if err != nil {

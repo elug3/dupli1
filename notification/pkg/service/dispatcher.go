@@ -118,7 +118,7 @@ func (d *Dispatcher) handleOrder(ctx context.Context, subject string, payload []
 		return nil
 	}
 
-	message := formatOrderMessage(subject, event, d.cfg.ManageWebURL)
+	message := bypassOrderBanner(event.PaymentMethod) + formatOrderMessage(subject, event, d.cfg.ManageWebURL)
 	return d.sendAll(ctx, chatIDs, message, "order event")
 }
 
@@ -138,7 +138,28 @@ func (d *Dispatcher) handlePaymentCanceled(ctx context.Context, payload []byte) 
 		return nil
 	}
 
-	return d.sendAll(ctx, chatIDs, formatPaymentCanceledMessage(event, d.cfg.ManageWebURL), "payment.canceled")
+	message := bypassRefundBanner(event.Method) + formatPaymentCanceledMessage(event, d.cfg.ManageWebURL)
+	return d.sendAll(ctx, chatIDs, message, "payment.canceled")
+}
+
+// bypassOrderBanner heads every alert about a bypass order, so a payment staff
+// recorded by hand (or a test run through the bypass path) is never read as a
+// genuine card sale. It is the first line because a Telegram notification
+// preview shows only the start of the message. Card orders, and orders from
+// before the method was published, get nothing.
+func bypassOrderBanner(method string) string {
+	if !strings.EqualFold(strings.TrimSpace(method), events.PaymentMethodBypass) {
+		return ""
+	}
+	return "🧪 <b>[바이패스 주문]</b> 카드 결제가 아닙니다 (수동 결제·테스트)\n"
+}
+
+// bypassRefundBanner does the same for a refund: no card money went back.
+func bypassRefundBanner(method string) string {
+	if !strings.EqualFold(strings.TrimSpace(method), events.PaymentMethodBypass) {
+		return ""
+	}
+	return "🧪 <b>[바이패스 결제]</b> 카드 환불이 아닙니다 (수동 결제·테스트)\n"
 }
 
 // formatPaymentCanceledMessage distinguishes a full refund from a partial one:

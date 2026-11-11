@@ -223,6 +223,11 @@ func TestCancelPayment_BypassSkipsProvider(t *testing.T) {
 	if canceled.Status != domain.StatusCanceled {
 		t.Fatalf("status = %q, want canceled", canceled.Status)
 	}
+	// The refund event names the method, so the ops alert can say no card
+	// money went back.
+	if len(pub.events) != 1 || pub.events[0].Method != domain.MethodBypass {
+		t.Fatalf("payment.canceled events = %+v, want one with method bypass", pub.events)
+	}
 }
 
 func TestCancelPayment_RejectsSecondFullCancel(t *testing.T) {

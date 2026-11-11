@@ -122,6 +122,12 @@ type Order struct {
 	Items          []OrderItem `json:"items"`
 	CreatedAt      time.Time   `json:"created_at"`
 	Occurred       time.Time   `json:"occurred_at"`
+	// PaymentMethod is what the order was priced for: PaymentMethodCreditCard
+	// or PaymentMethodBypass (staff recording a payment that never went
+	// through the PG, also the local/dev testing path). Ops alerts mark a
+	// bypass order so it is never mistaken for a card sale. Empty on orders
+	// placed before the field existed.
+	PaymentMethod string `json:"payment_method,omitempty"`
 
 	// The fields below say what this event changed, so an alert can read
 	// "확인됨 → 배송 중" instead of only the status the order ended in. All
@@ -145,6 +151,13 @@ type Order struct {
 	CarrierNote    string `json:"carrier_note,omitempty"`
 	TrackingNumber string `json:"tracking_number,omitempty"`
 }
+
+// Payment methods, carried in Order.PaymentMethod and
+// PaymentCanceledEvent.Method.
+const (
+	PaymentMethodCreditCard = "credit_card"
+	PaymentMethodBypass     = "bypass"
+)
 
 // Order change actions, carried in Order.Change.
 const (
@@ -192,6 +205,7 @@ func (e *Order) UnmarshalJSON(data []byte) error {
 		Items          []itemWire `json:"items"`
 		CreatedAt      time.Time  `json:"created_at"`
 		Occurred       time.Time  `json:"occurred_at"`
+		PaymentMethod  string     `json:"payment_method"`
 		PreviousStatus string     `json:"previous_status"`
 		Change         string     `json:"change"`
 		Automatic      bool       `json:"automatic"`
@@ -210,6 +224,7 @@ func (e *Order) UnmarshalJSON(data []byte) error {
 	e.Status = w.Status
 	e.CreatedAt = w.CreatedAt
 	e.Occurred = w.Occurred
+	e.PaymentMethod = w.PaymentMethod
 	e.PreviousStatus = w.PreviousStatus
 	e.Change = w.Change
 	e.Automatic = w.Automatic
@@ -319,13 +334,17 @@ func (e *PaymentSucceededEvent) UnmarshalJSON(data []byte) error {
 // notification alerts ops. A missing remaining_won (and legacy remaining_cents)
 // must not be treated as 0.
 type PaymentCanceledEvent struct {
-	EventType    string    `json:"event_type"`
-	OrderID      string    `json:"order_id"`
-	PaymentID    string    `json:"payment_id"`
-	AmountWon    int64     `json:"amount_won"`
-	RemainingWon int64     `json:"remaining_won"`
-	Reason       string    `json:"reason,omitempty"`
-	CanceledBy   string    `json:"canceled_by,omitempty"`
+	EventType    string `json:"event_type"`
+	OrderID      string `json:"order_id"`
+	PaymentID    string `json:"payment_id"`
+	AmountWon    int64  `json:"amount_won"`
+	RemainingWon int64  `json:"remaining_won"`
+	Reason       string `json:"reason,omitempty"`
+	CanceledBy   string `json:"canceled_by,omitempty"`
+	// Method is the payment's method (PaymentMethodCreditCard or
+	// PaymentMethodBypass), so a refund of a bypass payment is not read as
+	// card money going back. Empty on events from before the field existed.
+	Method       string    `json:"method,omitempty"`
 	Occurred     time.Time `json:"occurred_at"`
 	remainingSet bool      `json:"-"`
 }
@@ -350,6 +369,7 @@ func (e *PaymentCanceledEvent) UnmarshalJSON(data []byte) error {
 		RemainingCents *int64    `json:"remaining_cents"`
 		Reason         string    `json:"reason"`
 		CanceledBy     string    `json:"canceled_by"`
+		Method         string    `json:"method"`
 		Occurred       time.Time `json:"occurred_at"`
 	}
 	var w wire
@@ -361,6 +381,7 @@ func (e *PaymentCanceledEvent) UnmarshalJSON(data []byte) error {
 	e.PaymentID = w.PaymentID
 	e.Reason = w.Reason
 	e.CanceledBy = w.CanceledBy
+	e.Method = w.Method
 	e.Occurred = w.Occurred
 	if amount, ok := pickWon(w.AmountWon, w.AmountKRW, w.AmountCents); ok {
 		e.AmountWon = amount
