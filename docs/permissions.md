@@ -168,6 +168,8 @@ Redeem is **public** (checkout flow) — no permission.
 | `promotion.redeem` | Move the usage ledger — reserve, consume, release — and (until the retired route is removed) `POST …/promotions/tier`, which always answers no tier. **Service-to-service**: order's service account holds it; managers do not need it, and the public redeem/evaluate endpoints require no permission |
 
 | `promotion.issue` | Issue a single-user entitlement to a customer, and revoke one |
+| `banner.manage` | List, create, edit, show / take down and delete storefront image banners, and upload their images ([product-storefront-banners.md](product-storefront-banners.md)). The live list the storefront reads is public |
+| `banner.*` | Wildcard, in the `catalog_admin` bundle |
 
 Wallet reads are **ABAC**, not permissioned: a customer reads their own entitlements, and the customer id is taken from the token rather than the request, so one account cannot read another's. Auto-issue on `user.registered` runs inside product as a NATS subscriber and needs no permission.
 
@@ -306,6 +308,11 @@ Login, refresh, logout, health, settings, JWKS — public.
 | `POST` | `/api/v1/products/promotions/me/tier` | (authenticated; own tier) |
 | `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` |
 | `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` |
+| `GET` | `/api/v1/products/banners` | — (public; live banners only) |
+| `GET` | `/api/v1/products/banners/all` | `banner.manage` |
+| `POST` | `/api/v1/products/banners`, `/api/v1/products/banners/images` | `banner.manage` |
+| `PUT`/`DELETE` | `/api/v1/products/banners/by-id/{id}` | `banner.manage` |
+| `PUT` | `/api/v1/products/banners/by-id/{id}/active` | `banner.manage` |
 | `GET` | `/api/v1/products/reports/visitors` | `product.read` |
 | `GET` | `/api/v1/products/reports/catalog` | `product.read` |
 | `GET` | `/api/v1/products/{id}/reviews`, `…/reviews/photos` | — (public) |
@@ -460,7 +467,7 @@ Code-defined sets for common job functions. Assigning a bundle expands to explic
 | Bundle | Permissions |
 |--------|-------------|
 | `catalog_editor` | `product.create`, `product.update`, `product.read`, `product.variant.create`, `product.variant.update`, `product.image.upload`, `product.master.read`, `product.master.write` |
-| `catalog_admin` | `product.*`, `promotion.*`, `coupon.*` |
+| `catalog_admin` | `product.*`, `promotion.*`, `coupon.*`, `banner.*` |
 | `fulfillment` | `order.ship`, `order.status.update`, `inventory.stock.write`, `inventory.reservation.manage`, `cart.read`, `payment.bypass`, `payment.cancel` |
 | `user_admin` | `user.create`, `user.read`, `user.password.update`, `user.status.update`, `user.delete`, `user.apikey.read`, `user.apikey.manage` |
 | `customer_registrar` | `user.create` |

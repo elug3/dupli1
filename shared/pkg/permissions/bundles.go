@@ -29,6 +29,7 @@ var bundles = map[string][]string{
 		// freshly-assigned bundle keeps working after coupon.* is dropped.
 		PromotionAll,
 		CouponAll,
+		BannerAll,
 	},
 	BundleFulfillment: {
 		OrderShip,

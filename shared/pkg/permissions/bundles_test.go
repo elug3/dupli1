@@ -22,7 +22,7 @@ func TestExpandBundle_catalogAdminWildcards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(got, []string{ProductAll, PromotionAll, CouponAll}) {
+	if !slices.Equal(got, []string{ProductAll, PromotionAll, CouponAll, BannerAll}) {
 		t.Fatalf("catalog_admin = %v", got)
 	}
 	if !Has(got, PromotionRead) {

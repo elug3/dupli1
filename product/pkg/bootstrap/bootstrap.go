@@ -111,6 +111,12 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 
+	bannerStore, err := pg.NewBannerStore(store.Pool())
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
+
 	// Reviews (docs/product-reviews-plan.md). The order check and the
 	// author's name go through the gateway with the shopper's own token.
 	reviewStore, err := pg.NewReviewStore(store.Pool())
@@ -139,7 +145,8 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		WithGuestCookie(guestCookie).
 		WithVisitorService(service.NewVisitorService(visitorStore)).
 		WithCatalogReportService(service.NewCatalogReportService(store, catalogStore)).
-		WithReviewService(reviewSvc)
+		WithReviewService(reviewSvc).
+		WithBannerService(service.NewBannerService(bannerStore, imgStore))
 
 	// New customers get their welcome promotional code from auth's
 	// user.registered event. Issuing is keyed on the event's user id, so a
@@ -294,6 +301,11 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	handler.Mount(mux, "POST", handler.RouteInventoryReservations, internalOrder(permissions.InventoryReservationManage, h.CreateReservationHandler()), handler.LegacyRouteInventoryReservations)
 	handler.Mount(mux, "POST", handler.RouteInventoryReservationCommit, internalOrder(permissions.InventoryReservationManage, h.CommitReservationHandler()), handler.LegacyRouteInventoryReservationCommit)
 	handler.Mount(mux, "POST", handler.RouteInventoryReservationRelease, internalOrder(permissions.InventoryReservationManage, h.ReleaseReservationHandler()), handler.LegacyRouteInventoryReservationRelease)
+
+	// Storefront banners: the live list is public, the rest is banner.manage.
+	h.RegisterBannerRoutes(mux, func(next http.Handler) http.Handler {
+		return requirePerm(permissions.BannerManage, next)
+	})
 
 	h.RegisterReviewRoutes(mux, handler.ReviewMiddleware{
 		Auth:      func(next http.Handler) http.Handler { return middleware.RequireAuth(validator, next) },
