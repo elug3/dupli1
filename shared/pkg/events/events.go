@@ -29,8 +29,12 @@ const (
 	ProductUpdated          = "product.updated"
 	ProductDeleted          = "product.deleted"
 	ProductImage            = "product.image_uploaded"
-	UserRegistered          = "user.registered"
-	UserDeleted             = "user.deleted"
+	// ProductReviewChanged fires when a review is written, edited, hidden or
+	// unhidden (docs/product-reviews-plan.md). Payment subscribes to reward it
+	// with points (docs/payment-points.md).
+	ProductReviewChanged = "product.review_changed"
+	UserRegistered       = "user.registered"
+	UserDeleted          = "user.deleted"
 	// SupportInquiryOpened fires when a shopper asks the support bot for a
 	// human. Published by support, consumed by notification, which owns where
 	// ops alerts go.
@@ -468,4 +472,30 @@ type UserDeletedEvent struct {
 	EventType string    `json:"event_type"`
 	UserID    string    `json:"user_id"`
 	Occurred  time.Time `json:"occurred_at"`
+}
+
+// Review change actions, carried in ProductReview.Action.
+const (
+	ReviewCreated  = "created"
+	ReviewUpdated  = "updated"
+	ReviewHidden   = "hidden"
+	ReviewUnhidden = "unhidden"
+)
+
+// ProductReview is the payload for ProductReviewChanged, published by product.
+// It says what a reward needs to know about a review, never its text: the
+// body length and photo count, not the words or the photos.
+type ProductReview struct {
+	Action     string `json:"action"`
+	ReviewID   string `json:"review_id"`
+	ProductID  string `json:"product_id"`
+	SkuID      string `json:"sku_id"`
+	OrderID    string `json:"order_id"`
+	CustomerID string `json:"customer_id"`
+	Rating     int    `json:"rating"`
+	// BodyChars is the review text's length in characters (runes), trimmed.
+	BodyChars  int       `json:"body_chars"`
+	PhotoCount int       `json:"photo_count"`
+	Hidden     bool      `json:"hidden"`
+	Occurred   time.Time `json:"occurred_at"`
 }

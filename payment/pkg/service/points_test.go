@@ -78,3 +78,49 @@ func TestExpireDue(t *testing.T) {
 		t.Fatalf("after expiry: %+v", s)
 	}
 }
+
+func reviewEvent(t *testing.T, action string, bodyChars, photos int, hidden bool, at time.Time) []byte {
+	t.Helper()
+	b, err := json.Marshal(events.ProductReview{
+		Action: action, ReviewID: "rev-1", ProductID: "BAG-1", SkuID: "sku-1", OrderID: "o1",
+		CustomerID: "u-1", Rating: 5, BodyChars: bodyChars, PhotoCount: photos, Hidden: hidden, Occurred: at,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func TestPointsFollowReviewEvents(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 11, 18, 3, 0, 0, 0, time.UTC)
+	p := service.NewPoints(memory.NewPoints()).WithClock(func() time.Time { return now })
+	balance := func() int64 {
+		s, err := p.Summary(ctx, "u-1", 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s.Balance
+	}
+
+	steps := []struct {
+		name  string
+		event []byte
+		want  int64
+	}{
+		{"short text", reviewEvent(t, events.ReviewCreated, 12, 0, false, now), 0},
+		{"edited to 20+", reviewEvent(t, events.ReviewUpdated, 24, 0, false, now), 2_000},
+		{"replayed", reviewEvent(t, events.ReviewUpdated, 24, 0, false, now), 2_000},
+		{"photo added", reviewEvent(t, events.ReviewUpdated, 24, 1, false, now), 5_000},
+		{"hidden", reviewEvent(t, events.ReviewHidden, 24, 1, true, now), 0},
+		{"unhidden", reviewEvent(t, events.ReviewUnhidden, 24, 1, false, now), 0},
+	}
+	for _, step := range steps {
+		if err := p.HandleReviewEvent(ctx, events.ProductReviewChanged, step.event); err != nil {
+			t.Fatalf("%s: %v", step.name, err)
+		}
+		if got := balance(); got != step.want {
+			t.Fatalf("%s: balance %d, want %d", step.name, got, step.want)
+		}
+	}
+}

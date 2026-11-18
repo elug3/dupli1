@@ -134,8 +134,17 @@ func Bootstrap(cfg Config) (*App, error) {
 			closeFn()
 			return nil, err
 		}
-		for _, subject := range []string{events.OrderPaid, events.OrderStatusUpdate} {
-			if err := natsSubscriber.Subscribe(workerCtx, subject, points.HandleOrderEvent); err != nil {
+		handlers := []struct {
+			subject string
+			handle  func(context.Context, string, []byte) error
+		}{
+			{events.OrderPaid, points.HandleOrderEvent},
+			{events.OrderStatusUpdate, points.HandleOrderEvent},
+			// Review rewards (docs/payment-points.md → Review rewards).
+			{events.ProductReviewChanged, points.HandleReviewEvent},
+		}
+		for _, h := range handlers {
+			if err := natsSubscriber.Subscribe(workerCtx, h.subject, h.handle); err != nil {
 				workerCancel()
 				natsSubscriber.Close()
 				if natsPublisher != nil {

@@ -93,7 +93,7 @@ Deleting a product cascades to its reviews and photo rows, but not to the photo 
 
 ## Notifications
 
-None in Phase 1. Later: `product.review_created` with `{ reviewId, productId, rating }` (ids and the rating, no text, as with `SupportLive`), so notification can alert ops to 1–2 star reviews.
+Product publishes `product.review_changed` (`events.ProductReview`) when a review is created, edited, hidden or unhidden: the action, ids, rating, text length in characters, photo count and hidden flag, never the text. Payment rewards it with points ([payment-points.md](payment-points.md#review-rewards)). It is a best-effort publish after the write, like the catalog's events, and needs `NATS_URL`. Later, notification can use the same event to alert ops to 1–2 star reviews. Deleting a review publishes nothing: it keeps the points it earned.
 
 ## Storefront and console
 

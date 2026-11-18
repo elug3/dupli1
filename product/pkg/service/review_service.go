@@ -91,7 +91,39 @@ type ReviewService struct {
 	objects  ports.ReviewObjectStore
 	orders   ports.OrderReader
 	profiles ports.ProfileReader
+	events   ports.EventPublisher
 	now      func() time.Time
+}
+
+// WithEvents publishes product.review_changed, which payment rewards with
+// points. Without it reviews work and earn nothing.
+func (s *ReviewService) WithEvents(pub ports.EventPublisher) *ReviewService {
+	s.events = pub
+	return s
+}
+
+// publish tells subscribers a review changed. Best effort, like the catalog's
+// events: the review is already saved, so a failed publish is only logged.
+func (s *ReviewService) publish(ctx context.Context, action string, r *domain.Review) {
+	if s.events == nil || r == nil {
+		return
+	}
+	e := events.ProductReview{
+		Action:     action,
+		ReviewID:   r.ID,
+		ProductID:  r.ProductID,
+		SkuID:      r.SkuID,
+		OrderID:    r.OrderID,
+		CustomerID: r.CustomerID,
+		Rating:     r.Rating,
+		BodyChars:  utf8.RuneCountInString(strings.TrimSpace(r.Body)),
+		PhotoCount: len(r.Photos),
+		Hidden:     r.Hidden,
+		Occurred:   s.now().UTC(),
+	}
+	if err := s.events.Publish(ctx, events.ProductReviewChanged, e); err != nil {
+		log.Printf("product: publish %s for review %s: %v", events.ProductReviewChanged, r.ID, err)
+	}
 }
 
 func NewReviewService(store ports.ReviewStore, catalog ReviewCatalog) *ReviewService {
@@ -319,6 +351,7 @@ func (s *ReviewService) Create(ctx context.Context, caller ReviewCaller, product
 	if err != nil {
 		return nil, err
 	}
+	s.publish(ctx, events.ReviewCreated, created)
 	out := s.withURLs(*created).ForAuthor()
 	return &out, nil
 }
@@ -386,6 +419,7 @@ func (s *ReviewService) Update(ctx context.Context, caller ReviewCaller, reviewI
 	if err != nil {
 		return nil, err
 	}
+	s.publish(ctx, events.ReviewUpdated, updated)
 	out := s.withURLs(*updated).ForAuthor()
 	return &out, nil
 }
@@ -455,6 +489,11 @@ func (s *ReviewService) SetHidden(ctx context.Context, reviewID string, hidden b
 	if err != nil {
 		return nil, err
 	}
+	action := events.ReviewUnhidden
+	if hidden {
+		action = events.ReviewHidden
+	}
+	s.publish(ctx, action, review)
 	out := s.withURLs(*review)
 	return &out, nil
 }

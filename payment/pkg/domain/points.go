@@ -41,7 +41,7 @@ const BaseEarnBps = 100
 // credit idempotent: a replayed event finds its lot and does nothing.
 const (
 	PointSourceOrder  = "order"  // ref = order id
-	PointSourceReview = "review" // ref = review id (granted by a later change)
+	PointSourceReview = "review" // ref = order id ":" sku id, plus ":photo" for the photo bonus
 	PointSourceAdjust = "adjust" // ref = manager adjustment id
 )
 
@@ -63,7 +63,7 @@ const (
 // Entry kinds — the shopper-visible history.
 const (
 	EntryEarn     = "earn"     // order fulfilled
-	EntryGrant    = "grant"    // review reward, manager grant
+	EntryGrant    = "grant"    // manager grant (review rewards are EntryReview)
 	EntrySpend    = "spend"    // used on a paid order
 	EntryReturn   = "return"   // a paid order that used points was canceled
 	EntryClawback = "clawback" // points earned on an order taken back after a refund
@@ -383,6 +383,8 @@ func (a *PointAccount) OrderCanceled(orderID string, at time.Time) (shortfall in
 			shortfall = a.clawback(l, orderID, at)
 		}
 	}
+	// A review reward needs a kept order: a refund takes it back too.
+	shortfall += a.revokeReviewsForOrder(orderID, at)
 	if h := a.Hold(orderID); h != nil && h.Status != HoldReleased {
 		_ = a.Release(orderID, at)
 	}

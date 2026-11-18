@@ -149,6 +149,42 @@ func (p *Points) HandleOrderEvent(ctx context.Context, _ string, data []byte) er
 	return nil
 }
 
+// HandleReviewEvent rewards product.review_changed: a review that qualifies
+// earns once per order line, and a hidden one gives it back. Idempotent: a
+// replay finds the line's lots and does nothing.
+func (p *Points) HandleReviewEvent(ctx context.Context, _ string, data []byte) error {
+	var e events.ProductReview
+	if err := json.Unmarshal(data, &e); err != nil {
+		return fmt.Errorf("decode review event: %w", err)
+	}
+	if e.CustomerID == "" || e.OrderID == "" || e.SkuID == "" {
+		return nil
+	}
+	at := e.Occurred.UTC()
+	if at.IsZero() {
+		at = p.now()
+	}
+	switch {
+	case e.Action == events.ReviewHidden || e.Hidden:
+		var shortfall int64
+		_, err := p.store.MutatePointAccount(ctx, e.CustomerID, func(a *domain.PointAccount) error {
+			shortfall = a.ReviewHidden(e.OrderID, e.SkuID, at)
+			return nil
+		})
+		if err == nil && shortfall > 0 {
+			log.Printf("payment points: review %s hidden after its points were spent; take-back short by %d", e.ReviewID, shortfall)
+		}
+		return err
+	case e.Action == events.ReviewCreated || e.Action == events.ReviewUpdated || e.Action == events.ReviewUnhidden:
+		_, err := p.store.MutatePointAccount(ctx, e.CustomerID, func(a *domain.PointAccount) error {
+			a.ReviewWritten(e.OrderID, e.SkuID, e.ReviewID, e.BodyChars, e.PhotoCount, at)
+			return nil
+		})
+		return err
+	}
+	return nil
+}
+
 // Reserve sets points aside for an order at checkout (internal, order only).
 func (p *Points) Reserve(ctx context.Context, orderID, customerID string, points int64) (*domain.PointHold, error) {
 	if strings.TrimSpace(orderID) == "" || strings.TrimSpace(customerID) == "" || points <= 0 {
