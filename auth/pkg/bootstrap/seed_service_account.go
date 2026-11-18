@@ -20,8 +20,9 @@ var orderServicePermissions = []string{
 	permissions.OrderShip,
 	permissions.OrderStatusUpdate,
 	permissions.InventoryReservationManage,
-	permissions.PaymentCancel,   // paid-order cancel refunds via the payment service
-	permissions.PromotionRedeem, // checkout reserve/consume/release on product ledger
+	permissions.PaymentCancel,       // paid-order cancel refunds via the payment service
+	permissions.PromotionRedeem,     // checkout reserve/consume/release on product ledger
+	permissions.PaymentPointsRedeem, // checkout reserve/consume/release on the points ledger
 }
 
 // envKeySyncer is the part of the auth service the seeders use to keep a

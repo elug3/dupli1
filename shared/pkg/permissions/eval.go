@@ -130,6 +130,24 @@ func CanManageKillSwitches(held []string) bool {
 	return HasAny(held, All, AdminAll, PaymentKillSwitchManage)
 }
 
+// CanReadPoints reports whether held may read any customer's points.
+// Managing them implies reading them.
+func CanReadPoints(held []string) bool {
+	return HasAny(held, All, AdminAll, PaymentPointsRead, PaymentPointsManage)
+}
+
+// CanManagePoints reports whether held may grant or take away a customer's
+// points.
+func CanManagePoints(held []string) bool {
+	return HasAny(held, All, AdminAll, PaymentPointsManage)
+}
+
+// CanRedeemPoints reports whether held may hold, spend and return points for
+// an order. The routes also require the dupli1-order service account.
+func CanRedeemPoints(held []string) bool {
+	return HasAny(held, All, AdminAll, PaymentPointsRedeem)
+}
+
 // CanCancelPayment reports whether held may cancel/refund a succeeded payment
 // at the PG. Never granted by ABAC — customers cannot refund their own payments.
 func CanCancelPayment(held []string) bool {

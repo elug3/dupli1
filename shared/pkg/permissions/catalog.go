@@ -106,6 +106,15 @@ const (
 	// whether a method is available, through the public methods endpoint.
 	PaymentKillSwitchRead   = "payment.killswitch.read"
 	PaymentKillSwitchManage = "payment.killswitch.manage"
+	// PaymentPointsRead shows any customer's points balance, tier and history;
+	// PaymentPointsManage grants or takes away points with a reason. Shoppers
+	// read their own points without either (ABAC on the token subject).
+	PaymentPointsRead   = "payment.points.read"
+	PaymentPointsManage = "payment.points.manage"
+	// PaymentPointsRedeem holds, spends and returns points for an order. Only
+	// the dupli1-order service account carries it, and the routes also check
+	// the caller is that account (docs/payment-points.md).
+	PaymentPointsRedeem = "payment.points.redeem"
 )
 
 // Notification permissions (notification service).
@@ -166,6 +175,9 @@ var Catalog = []string{
 	PaymentCancel,
 	PaymentKillSwitchRead,
 	PaymentKillSwitchManage,
+	PaymentPointsRead,
+	PaymentPointsManage,
+	PaymentPointsRedeem,
 	NotificationTelegramRead,
 	NotificationTelegramManage,
 	SupportRead,

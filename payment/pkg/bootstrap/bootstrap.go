@@ -18,6 +18,7 @@ import (
 	"github.com/elug3/dupli1/payment/pkg/ports"
 	"github.com/elug3/dupli1/payment/pkg/service"
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
+	"github.com/elug3/dupli1/shared/pkg/events"
 )
 
 type Config struct {
@@ -53,7 +54,7 @@ func (a *App) Close() error {
 }
 
 func Bootstrap(cfg Config) (*App, error) {
-	repo, killSwitches, closeFn, err := openRepository(cfg.DatabaseConnString)
+	repo, killSwitches, pointsStore, closeFn, err := openRepository(cfg.DatabaseConnString)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +118,37 @@ func Bootstrap(cfg Config) (*App, error) {
 	svc.StartOutboxWorker(workerCtx, 2*time.Second)
 	svc.StartReconcileWorker(workerCtx, 1*time.Minute, 2*time.Hour)
 
+	// Points ledger (docs/payment-points.md): earning follows order's events,
+	// so it needs NATS; without it the ledger still answers and holds work,
+	// but nothing is earned.
+	points := service.NewPoints(pointsStore)
+	points.StartExpiryWorker(workerCtx, time.Hour)
+	var natsSubscriber *natsinfra.Subscriber
+	if cfg.NATSURL != "" {
+		natsSubscriber, err = natsinfra.NewSubscriber(cfg.NATSURL)
+		if err != nil {
+			workerCancel()
+			if natsPublisher != nil {
+				natsPublisher.Close()
+			}
+			closeFn()
+			return nil, err
+		}
+		for _, subject := range []string{events.OrderPaid, events.OrderStatusUpdate} {
+			if err := natsSubscriber.Subscribe(workerCtx, subject, points.HandleOrderEvent); err != nil {
+				workerCancel()
+				natsSubscriber.Close()
+				if natsPublisher != nil {
+					natsPublisher.Close()
+				}
+				closeFn()
+				return nil, err
+			}
+		}
+	} else {
+		log.Printf("payment: NATS_URL is not set; points are not earned from orders")
+	}
+
 	jwtValidator, err := authjwt.NewAccessTokenValidator(cfg.JWKSURL, cfg.JWTSecret)
 	if err != nil {
 		workerCancel()
@@ -124,11 +156,15 @@ func Bootstrap(cfg Config) (*App, error) {
 			natsPublisher.Close()
 		}
 		closeFn()
+		if natsSubscriber != nil {
+			natsSubscriber.Close()
+		}
 		return nil, fmt.Errorf("auth validator: %w", err)
 	}
 
 	h := handler.New(svc, jwtValidator).
-		WithSettings(BuildSettings(cfg))
+		WithSettings(BuildSettings(cfg)).
+		WithPoints(points)
 	if nanoProvider != nil {
 		h = h.WithNano(nanoProvider)
 	}
@@ -137,6 +173,9 @@ func Bootstrap(cfg Config) (*App, error) {
 
 	closeAll := func() error {
 		var errs []error
+		if natsSubscriber != nil {
+			natsSubscriber.Close()
+		}
 		if natsPublisher != nil {
 			natsPublisher.Close()
 		}
@@ -153,16 +192,16 @@ func Bootstrap(cfg Config) (*App, error) {
 	}, nil
 }
 
-func openRepository(connString string) (ports.Repository, ports.KillSwitchStore, func() error, error) {
+func openRepository(connString string) (ports.Repository, ports.KillSwitchStore, ports.PointsStore, func() error, error) {
 	if connString == "" {
-		return memory.NewRepository(), memory.NewKillSwitches(), func() error { return nil }, nil
+		return memory.NewRepository(), memory.NewKillSwitches(), memory.NewPoints(), func() error { return nil }, nil
 	}
 
 	pgRepo, err := pg.NewRepository(connString)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("payment repository: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("payment repository: %w", err)
 	}
-	return pgRepo, pgRepo, func() error {
+	return pgRepo, pgRepo, pgRepo, func() error {
 		pgRepo.Close()
 		return nil
 	}, nil
