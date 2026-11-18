@@ -484,3 +484,55 @@ func TestProductReviews_SortFilterPage(t *testing.T) {
 		t.Fatalf("draft product: %v", err)
 	}
 }
+
+type recordedEvent struct {
+	subject string
+	event   events.ProductReview
+}
+
+type fakePublisher struct{ got []recordedEvent }
+
+func (f *fakePublisher) Publish(_ context.Context, subject string, event any) error {
+	f.got = append(f.got, recordedEvent{subject, event.(events.ProductReview)})
+	return nil
+}
+
+// Payment rewards reviews from product.review_changed, so every write that
+// can change a reward publishes one: lengths and counts, never the text.
+func TestReviewChanges_PublishForPoints(t *testing.T) {
+	f := newReviewFixture(t)
+	pub := &fakePublisher{}
+	f.svc.WithEvents(pub)
+	ctx := context.Background()
+
+	r, err := f.svc.Create(ctx, caller(buyer), "BAG-1", input("ORD-1", "SKU-BAG-BLK", 5, goodBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	photo, err := f.svc.UploadPhoto(ctx, caller(buyer), pngBytes(t), "image/png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Update(ctx, caller(buyer), r.ID, domain.ReviewInput{PhotoIDs: &[]string{photo.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.SetHidden(ctx, r.ID, true, "spam", "mgr-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(pub.got) != 3 {
+		t.Fatalf("events = %+v, want 3", pub.got)
+	}
+	created, updated, hidden := pub.got[0].event, pub.got[1].event, pub.got[2].event
+	if pub.got[0].subject != events.ProductReviewChanged || created.Action != events.ReviewCreated ||
+		created.OrderID != "ORD-1" || created.SkuID != "SKU-BAG-BLK" || created.CustomerID != buyer ||
+		created.BodyChars != len([]rune(goodBody)) || created.PhotoCount != 0 {
+		t.Fatalf("created = %+v", created)
+	}
+	if updated.Action != events.ReviewUpdated || updated.PhotoCount != 1 {
+		t.Fatalf("updated = %+v", updated)
+	}
+	if hidden.Action != events.ReviewHidden || !hidden.Hidden || hidden.CustomerID != buyer {
+		t.Fatalf("hidden = %+v", hidden)
+	}
+}

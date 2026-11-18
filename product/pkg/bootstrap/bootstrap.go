@@ -119,6 +119,10 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 		return nil, err
 	}
 	reviewSvc := service.NewReviewService(reviewStore, store)
+	if eventPublisher != nil {
+		// Payment rewards reviews with points from these events.
+		reviewSvc.WithEvents(eventPublisher)
+	}
 	if objects, ok := imgStore.(ports.ReviewObjectStore); ok && imgStore != nil {
 		reviewSvc.WithObjects(objects)
 	}

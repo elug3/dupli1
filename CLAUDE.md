@@ -83,7 +83,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | `shared/pkg/authjwt` | JWKS/JWT validation helpers (RS256 via `AUTH_JWKS_URL`; HS256 fallback) |
 | `shared/pkg/settings` | `GET /settings` response helpers used by all services |
 | `shared/pkg/outbox` | Transactional outbox drain/retry loop (`Drainer`), used by `order` and `payment`; each service keeps its own outbox table/SQL behind the `Store` interface |
-| `shared/pkg/events` | NATS subject constants + payload structs for cross-service events (`order.*`, `payment.succeeded`, `product.*`, `support.inquiry_opened`, `support.message_created|inquiry_updated`); one canonical contract per publisher/subscriber pair instead of redeclaring subject strings and payload shapes on each side |
+| `shared/pkg/events` | NATS subject constants + payload structs for cross-service events (`order.*`, `payment.succeeded`, `product.*` incl. `product.review_changed` → payment's review points, `support.inquiry_opened`, `support.message_created|inquiry_updated`); one canonical contract per publisher/subscriber pair instead of redeclaring subject strings and payload shapes on each side |
 | `shared/pkg/money` | The one storefront currency (`krw`) and whole-won amount helpers; its package comment is the record of the `*_cents` → `*_krw` → `*_won` renames |
 | `shared/pkg/natsauth` | Adds `nats.Token(NATS_TOKEN)` to a NATS connection when the env var is set (the broker runs with `--auth` in Compose) |
 | `shared/pkg/pgsslmode` | Picks `sslmode` for a Postgres connection string (local/docker hosts → `disable`, everything else including RDS → `require`); used by every service's DB bootstrap so the local-hostname list can't drift out of sync per service again |
@@ -134,7 +134,7 @@ POST /orders → pending → paid → confirmed → in_transit → delivered →
 
 Card payments carry a surcharge (`DUPLI1_ORDER_CARD_SURCHARGE_BPS`, default 1000 = 10%) on goods after discounts plus delivery. Order prices it at checkout complete from the order's `payment_method` (`credit_card` by default; `bypass` needs `payment.bypass` and has none) and stores it as `card_surcharge_won` inside `total_won`, so payment and refunds just use the total; payment refuses a card checkout on a bypass-priced order.
 
-Points (적립금) live in payment's ledger ([docs/payment-points.md](docs/payment-points.md)). Checkout complete takes `points_won`, trims it to goods after discounts (never delivery), takes it off before the surcharge (`points_won` on the order, outside `total_won`) and reserves it through payment's internal `points/reserve|consume|release` routes: consume on paid, release on **every** cancel. A ₩0 order gets a succeeded `method: points` payment.
+Points (적립금) live in payment's ledger ([docs/payment-points.md](docs/payment-points.md)). Checkout complete takes `points_won`, trims it to goods after discounts (never delivery), takes it off before the surcharge (`points_won` on the order, outside `total_won`) and reserves it through payment's internal `points/reserve|consume|release` routes: consume on paid, release on **every** cancel. A ₩0 order gets a succeeded `method: points` payment. Reviews earn points once per order line (2,000 P, 5,000 P with a photo) from product's `product.review_changed`.
 
 Order calls product stock/promotions via the internal nginx gateway (`DUPLI1_GATEWAY_URL`), not direct service URLs. Pricing is resolved server-side — client `unit_price_won` is ignored.
 
