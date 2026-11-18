@@ -29,19 +29,19 @@ const (
 )
 
 type Service struct {
-	repo           ports.Repository
-	stock          ports.StockClient
-	product        ports.ProductClient
-	payment        ports.PaymentClient
+	repo    ports.Repository
+	stock   ports.StockClient
+	product ports.ProductClient
+	payment ports.PaymentClient
 	// methodGate asks payment whether a method can take a payment right now.
-	methodGate ports.PaymentMethodGate
-	eventPublisher ports.EventPublisher
-	outboxDrainer  *outbox.Drainer
-	promotionClient   ports.PromotionClient
+	methodGate      ports.PaymentMethodGate
+	eventPublisher  ports.EventPublisher
+	outboxDrainer   *outbox.Drainer
+	promotionClient ports.PromotionClient
 	// points sets points aside in payment's ledger and settles them. Nil
 	// means checkout refuses points (ErrPointsUnavailable).
 	points      ports.PointsClient
-	checkoutTTL    time.Duration
+	checkoutTTL time.Duration
 	// shippingFeeKRW is the flat delivery charge applied to every order, in
 	// whole KRW. Zero (the default) means delivery is free, which keeps the
 	// service safe to run unconfigured.
@@ -54,19 +54,15 @@ type Service struct {
 	videos ports.InspectionVideoStore
 	// videoMaxBytes caps one inspection video upload.
 	videoMaxBytes int64
-	now            func() time.Time
+	now           func() time.Time
 }
 
 type CreateOrderInput struct {
-	CustomerID      string
-	Items           []domain.OrderItem
-	PromotionCode      string
-	// DiscountWon is the whole goods discount, the tier's share included.
+	CustomerID    string
+	Items         []domain.OrderItem
+	PromotionCode string
+	// DiscountWon is the whole goods discount.
 	DiscountWon     int64
-	// TierPromotionCode and TierDiscountWon are the automatic tier's share of
-	// DiscountWon; checkout complete sets them.
-	TierPromotionCode string
-	TierDiscountWon   int64
 	IdempotencyKey  string
 	RecipientName   string
 	RecipientPhone  string
@@ -115,7 +111,7 @@ type idempotencyFingerprint struct {
 	// out hashes as it did before the field existed.
 	PaymentMethod string `json:"payment_method,omitempty"`
 	PointsWon     int64  `json:"points_won,omitempty"`
-	Items           []struct {
+	Items         []struct {
 		SkuID    string `json:"sku_id,omitempty"`
 		SKU      string `json:"sku,omitempty"`
 		Quantity int    `json:"quantity"`
@@ -134,10 +130,10 @@ func NewWithCheckout(
 	eventPublisher ...ports.EventPublisher,
 ) *Service {
 	s := &Service{
-		repo:         repo,
-		stock:        stock,
+		repo:            repo,
+		stock:           stock,
 		promotionClient: promotionClient,
-		checkoutTTL:  checkoutTTL,
+		checkoutTTL:     checkoutTTL,
 		now: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -284,10 +280,6 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 
 	order, err := domain.NewOrder(orderID, input.CustomerID, reservationID, pricedItems, input.PromotionCode, input.DiscountWon, shippingFee, s.now())
 	if err != nil {
-		_ = s.stock.ReleaseReservation(ctx, reservationID)
-		return nil, err
-	}
-	if err := order.SetTier(input.TierPromotionCode, input.TierDiscountWon); err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
@@ -885,7 +877,7 @@ func (s *Service) loadIdempotentOrder(ctx context.Context, customerID, key, reqH
 func hashCreateOrderInput(input CreateOrderInput) string {
 	fp := idempotencyFingerprint{
 		CustomerID:      strings.TrimSpace(input.CustomerID),
-		PromotionCode:      strings.TrimSpace(input.PromotionCode),
+		PromotionCode:   strings.TrimSpace(input.PromotionCode),
 		DiscountWon:     input.DiscountWon,
 		RecipientName:   strings.TrimSpace(input.RecipientName),
 		RecipientPhone:  strings.TrimSpace(input.RecipientPhone),

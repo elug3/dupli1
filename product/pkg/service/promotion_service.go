@@ -72,6 +72,9 @@ func (s *PromotionService) Create(ctx context.Context, p domain.Promotion) (*dom
 	if p.Scope == "" {
 		p.Scope = domain.ScopeGlobal
 	}
+	if p.IsTier() {
+		return nil, errTiersRetired
+	}
 	if err := validateDefinition(p); err != nil {
 		return nil, err
 	}
@@ -85,6 +88,9 @@ func (s *PromotionService) Update(ctx context.Context, code string, patch ports.
 	// Validate the result of the patch, not the patch itself: a partial update
 	// that would leave the definition invalid must be refused before it is
 	// written, not discovered later at a customer's checkout.
+	if patch.ApplyMode != nil && *patch.ApplyMode == domain.ApplyModeAuto {
+		return nil, errTiersRetired
+	}
 	current, err := s.store.Get(ctx, code)
 	if err != nil {
 		return nil, err
@@ -143,7 +149,7 @@ func (s *PromotionService) Redeem(ctx context.Context, code string) (*domain.Pro
 	if !ok {
 		return nil, false
 	}
-	// A tier is never a code anyone types.
+	// A retired tier is never a code anyone types.
 	if promotion.IsTier() || promotion.IsExpired(s.now()) || promotion.IsExhausted() {
 		return nil, false
 	}
@@ -174,8 +180,8 @@ func (s *PromotionService) evaluate(ctx context.Context, code string, evalCtx do
 		// that probing cannot enumerate live campaigns.
 		return domain.EvaluationResult{Reason: domain.ReasonInvalidCode}
 	}
-	// A tier applies on its own through EvaluateTier. Typing its code must not
-	// also spend it in the code slot, or a member would get it twice.
+	// A retired customer tier (apply_mode auto) left in the table is not a
+	// code anyone can type.
 	if promotion.IsTier() {
 		return domain.EvaluationResult{Reason: domain.ReasonInvalidCode}
 	}
@@ -308,57 +314,6 @@ func (s *PromotionService) Reserve(ctx context.Context, code, orderID string, ev
 	return row, result, nil
 }
 
-// TierResult is the automatic tier discount a customer earns on a checkout.
-// OK false with no reason means the customer holds no tier that applies.
-type TierResult struct {
-	Code string `json:"code,omitempty"`
-	domain.EvaluationResult
-}
-
-// EvaluateTier finds the customer's automatic tiers (apply_mode auto) and
-// returns the one worth the most on this cart.
-//
-// Membership is the entitlement: a manager issues the tier's code to an
-// account and revokes it to take them out. A member holding two tiers gets the
-// better one, never both. There is no ledger row and no usage cap — a tier is
-// spent on every order — so this is safe to call as often as checkout needs.
-func (s *PromotionService) EvaluateTier(ctx context.Context, evalCtx domain.EvaluationContext) (TierResult, error) {
-	if s.entitlements == nil || evalCtx.CustomerID == "" {
-		return TierResult{}, nil
-	}
-	rows, err := s.entitlements.ListForCustomer(ctx, evalCtx.CustomerID)
-	if err != nil {
-		return TierResult{}, err
-	}
-	if evalCtx.Now.IsZero() {
-		evalCtx.Now = s.now()
-	}
-
-	var best TierResult
-	seen := map[string]bool{}
-	for _, row := range rows {
-		if seen[row.Code] || !row.Usable(evalCtx.Now) {
-			continue
-		}
-		promotion, err := s.store.Get(ctx, row.Code)
-		if err != nil || !promotion.IsTier() {
-			continue
-		}
-		seen[row.Code] = true
-		lines := s.withCatalogAttributes(ctx, *promotion, evalCtx.Lines)
-		judged := evalCtx
-		judged.Lines = lines
-		result := promotion.Evaluate(judged)
-		if !result.OK {
-			continue
-		}
-		if !best.OK || result.DiscountWon > best.DiscountWon {
-			best = TierResult{Code: promotion.Code, EvaluationResult: result}
-		}
-	}
-	return best, nil
-}
-
 // Consume marks an order's reservation paid.
 func (s *PromotionService) Consume(ctx context.Context, orderID string) error {
 	if s.ledger == nil {
@@ -376,6 +331,13 @@ func (s *PromotionService) Release(ctx context.Context, orderID string) error {
 	}
 	return s.ledger.Release(ctx, orderID, s.now())
 }
+
+// errTiersRetired refuses new customer tiers. The VIP auto-discount
+// (apply_mode auto) was retired on 2026-11-18: VIP is now a points multiplier
+// in payment (docs/payment-points.md). Rows already stored stay readable and
+// editable, so a manager can switch one to code or delete it, but nothing
+// applies them any more.
+var errTiersRetired = ports.Invalid("apply_mode auto (customer tiers) is retired: VIP is now a points multiplier, see docs/payment-points.md")
 
 func validateDefinition(p domain.Promotion) error {
 	switch p.EffectiveScope() {
@@ -542,8 +504,7 @@ func (s *PromotionService) Wallet(ctx context.Context, customerID string, evalCt
 		entry := WalletEntry{Entitlement: row}
 		promotion, err := s.store.Get(ctx, row.Code)
 		if err == nil {
-			// Tier membership is not something to pick at checkout; it is
-			// applied on its own.
+			// A retired tier is not something to pick at checkout.
 			if promotion.IsTier() {
 				continue
 			}

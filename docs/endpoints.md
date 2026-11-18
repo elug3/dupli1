@@ -332,9 +332,9 @@ Errors: `400` invalid field, `401` missing/invalid token, `404` address not foun
 | `DELETE` | `/api/v1/products/promotions/by-code/{code}` | `promotion.delete` | Delete promotional code |
 | `POST` | `/api/v1/products/promotions/evaluate` | — (throttled) | Price a code against a cart (`422` with `reason` when it does not apply) |
 | `POST` | `/api/v1/products/promotions/reserve` · `/consume` · `/release` | `promotion.redeem` + `dupli1-order` (internal `:8081` only) | Usage ledger |
-| `POST` | `/api/v1/products/promotions/tier` | `promotion.redeem` + `dupli1-order` (internal `:8081` only) | Customer tier discount for a cart |
+| `POST` | `/api/v1/products/promotions/tier` | `promotion.redeem` + `dupli1-order` (internal `:8081` only) | Retired 2026-11-18: always `{ "ok": false }`, kept one release |
 | `GET` / `POST` | `/api/v1/products/promotions/me` | signed in | The caller's own promotional-code wallet |
-| `POST` | `/api/v1/products/promotions/me/tier` | signed in | The caller's own tier discount on a cart |
+| `POST` | `/api/v1/products/promotions/me/tier` | signed in | Retired 2026-11-18: always `{ "ok": false }`, kept one release |
 | `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` | Grant a `single_user` code to one account |
 | `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` | Withdraw an issued entitlement |
 | `POST` | `/api/v1/products/visits` | — (throttled) | Storefront page-load visitor beacon |

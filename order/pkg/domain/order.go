@@ -87,9 +87,10 @@ type Order struct {
 	SubtotalWon   int64       `json:"subtotal_won"`
 	DiscountWon   int64       `json:"discount_won"`
 	// TierPromotionCode and TierDiscountWon are the automatic customer tier
-	// (VIP, a private tier) this order earned without a code. DiscountWon
-	// already includes TierDiscountWon, so totals read as before; the code's
-	// own share is DiscountWon - TierDiscountWon.
+	// (VIP, a private tier) an order earned without a code, before tiers were
+	// retired on 2026-11-18 for the points multiplier. New orders leave them
+	// empty; old ones keep them. DiscountWon already includes TierDiscountWon,
+	// so the code's own share is DiscountWon - TierDiscountWon.
 	TierPromotionCode string `json:"tier_promotion_code,omitempty"`
 	TierDiscountWon   int64  `json:"tier_discount_won"`
 	// ShippingFeeWon is the delivery charge in whole KRW, captured at order

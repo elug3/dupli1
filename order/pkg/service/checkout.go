@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/elug3/dupli1/order/pkg/domain"
@@ -241,28 +240,14 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 		discountKRW = verdict.DiscountWon
 	}
 
-	// The customer's tier stacks under the code. Unlike the preview on a
-	// session read, a lookup that fails here fails the checkout: charging a
-	// VIP full price without saying so is worse than asking them to retry.
-	tierCode, tierWon, err := s.tierDiscount(ctx, promoCtx)
-	if err != nil {
-		return nil, err
-	}
 	var subtotal int64
 	for _, item := range pricedItems {
 		subtotal += int64(item.Quantity) * item.UnitPriceWon
 	}
-	if room := subtotal - discountKRW; tierWon > room {
-		tierWon = room
-	}
-	if tierWon <= 0 {
-		tierCode, tierWon = "", 0
-	}
-
 	// Points pay for goods after every discount, never delivery; asking for
 	// more ("use all" sends the whole balance) is trimmed to that.
 	pointsWon := input.PointsWon
-	if room := subtotal - discountKRW - tierWon; pointsWon > room {
+	if room := subtotal - discountKRW; pointsWon > room {
 		pointsWon = room
 	}
 
@@ -270,10 +255,8 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 	order, err := s.CreateOrder(ctx, CreateOrderInput{
 		CustomerID:      session.CustomerID,
 		Items:           pricedItems,
-		PromotionCode:      promotionCode,
-		DiscountWon:     discountKRW + tierWon,
-		TierPromotionCode: tierCode,
-		TierDiscountWon:   tierWon,
+		PromotionCode:   promotionCode,
+		DiscountWon:     discountKRW,
 		RecipientName:   snapshot.RecipientName,
 		RecipientPhone:  snapshot.RecipientPhone,
 		ShippingAddress: snapshot.ShippingAddress,
@@ -353,45 +336,12 @@ func (s *Service) saveCheckoutSession(ctx context.Context, session *domain.Check
 	return s.annotateCheckoutSession(ctx, cloneCheckoutSession(session)), nil
 }
 
-// tierDiscount asks product for the customer's automatic tier discount on
-// this cart. No client, no customer or no lines means no tier.
-func (s *Service) tierDiscount(ctx context.Context, promoCtx ports.PromotionContext) (string, int64, error) {
-	if s.promotionClient == nil || promoCtx.CustomerID == "" || len(promoCtx.Lines) == 0 {
-		return "", 0, nil
-	}
-	verdict, err := s.promotionClient.EvaluateTier(ctx, promoCtx)
-	if err != nil {
-		return "", 0, fmt.Errorf("%w: tier lookup: %v", ports.ErrPromotionUnavailable, err)
-	}
-	if verdict == nil || !verdict.OK || verdict.DiscountWon <= 0 {
-		return "", 0, nil
-	}
-	return verdict.Code, verdict.DiscountWon, nil
-}
-
-// annotateTier shows the tier discount on a session being returned. A failed
-// lookup shows none rather than failing the read; complete asks again and is
-// the authority on what is charged.
-func (s *Service) annotateTier(ctx context.Context, session *domain.CheckoutSession) {
-	if session.Status != domain.CheckoutStatusOpen || len(session.Items) == 0 {
-		return
-	}
-	code, won, err := s.tierDiscount(ctx, promotionContextFor(session, session.Items))
-	if err != nil {
-		log.Printf("checkout session %s: tier lookup failed, showing no tier: %v", session.ID, err)
-		return
-	}
-	session.ApplyTier(code, won)
-}
-
 // annotateCheckoutSession re-checks each stored line against the product catalog
-// so the storefront can surface unavailable_items before complete, and shows
-// the customer's tier discount.
+// so the storefront can surface unavailable_items before complete.
 func (s *Service) annotateCheckoutSession(ctx context.Context, session *domain.CheckoutSession) *domain.CheckoutSession {
 	if session == nil {
 		return session
 	}
-	s.annotateTier(ctx, session)
 	if len(session.Items) == 0 || s.product == nil {
 		return session
 	}
