@@ -456,3 +456,25 @@ func TestReportNotReceivedClearsPendingCancelRequest(t *testing.T) {
 func attachVideo(o *domain.Order) {
 	o.InspectionVideo = &domain.InspectionVideo{ObjectKey: "orders/" + o.ID + "/inspection.mp4", ContentType: "video/mp4", SizeBytes: 3}
 }
+
+func TestApplyPointsCoversGoodsOnly(t *testing.T) {
+	o, err := domain.NewOrder("o1", "c1", "r1", []domain.OrderItem{{SKU: "A", Quantity: 1, UnitPriceWon: 10000}}, "", 2000, 3000, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := o.ApplyPoints(8001); err == nil {
+		t.Fatal("points above goods after discount accepted")
+	}
+	if err := o.ApplyPoints(8000); err != nil {
+		t.Fatal(err)
+	}
+	if o.TotalWon != 3000 || o.PointsWon != 8000 {
+		t.Fatalf("total/points = %d/%d, want 3000/8000", o.TotalWon, o.PointsWon)
+	}
+	if err := o.ApplyPoints(1); err == nil {
+		t.Fatal("second ApplyPoints accepted")
+	}
+	if err := o.ApplyPaymentMethod("", 1000); err != nil || o.CardSurchargeWon != 300 {
+		t.Fatalf("surcharge = %d, %v, want 300 on delivery only", o.CardSurchargeWon, err)
+	}
+}

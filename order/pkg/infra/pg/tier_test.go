@@ -23,7 +23,10 @@ func TestOrderTierSurvivesEveryReadPath(t *testing.T) {
 	if err := order.SetTier("VIP", 20000); err != nil {
 		t.Fatalf("SetTier: %v", err)
 	}
-	// The card surcharge rides the same read paths.
+	// Points and the card surcharge ride the same read paths.
+	if err := order.ApplyPoints(10000); err != nil {
+		t.Fatalf("ApplyPoints: %v", err)
+	}
 	if err := order.ApplyPaymentMethod("credit_card", 1000); err != nil {
 		t.Fatalf("ApplyPaymentMethod: %v", err)
 	}
@@ -37,9 +40,9 @@ func TestOrderTierSurvivesEveryReadPath(t *testing.T) {
 			t.Fatalf("%s: tier %q %d discount %d, want VIP 20000 / 30000",
 				where, got.TierPromotionCode, got.TierDiscountWon, got.DiscountWon)
 		}
-		if got.PaymentMethod != "credit_card" || got.CardSurchargeWon != 17000 || got.TotalWon != 187000 {
-			t.Fatalf("%s: method %q surcharge %d total %d, want credit_card 17000 / 187000",
-				where, got.PaymentMethod, got.CardSurchargeWon, got.TotalWon)
+		if got.PaymentMethod != "credit_card" || got.PointsWon != 10000 || got.CardSurchargeWon != 16000 || got.TotalWon != 176000 {
+			t.Fatalf("%s: method %q points %d surcharge %d total %d, want credit_card 10000 / 16000 / 176000",
+				where, got.PaymentMethod, got.PointsWon, got.CardSurchargeWon, got.TotalWon)
 		}
 	}
 

@@ -163,6 +163,7 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tier_discount_won BIGINT NOT NULL DEFAULT 0`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS card_surcharge_won BIGINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS points_won BIGINT NOT NULL DEFAULT 0`,
 		`ALTER TABLE checkout_sessions ADD COLUMN IF NOT EXISTS shipping_fee_won BIGINT NOT NULL DEFAULT 0`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`,
@@ -448,9 +449,9 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
 			cancel_requested_at, cancel_request_reason, canceled_at,
-			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won,
+			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won, points_won,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			reservation_id = EXCLUDED.reservation_id,
@@ -485,6 +486,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 			tier_discount_won = EXCLUDED.tier_discount_won,
 			payment_method = EXCLUDED.payment_method,
 			card_surcharge_won = EXCLUDED.card_surcharge_won,
+			points_won = EXCLUDED.points_won,
 			updated_at = EXCLUDED.updated_at
 	`, order.ID, order.CustomerID, order.ReservationID, order.Status, order.PromotionCode,
 		order.SubtotalWon, order.DiscountWon, order.ShippingFeeWon, order.TotalWon,
@@ -493,7 +495,7 @@ func (r *Repository) SaveWithOutbox(ctx context.Context, order *domain.Order, id
 		order.Carrier, order.TrackingNumber, order.CarrierNote,
 		order.ConfirmedAt, order.DeliveredAt, order.DeliveredBy, order.ReceiptConfirmedAt, order.DisputedAt, order.DisputeReason,
 		order.CancelRequestedAt, order.CancelRequestReason, order.CanceledAt,
-		order.TierPromotionCode, order.TierDiscountWon, order.PaymentMethod, order.CardSurchargeWon,
+		order.TierPromotionCode, order.TierDiscountWon, order.PaymentMethod, order.CardSurchargeWon, order.PointsWon,
 		order.CreatedAt, order.UpdatedAt)
 	if err != nil {
 		return err
@@ -630,7 +632,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
 			cancel_requested_at, cancel_request_reason, canceled_at,
-			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won,
+			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won, points_won,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, id).Scan(
@@ -641,7 +643,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Order, error) 
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
 		&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
-		&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon,
+		&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon, &order.PointsWon,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -812,7 +814,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
 			cancel_requested_at, cancel_request_reason, canceled_at,
-			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won,
+			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won, points_won,
 			created_at, updated_at
 		FROM orders WHERE customer_id = $1 ORDER BY created_at DESC
 	`, customerID)
@@ -835,7 +837,7 @@ func (r *Repository) ListByCustomer(ctx context.Context, customerID string) ([]d
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
 			&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
-			&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon,
+			&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon, &order.PointsWon,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -884,7 +886,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
 			cancel_requested_at, cancel_request_reason, canceled_at,
-			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won,
+			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won, points_won,
 			created_at, updated_at
 		FROM orders ORDER BY created_at DESC
 	`)
@@ -907,7 +909,7 @@ func (r *Repository) ListAll(ctx context.Context) ([]domain.Order, error) {
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
 			&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
-			&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon,
+			&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon, &order.PointsWon,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -956,7 +958,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
 			cancel_requested_at, cancel_request_reason, canceled_at,
-			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won,
+			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won, points_won,
 			created_at, updated_at
 		FROM orders
 		WHERE status = $1 AND payment_due_at < $2
@@ -980,7 +982,7 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 			&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 			&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
 			&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
-			&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon,
+			&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon, &order.PointsWon,
 			&order.CreatedAt, &order.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -1018,7 +1020,7 @@ func (r *Repository) ListSalesActivity(ctx context.Context, start, end time.Time
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, status, subtotal_won, discount_won, shipping_fee_won, card_surcharge_won, total_won, paid_at, canceled_at
+		SELECT id, status, subtotal_won, discount_won, shipping_fee_won, card_surcharge_won, points_won, total_won, paid_at, canceled_at
 		FROM orders
 		WHERE paid_at IS NOT NULL
 			AND ((paid_at >= $1 AND paid_at < $2)
@@ -1034,7 +1036,7 @@ func (r *Repository) ListSalesActivity(ctx context.Context, start, end time.Time
 		var order domain.Order
 		var paidAt, canceledAt *time.Time
 		if err := rows.Scan(&order.ID, &order.Status, &order.SubtotalWon, &order.DiscountWon,
-			&order.ShippingFeeWon, &order.CardSurchargeWon, &order.TotalWon, &paidAt, &canceledAt); err != nil {
+			&order.ShippingFeeWon, &order.CardSurchargeWon, &order.PointsWon, &order.TotalWon, &paidAt, &canceledAt); err != nil {
 			return nil, err
 		}
 		order.PaidAt = paidAt
@@ -1141,7 +1143,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
 			cancel_requested_at, cancel_request_reason, canceled_at,
-			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won,
+			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won, points_won,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
@@ -1152,7 +1154,7 @@ func (r *Repository) CancelIfPendingExpired(ctx context.Context, orderID string,
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
 		&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
-		&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon,
+		&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon, &order.PointsWon,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if err != nil {
@@ -1237,7 +1239,7 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
 			cancel_requested_at, cancel_request_reason, canceled_at,
-			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won,
+			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won, points_won,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
@@ -1248,7 +1250,7 @@ func (r *Repository) CancelIfPending(ctx context.Context, orderID string, now ti
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
 		&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
-		&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon,
+		&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon, &order.PointsWon,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if err != nil {
@@ -1335,7 +1337,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 			payment_id, paid_at, payment_due_at, shipped_by, shipped_at, carrier, tracking_number, carrier_note,
 			confirmed_at, delivered_at, delivered_by, receipt_confirmed_at, disputed_at, dispute_reason,
 			cancel_requested_at, cancel_request_reason, canceled_at,
-			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won,
+			tier_promotion_code, tier_discount_won, payment_method, card_surcharge_won, points_won,
 			created_at, updated_at
 		FROM orders WHERE id = $1
 	`, orderID).Scan(
@@ -1346,7 +1348,7 @@ func (r *Repository) CancelIfPaidForRefund(ctx context.Context, orderID, payment
 		&order.Carrier, &order.TrackingNumber, &order.CarrierNote,
 		&confirmedAt, &deliveredAt, &order.DeliveredBy, &receiptConfirmedAt, &disputedAt, &order.DisputeReason,
 		&cancelRequestedAt, &order.CancelRequestReason, &canceledAt,
-		&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon,
+		&order.TierPromotionCode, &order.TierDiscountWon, &order.PaymentMethod, &order.CardSurchargeWon, &order.PointsWon,
 		&order.CreatedAt, &order.UpdatedAt,
 	)
 	if err != nil {

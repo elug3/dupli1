@@ -17,6 +17,9 @@ type SalesPeriod struct {
 	ShippingFeeWon int64 `json:"shipping_fee_won"`
 	// CardSurchargeWon is the card surcharge collected, already in GrossWon.
 	CardSurchargeWon int64 `json:"card_surcharge_won"`
+	// PointsWon is the store credit shoppers paid with. It is not money
+	// received, so it is not in GrossWon; like DiscountWon it is shown beside it.
+	PointsWon int64 `json:"points_won"`
 	// Refunds of paid orders, by canceled_at.
 	Refunds     int   `json:"refunds"`
 	RefundedWon int64 `json:"refunded_won"`
@@ -56,6 +59,7 @@ func BuildSalesReport(r reportperiod.Range, orders []Order) SalesReport {
 			p.DiscountWon += o.DiscountWon
 			p.ShippingFeeWon += o.ShippingFeeWon
 			p.CardSurchargeWon += o.CardSurchargeWon
+			p.PointsWon += o.PointsWon
 		}
 		if o.Status == StatusCanceled && o.CanceledAt != nil {
 			if i := r.Index(*o.CanceledAt); i >= 0 {
@@ -74,6 +78,7 @@ func BuildSalesReport(r reportperiod.Range, orders []Order) SalesReport {
 		totals.DiscountWon += p.DiscountWon
 		totals.ShippingFeeWon += p.ShippingFeeWon
 		totals.CardSurchargeWon += p.CardSurchargeWon
+		totals.PointsWon += p.PointsWon
 		totals.Refunds += p.Refunds
 		totals.RefundedWon += p.RefundedWon
 	}

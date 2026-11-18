@@ -102,6 +102,11 @@ type Order struct {
 	// CardSurchargeWon is the card surcharge, in whole KRW, already included
 	// in TotalWon. Zero for any other method.
 	CardSurchargeWon int64           `json:"card_surcharge_won"`
+	// PointsWon is the store credit (1 P = ₩1) the shopper paid part of the
+	// goods with. It is already taken off TotalWon, before the card surcharge,
+	// so payment charges and refunds only the money part; payment holds the
+	// points themselves (docs/payment-points.md).
+	PointsWon int64 `json:"points_won"`
 	TotalWon         int64           `json:"total_won"`
 	RecipientName   string          `json:"recipient_name,omitempty"`
 	RecipientPhone  string          `json:"recipient_phone,omitempty"`
@@ -225,6 +230,22 @@ func (o *Order) SetTier(code string, discountWon int64) error {
 	}
 	o.TierPromotionCode = code
 	o.TierDiscountWon = discountWon
+	return nil
+}
+
+// ApplyPoints takes points off a new order's goods. Points pay for goods only,
+// after every discount, never delivery, so the most an order can take is
+// SubtotalWon - DiscountWon. It runs before ApplyPaymentMethod, so the card
+// surcharge falls only on what is left to pay by card.
+func (o *Order) ApplyPoints(points int64) error {
+	if points < 0 || o.Status != StatusPending || o.PaymentMethod != "" || o.PointsWon != 0 {
+		return ErrInvalidOrder
+	}
+	if points > o.SubtotalWon-o.DiscountWon {
+		return ErrInvalidOrder
+	}
+	o.PointsWon = points
+	o.TotalWon -= points
 	return nil
 }
 

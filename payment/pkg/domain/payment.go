@@ -33,12 +33,19 @@ const (
 	MethodCreditCard = "credit_card"
 	MethodBypass     = "bypass"
 	MethodBitcoin    = "bitcoin"
+	// MethodPoints is set by payment itself on a ₩0 order; a client never
+	// asks for it (NormalizeMethod refuses it).
+	MethodPoints = "points"
 )
 
 // Provider identifiers stored on the payment row.
 const (
 	ProviderBypass = "bypass"
 	ProviderNano   = "nano"
+	// ProviderPoints records an order paid entirely in points: nothing was
+	// charged, so there is no PG and the amount is ₩0. The points themselves
+	// are the hold in the points ledger.
+	ProviderPoints = "points"
 )
 
 const DefaultPaymentTTL = 5 * time.Minute
@@ -107,6 +114,27 @@ func NewPayment(id, orderID, customerID string, amountKRW int64, currency, provi
 		Provider:    provider,
 		ProviderRef: providerRef,
 		CheckoutURL: checkoutURL,
+		ExpiresAt:   now.Add(DefaultPaymentTTL),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}, nil
+}
+
+// NewPointsPayment is the succeeded ₩0 payment of an order whose goods were
+// paid in full with points and that owes nothing for delivery.
+func NewPointsPayment(id, orderID, customerID string, now time.Time) (*Payment, error) {
+	if id == "" || orderID == "" || customerID == "" {
+		return nil, ErrInvalidPayment
+	}
+	return &Payment{
+		ID:          id,
+		OrderID:     orderID,
+		CustomerID:  customerID,
+		Currency:    DefaultCurrency,
+		Status:      StatusSucceeded,
+		Method:      MethodPoints,
+		Provider:    ProviderPoints,
+		ProviderRef: "points_" + id,
 		ExpiresAt:   now.Add(DefaultPaymentTTL),
 		CreatedAt:   now,
 		UpdatedAt:   now,

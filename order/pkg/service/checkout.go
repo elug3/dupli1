@@ -204,6 +204,12 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 	if _, err := domain.NormalizePaymentMethod(input.PaymentMethod); err != nil {
 		return nil, err
 	}
+	if input.PointsWon < 0 {
+		return nil, ports.ErrInvalidPoints
+	}
+	if input.PointsWon > 0 && s.points == nil {
+		return nil, ports.ErrPointsUnavailable
+	}
 
 	pricedItems, err := s.priceItems(ctx, session.Items)
 	if err != nil {
@@ -253,6 +259,13 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 		tierCode, tierWon = "", 0
 	}
 
+	// Points pay for goods after every discount, never delivery; asking for
+	// more ("use all" sends the whole balance) is trimmed to that.
+	pointsWon := input.PointsWon
+	if room := subtotal - discountKRW - tierWon; pointsWon > room {
+		pointsWon = room
+	}
+
 	shippingFee := session.ShippingFeeWon
 	order, err := s.CreateOrder(ctx, CreateOrderInput{
 		CustomerID:      session.CustomerID,
@@ -267,6 +280,7 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 		SourceAddressID: snapshot.SourceAddressID,
 		ShippingFeeWon:  &shippingFee,
 		PaymentMethod:   input.PaymentMethod,
+		PointsWon:       pointsWon,
 	})
 	if err != nil {
 		return nil, err
@@ -286,6 +300,17 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 		if !verdict.OK {
 			_, _ = s.CancelOrder(ctx, order.ID)
 			return nil, promotionRejection(verdict)
+		}
+	}
+
+	// Set the points aside the same way, keyed by the order. Too few points
+	// (spent in another tab since the shopper looked) rolls the order back.
+	// The cancel releases the code's use and the stock; there is no hold to
+	// give back, because the reserve is what failed.
+	if order.PointsWon > 0 {
+		if err := s.points.Reserve(ctx, order.ID, order.CustomerID, order.PointsWon); err != nil {
+			_, _ = s.CancelOrder(ctx, order.ID)
+			return nil, err
 		}
 	}
 

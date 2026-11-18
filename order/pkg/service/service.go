@@ -38,6 +38,9 @@ type Service struct {
 	eventPublisher ports.EventPublisher
 	outboxDrainer  *outbox.Drainer
 	promotionClient   ports.PromotionClient
+	// points sets points aside in payment's ledger and settles them. Nil
+	// means checkout refuses points (ErrPointsUnavailable).
+	points      ports.PointsClient
 	checkoutTTL    time.Duration
 	// shippingFeeKRW is the flat delivery charge applied to every order, in
 	// whole KRW. Zero (the default) means delivery is free, which keeps the
@@ -77,6 +80,10 @@ type CreateOrderInput struct {
 	// PaymentMethod is how the order will be paid: credit_card (the default
 	// when empty, and the one that carries the card surcharge) or bypass.
 	PaymentMethod string
+	// PointsWon is store credit taken off the goods before the surcharge.
+	// Only checkout complete sets it, after setting the points aside is
+	// arranged; a direct POST /orders never spends points.
+	PointsWon int64
 }
 
 type CompleteCheckoutInput struct {
@@ -85,6 +92,10 @@ type CompleteCheckoutInput struct {
 	ShippingAddress domain.ShippingAddress
 	SourceAddressID string
 	PaymentMethod   string
+	// PointsWon is how many points the shopper wants to pay with. More than
+	// the goods are worth after discounts is trimmed to that, so "use all"
+	// can send the whole balance.
+	PointsWon int64
 }
 
 type idempotencyFingerprint struct {
@@ -103,6 +114,7 @@ type idempotencyFingerprint struct {
 	// The raw input, not the normalized method, so a request that leaves it
 	// out hashes as it did before the field existed.
 	PaymentMethod string `json:"payment_method,omitempty"`
+	PointsWon     int64  `json:"points_won,omitempty"`
 	Items           []struct {
 		SkuID    string `json:"sku_id,omitempty"`
 		SKU      string `json:"sku,omitempty"`
@@ -183,6 +195,13 @@ func (s *Service) WithCardSurcharge(bps int64) *Service {
 // is not dropped locally while NANO still holds the money.
 func (s *Service) WithPayment(payment ports.PaymentClient) *Service {
 	s.payment = payment
+	return s
+}
+
+// WithPoints sets the client for payment's points ledger, so checkout can
+// take points off an order's price.
+func (s *Service) WithPoints(points ports.PointsClient) *Service {
+	s.points = points
 	return s
 }
 
@@ -269,6 +288,10 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		return nil, err
 	}
 	if err := order.SetTier(input.TierPromotionCode, input.TierDiscountWon); err != nil {
+		_ = s.stock.ReleaseReservation(ctx, reservationID)
+		return nil, err
+	}
+	if err := order.ApplyPoints(input.PointsWon); err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
@@ -491,6 +514,7 @@ func (s *Service) persistPaid(ctx context.Context, order *domain.Order, events [
 	}
 	if err == nil && saved {
 		s.consumePromotionForPaid(ctx, order)
+		s.consumePointsForPaid(ctx, order)
 	}
 	return saved, err
 }
@@ -654,6 +678,8 @@ func (s *Service) cancelOrder(ctx context.Context, id, action string) (*domain.O
 	// the same rule the promotional code stays spent.
 	if !stockCommitted {
 		s.releaseHoldsForCancel(ctx, saved)
+	} else {
+		s.releasePointsForCancel(ctx, saved)
 	}
 	return saved, nil
 }
@@ -804,6 +830,11 @@ func (s *Service) refundCapturedPayment(ctx context.Context, order *domain.Order
 	if paymentID == "" {
 		return nil
 	}
+	// An order paid entirely in points took no money; giving the points back
+	// (releasePointsForCancel) is the whole refund.
+	if order.TotalWon == 0 {
+		return nil
+	}
 	if s.payment == nil {
 		return fmt.Errorf("%w: cannot refund payment %s without a payment client", ports.ErrPaymentUnavailable, paymentID)
 	}
@@ -861,6 +892,7 @@ func hashCreateOrderInput(input CreateOrderInput) string {
 		ShippingAddress: input.ShippingAddress,
 		SourceAddressID: strings.TrimSpace(input.SourceAddressID),
 		PaymentMethod:   strings.TrimSpace(input.PaymentMethod),
+		PointsWon:       input.PointsWon,
 	}
 	fp.Items = make([]struct {
 		SkuID    string `json:"sku_id,omitempty"`
@@ -925,6 +957,7 @@ func (s *Service) marshalOrderEvent(subject string, order *domain.Order, change 
 		ShippingFeeWon: order.ShippingFeeWon,
 		TotalWon:       order.TotalWon,
 		PaymentMethod:  order.PaymentMethod,
+		PointsWon:      order.PointsWon,
 		Items:          items,
 		CreatedAt:      order.CreatedAt,
 		Occurred:       s.now(),
@@ -1052,11 +1085,38 @@ func (s *Service) releaseHoldsForCancel(ctx context.Context, order *domain.Order
 	if err := s.releaseReservationForCancel(ctx, order.ReservationID); err != nil {
 		log.Printf("cancel order %s: release reservation %s: %v", order.ID, order.ReservationID, err)
 	}
+	s.releasePointsForCancel(ctx, order)
 	if order.PromotionCode == "" || s.promotionClient == nil {
 		return
 	}
 	if err := s.promotionClient.Release(ctx, order.ID); err != nil {
 		log.Printf("cancel order %s: release promotion %s: %v", order.ID, order.PromotionCode, err)
+	}
+}
+
+// consumePointsForPaid spends the order's points hold once it is paid. Like
+// the code, a failure is logged rather than undoing the payment: the hold
+// already keeps the points out of the balance.
+func (s *Service) consumePointsForPaid(ctx context.Context, order *domain.Order) {
+	if order == nil || order.PointsWon <= 0 || s.points == nil {
+		return
+	}
+	if err := s.points.Consume(ctx, order.ID); err != nil {
+		log.Printf("order %s: consume %d points: %v", order.ID, order.PointsWon, err)
+	}
+}
+
+// releasePointsForCancel gives an order's points back. Unlike stock and the
+// code it runs on every cancel, shipped or not: points are money, and a
+// cancel of a shipped order refunds the card part too. Payment also releases
+// the hold on the order.status_updated canceled event; this call covers that
+// event being missed. Releasing twice is harmless.
+func (s *Service) releasePointsForCancel(ctx context.Context, order *domain.Order) {
+	if order == nil || order.PointsWon <= 0 || s.points == nil {
+		return
+	}
+	if err := s.points.Release(ctx, order.ID); err != nil {
+		log.Printf("cancel order %s: release %d points: %v", order.ID, order.PointsWon, err)
 	}
 }
 

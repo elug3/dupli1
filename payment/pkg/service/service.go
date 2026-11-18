@@ -89,6 +89,30 @@ func (s *Service) CreatePayment(ctx context.Context, input CreatePaymentInput) (
 	}
 }
 
+// createPointsPayment records the ₩0 payment of an order that points paid for
+// in full and marks it succeeded at once, so order moves to paid (and spends
+// the points hold) through the usual payment.succeeded event. Order alone
+// prices an order, so a ₩0 total can only come from its own arithmetic.
+func (s *Service) createPointsPayment(ctx context.Context, order *ports.OrderSummary, input CreatePaymentInput) (*domain.Payment, error) {
+	paymentID, err := s.repo.NextPaymentID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	payment, err := domain.NewPointsPayment(paymentID, order.ID, order.CustomerID, s.now())
+	if err != nil {
+		return nil, err
+	}
+	payment.CreatedBy = strings.TrimSpace(input.CreatedBy)
+	payment.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
+	if err := s.persistSucceeded(ctx, payment); err != nil {
+		if existing, reuseErr := s.reuseOpenPaymentForOrder(ctx, order.ID); reuseErr == nil && existing != nil {
+			return existing, nil
+		}
+		return nil, err
+	}
+	return payment, nil
+}
+
 func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInput) (*domain.Payment, error) {
 	order, err := s.loadPendingOrder(ctx, input, false)
 	if err != nil {
@@ -105,6 +129,9 @@ func (s *Service) createCardPayment(ctx context.Context, input CreatePaymentInpu
 	// and were never surcharged; they pay as they always did.
 	if order.PaymentMethod != "" && order.PaymentMethod != domain.MethodCreditCard {
 		return nil, ports.ErrMethodMismatch
+	}
+	if order.TotalWon == 0 {
+		return s.createPointsPayment(ctx, order, input)
 	}
 
 	paymentID, err := s.repo.NextPaymentID(ctx)
@@ -164,6 +191,9 @@ func (s *Service) createBypassPayment(ctx context.Context, input CreatePaymentIn
 		return nil, err
 	} else if existing != nil {
 		return existing, nil
+	}
+	if order.TotalWon == 0 {
+		return s.createPointsPayment(ctx, order, input)
 	}
 
 	paymentID, err := s.repo.NextPaymentID(ctx)

@@ -134,6 +134,8 @@ POST /orders → pending → paid → confirmed → in_transit → delivered →
 
 Card payments carry a surcharge (`DUPLI1_ORDER_CARD_SURCHARGE_BPS`, default 1000 = 10%) on goods after discounts plus delivery. Order prices it at checkout complete from the order's `payment_method` (`credit_card` by default; `bypass` needs `payment.bypass` and has none) and stores it as `card_surcharge_won` inside `total_won`, so payment and refunds just use the total; payment refuses a card checkout on a bypass-priced order.
 
+Points (적립금) live in payment's ledger ([docs/payment-points.md](docs/payment-points.md)). Checkout complete takes `points_won`, trims it to goods after discounts (never delivery), takes it off before the surcharge (`points_won` on the order, outside `total_won`) and reserves it through payment's internal `points/reserve|consume|release` routes: consume on paid, release on **every** cancel. A ₩0 order gets a succeeded `method: points` payment.
+
 Order calls product stock/promotions via the internal nginx gateway (`DUPLI1_GATEWAY_URL`), not direct service URLs. Pricing is resolved server-side — client `unit_price_won` is ignored.
 
 Event flow: `payment.succeeded` (NATS, published by payment outbox) → order marks `paid`. `POST /orders/{id}/ship` → commits inventory reservation → `in_transit`.

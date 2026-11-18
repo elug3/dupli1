@@ -125,6 +125,8 @@ All order JSON / DB money uses **whole KRW won** with the `*_won` suffix (`subto
 
 **Card surcharge:** a card order (`payment_method: credit_card`, the default) adds `DUPLI1_ORDER_CARD_SURCHARGE_BPS` (default 1000 = 10%) of `subtotal - discount + shipping`, rounded down, as `card_surcharge_won` inside `total_won`; `bypass` orders have none. See [checkout-session.md](checkout-session.md).
 
+**Points:** `points_won` on checkout complete pays part of the goods (never delivery) with points; it comes off before the surcharge, is stored on the order and in `order.*` events, and is held in payment's ledger (reserve at complete, consume on paid, release on any cancel). See [payment-points.md](payment-points.md).
+
 Client-sent `unit_price_won` on create/checkout is **ignored**; prices are resolved server-side from product.
 
 ---
