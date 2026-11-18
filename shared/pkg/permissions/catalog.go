@@ -64,6 +64,13 @@ const (
 	PromotionIssue = "promotion.issue"
 )
 
+// Storefront banner permissions (product service). Banners are images staff
+// put up and take down; the storefront reads the live ones without a token.
+const (
+	BannerAll    = "banner.*"
+	BannerManage = "banner.manage"
+)
+
 // Deprecated: the coupon.* set is superseded by the promotion.* set above.
 // Both are accepted on every promotion route for one release so access tokens
 // minted before the rename keep authorizing; drop these once that window
@@ -157,6 +164,7 @@ var Catalog = []string{
 	PromotionDelete,
 	PromotionRedeem,
 	PromotionIssue,
+	BannerManage,
 	CouponRead,
 	CouponCreate,
 	CouponUpdate,

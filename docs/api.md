@@ -764,6 +764,24 @@ Storefront visit beacon. No authentication, no body. The storefront sends it onc
 
 ---
 
+### Storefront banners (`/api/v1/products/banners`)
+
+Image banners staff put on the storefront and take down by hand: no schedule, `active` is the whole switch. One placement so far, `home_hero` (the home page's top image); while none is live there the storefront keeps its built-in hero. Design: [product-storefront-banners.md](product-storefront-banners.md).
+
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| `GET` | `/api/v1/products/banners?placement=home_hero` | — | Live banners in display order → `{ "banners": [Banner] }`. `Cache-Control: public, max-age=60`. Unknown placement `400` |
+| `GET` | `/api/v1/products/banners/all` | `banner.manage` | Every banner, shown or not |
+| `POST` | `/api/v1/products/banners` | `banner.manage` | Create (`201`). Starts hidden unless `active: true` is sent |
+| `PUT` | `/api/v1/products/banners/by-id/{id}` | `banner.manage` | Replace every field (send the whole banner) |
+| `PUT` | `/api/v1/products/banners/by-id/{id}/active` | `banner.manage` | `{ "active": true|false }`: show or take down |
+| `DELETE` | `/api/v1/products/banners/by-id/{id}` | `banner.manage` | `204`; the image stays in storage |
+| `POST` | `/api/v1/products/banners/images` | `banner.manage` | Multipart `image` (JPEG, PNG or WebP by content, ≤10 MB, stored as sent) → `201 { "url" }`. `503` without S3 |
+
+`Banner`: `id`, `placement`, `image_url` (required; `https://`, `http://` or a `/path`), `mobile_image_url` (optional, used on narrow screens), `title` and `link_label` (`{ ko, en, zh }`, each ≤120 characters; an empty language falls back to Korean), `link_url` (optional; a `/path` or `https://`, never `javascript:` or `//host`), `active`, `sort_order` (lowest first; ties go to the most recently changed), `created_at`, `updated_at`, `updated_by` (the editor's email).
+
+---
+
 ### `GET /api/v1/products/reports/visitors`
 
 Unique storefront visitors per week or month. Requires `product.read`. Same query and periods as `GET /api/v1/orders/reports/sales`: `granularity=week|month` (default `week`), `from`/`to` inclusive `YYYY-MM-DD` KST dates widened to whole periods (default the last 12 weeks or 12 months; at most 104 weeks or 36 months, else `400`). A visitor is a browser (`dupli1_guest` cookie), so one person on two devices counts twice. Counting started when this endpoint shipped; there is no earlier history.

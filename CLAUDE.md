@@ -100,7 +100,7 @@ Configuration lives in `<service>/pkg/bootstrap/config.go` and/or `<service>/pkg
 | Service | Framework | Key responsibility |
 |---------|-----------|--------------------|
 | `auth` | Gin | RS256 JWT + JWKS, fine-grained permissions, user admin. Customer profile + saved addresses code still lives here too (not yet removed — see [docs/auth-profile-extension-plan.md](docs/auth-profile-extension-plan.md) Phase D) but `profile` is now the wired service for that traffic |
-| `product` | stdlib `net/http` | Parent-style + variant(SKU) catalog, images (MinIO/S3), stock & reservations (merged from former `inventory` service) |
+| `product` | stdlib `net/http` | Parent-style + variant(SKU) catalog, images (MinIO/S3), stock & reservations (merged from former `inventory` service). Also the storefront's image banners (`storefront_banners`, `banner.manage`; staff show and take them down by hand — [docs/product-storefront-banners.md](docs/product-storefront-banners.md)) |
 | `order` | stdlib `net/http` | Checkout sessions, order lifecycle, transactional outbox → NATS |
 | `cart` | stdlib `net/http` | Persistent per-customer cart; enriches lines from product |
 | `payment` | stdlib `net/http` | NANO card / manager Bypass (also the local/dev testing path); publishes `payment.succeeded` via outbox. Owns the operator **kill switches** (`payment_method.credit_card|bypass`, `payment.killswitch.manage`): an engaged one refuses new payments by that method, order refuses to price an order for it, and `GET /api/v1/payments/methods` tells the storefront not to offer it — never blocking captured payments, refunds or PG callbacks. See [docs/payment-kill-switches.md](docs/payment-kill-switches.md) |

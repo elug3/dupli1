@@ -32,6 +32,7 @@ type Handler struct {
 	visitorSvc        *service.VisitorService
 	catalogReportSvc  *service.CatalogReportService
 	reviewSvc         *service.ReviewService
+	bannerSvc         *service.BannerService
 	guestCookie       GuestCookieConfig
 	settings          settings.Response
 }

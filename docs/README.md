@@ -42,6 +42,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [product-master-catalog.md](product-master-catalog.md) | Bag merchandising taxonomy |
 | [product-color-swatches.md](product-color-swatches.md) | Color swatch hexes, base colors, one color per color master row |
 | [product-rich-search.md](product-rich-search.md) | Search / sort / wishlist |
+| [product-storefront-banners.md](product-storefront-banners.md) | Image banners staff put on the storefront (home hero), shown and taken down by hand |
 | [product-recommendations.md](product-recommendations.md) | PDP recommendations |
 | [product-sold-count.md](product-sold-count.md) | `soldCount` on ship |
 | [product-error-wrapping.md](product-error-wrapping.md) | Store-boundary errors |
