@@ -17,7 +17,7 @@ Points are dupli1's store credit. A shopper earns them on fulfilled orders, can 
 | Refund | Canceled before fulfillment: the pending points are dropped. Canceled after: the credited points are taken back, from that order's lot first and then the soonest-expiring others. What the shopper already spent elsewhere is not collected (logged as a shortfall, not carried as debt) |
 | Expiry | 12 months after crediting, per lot. Spending takes the soonest-expiring points first. An hourly sweep records what expired |
 | Spending | Up to 100% of the goods, no minimum balance, together with a promo or referral code |
-| Returned on cancel | Points an order paid with go back to the lots they came from, keeping those lots' expiry. If a lot expired meanwhile, those points expire at once (an `expire` entry follows the `return`) |
+| Returned on cancel | Points an order paid with go back to the lots they came from, keeping those lots' expiry. If a lot expired meanwhile, those points expire at once (an `expire` entry follows the `return`), decided 2026-11-18 |
 
 ### VIP tiers
 
@@ -66,8 +66,10 @@ The hold routes are internal APIs ([permissions.md](permissions.md#internal-apis
 
 Order will reserve points at checkout complete, the way it reserves a promo code, and charge the card surcharge only on what is left: `CardSurchargeWon(total − points)`. It consumes the hold on `payment.succeeded` and releases it on cancel. An order paid fully in points needs a payment path with no card part.
 
-## Open questions
+## Decisions
 
-- Should a returned point that already passed its expiry be returned anyway? Today it expires at once.
-- A clawback the shopper cannot cover is forgiven. Carry it as a negative balance instead?
-- How current VIP members (the auto-discount) are placed in the new tiers.
+Answered by the owner on 2026-11-18:
+
+- A point returned on cancel after its lot's expiry passed **expires at once**, as built.
+- A clawback the shopper cannot cover is **forgiven**: no negative balance, as built.
+- There are no current VIP members, so nobody is migrated into the tiers. Retiring the `apply_mode: auto` promotions is still a separate step.
