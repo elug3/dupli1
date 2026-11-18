@@ -47,7 +47,7 @@ func (r *Repository) migrate() error {
 			id              TEXT PRIMARY KEY,
 			order_id        TEXT NOT NULL,
 			customer_id     TEXT NOT NULL,
-			amount_won    BIGINT NOT NULL CHECK (amount_won > 0),
+			amount_won    BIGINT NOT NULL CHECK (amount_won >= 0),
 			currency        TEXT NOT NULL,
 			status          TEXT NOT NULL,
 			method          TEXT NOT NULL DEFAULT 'credit_card',
@@ -103,6 +103,10 @@ func (r *Repository) migrate() error {
 		return fmt.Errorf("migrate payment schema: %w", err)
 	}
 
+	if err := r.allowZeroAmount(ctx); err != nil {
+		return fmt.Errorf("migrate payment schema: %w", err)
+	}
+
 	// status is otherwise plain TEXT with validity enforced only in Go
 	// (domain.PaymentStatus); this CHECK makes an invalid value fail loudly at
 	// write time instead of silently corrupting state. Postgres has no ADD
@@ -122,6 +126,29 @@ func (r *Repository) migrate() error {
 		}
 	}
 	return nil
+}
+
+// allowZeroAmount relaxes the original amount_won > 0 check to >= 0, so an
+// order paid entirely in points records its ₩0 payment (provider "points").
+// The old check may carry a pre-rename name (amount_cents), so it is found by
+// what it says rather than by name.
+func (r *Repository) allowZeroAmount(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, `
+		DO $$
+		DECLARE c record;
+		BEGIN
+			FOR c IN
+				SELECT conname FROM pg_constraint
+				WHERE conrelid = 'payments'::regclass AND contype = 'c'
+				  AND pg_get_constraintdef(oid) LIKE '%amount_won > 0%'
+			LOOP
+				EXECUTE format('ALTER TABLE payments DROP CONSTRAINT %I', c.conname);
+			END LOOP;
+			IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_amount_won_nonnegative') THEN
+				ALTER TABLE payments ADD CONSTRAINT payments_amount_won_nonnegative CHECK (amount_won >= 0);
+			END IF;
+		END $$`)
+	return err
 }
 
 func (r *Repository) renameMoneyCentsColumns(ctx context.Context) error {

@@ -562,6 +562,16 @@ func respondServiceError(w http.ResponseWriter, err error) {
 		respondJSON(w, http.StatusConflict, body)
 		return
 	}
+	// Points refusals carry a reason the storefront can show, like payment's
+	// own: the shopper asked for more than they hold, or a bad amount.
+	if errors.Is(err, ports.ErrInsufficientPoints) || errors.Is(err, ports.ErrInvalidPoints) {
+		status, reason := http.StatusConflict, "insufficient_points"
+		if errors.Is(err, ports.ErrInvalidPoints) {
+			status, reason = http.StatusBadRequest, "invalid_points"
+		}
+		respondJSON(w, status, map[string]any{"error": err.Error(), "code": status, "reason": reason})
+		return
+	}
 	if status, ok := inspectionVideoErrorStatus(err); ok {
 		respondJSON(w, status, map[string]any{
 			"error":  err.Error(),
@@ -578,7 +588,8 @@ func respondServiceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ports.ErrVariantNotFound):
 		respondError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, ports.ErrProductUnavailable), errors.Is(err, ports.ErrPromotionUnavailable),
-		errors.Is(err, ports.ErrPaymentUnavailable), errors.Is(err, ports.ErrPaymentRefundRejected):
+		errors.Is(err, ports.ErrPaymentUnavailable), errors.Is(err, ports.ErrPaymentRefundRejected),
+		errors.Is(err, ports.ErrPointsUnavailable):
 		respondError(w, http.StatusBadGateway, err.Error())
 	case errors.Is(err, ports.ErrPaymentForbidden):
 		respondError(w, http.StatusForbidden, err.Error())

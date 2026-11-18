@@ -128,6 +128,9 @@ type Order struct {
 	// bypass order so it is never mistaken for a card sale. Empty on orders
 	// placed before the field existed.
 	PaymentMethod string `json:"payment_method,omitempty"`
+	// PointsWon is the store credit the order paid part of its goods with,
+	// already off TotalWon. Zero when none, and on orders before points.
+	PointsWon int64 `json:"points_won,omitempty"`
 
 	// The fields below say what this event changed, so an alert can read
 	// "확인됨 → 배송 중" instead of only the status the order ended in. All

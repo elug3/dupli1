@@ -1,6 +1,6 @@
 # Points (적립금)
 
-**Status:** the ledger, earning, VIP tiers and the APIs are built in the payment service. Not built yet: order spending points at checkout (it will call the internal hold routes below), review rewards, and the storefront and manage-web screens.
+**Status:** the ledger, earning, VIP tiers, the APIs and spending points at checkout are built. Not built yet: review rewards, and the storefront and manage-web screens.
 
 **Related:** [payment-service.md](payment-service.md), [order-service.md](order-service.md) (statuses), [permissions.md](permissions.md) (Internal APIs), [product-reviews-plan.md](product-reviews-plan.md).
 
@@ -17,7 +17,7 @@ Points are dupli1's store credit. A shopper earns them on fulfilled orders, can 
 | Refund | Canceled before fulfillment: the pending points are dropped. Canceled after: the credited points are taken back, from that order's lot first and then the soonest-expiring others. What the shopper already spent elsewhere is not collected (logged as a shortfall, not carried as debt) |
 | Expiry | 12 months after crediting, per lot. Spending takes the soonest-expiring points first. An hourly sweep records what expired |
 | Spending | Up to 100% of the goods, no minimum balance, together with a promo or referral code |
-| Returned on cancel | Points an order paid with go back to the lots they came from, keeping those lots' expiry. If a lot expired meanwhile, those points expire at once (an `expire` entry follows the `return`) |
+| Returned on cancel | Points an order paid with go back on any cancel, to the lots they came from, keeping those lots' expiry. If a lot expired meanwhile, those points expire at once (an `expire` entry follows the `return`), decided 2026-11-18 |
 
 ### VIP tiers
 
@@ -62,12 +62,28 @@ Errors carry `reason`: `invalid_points` (400), `insufficient_points`, `points_ho
 
 The hold routes are internal APIs ([permissions.md](permissions.md#internal-apis)): the gateway answers `404` for them on `:80`, and payment refuses any caller that is not the `dupli1-order` service account, owners included.
 
-## Checkout (next step, in order)
+## Checkout
 
-Order will reserve points at checkout complete, the way it reserves a promo code, and charge the card surcharge only on what is left: `CardSurchargeWon(total − points)`. It consumes the hold on `payment.succeeded` and releases it on cancel. An order paid fully in points needs a payment path with no card part.
+The shopper sends `points_won` with checkout complete (`POST /api/v1/orders/checkout/sessions/{id}/complete`). Order:
 
-## Open questions
+1. Trims it to the goods after every discount (`subtotal_won − discount_won`). Points never pay delivery, so "use all" can send the whole balance.
+2. Prices the order: goods − discounts − points + delivery, then the card surcharge on that (`CardSurchargeWon(total − points)`). It stores `points_won`, already off `total_won`, so payment charges and refunds only the money part.
+3. Reserves the points in payment, keyed by the order. Too few (`409 insufficient_points`) rolls the order back, like a code spent in the meantime; the session stays open.
+4. Consumes the hold when the order is paid, next to the code's consume.
+5. Releases the hold on **every** cancel, shipped or not: points are money, and a shipped cancel refunds the card part too. Payment also releases it on the `canceled` event, so either one is enough.
 
-- Should a returned point that already passed its expiry be returned anyway? Today it expires at once.
-- A clawback the shopper cannot cover is forgiven. Carry it as a negative balance instead?
-- How current VIP members (the auto-discount) are placed in the new tiers.
+**Paid in full with points.** With free delivery and points covering the goods the total is ₩0: no surcharge, nothing to charge. The storefront still calls `POST /api/v1/payments`; payment records a succeeded `method: points`, `provider: points` payment of ₩0 (no PG, no `checkout_url`) and publishes `payment.succeeded`, so order moves to paid the usual way. A cancel refunds nothing by card and gives the points back. The payments table allows `amount_won = 0` for this (migrated on startup).
+
+**Earning** still uses the hold: an order earns on goods after discounts less the points it used. `order.*` events also carry `points_won`.
+
+**Sales report:** `points_won` is its own column. It is not money received, so `gross_won` (the sum of `total_won`) already leaves it out.
+
+**Known gaps:** a ₩0 order is refused while the `credit_card` kill switch is engaged, like any card order. An order auto-canceled for non-payment gets its points back; if a card payment then arrives late and reinstates it, the points are not taken again (the consume is logged as failed).
+
+## Decisions
+
+Answered by the owner on 2026-11-18:
+
+- A point returned on cancel after its lot's expiry passed **expires at once**, as built.
+- A clawback the shopper cannot cover is **forgiven**: no negative balance, as built.
+- There are no current VIP members, so nobody is migrated into the tiers. Retiring the `apply_mode: auto` promotions is still a separate step.

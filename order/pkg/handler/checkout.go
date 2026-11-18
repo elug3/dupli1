@@ -78,6 +78,7 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 			ShippingAddress domain.ShippingAddress `json:"shipping_address"`
 			AddressID       string                 `json:"address_id"`
 			PaymentMethod   string                 `json:"payment_method"`
+			PointsWon       int64                  `json:"points_won"`
 		}
 		if err := decodeJSON(r, &req); err != nil {
 			respondError(w, http.StatusBadRequest, err.Error())
@@ -92,6 +93,7 @@ func (h *Handler) checkoutSession(w http.ResponseWriter, r *http.Request) {
 			ShippingAddress: req.ShippingAddress,
 			SourceAddressID: req.AddressID,
 			PaymentMethod:   req.PaymentMethod,
+			PointsWon:       req.PointsWon,
 		})
 		if err != nil {
 			respondServiceError(w, err)

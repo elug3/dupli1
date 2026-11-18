@@ -13,6 +13,7 @@ import (
 	"github.com/elug3/dupli1/order/pkg/infra/httpauth"
 	"github.com/elug3/dupli1/order/pkg/infra/httppayment"
 	"github.com/elug3/dupli1/order/pkg/infra/httpproduct"
+	"github.com/elug3/dupli1/order/pkg/infra/httppoints"
 	"github.com/elug3/dupli1/order/pkg/infra/httppromotion"
 	"github.com/elug3/dupli1/order/pkg/infra/httpstock"
 	"github.com/elug3/dupli1/order/pkg/infra/memory"
@@ -156,7 +157,8 @@ func Bootstrap(cfg Config) (*App, error) {
 		WithShippingFee(cfg.ShippingFeeWon).
 		WithCardSurcharge(cfg.CardSurchargeBps).
 		WithPayment(payment).
-		WithPaymentMethodGate(payment)
+		WithPaymentMethodGate(payment).
+		WithPoints(httppoints.NewClient(apiBase, cfg.HTTPClient, stockTokenSource))
 
 	if cfg.S3Endpoint != "" {
 		videoStore, err := s3store.NewVideoStore(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket)
