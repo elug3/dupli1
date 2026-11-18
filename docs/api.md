@@ -679,8 +679,8 @@ The cart-aware surface from [product-promo-referral-code-plan.md](product-promo-
 | `POST` | `/api/v1/products/promotions/reserve` | `promotion.redeem` + `dupli1-order` (internal) | Re-evaluate and record a pending use against an order. Idempotent per order | **live** |
 | `POST` | `/api/v1/products/promotions/consume` | `promotion.redeem` + `dupli1-order` (internal) | Mark an order's reservation paid. Idempotent | **live** |
 | `POST` | `/api/v1/products/promotions/release` | `promotion.redeem` + `dupli1-order` (internal) | Hand a use back, for a cancel before shipment | **live** |
-| `POST` | `/api/v1/products/promotions/tier` | `promotion.redeem` + `dupli1-order` (internal) | The customer's automatic tier discount on a cart (`apply_mode: auto`), the best one if they hold several → `{ ok, code, discount_won, … }`. Internal (the customer id is in the body); order calls it on every session read and at complete | **live** |
-| `POST` | `/api/v1/products/promotions/me/tier` | Bearer (ABAC) | The same answer for the signed-in customer (id from the token, never the body), so the storefront can show a member's tier before checkout | **live** |
+| `POST` | `/api/v1/products/promotions/tier` | `promotion.redeem` + `dupli1-order` (internal) | **Retired 2026-11-18** with customer tiers: always `{ "ok": false }`. Kept one release for an order replica deployed before the retirement; order no longer calls it | **deprecated** |
+| `POST` | `/api/v1/products/promotions/me/tier` | Bearer (ABAC) | **Retired 2026-11-18**: always `{ "ok": false }`, kept one release for a cached storefront page | **deprecated** |
 | `GET`/`POST` | `/api/v1/products/promotions/me` | Bearer (ABAC) | Current customer's wallet. POST a cart to have each entitlement judged against it; the customer id comes from the token, never the body | **live** |
 | `POST` | `/api/v1/products/promotions/by-code/{code}/issue` | `promotion.issue` | Issue a single-user entitlement, idempotent on `trigger_key` | **live** |
 | `DELETE` | `/api/v1/products/promotions/entitlements/{id}` | `promotion.issue` | Revoke an entitlement; never rewrites an order that used it | **live** |
@@ -715,7 +715,7 @@ ledger's answer, not the entitlement's.
 max_discount_won, apply_to}`), `conditions` (versioned predicate document over
 an allowlist of attributes), `expires_at`, `max_redemptions`,
 `max_per_customer`, `entitlement_ttl_days`, `auto_issue` (`""` | `user_registered`;
-`single_user` only), `apply_mode` (`code` default | `auto`), `terms`, `redemption_count`.
+`single_user` only), `apply_mode` (`code` default; `auto` is retired, see below), `terms`, `redemption_count`.
 
 **Every promotion discounts the whole order.** The discount base is always the
 goods subtotal (selling price, before shipping). `conditions` on brand,
@@ -725,14 +725,12 @@ empty); `eligible_lines` answers `400` since 2026-09-30, and stored definitions
 still carrying it are rewritten to `entire_subtotal` on startup. Shipping is
 never discounted.
 
-**Customer tiers (`apply_mode: auto`).** A VIP or private tier is a
-`single_user` definition with `apply_mode: auto`: issuing its code to an
-account makes that account a member, revoking the entitlement takes them out.
-Members get the discount on every order without entering anything, and it
-stacks under whatever code the order carries (code and tier together are
-capped at the goods subtotal). A member of several tiers gets the best one.
-A tier has no ledger row and no cap, so `max_redemptions` is refused; typing
-its code answers `invalid_code`, and it is left out of the wallet. On create/update, send
+**Customer tiers (`apply_mode: auto`) are retired** (2026-11-18). VIP is now a
+points multiplier in payment ([payment-points.md](payment-points.md#vip-tiers)),
+not a discount. Creating a definition with `apply_mode: auto`, or switching one
+to it, answers `400`. A definition stored before then is inert: nothing applies
+it, typing its code answers `invalid_code`, and it is left out of the wallet; a
+manager can still edit it, switch it to `code` or delete it. On create/update, send
 `expires_on` as a date (`2026-08-31`) to mean the end of that day in Seoul.
 The legacy `discount` fraction and free-text `expires` are still accepted and
 read, but are not enforced — a definition needs a real `expires_at` to expire.
@@ -1040,12 +1038,10 @@ When `AUTH_JWKS_URL` or `JWT_SECRET` is set, order and checkout routes require `
 total_won = subtotal_won - discount_won + shipping_fee_won
 ```
 
-`discount_won` is the whole goods discount. When the customer belongs to an
-automatic tier, `tier_promotion_code` names it and `tier_discount_won` is its
-share of `discount_won`; the entered code's share is the rest. On a checkout
-session the tier is worked out each time it is read, and complete asks again
-(failing with `503` rather than charging a member full price if product
-cannot answer).
+`discount_won` is the whole goods discount. Orders placed before customer
+tiers were retired (2026-11-18) may carry `tier_promotion_code` and
+`tier_discount_won`, the tier's share of `discount_won`; the entered code's
+share is the rest. New orders and checkout sessions have no tier.
 
 `shipping_fee_won` is a flat per-order delivery charge in whole KRW, set by `DUPLI1_ORDER_SHIPPING_FEE_WON` on the order service (deprecated aliases: `DUPLI1_ORDER_SHIPPING_FEE_KRW`, `DUPLI1_ORDER_SHIPPING_FEE_CENTS`). It defaults to **0** (free delivery since 2026-10-04); set the variable to a positive amount to charge. JSON, Go identifiers, and Postgres columns for money use `*_won` (`shipping_fee_won`, `subtotal_won`, `discount_won`, `total_won`, `unit_price_won`, `amount_won`, …) — not `*_krw` or `*_cents`. Existing databases rename leftover `*_krw` / `*_cents` columns on migrate.
 

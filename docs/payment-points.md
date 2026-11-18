@@ -30,7 +30,7 @@ The tier multiplies the base rate. It is decided by goods paid on fulfilled orde
 | `gold` | ₩3,000,000+ | 2× | 2% |
 | `diamond` | ₩5,000,000+ | 3× | 3% |
 
-Thresholds and multipliers are code (`domain.Tiers`), not settings. This replaces the old VIP auto-discount (`apply_mode: auto` promotions in product); retiring those is a separate step.
+Thresholds and multipliers are code (`domain.Tiers`), not settings. This replaces the old VIP auto-discount (`apply_mode: auto` promotions in product), retired on 2026-11-18: order no longer applies tiers and product refuses new ones.
 
 ## Model
 
@@ -103,4 +103,4 @@ Answered by the owner on 2026-11-18:
 
 - A point returned on cancel after its lot's expiry passed **expires at once**, as built.
 - A clawback the shopper cannot cover is **forgiven**: no negative balance, as built.
-- There are no current VIP members, so nobody is migrated into the tiers. Retiring the `apply_mode: auto` promotions is still a separate step.
+- There were no VIP members, so nobody was migrated into the tiers. The `apply_mode: auto` promotions were retired on 2026-11-18.

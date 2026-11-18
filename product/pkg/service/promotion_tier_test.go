@@ -2,13 +2,15 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
+	"github.com/elug3/dupli1/product/pkg/ports"
 )
 
-// tierPromotion is a customer tier as a manager registers it: single-user,
-// applied on its own, a percentage off every order its members place.
+// tierPromotion is a customer tier (apply_mode auto) as one was registered
+// before tiers were retired for the points multiplier.
 func tierPromotion(code string, fraction float64) domain.Promotion {
 	return domain.Promotion{
 		Code:      code,
@@ -24,87 +26,38 @@ func tierPromotion(code string, fraction float64) domain.Promotion {
 	}
 }
 
-func TestTierAppliesToEveryOrderOfAMember(t *testing.T) {
+// No new tier can be made, either by creating one or by switching a code.
+func TestTiersAreRetired(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newPromotionSvc(t)
-	if _, err := svc.Create(ctx, tierPromotion("VIP", 0.10)); err != nil {
-		t.Fatalf("create VIP: %v", err)
-	}
-	if _, err := svc.Issue(ctx, "VIP", "cust-1", "issue", "manager:cust-1", "mgr"); err != nil {
-		t.Fatalf("Issue: %v", err)
+	if _, err := svc.Create(ctx, tierPromotion("VIP", 0.10)); !errors.Is(err, ports.ErrInvalid) {
+		t.Fatalf("Create(auto) err = %v, want invalid", err)
 	}
 
-	// No ledger, no cap: the same member earns it order after order.
-	for i := 0; i < 3; i++ {
-		got, err := svc.EvaluateTier(ctx, cartFor("cust-1", 200000))
-		if err != nil {
-			t.Fatalf("EvaluateTier: %v", err)
-		}
-		if !got.OK || got.Code != "VIP" || got.DiscountWon != 20000 {
-			t.Fatalf("order %d: got %+v, want VIP 20000", i, got)
-		}
+	code := tierPromotion("PRIVATE", 0.10)
+	code.ApplyMode = domain.ApplyModeCode
+	if _, err := svc.Create(ctx, code); err != nil {
+		t.Fatalf("Create(code): %v", err)
+	}
+	auto := domain.ApplyModeAuto
+	if _, err := svc.Update(ctx, "PRIVATE", ports.PromotionPatch{ApplyMode: &auto}); !errors.Is(err, ports.ErrInvalid) {
+		t.Fatalf("Update to auto err = %v, want invalid", err)
 	}
 
-	other, err := svc.EvaluateTier(ctx, cartFor("cust-2", 200000))
-	if err != nil {
-		t.Fatalf("EvaluateTier: %v", err)
-	}
-	if other.OK {
-		t.Fatalf("a non-member earned a tier: %+v", other)
+	bad := tierPromotion("BAD", 0.10)
+	bad.ApplyMode = "sometimes"
+	if _, err := svc.Create(ctx, bad); err == nil {
+		t.Fatal("an unknown apply_mode should be refused")
 	}
 }
 
-// A member of two tiers gets the better one, not both.
-func TestTierPicksTheBestOfSeveral(t *testing.T) {
+// A tier stored before the retirement is inert: not typeable, not redeemable,
+// not in the wallet. A manager can still edit it, or switch it to a code.
+func TestStoredTierIsInert(t *testing.T) {
 	ctx := context.Background()
-	svc, _ := newPromotionSvc(t)
-	for _, p := range []domain.Promotion{tierPromotion("PRIVATE", 0.05), tierPromotion("VIP", 0.10)} {
-		if _, err := svc.Create(ctx, p); err != nil {
-			t.Fatalf("create %s: %v", p.Code, err)
-		}
-		if _, err := svc.Issue(ctx, p.Code, "cust-1", "issue", "manager:cust-1", "mgr"); err != nil {
-			t.Fatalf("Issue %s: %v", p.Code, err)
-		}
-	}
-	got, err := svc.EvaluateTier(ctx, cartFor("cust-1", 100000))
-	if err != nil {
-		t.Fatalf("EvaluateTier: %v", err)
-	}
-	if got.Code != "VIP" || got.DiscountWon != 10000 {
-		t.Fatalf("got %+v, want VIP 10000", got)
-	}
-}
-
-// Revoking the entitlement takes a customer out of the tier.
-func TestRevokedTierNoLongerApplies(t *testing.T) {
-	ctx := context.Background()
-	svc, _ := newPromotionSvc(t)
-	if _, err := svc.Create(ctx, tierPromotion("VIP", 0.10)); err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	entitlement, err := svc.Issue(ctx, "VIP", "cust-1", "issue", "manager:cust-1", "mgr")
-	if err != nil {
-		t.Fatalf("Issue: %v", err)
-	}
-	if err := svc.Revoke(ctx, entitlement.ID); err != nil {
-		t.Fatalf("Revoke: %v", err)
-	}
-	got, err := svc.EvaluateTier(ctx, cartFor("cust-1", 100000))
-	if err != nil {
-		t.Fatalf("EvaluateTier: %v", err)
-	}
-	if got.OK {
-		t.Fatalf("a revoked member still earned the tier: %+v", got)
-	}
-}
-
-// A tier is never typed: entering its code, redeeming it or finding it in the
-// wallet would let a member spend it a second time in the code slot.
-func TestTierIsNotACode(t *testing.T) {
-	ctx := context.Background()
-	svc, _ := newPromotionSvc(t)
-	if _, err := svc.Create(ctx, tierPromotion("VIP", 0.10)); err != nil {
-		t.Fatalf("create: %v", err)
+	svc, store := newPromotionSvc(t)
+	if err := store.Create(ctx, tierPromotion("VIP", 0.10)); err != nil {
+		t.Fatalf("store.Create: %v", err)
 	}
 	if _, err := svc.Issue(ctx, "VIP", "cust-1", "issue", "manager:cust-1", "mgr"); err != nil {
 		t.Fatalf("Issue: %v", err)
@@ -122,28 +75,17 @@ func TestTierIsNotACode(t *testing.T) {
 	if len(wallet) != 0 {
 		t.Fatalf("wallet lists %d entries, want the tier left out", len(wallet))
 	}
-}
 
-func TestTierDefinitionRules(t *testing.T) {
-	ctx := context.Background()
-	svc, _ := newPromotionSvc(t)
-
-	global := tierPromotion("OPEN", 0.10)
-	global.Scope = domain.ScopeGlobal
-	if _, err := svc.Create(ctx, global); err == nil {
-		t.Fatal("a global tier should be refused: membership is the entitlement")
+	off := false
+	if _, err := svc.Update(ctx, "VIP", ports.PromotionPatch{Active: &off}); err != nil {
+		t.Fatalf("deactivating a stored tier: %v", err)
 	}
-
-	capped := tierPromotion("CAPPED", 0.10)
-	n := 100
-	capped.MaxRedemptions = &n
-	if _, err := svc.Create(ctx, capped); err == nil {
-		t.Fatal("a tier with max_redemptions should be refused")
+	code := domain.ApplyModeCode
+	updated, err := svc.Update(ctx, "VIP", ports.PromotionPatch{ApplyMode: &code})
+	if err != nil {
+		t.Fatalf("switching a stored tier to code: %v", err)
 	}
-
-	bad := tierPromotion("BAD", 0.10)
-	bad.ApplyMode = "sometimes"
-	if _, err := svc.Create(ctx, bad); err == nil {
-		t.Fatal("an unknown apply_mode should be refused")
+	if updated.IsTier() {
+		t.Fatal("still a tier after switching to code")
 	}
 }

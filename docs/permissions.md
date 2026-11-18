@@ -165,7 +165,7 @@ Redeem is **public** (checkout flow) — no permission.
 
 **`coupon.read|create|update|delete` and `coupon.*` are deprecated but still accepted.** Every promotion route asks for either name, so an access token minted before the rename keeps authorizing; the bundles and legacy role expansions grant both. The `coupon.*` set is dropped one release later. See [product-promotion-rename.md](product-promotion-rename.md).
 
-| `promotion.redeem` | Move the usage ledger — reserve, consume, release — and look up a customer's automatic tier (`POST …/promotions/tier`). **Service-to-service**: order's service account holds it; managers do not need it, and the public redeem/evaluate endpoints require no permission |
+| `promotion.redeem` | Move the usage ledger — reserve, consume, release — and (until the retired route is removed) `POST …/promotions/tier`, which always answers no tier. **Service-to-service**: order's service account holds it; managers do not need it, and the public redeem/evaluate endpoints require no permission |
 
 | `promotion.issue` | Issue a single-user entitlement to a customer, and revoke one |
 

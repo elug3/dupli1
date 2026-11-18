@@ -45,10 +45,11 @@ const (
 	// ApplyModeCode is the default: the customer enters the code, or picks it
 	// from their wallet, and it takes the order's one code slot.
 	ApplyModeCode ApplyMode = "code"
-	// ApplyModeAuto is a customer tier (VIP, a private tier): every account
-	// holding an entitlement gets the discount on every order without
-	// entering anything, on top of any code. It is never typed, has no usage
-	// cap, and is not recorded in the redemption ledger.
+	// ApplyModeAuto was a customer tier (VIP, a private tier), applied to
+	// every order its members placed. Retired on 2026-11-18 for the points
+	// multiplier: nothing applies it, product refuses new ones, and a stored
+	// one is neither typeable nor shown in a wallet. It is still read so old
+	// rows keep their meaning.
 	ApplyModeAuto ApplyMode = "auto"
 )
 
