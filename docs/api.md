@@ -1149,6 +1149,10 @@ When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront calle
 | GET | `/api/v1/payments/methods` | — (which methods checkout can offer now; kill switches applied) |
 | GET | `/api/v1/payments/kill-switches` | `payment.killswitch.read` / `.manage` |
 | PUT | `/api/v1/payments/kill-switches/{key}` | `payment.killswitch.manage` — `{ engaged, message?, reason? }` |
+| GET | `/api/v1/payments/points/me[/entries]` | Bearer (own `sub`) — balance, pending, expiring, tier, history ([payment-points.md](payment-points.md)) |
+| GET | `/api/v1/payments/points/customers/{id}[/entries]` | `payment.points.read` / `.manage` |
+| POST | `/api/v1/payments/points/customers/{id}/adjust` | `payment.points.manage` — `{ points, reason }` |
+| POST | `/api/v1/payments/points/reserve\|consume\|release` | `dupli1-order` + `payment.points.redeem`; internal listener only |
 
 **Create payment**
 ```json
@@ -1376,6 +1380,9 @@ Permission strings are authoritative; see [permissions.md](permissions.md). `—
 | POST | `/api/v1/payments/{id}/cancel` | `payment.cancel` | payment |
 | GET | `/api/v1/payments/methods` | — | payment |
 | GET/PUT | `/api/v1/payments/kill-switches[/{key}]` | `payment.killswitch.read` / `.manage` | payment |
+| GET | `/api/v1/payments/points/me[/entries]` | Bearer (own `sub`) | payment |
+| GET/POST | `/api/v1/payments/points/customers/{id}[/entries\|/adjust]` | `payment.points.read` / `.manage` | payment |
+| POST | `/api/v1/payments/points/reserve\|consume\|release` | `dupli1-order` (internal `:8081` only) | payment |
 | GET | `/api/v1/notification/health` | — | notification |
 | GET | `/api/v1/notification/settings` | — | notification |
 | POST | `/api/v1/notification/telegram/webhook` | webhook secret header | notification |

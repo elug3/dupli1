@@ -29,6 +29,7 @@ type Handler struct {
 	jwtValidator authjwt.AccessTokenValidator
 	nano         *checkout.NanoProvider
 	settings     settings.Response
+	points       *service.Points
 }
 
 func New(svc *service.Service, jwtValidator authjwt.AccessTokenValidator) *Handler {
@@ -139,6 +140,13 @@ func (h *Handler) paymentRoutes(w http.ResponseWriter, r *http.Request) {
 		h.methods(w, r)
 		return
 	}
+	if parts[0] == "points" {
+		h.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+			h.pointsRoutes(w, r, parts[1:])
+		})(w, r)
+		return
+	}
+
 	if parts[0] == "kill-switches" {
 		h.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 			h.killSwitchRoutes(w, r, parts[1:])

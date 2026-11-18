@@ -96,6 +96,8 @@ ROUTES=(
   /api/v1/carts/c1=cart
   /api/v1/payments=payment
   /api/v1/payments/p1=payment
+  /api/v1/payments/points/me=payment
+  /api/v1/payments/points/reserved=payment
   /api/v1/notification/telegram/subscriptions=notification
   /api/v1/support/inquiries=support
   /api/v1/support/inquiries/events=support
@@ -120,6 +122,17 @@ INTERNAL=(
   //api//v1/products/inventory/reservations
   /api/v1/products/x/../inventory/reservations
   /API/V1/PRODUCTS/PROMOTIONS/RESERVE
+)
+
+# Payment's points holds: internal only too, served by payment.
+INTERNAL_PAYMENT=(
+  /api/v1/payments/points/reserve
+  /api/v1/payments/points/consume
+  /api/v1/payments/points/release
+  /api/v1/payments/points/%72eserve
+  //api/v1/payments//points/release
+  /api/v1/payments/x/../points/consume
+  /API/V1/PAYMENTS/POINTS/RESERVE
 )
 
 # Auth's API key exchange: internal only too, but served by auth.
@@ -170,6 +183,10 @@ run_suite() { # label wrapper-file [extra checks: "path=service" ...]
   for path in "${INTERNAL[@]}"; do
     check "$name" "$label" 80 "$path" 404 '{"error":"not found"}'
     check "$name" "$label" 8081 "$path" 200 "SVC=product"
+  done
+  for path in "${INTERNAL_PAYMENT[@]}"; do
+    check "$name" "$label" 80 "$path" 404 '{"error":"not found"}'
+    check "$name" "$label" 8081 "$path" 200 "SVC=payment"
   done
   for path in "${INTERNAL_AUTH[@]}"; do
     check "$name" "$label" 80 "$path" 404 '{"error":"not found"}'

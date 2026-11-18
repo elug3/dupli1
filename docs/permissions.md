@@ -210,6 +210,9 @@ Own-cart routes (`/api/v1/cart/*`) require authentication only; scoped to `sub`.
 | `payment.cancel` | Cancel / refund a succeeded payment at the PG (`POST /api/v1/payments/{id}/cancel`). Staff-only — no ABAC path, so customers can never refund themselves |
 | `payment.killswitch.read` | List the payment kill switches with who flipped them (`GET /api/v1/payments/kill-switches`). See [payment-kill-switches.md](payment-kill-switches.md) |
 | `payment.killswitch.manage` | Engage / release a payment kill switch (`PUT /api/v1/payments/kill-switches/{key}`); implies read |
+| `payment.points.read` | Any customer's points balance, tier and history (`GET /api/v1/payments/points/customers/{id}`). Shoppers read their own without it. See [payment-points.md](payment-points.md) |
+| `payment.points.manage` | Grant or take away a customer's points with a reason (`POST …/points/customers/{id}/adjust`); implies read |
+| `payment.points.redeem` | Hold, spend and return points for an order (`POST …/points/reserve\|consume\|release`). Only the `dupli1-order` service account carries it, and the routes also require that account |
 
 **Default storefront:** authenticated user with empty `permissions` may create/read **only their own** payments (ownership enforced in service).
 
@@ -372,6 +375,10 @@ registered as an alias.
 | `POST` | `/api/v1/payments/{id}/cancel` | `payment.cancel` (no ABAC) |
 | `GET` | `/api/v1/payments/kill-switches` | `payment.killswitch.read` or `payment.killswitch.manage` |
 | `PUT` | `/api/v1/payments/kill-switches/{key}` | `payment.killswitch.manage` |
+| `GET` | `/api/v1/payments/points/me[/entries]` | Bearer; own `sub` (customers only) |
+| `GET` | `/api/v1/payments/points/customers/{id}[/entries]` | `payment.points.read` or `payment.points.manage` |
+| `POST` | `/api/v1/payments/points/customers/{id}/adjust` | `payment.points.manage` |
+| `POST` | `/api/v1/payments/points/reserve\|consume\|release` | `payment.points.redeem` + `dupli1-order` ([Internal APIs](#internal-apis)) |
 
 ### Notification service
 
@@ -435,9 +442,10 @@ Some routes exist only for one service to call. A permission is not enough to re
 |-------|----------------|
 | `POST /api/v1/products/promotions/reserve\|consume\|release\|tier` | `dupli1-order` |
 | `POST /api/v1/products/inventory/reservations`, `…/{id}/commit`, `…/{id}/release` (and the legacy `/api/v1/inventory/…` aliases) | `dupli1-order` |
+| `POST /api/v1/payments/points/reserve\|consume\|release` | `dupli1-order` |
 | `POST /api/v1/auth/token` (API key exchange) | any service account holding a key — the key is the credential; gateway internal listener only |
 
-**Not reachable from outside.** The API gateway listens twice: `:80`, which is what the public entry reaches (the `edge` on VENUS, the ALB on AWS), and `:8081`, which nothing public routes to. On `:80` the routes above answer `404`; only `:8081` passes them to product, and order's `DUPLI1_GATEWAY_URL` points there. The check is a regex location on nginx's decoded, normalized URI, so `%`-encoding, `//` or `../` do not get past it. It lives once, in the shared route table `api/gateway/routes.conf` that every gateway config includes, and `api/gateway/test.sh` (CI job `gateway`) checks it in each; a new internal route must be added to that regex as well as allowlisted in product.
+**Not reachable from outside.** The API gateway listens twice: `:80`, which is what the public entry reaches (the `edge` on VENUS, the ALB on AWS), and `:8081`, which nothing public routes to. On `:80` the routes above answer `404`; only `:8081` passes them on (to product, payment or auth), and order's `DUPLI1_GATEWAY_URL` points there. The check is a regex location on nginx's decoded, normalized URI, so `%`-encoding, `//` or `../` do not get past it. It lives once, in the shared route table `api/gateway/routes.conf` that every gateway config includes, and `api/gateway/test.sh` (CI job `gateway`) checks it in each; a new internal route must be added to a regex there as well as allowlisted in the service that serves it.
 
 `service_name` is set only by auth's startup seeds (`DUPLI1_ORDER_SERVICE_*` → `dupli1-order`, `DUPLI1_WEB_SERVICE_*` → `dupli1-web`); no API writes it.
 

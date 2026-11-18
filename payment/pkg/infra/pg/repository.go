@@ -90,6 +90,7 @@ func (r *Repository) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_payment_outbox_pending ON payment_outbox (created_at) WHERE published_at IS NULL`,
 		killSwitchTableDDL,
 	}
+	stmts = append(stmts, pointsTableDDL...)
 	for _, stmt := range stmts {
 		if _, err := r.pool.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("migrate payment schema: %w", err)
