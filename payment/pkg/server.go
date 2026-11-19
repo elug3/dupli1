@@ -43,6 +43,8 @@ func NewServer(opts ServerOptions) (*Server, error) {
 			PublicBaseURL: opts.PublicBaseURL,
 			SuccessURL:    opts.NanoSuccessURL,
 			FailureURL:    opts.NanoFailureURL,
+			EncKey:        opts.NanoEncKey,
+			EncIV:         opts.NanoEncIV,
 		},
 		HTTPClient: bootstrap.DefaultHTTPClient(),
 	})

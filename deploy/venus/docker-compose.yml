@@ -223,6 +223,11 @@ services:
       NANO_LOGIN_ID: ${NANO_LOGIN_ID:-}
       NANO_SHOPCODE: ${NANO_SHOPCODE:-}
       NANO_VER: ${NANO_VER:-}
+      # Key-in (수기결제) encData key and IV from the NANO contract. With both
+      # set, the storefront takes the card itself; unset keeps 인증결제.
+      # docs/payment-nano-key-in.md
+      NANO_ENC_KEY: ${NANO_ENC_KEY:-}
+      NANO_ENC_IV: ${NANO_ENC_IV:-}
     depends_on: { postgres: { condition: service_healthy } }
     networks: { default: { aliases: [payment.dupli1.local] } }
 

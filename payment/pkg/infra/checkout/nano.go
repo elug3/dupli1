@@ -43,7 +43,13 @@ type NanoConfig struct {
 	PublicBaseURL string // gateway URL used for receiveUrl + checkout bridge
 	SuccessURL    string // storefront redirect after paid
 	FailureURL    string // storefront redirect after failed/canceled
-	HTTPClient    *http.Client
+	// EncKey / EncIV encrypt the card into encData for key-in approval
+	// (수기결제 v2.5 §1: AES-256-CBC, a 32-byte key and a 16-byte IV issued
+	// with the contract). With both set, card checkout is key-in; without
+	// them it stays on the 인증결제 window. See nano_keyin.go.
+	EncKey     string
+	EncIV      string
+	HTTPClient *http.Client
 }
 
 func (c NanoConfig) Enabled() bool {
@@ -102,7 +108,13 @@ func (p *NanoProvider) CreateSession(_ context.Context, input ports.CheckoutSess
 		return nil, domain.ErrInvalidPayment
 	}
 
-	checkoutURL := fmt.Sprintf("%s/api/v1/payments/%s/nano/checkout", p.cfg.publicBase(), input.PaymentID)
+	// Key-in: the storefront shows its own card form and posts it to
+	// POST /api/v1/payments/{id}/card, so there is no window to send the
+	// shopper to. An empty checkout_url is how the storefront tells.
+	checkoutURL := ""
+	if !p.cfg.KeyInEnabled() {
+		checkoutURL = fmt.Sprintf("%s/api/v1/payments/%s/nano/checkout", p.cfg.publicBase(), input.PaymentID)
+	}
 	return &ports.CheckoutSessionResult{
 		Provider:    domain.ProviderNano,
 		ProviderRef: PlaceholderProviderRef(input.PaymentID),

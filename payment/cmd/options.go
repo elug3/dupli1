@@ -103,6 +103,14 @@ func applyEnv(opts *payment.ServerOptions) {
 	if v := os.Getenv("NANO_FAILURE_URL"); v != "" {
 		opts.NanoFailureURL = v
 	}
+	// Key-in (수기결제) encData key and IV. With both set, card checkout takes
+	// the card on the storefront instead of opening the 인증결제 window.
+	if v := os.Getenv("NANO_ENC_KEY"); v != "" {
+		opts.NanoEncKey = v
+	}
+	if v := os.Getenv("NANO_ENC_IV"); v != "" {
+		opts.NanoEncIV = v
+	}
 }
 
 func splitAddr(addr string) (string, int, error) {

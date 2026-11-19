@@ -25,6 +25,9 @@ type Service struct {
 	// killSwitches and configuredMethods: see killswitch.go.
 	killSwitches      ports.KillSwitchStore
 	configuredMethods map[string]bool
+	// cardApprover and nanoShopCode: see keyin.go.
+	cardApprover ports.CardApprover
+	nanoShopCode string
 }
 
 func New(repo ports.Repository, orders ports.OrderClient, checkout ports.CheckoutProvider, events ports.EventPublisher) *Service {

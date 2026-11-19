@@ -400,6 +400,10 @@ services:
       NANO_API_KEY: ${NANO_API_KEY:-}
       NANO_SUCCESS_URL: ${NANO_SUCCESS_URL:-http://localhost:5173/checkout/confirmation}
       NANO_FAILURE_URL: ${NANO_FAILURE_URL:-http://localhost:5173/checkout}
+      # Key-in (수기결제): NANO's test merchant key and IV are in the 수기결제
+      # v2.5 guide §1. Set both to take the card on the storefront.
+      NANO_ENC_KEY: ${NANO_ENC_KEY:-}
+      NANO_ENC_IV: ${NANO_ENC_IV:-}
     depends_on:
       postgres-payment:
         condition: service_healthy

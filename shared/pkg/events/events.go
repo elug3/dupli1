@@ -429,8 +429,9 @@ type PaymentCallbackRejectedEvent struct {
 	EventType string `json:"event_type"`
 	// Provider is the PG that sent the callback ("nano").
 	Provider string `json:"provider"`
-	// Source is which endpoint received it: "return" (shopper's browser) or
-	// "webhook" (server-to-server).
+	// Source is which endpoint received it: "return" (shopper's browser),
+	// "webhook" (server-to-server) or "key_in" (a 수기결제 approval payment
+	// sent itself, see ReasonKeyInUnconfirmed).
 	Source    string `json:"source"`
 	PaymentID string `json:"payment_id,omitempty"`
 	OrderID   string `json:"order_id,omitempty"`
@@ -448,6 +449,12 @@ type PaymentCallbackRejectedEvent struct {
 	Detail   string    `json:"detail,omitempty"`
 	Occurred time.Time `json:"occurred_at"`
 }
+
+// ReasonKeyInUnconfirmed is the PaymentCallbackRejectedEvent reason for a
+// key-in (수기결제) approval that was sent and never answered: the card may
+// or may not have been charged, and the payment is held until someone checks
+// the PG console.
+const ReasonKeyInUnconfirmed = "approval_unconfirmed"
 
 // UserRegisteredEvent is the payload for UserRegistered — published by auth,
 // consumed by product, which issues a welcome promotional code to new customer

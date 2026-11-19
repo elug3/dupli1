@@ -71,6 +71,9 @@ func (r *Repository) migrate() error {
 		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cancel_reason TEXT`,
 		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS canceled_by TEXT`,
 		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cancel_idempotency_key TEXT`,
+		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS card_attempts INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS card_approval_started_at TIMESTAMPTZ`,
+		`ALTER TABLE payments ADD COLUMN IF NOT EXISTS card_approval_unconfirmed BOOLEAN NOT NULL DEFAULT FALSE`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_provider_ref ON payments(provider_ref)`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id)`,
@@ -301,6 +304,10 @@ func persistPaymentTx(ctx context.Context, tx pgx.Tx, payment *domain.Payment, e
 	if payment.PayerEmail != "" {
 		payerEmail = payment.PayerEmail
 	}
+	var cardStartedAt any
+	if payment.CardApprovalStartedAt != nil {
+		cardStartedAt = *payment.CardApprovalStartedAt
+	}
 	_, err := tx.Exec(ctx, `
 		INSERT INTO payments (
 			id, order_id, customer_id, amount_won, currency, status, method,
@@ -308,8 +315,9 @@ func persistPaymentTx(ctx context.Context, tx pgx.Tx, payment *domain.Payment, e
 			payer_name, payer_phone, payer_email, idempotency_key,
 			expires_at, created_at, updated_at,
 			canceled_amount_won, canceled_at, cancel_reason, canceled_by,
-			cancel_idempotency_key
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+			cancel_idempotency_key,
+			card_attempts, card_approval_started_at, card_approval_unconfirmed
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
 		ON CONFLICT (id) DO UPDATE SET
 			status = EXCLUDED.status,
 			provider_ref = EXCLUDED.provider_ref,
@@ -325,12 +333,16 @@ func persistPaymentTx(ctx context.Context, tx pgx.Tx, payment *domain.Payment, e
 			canceled_at = EXCLUDED.canceled_at,
 			cancel_reason = EXCLUDED.cancel_reason,
 			canceled_by = EXCLUDED.canceled_by,
-			cancel_idempotency_key = EXCLUDED.cancel_idempotency_key
+			cancel_idempotency_key = EXCLUDED.cancel_idempotency_key,
+			card_attempts = EXCLUDED.card_attempts,
+			card_approval_started_at = EXCLUDED.card_approval_started_at,
+			card_approval_unconfirmed = EXCLUDED.card_approval_unconfirmed
 	`, payment.ID, payment.OrderID, payment.CustomerID, payment.AmountWon, payment.Currency,
 		string(payment.Status), method, payment.Provider, payment.ProviderRef, payment.CheckoutURL,
 		createdBy, note, payerName, payerPhone, payerEmail, idempotencyKey,
 		payment.ExpiresAt, payment.CreatedAt, payment.UpdatedAt,
-		payment.CanceledAmountWon, canceledAt, cancelReason, canceledByUser, cancelKey)
+		payment.CanceledAmountWon, canceledAt, cancelReason, canceledByUser, cancelKey,
+		payment.CardAttempts, cardStartedAt, payment.CardApprovalUnconfirmed)
 	if err != nil {
 		return err
 	}
@@ -484,7 +496,9 @@ const paymentSelect = `
 	       expires_at, created_at, updated_at,
 	       COALESCE(canceled_amount_won, 0), canceled_at,
 	       COALESCE(cancel_reason, ''), COALESCE(canceled_by, ''),
-	       COALESCE(cancel_idempotency_key, '')
+	       COALESCE(cancel_idempotency_key, ''),
+	       COALESCE(card_attempts, 0), card_approval_started_at,
+	       COALESCE(card_approval_unconfirmed, FALSE)
 	FROM payments`
 
 func scanPayment(row pgx.Row) (*domain.Payment, error) {
@@ -498,6 +512,7 @@ func scanPayment(row pgx.Row) (*domain.Payment, error) {
 		&idempotencyKey, &p.ExpiresAt, &p.CreatedAt, &p.UpdatedAt,
 		&p.CanceledAmountWon, &p.CanceledAt,
 		&p.CancelReason, &p.CanceledBy, &p.CancelIdempotencyKey,
+		&p.CardAttempts, &p.CardApprovalStartedAt, &p.CardApprovalUnconfirmed,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ports.ErrNotFound

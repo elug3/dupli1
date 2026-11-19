@@ -2,9 +2,9 @@ package bootstrap
 
 import (
 	"context"
-	"log"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -77,7 +77,13 @@ func Bootstrap(cfg Config) (*App, error) {
 	if nanoCfg.Enabled() {
 		nanoProvider = checkout.NewNanoProvider(nanoCfg)
 		checkoutProvider = nanoProvider
-		if !nanoCfg.CallbackReachable() {
+		if nanoCfg.KeyInMisconfigured() {
+			log.Printf("payment: WARNING NANO_ENC_KEY must be 32 bytes and NANO_ENC_IV 16 bytes; " +
+				"key-in (수기결제) is off and card checkout stays on the 인증결제 window")
+		}
+		if nanoCfg.KeyInEnabled() {
+			log.Printf("payment: nano card checkout is key-in (수기결제, approval.io)")
+		} else if !nanoCfg.CallbackReachable() {
 			// Card payments cannot complete in this state: NANO POSTs the
 			// approval to receiveUrl from its own servers, and a loopback or
 			// private base resolves to something on their side. Payments strand
@@ -107,7 +113,11 @@ func Bootstrap(cfg Config) (*App, error) {
 		eventPublisher = natsPublisher
 	}
 
-	svc := service.New(repo, orders, checkoutProvider, eventPublisher).
+	svc := service.New(repo, orders, checkoutProvider, eventPublisher)
+	if nanoProvider != nil && nanoCfg.KeyInEnabled() {
+		svc = svc.WithCardApprover(nanoProvider, nanoCfg.ShopCode)
+	}
+	svc = svc.
 		WithKillSwitches(killSwitches).
 		WithConfiguredMethods(map[string]bool{
 			domain.MethodCreditCard: nanoCfg.Enabled(),

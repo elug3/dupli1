@@ -157,6 +157,8 @@ func nanoRejectDetail(reason NanoRejectReason) string {
 		return "payment lookup failed"
 	case NanoRejectPersistFailed:
 		return "verified approval could not be saved"
+	case KeyInRejectUnconfirmed:
+		return "key-in approval was sent and NANO never answered; the card may have been charged"
 	default:
 		return string(reason)
 	}

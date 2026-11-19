@@ -84,10 +84,17 @@ type Payment struct {
 	// make a client retry of that same cancel a no-op. Only the latest key is
 	// kept: it guards the realistic double-submit (timeout then retry), not an
 	// arbitrary replay of an older partial cancel.
-	CancelIdempotencyKey string    `json:"-"`
-	ExpiresAt            time.Time `json:"expires_at"`
-	CreatedAt            time.Time `json:"created_at"`
-	UpdatedAt            time.Time `json:"updated_at"`
+	CancelIdempotencyKey string `json:"-"`
+	// Key-in card approval (keyin.go). CardAttempts counts approval calls
+	// sent to the PG; CardApprovalStartedAt is set while one is running;
+	// CardApprovalUnconfirmed is set when one got no answer, which holds the
+	// payment for a person to check.
+	CardAttempts            int        `json:"card_attempts,omitempty"`
+	CardApprovalStartedAt   *time.Time `json:"-"`
+	CardApprovalUnconfirmed bool       `json:"card_approval_unconfirmed,omitempty"`
+	ExpiresAt               time.Time  `json:"expires_at"`
+	CreatedAt               time.Time  `json:"created_at"`
+	UpdatedAt               time.Time  `json:"updated_at"`
 }
 
 func (p *Payment) MarkFailed(now time.Time) {

@@ -218,8 +218,16 @@ func (d *Dispatcher) handlePaymentCallbackRejected(ctx context.Context, payload 
 // payment — so each line is omitted rather than printed empty.
 func formatPaymentCallbackRejectedMessage(event events.PaymentCallbackRejectedEvent, manageWebURL string) string {
 	var b strings.Builder
-	b.WriteString("🚨 <b>PG가 결제를 승인했으나 시스템에서 거부함</b>\n")
-	b.WriteString("구매자가 이중 청구되지 않도록 PG 콘솔을 먼저 확인하세요.\n")
+	if strings.TrimSpace(event.Reason) == events.ReasonKeyInUnconfirmed {
+		// Key-in (수기결제): the approval was sent and never answered, so the
+		// card may or may not have been charged. The payment takes no more
+		// cards until someone checks.
+		b.WriteString("🚨 <b>카드 수기결제 응답 없음: 승인 여부 확인 필요</b>\n")
+		b.WriteString("PG 콘솔에서 이 결제가 승인됐는지 확인하세요. 구매자는 이 주문을 다시 결제할 수 없습니다.\n")
+	} else {
+		b.WriteString("🚨 <b>PG가 결제를 승인했으나 시스템에서 거부함</b>\n")
+		b.WriteString("구매자가 이중 청구되지 않도록 PG 콘솔을 먼저 확인하세요.\n")
+	}
 
 	if orderID := strings.TrimSpace(event.OrderID); orderID != "" {
 		b.WriteString(fmt.Sprintf("주문: %s\n%s", tg.EscapeHTML(orderID), formatManageOrderLink(manageWebURL, orderID)))
@@ -247,7 +255,11 @@ func formatPaymentCallbackRejectedMessage(event events.PaymentCallbackRejectedEv
 	if provider == "" {
 		provider = "PG"
 	}
-	b.WriteString(fmt.Sprintf("출처: %s %s 콜백", tg.EscapeHTML(provider), tg.EscapeHTML(strings.TrimSpace(event.Source))))
+	if strings.TrimSpace(event.Source) == "key_in" {
+		b.WriteString(fmt.Sprintf("출처: %s 수기결제 승인 요청", tg.EscapeHTML(provider)))
+	} else {
+		b.WriteString(fmt.Sprintf("출처: %s %s 콜백", tg.EscapeHTML(provider), tg.EscapeHTML(strings.TrimSpace(event.Source))))
+	}
 	return b.String()
 }
 

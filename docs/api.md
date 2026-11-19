@@ -1159,7 +1159,7 @@ Identify each line by canonical `sku_id` (preferred) or human `sku`. Unit prices
 
 ## Payment Service — `/api/v1/payments`
 
-Credit card uses **NANO Solution** certified payment when `NANO_*` credentials are set; otherwise `credit_card` is unavailable (501) and payments — including local testing — go through manager **Bypass**. Dupli1 never handles card numbers, CVC, or card passwords.
+Credit card uses **NANO Solution** when `NANO_*` credentials are set; otherwise `credit_card` is unavailable (501) and payments — including local testing — go through manager **Bypass**. With `NANO_ENC_KEY`/`NANO_ENC_IV` set it is **key-in (수기결제)**: the storefront takes the card and posts it to `POST /api/v1/payments/{id}/card`, which passes it to NANO once and never stores it ([payment-nano-key-in.md](payment-nano-key-in.md)). Without them it is the 인증결제 window. CVC is never taken.
 
 **Methods:** create body accepts `method`: `credit_card` (NANO; 501 when unconfigured), `bypass` (order manager / `payment.bypass`), `bitcoin` (501 until implemented). See [payment-methods-plan.md](payment-methods-plan.md).
 
@@ -1169,6 +1169,7 @@ When JWT is configured, `POST` and `GET` require Bearer tokens. Storefront calle
 |--------|------|-------------------|
 | POST | `/api/v1/payments` | ABAC or `payment.create`; `method=bypass` requires `payment.bypass` |
 | GET | `/api/v1/payments/{id}` | ABAC or `payment.read.all` |
+| POST | `/api/v1/payments/{id}/card` | Bearer, the payment's own customer only — key-in card ([payment-nano-key-in.md](payment-nano-key-in.md)) |
 | POST | `/api/v1/payments/{id}/cancel` | `payment.cancel` — **staff only, no ABAC** |
 | GET | `/api/v1/payments/methods` | — (which methods checkout can offer now; kill switches applied) |
 | GET | `/api/v1/payments/kill-switches` | `payment.killswitch.read` / `.manage` |

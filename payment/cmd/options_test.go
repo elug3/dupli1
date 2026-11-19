@@ -13,6 +13,8 @@ func TestConfigureOptions_AppliesNanoEnv(t *testing.T) {
 	t.Setenv("NANO_API_KEY", "test-api-key")
 	t.Setenv("NANO_SUCCESS_URL", "https://dupli1.com/checkout/success")
 	t.Setenv("NANO_FAILURE_URL", "https://dupli1.com/checkout/failure")
+	t.Setenv("NANO_ENC_KEY", "Q2Jv7LkNp5X3M8Yc6rW9T1Eb4F6HdKx6")
+	t.Setenv("NANO_ENC_IV", "Nx5Lq7Kv4W8Jp6Mu")
 
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
 	opts, err := ConfigureOptions(fs, nil)
@@ -30,5 +32,8 @@ func TestConfigureOptions_AppliesNanoEnv(t *testing.T) {
 	}
 	if opts.NanoSuccessURL == "" || opts.NanoFailureURL == "" {
 		t.Fatalf("redirect urls missing: success=%q failure=%q", opts.NanoSuccessURL, opts.NanoFailureURL)
+	}
+	if opts.NanoEncKey == "" || opts.NanoEncIV == "" {
+		t.Fatalf("key-in encData key/IV missing: key=%t iv=%t", opts.NanoEncKey != "", opts.NanoEncIV != "")
 	}
 }

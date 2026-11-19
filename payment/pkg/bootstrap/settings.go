@@ -19,10 +19,14 @@ func BuildSettings(cfg Config) settings.Response {
 	resp.Features = map[string]bool{
 		"nats_events":   cfg.NATSURL != "",
 		"nano_checkout": nanoOn,
+		// Card checkout takes the card on the storefront (수기결제) rather
+		// than in NANO's 인증결제 window. See docs/payment-nano-key-in.md.
+		"nano_key_in": nanoOn && cfg.Nano.KeyInEnabled(),
 		// False when nano is on but DUPLI1_PAYMENT_PUBLIC_URL is loopback or
 		// private: NANO cannot deliver the approval callback, so card payments
 		// never leave requires_payment. Surfaced here so the broken state is
 		// observable without shell access to the container logs.
+		// Key-in needs no callback, so it is only reported for 인증결제.
 		"nano_callback_reachable": nanoOn && cfg.Nano.CallbackReachable(),
 		"method_credit_card":      nanoOn,
 		"method_bypass":           true,
