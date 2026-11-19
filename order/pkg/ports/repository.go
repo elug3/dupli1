@@ -29,6 +29,10 @@ type Repository interface {
 	// not yet fulfilled or canceled). Only the fields the referral report
 	// reads are filled; no items.
 	ListReferralActivity(ctx context.Context, start, end time.Time) ([]domain.Order, error)
+	// ListReferralOrdersByCode returns every paid referred order placed with
+	// code (canceled ones too), newest payment first. Same fields as
+	// ListReferralActivity plus canceled_at.
+	ListReferralOrdersByCode(ctx context.Context, code string) ([]domain.Order, error)
 	NextCheckoutSessionID(ctx context.Context) (string, error)
 	SaveCheckoutSession(ctx context.Context, session *domain.CheckoutSession) error
 	GetCheckoutSession(ctx context.Context, id string) (*domain.CheckoutSession, error)

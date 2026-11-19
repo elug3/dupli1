@@ -91,6 +91,24 @@ Grouped by referrer name (the name snapshotted on the order), sorted by name.
 
 The report does not record that a month was paid; staff keep that record.
 
+
+## One code's history
+
+`GET /api/v1/orders/reports/referrals/codes/{code}` (`order.read.all`) is the
+console's code detail page: every **paid** order placed with the code
+(canceled ones too, newest payment first, as the report's `lines` with
+`canceled_at`), a `summary` (orders by fulfilled / open / canceled, distinct
+customers, goods and discount over the orders not canceled, commission earned
+and still open), `months` (fulfilled orders per KST month, newest first, with
+the same 3.3% split) and `referrer_names` (each name snapshotted on its
+orders, in order of first use). An unused or unknown code answers an empty
+history; an empty code is `400`.
+
+The withholding in `months` is worked out on the code's own commission. The
+payout is the monthly report's referrer statement, which withholds on the
+referrer's total: with several codes per referrer the two can differ by the
+ten-won rounding.
+
 ## Not built
 
 The richer referral tracking discussed on 2026-11-18 (time from sign-up to

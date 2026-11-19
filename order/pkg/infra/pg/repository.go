@@ -224,6 +224,7 @@ func (r *Repository) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_orders_pending_payment_due_at ON orders(payment_due_at) WHERE status = 'pending'`,
 		`CREATE INDEX IF NOT EXISTS idx_orders_paid_at ON orders(paid_at) WHERE paid_at IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_orders_canceled_at ON orders(canceled_at) WHERE canceled_at IS NOT NULL AND paid_at IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_orders_referral_code ON orders(promotion_code) WHERE referrer_name <> ''`,
 	}
 	for _, stmt := range postAlterStmts {
 		if _, err := r.pool.Exec(ctx, stmt); err != nil {
@@ -1083,6 +1084,37 @@ func (r *Repository) ListReferralActivity(ctx context.Context, start, end time.T
 			&order.SubtotalWon, &order.DiscountWon, &order.PointsWon, &order.TotalWon,
 			&order.ReferrerName, &order.ReferralCommissionBps, &order.PaidAt, &order.FulfilledAt,
 			&order.CreatedAt); err != nil {
+			return nil, err
+		}
+		orders = append(orders, order)
+	}
+	return orders, rows.Err()
+}
+
+func (r *Repository) ListReferralOrdersByCode(ctx context.Context, code string) ([]domain.Order, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, customer_id, status, promotion_code, subtotal_won, discount_won, points_won, total_won,
+			referrer_name, referral_commission_bps, paid_at, fulfilled_at, canceled_at, created_at
+		FROM orders
+		WHERE promotion_code = $1 AND referrer_name <> '' AND paid_at IS NOT NULL
+		ORDER BY paid_at DESC, id
+	`, code)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	orders := make([]domain.Order, 0)
+	for rows.Next() {
+		var order domain.Order
+		if err := rows.Scan(&order.ID, &order.CustomerID, &order.Status, &order.PromotionCode,
+			&order.SubtotalWon, &order.DiscountWon, &order.PointsWon, &order.TotalWon,
+			&order.ReferrerName, &order.ReferralCommissionBps, &order.PaidAt, &order.FulfilledAt,
+			&order.CanceledAt, &order.CreatedAt); err != nil {
 			return nil, err
 		}
 		orders = append(orders, order)

@@ -54,6 +54,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/orders/events", h.requireAuth(h.orderEvents))
 	mux.HandleFunc("/api/v1/orders/reports/sales", h.requireAuth(h.salesReport))
 	mux.HandleFunc("/api/v1/orders/reports/referrals", h.requireAuth(h.referralReport))
+	mux.HandleFunc("/api/v1/orders/reports/referrals/codes/", h.requireAuth(h.referralCodeHistory))
 	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
 	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
 }
@@ -228,6 +229,36 @@ func (h *Handler) referralReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, report)
+}
+
+// referralCodeHistory serves GET /api/v1/orders/reports/referrals/codes/{code}:
+// every paid order placed with one referral code and the commission it earned
+// per KST month. Same permission as the referral report.
+func (h *Handler) referralCodeHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims, _ := authjwt.FromContext(r.Context())
+	if h.jwtValidator != nil && !permissions.BypassesOrderReadABAC(claims.Permissions) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
+		return
+	}
+	code := strings.TrimPrefix(r.URL.Path, "/api/v1/orders/reports/referrals/codes/")
+	if strings.Contains(code, "/") {
+		respondError(w, http.StatusNotFound, "not found")
+		return
+	}
+	history, err := h.svc.ReferralCodeHistory(r.Context(), code)
+	if errors.Is(err, domain.ErrInvalidReferralCode) {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, history)
 }
 
 func (h *Handler) order(w http.ResponseWriter, r *http.Request) {

@@ -63,6 +63,13 @@ func TestListReferralActivityRoundTripsTheReferral(t *testing.T) {
 	if len(orders) != 2 {
 		t.Fatalf("orders = %d, want the fulfilled one and the open one", len(orders))
 	}
+	byCode, err := repo.ListReferralOrdersByCode(ctx, "HUH15")
+	if err != nil || len(byCode) != 2 || byCode[0].ReferrerName != "허경호" || byCode[0].PaidAt == nil {
+		t.Fatalf("ListReferralOrdersByCode = %+v, %v; want both paid orders", byCode, err)
+	}
+	if other, err := repo.ListReferralOrdersByCode(ctx, "OTHER"); err != nil || len(other) != 0 {
+		t.Fatalf("OTHER = %+v, %v; want none", other, err)
+	}
 	oct := nov.AddDate(0, -1, 0)
 	orders, err = repo.ListReferralActivity(ctx, oct, nov)
 	if err != nil || len(orders) != 1 || orders[0].ID != "ord-open" {

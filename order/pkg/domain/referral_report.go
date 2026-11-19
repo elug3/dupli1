@@ -82,6 +82,7 @@ type ReferralLine struct {
 	Status      OrderStatus `json:"status"`
 	PaidAt      *time.Time  `json:"paid_at,omitempty"`
 	FulfilledAt *time.Time  `json:"fulfilled_at,omitempty"`
+	CanceledAt  *time.Time  `json:"canceled_at,omitempty"`
 	SubtotalWon int64       `json:"subtotal_won"`
 	DiscountWon int64       `json:"discount_won"`
 	PointsWon   int64       `json:"points_won"`
@@ -170,6 +171,7 @@ func referralLine(o *Order) ReferralLine {
 		Status:        o.Status,
 		PaidAt:        o.PaidAt,
 		FulfilledAt:   o.FulfilledAt,
+		CanceledAt:    o.CanceledAt,
 		SubtotalWon:   o.SubtotalWon,
 		DiscountWon:   o.DiscountWon,
 		PointsWon:     o.PointsWon,
