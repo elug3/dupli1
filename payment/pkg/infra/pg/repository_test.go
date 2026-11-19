@@ -491,3 +491,43 @@ func TestPayerFieldsRoundTrip(t *testing.T) {
 		t.Fatalf("payer fields = %q / %q / %q", got.PayerName, got.PayerPhone, got.PayerEmail)
 	}
 }
+
+func TestCardAttemptFieldsRoundTrip(t *testing.T) {
+	repo := migratedRepo(t, "payment_card_attempt_test")
+	ctx := t.Context()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	p, err := domain.NewPayment("pay_keyin", "ord_keyin", "cust_1", 70000,
+		domain.DefaultCurrency, domain.ProviderNano, "nano_pay_keyin", "", now)
+	if err != nil {
+		t.Fatalf("NewPayment: %v", err)
+	}
+	if err := repo.Save(ctx, p); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	claimed, err := repo.MutateLocked(ctx, p.ID, func(p *domain.Payment) ([]ports.OutboxEvent, error) {
+		return nil, p.BeginCardAttempt(now)
+	})
+	if err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if claimed.CardAttempts != 1 {
+		t.Fatalf("attempts = %d", claimed.CardAttempts)
+	}
+	got, err := repo.Get(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.CardAttempts != 1 || got.CardApprovalStartedAt == nil || !got.CardApprovalStartedAt.Equal(now) {
+		t.Fatalf("after claim: attempts %d started %v", got.CardAttempts, got.CardApprovalStartedAt)
+	}
+	if _, err := repo.MutateLocked(ctx, p.ID, func(p *domain.Payment) ([]ports.OutboxEvent, error) {
+		p.CardUnconfirmed(now)
+		return nil, nil
+	}); err != nil {
+		t.Fatalf("hold: %v", err)
+	}
+	got, _ = repo.Get(ctx, p.ID)
+	if !got.CardApprovalUnconfirmed || got.CheckoutURL != "" {
+		t.Fatalf("after hold: %+v", got)
+	}
+}

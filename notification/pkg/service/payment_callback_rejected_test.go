@@ -96,3 +96,23 @@ func TestDispatcher_CallbackRejectedWithoutChatIsNotAnError(t *testing.T) {
 		t.Fatalf("message sent with no chat configured: %s", n.message)
 	}
 }
+
+// A key-in approval that NANO never answered is not a refusal: nobody knows
+// whether the card was charged, and the alert must say so.
+func TestDispatcher_KeyInUnconfirmedAlert(t *testing.T) {
+	n := dispatchCallbackRejected(t, "-100123", map[string]any{
+		"event_type": "payment.callback_rejected",
+		"provider":   "nano", "source": "key_in",
+		"payment_id": "pay_000031", "order_id": "ORD-031",
+		"reason": "approval_unconfirmed", "result_code": "0000",
+		"expected_won": 77000, "reported_amount": "77000",
+	})
+	for _, want := range []string{"수기결제 응답 없음", "승인됐는지 확인", "ORD-031", "₩77,000", "수기결제 승인 요청"} {
+		if !strings.Contains(n.message, want) {
+			t.Fatalf("message missing %q:\n%s", want, n.message)
+		}
+	}
+	if strings.Contains(n.message, "시스템에서 거부함") {
+		t.Fatalf("an unanswered approval is not a refusal:\n%s", n.message)
+	}
+}

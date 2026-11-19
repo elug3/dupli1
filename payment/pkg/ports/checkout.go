@@ -1,6 +1,11 @@
 package ports
 
-import "context"
+import (
+	"context"
+	"errors"
+
+	"github.com/elug3/dupli1/payment/pkg/domain"
+)
 
 type CheckoutSessionInput struct {
 	OrderID    string
@@ -55,4 +60,46 @@ type CancelPaymentResult struct {
 	ProviderRef string
 	// CanceledAt is the provider's own cancel timestamp, when it reports one.
 	CanceledAt string
+}
+
+// ErrCardApprovalUnconfirmed means a key-in approval was sent to the PG and
+// no answer came back that says what happened (timeout, transport error,
+// unreadable response). The card may have been charged, so the payment is
+// held for a person to check rather than offered for another try.
+var ErrCardApprovalUnconfirmed = errors.New("card approval outcome unknown")
+
+// CardDetails is what the shopper typed for key-in; see domain.CardDetails.
+type CardDetails = domain.CardDetails
+
+// CardApprovalInput asks the PG to charge a typed card for one payment.
+type CardApprovalInput struct {
+	PaymentID  string
+	OrderID    string
+	AmountWon  int64
+	OrderName  string
+	OrderTel   string
+	OrderEmail string
+	GoodsName  string
+	Card       CardDetails
+}
+
+// CardApprovalResult is the PG's parsed answer. Approved is false for a
+// decline, with ResultCode/ResultMsg saying why.
+type CardApprovalResult struct {
+	Approved    bool
+	ResultCode  string
+	ResultMsg   string
+	ShopCode    string
+	ReqPayAmt   string
+	TranNo      string
+	ApprNo      string
+	CardMasked  string
+	CardName    string
+	CompOrderNo string
+}
+
+// CardApprover charges a typed card (NANO 수기결제). Optional: a deployment
+// without it keeps the redirect checkout of CheckoutProvider.
+type CardApprover interface {
+	ApproveCard(ctx context.Context, input CardApprovalInput) (*CardApprovalResult, error)
 }

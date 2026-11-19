@@ -19,6 +19,8 @@ type ServerOptions struct {
 	NanoAPIKey      string
 	NanoSuccessURL  string
 	NanoFailureURL  string
+	NanoEncKey      string
+	NanoEncIV       string
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration

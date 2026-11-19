@@ -20,7 +20,7 @@ All successful methods must end the same way: payment record → **`succeeded`**
 
 ## Non-goals (this plan)
 
-- Handling card PAN / CVC / card passwords on Dupli1 (NANO-hosted certified window only; do not use 수기결제)
+- ~~Handling card PAN / CVC / card passwords on Dupli1 (NANO-hosted certified window only; do not use 수기결제)~~ Superseded 2026-11-19 (SER-106): NANO asked for key-in, so card checkout is 수기결제 and the card passes through Dupli1 once, never stored. CVC is still never taken. See [payment-nano-key-in.md](payment-nano-key-in.md)
 - Refunds / chargebacks UI (still payment phase 2 in [payment-service.md](payment-service.md))
 - Multi-currency storefront (KRW only stays locked)
 - Implementing Bitcoin rails, wallets, or FX settlement in this phase
@@ -189,7 +189,7 @@ Add to `shared/pkg/permissions` catalog, fulfillment / order-manager bundles, an
 
 Customer **name and phone** for certified PG requests come from the **order snapshot** at checkout complete (copied onto the payment row as `payer_*` for the checkout bridge). Optional prefill from auth profile: [auth-profile-extension-plan.md](auth-profile-extension-plan.md).
 
-Hash (request): `SHA256(ver+loginId+shopcode+reqPayAmt+timestamp+API_KEY+"NANO")`. 인증결제 v2.7 does not sign the browser return, so checkout binds `receiveUrl` with `nano_ts`/`nano_mac` (`SHA256(ver+loginId+shopcode+compOrderNo+reqPayAmt+timestamp+API_KEY+"RETURN")`). Success callbacks must match `shopcode` + `reqPayAmt` and either a PG `hashValue` or that MAC. Do **not** integrate 수기결제 (key-in) — that would put PAN on Dupli1.
+Hash (request): `SHA256(ver+loginId+shopcode+reqPayAmt+timestamp+API_KEY+"NANO")`. 인증결제 v2.7 does not sign the browser return, so checkout binds `receiveUrl` with `nano_ts`/`nano_mac` (`SHA256(ver+loginId+shopcode+compOrderNo+reqPayAmt+timestamp+API_KEY+"RETURN")`). Success callbacks must match `shopcode` + `reqPayAmt` and either a PG `hashValue` or that MAC. Since 2026-11-19 card checkout is 수기결제 (key-in) once `NANO_ENC_KEY`/`NANO_ENC_IV` are set; the 인증결제 path above stays for one release. See [payment-nano-key-in.md](payment-nano-key-in.md).
 
 **Open questions (resolve before coding Bitcoin)**
 

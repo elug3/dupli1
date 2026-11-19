@@ -159,6 +159,13 @@ func (h *Handler) paymentRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "card" && r.Method == http.MethodPost {
+		h.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+			h.payByCard(w, r, parts[0])
+		})(w, r)
+		return
+	}
+
 	if len(parts) == 2 && parts[1] == "cancel" && r.Method == http.MethodPost {
 		h.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 			h.cancelPayment(w, r, parts[0])

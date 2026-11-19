@@ -39,6 +39,13 @@ func TestBuildSettingsNanoEnablesCard(t *testing.T) {
 	if !resp.Features["method_credit_card"] {
 		t.Fatal("method_credit_card should be true with nano")
 	}
+	if resp.Features["nano_key_in"] {
+		t.Fatal("nano_key_in needs the encData key and IV")
+	}
+	cfg.Nano.EncKey, cfg.Nano.EncIV = "Q2Jv7LkNp5X3M8Yc6rW9T1Eb4F6HdKx6", "Nx5Lq7Kv4W8Jp6Mu"
+	if !BuildSettings(cfg).Features["nano_key_in"] {
+		t.Fatal("nano_key_in should be true with the encData key and IV")
+	}
 }
 
 // The broken state must be observable without container log access.
