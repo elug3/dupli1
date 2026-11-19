@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -178,6 +179,12 @@ func applyPromotionPatch(p *domain.Promotion, patch ports.PromotionPatch) {
 	}
 	if patch.Expires != nil {
 		p.Expires = *patch.Expires
+	}
+	if patch.ReferrerName != nil {
+		p.ReferrerName = strings.TrimSpace(*patch.ReferrerName)
+	}
+	if patch.CommissionBps != nil {
+		p.CommissionBps = *patch.CommissionBps
 	}
 }
 

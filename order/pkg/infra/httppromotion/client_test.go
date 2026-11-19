@@ -196,3 +196,24 @@ func TestClientSendsLineIdentifiersForCatalogLookup(t *testing.T) {
 		}
 	}
 }
+
+func TestClientReserveReadsTheReferral(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"result":     map[string]any{"ok": true, "discount_won": 150000},
+			"redemption": map[string]any{"order_id": "ord-1", "code": "HUH15"},
+			"referral":   map[string]any{"referrer_name": "허경호", "commission_bps": 500},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	client := httppromotion.NewClient(srv.URL, srv.Client(), httpauth.StaticToken("svc-token"))
+	got, err := client.Reserve(t.Context(), "HUH15", "ord-1", ports.PromotionContext{CustomerID: "cust-1"})
+	if err != nil {
+		t.Fatalf("Reserve: %v", err)
+	}
+	if !got.OK || got.Referral == nil || got.Referral.ReferrerName != "허경호" || got.Referral.CommissionBps != 500 {
+		t.Fatalf("result = %+v, want the referral beside the verdict", got)
+	}
+}

@@ -113,6 +113,15 @@ type Promotion struct {
 	// minimum spend or an expiry should say so here.
 	Terms string `json:"terms,omitempty"`
 
+	// Kind is "" for an ordinary code and "referral" for a secret referral
+	// code (promotion_referral.go). ReferrerName and CommissionBps are only
+	// set on a referral code: the person who referred the shopper, by name
+	// (not an account), and the commission they earn on each fulfilled order
+	// in basis points (500 = 5%). None of the three is shown to shoppers.
+	Kind          PromotionKind `json:"kind,omitempty"`
+	ReferrerName  string        `json:"referrer_name,omitempty"`
+	CommissionBps int           `json:"commission_bps,omitempty"`
+
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 
 	// Discount and Expires are the pre-Phase-2 columns. Nothing writes them

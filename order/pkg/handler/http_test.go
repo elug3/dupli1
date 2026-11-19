@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -1480,5 +1480,31 @@ func TestSalesReport_RejectsBadGranularity(t *testing.T) {
 	w := do(t, mux, http.MethodGet, "/api/v1/orders/reports/sales?granularity=day", token, nil)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestReferralReport_NeedsOrderReadAll(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/reports/referrals", makeToken(t, "u-1", nil), nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("customer status = %d, want 403; body: %s", w.Code, w.Body.String())
+	}
+	token := makeToken(t, "mgr-1", []string{permissions.OrderReadAll})
+	w = do(t, mux, http.MethodGet, "/api/v1/orders/reports/referrals?month=2026-11", token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var rep domain.ReferralReport
+	if err := json.NewDecoder(w.Body).Decode(&rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Month != "2026-11" || rep.From != "2026-11-01" || rep.To != "2026-11-30" || rep.WithholdingBps != 330 {
+		t.Fatalf("report = %+v", rep)
+	}
+	w = do(t, mux, http.MethodGet, "/api/v1/orders/reports/referrals?month=11-2026", token, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bad month status = %d, want 400", w.Code)
 	}
 }

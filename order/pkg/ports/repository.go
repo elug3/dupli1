@@ -24,6 +24,11 @@ type Repository interface {
 	// orders canceled (refunded) in it. Only the fields the sales report reads
 	// are filled: id, status, money totals, paid_at and canceled_at; no items.
 	ListSalesActivity(ctx context.Context, start, end time.Time) ([]domain.Order, error)
+	// ListReferralActivity returns the referred orders (referrer_name set)
+	// fulfilled in [start, end), and every referred order still open (paid,
+	// not yet fulfilled or canceled). Only the fields the referral report
+	// reads are filled; no items.
+	ListReferralActivity(ctx context.Context, start, end time.Time) ([]domain.Order, error)
 	NextCheckoutSessionID(ctx context.Context) (string, error)
 	SaveCheckoutSession(ctx context.Context, session *domain.CheckoutSession) error
 	GetCheckoutSession(ctx context.Context, id string) (*domain.CheckoutSession, error)

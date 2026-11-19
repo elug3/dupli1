@@ -715,7 +715,13 @@ ledger's answer, not the entitlement's.
 max_discount_won, apply_to}`), `conditions` (versioned predicate document over
 an allowlist of attributes), `expires_at`, `max_redemptions`,
 `max_per_customer`, `entitlement_ttl_days`, `auto_issue` (`""` | `user_registered`;
-`single_user` only), `apply_mode` (`code` default; `auto` is retired, see below), `terms`, `redemption_count`.
+`single_user` only), `apply_mode` (`code` default; `auto` is retired, see below), `terms`, `redemption_count`,
+`kind` (`""` | `referral`, set on create only), `referrer_name` and `commission_bps` (referral codes only).
+
+**Referral codes** (`kind: "referral"`, [product-referral-codes.md](product-referral-codes.md)) are secret
+`global` codes with a referrer name (not an account) and a commission rate (`commission_bps`, default 500 = 5%).
+A shopper may use one on any number of orders. The public `redeem` and `evaluate` routes never reveal that a code
+is a referral; only the internal `reserve` response carries `referral: {referrer_name, commission_bps}` for order.
 
 **Every promotion discounts the whole order.** The discount base is always the
 goods subtotal (selling price, before shipping). `conditions` on brand,
@@ -1105,6 +1111,7 @@ The legacy prefix `/api/v1/checkout/sessions…` is still registered as an alias
 | POST | `/api/v1/orders` | Create order directly |
 | GET | `/api/v1/orders` | List all orders (`order.read.all`) |
 | GET | `/api/v1/orders/events` | Live order stream, Server-Sent Events (`order.read.all`) — see [order-live-events.md](order-live-events.md) |
+| GET | `/api/v1/orders/reports/referrals?month=YYYY-MM` | Referral commission for a KST month, default the current one (`order.read.all`). Per referrer: the referred orders fulfilled in the month (`lines`), `base_won` (goods after the code's discount), `commission_won` (each order's base × its snapshotted rate, rounded down), `income_tax_won` 3% and `local_tax_won` 0.3% (each rounded down to ten won), `withholding_won`, `net_won`; plus `open` orders paid but not yet fulfilled. `400` for a month that is not `YYYY-MM`. See [product-referral-codes.md](product-referral-codes.md) |
 | GET | `/api/v1/orders/reports/sales?granularity=week\|month&from=YYYY-MM-DD&to=YYYY-MM-DD` | Sales report (`order.read.all`). KST periods: weeks run Monday–Sunday, months are calendar months; `from`/`to` are inclusive and widened to whole periods (default: the last 12 weeks or 12 months up to the current one; at most 104 weeks or 36 months, else `400`). Returns `{granularity, timezone, from, to, periods[], totals}`; each period has `period_start`, `period_end`, `orders`, `gross_won`, `discount_won`, `shipping_fee_won`, `card_surcharge_won`, `points_won` (points shoppers paid with, not in `gross_won`), `refunds`, `refunded_won`, `net_won`, `average_order_won`. A sale counts in the period of its `paid_at`; a refund (a paid order canceled) counts in the period of its `canceled_at`, so `net_won = gross_won - refunded_won` is what moved in that period. Empty periods are listed |
 | GET | `/api/v1/orders?customer_id=` | List customer orders |
 | GET | `/api/v1/orders/{id}` | Get order |

@@ -93,6 +93,8 @@ func (c *Client) evaluateAt(ctx context.Context, path string, req evaluateReques
 	out := body.PromotionEvaluation
 	if body.Result != nil {
 		out = *body.Result
+		// referral sits beside result in reserve's body, not inside it.
+		out.Referral = body.PromotionEvaluation.Referral
 	}
 	out.Code = req.Code
 	return &out, nil

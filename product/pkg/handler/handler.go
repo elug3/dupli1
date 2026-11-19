@@ -525,6 +525,14 @@ type promotionBody struct {
 	// customer tier applied to every order its members place).
 	ApplyMode *string `json:"apply_mode"`
 
+	// Kind is "referral" for a secret referral code, set on create only.
+	// ReferrerName is who referred the shopper (a name, not an account) and
+	// CommissionBps their commission per fulfilled order in basis points;
+	// a referral code created without one gets the default 5% (500).
+	Kind          *string `json:"kind"`
+	ReferrerName  *string `json:"referrer_name"`
+	CommissionBps *int    `json:"commission_bps"`
+
 	// Legacy fields, still accepted while clients migrate.
 	Discount *float64 `json:"discount"`
 	Expires  *string  `json:"expires"`
@@ -594,6 +602,15 @@ func (h *Handler) CreatePromotion(w http.ResponseWriter, r *http.Request) {
 	if body.ApplyMode != nil {
 		promotion.ApplyMode = domain.ApplyMode(*body.ApplyMode)
 	}
+	if body.Kind != nil {
+		promotion.Kind = domain.PromotionKind(strings.TrimSpace(*body.Kind))
+	}
+	promotion.ReferrerName = strValue(body.ReferrerName)
+	if body.CommissionBps != nil {
+		promotion.CommissionBps = *body.CommissionBps
+	} else if promotion.IsReferral() {
+		promotion.CommissionBps = domain.DefaultReferralCommissionBps
+	}
 
 	created, err := h.promotionSvc.Create(r.Context(), promotion)
 	if err != nil {
@@ -648,6 +665,13 @@ func (h *Handler) UpdatePromotion(w http.ResponseWriter, r *http.Request) {
 		Expires:        body.Expires,
 
 		EntitlementTTLDays: body.EntitlementTTLDays,
+
+		ReferrerName:  body.ReferrerName,
+		CommissionBps: body.CommissionBps,
+	}
+	if body.Kind != nil {
+		h.respondError(w, http.StatusBadRequest, "kind is set when a code is created and cannot be changed")
+		return
 	}
 	if body.Scope != nil {
 		scope := domain.Scope(*body.Scope)
@@ -826,7 +850,8 @@ func (h *Handler) RedeemPromotion(w http.ResponseWriter, r *http.Request) {
 		h.respondError(w, http.StatusNotFound, "invalid promotion code")
 		return
 	}
-	h.respondJSON(w, http.StatusOK, promotion)
+	// Anyone may call redeem, so a referral code must look like any other.
+	h.respondJSON(w, http.StatusOK, promotion.PublicView())
 }
 
 func (h *Handler) extractFilters(r *http.Request) map[string]string {

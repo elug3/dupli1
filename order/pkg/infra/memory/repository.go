@@ -266,6 +266,32 @@ func (r *Repository) ListPendingPaymentExpired(ctx context.Context, now time.Tim
 	return orders, nil
 }
 
+func (r *Repository) ListReferralActivity(ctx context.Context, start, end time.Time) ([]domain.Order, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	open := map[string]bool{}
+	for _, s := range domain.ReferralOpenStatuses() {
+		open[s] = true
+	}
+	orders := make([]domain.Order, 0)
+	for _, order := range r.orders {
+		if order.ReferrerName == "" {
+			continue
+		}
+		fulfilledIn := order.Status == domain.StatusFulfilled && order.FulfilledAt != nil &&
+			!order.FulfilledAt.Before(start) && order.FulfilledAt.Before(end)
+		if fulfilledIn || open[string(order.Status)] {
+			orders = append(orders, *r.readOrder(order))
+		}
+	}
+	return orders, nil
+}
+
 func (r *Repository) ListSalesActivity(ctx context.Context, start, end time.Time) ([]domain.Order, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

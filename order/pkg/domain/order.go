@@ -83,7 +83,7 @@ type Order struct {
 	ReservationID string      `json:"reservation_id"`
 	Items         []OrderItem `json:"items"`
 	Status        OrderStatus `json:"status"`
-	PromotionCode    string      `json:"promotion_code,omitempty"`
+	PromotionCode string      `json:"promotion_code,omitempty"`
 	SubtotalWon   int64       `json:"subtotal_won"`
 	DiscountWon   int64       `json:"discount_won"`
 	// TierPromotionCode and TierDiscountWon are the automatic customer tier
@@ -95,32 +95,40 @@ type Order struct {
 	TierDiscountWon   int64  `json:"tier_discount_won"`
 	// ShippingFeeWon is the delivery charge in whole KRW, captured at order
 	// creation so a later config change never re-prices a placed order.
-	ShippingFeeWon  int64           `json:"shipping_fee_won"`
+	ShippingFeeWon int64 `json:"shipping_fee_won"`
 	// PaymentMethod is what the order was priced for: credit_card or bypass
 	// (staff recording an offline payment). Empty on orders placed before
 	// the card surcharge existed.
 	PaymentMethod string `json:"payment_method,omitempty"`
 	// CardSurchargeWon is the card surcharge, in whole KRW, already included
 	// in TotalWon. Zero for any other method.
-	CardSurchargeWon int64           `json:"card_surcharge_won"`
+	CardSurchargeWon int64 `json:"card_surcharge_won"`
 	// PointsWon is the store credit (1 P = ₩1) the shopper paid part of the
 	// goods with. It is already taken off TotalWon, before the card surcharge,
 	// so payment charges and refunds only the money part; payment holds the
 	// points themselves (docs/payment-points.md).
 	PointsWon int64 `json:"points_won"`
-	TotalWon         int64           `json:"total_won"`
-	RecipientName   string          `json:"recipient_name,omitempty"`
-	RecipientPhone  string          `json:"recipient_phone,omitempty"`
-	ShippingAddress ShippingAddress `json:"shipping_address,omitempty"`
-	SourceAddressID string          `json:"source_address_id,omitempty"`
-	PaymentID       string          `json:"payment_id,omitempty"`
-	PaidAt          *time.Time      `json:"paid_at,omitempty"`
-	PaymentDueAt    time.Time       `json:"payment_due_at"`
-	ShippedBy       string          `json:"shipped_by,omitempty"`
-	ShippedAt       *time.Time      `json:"shipped_at,omitempty"`
-	Carrier         string          `json:"carrier,omitempty"`
-	TrackingNumber  string          `json:"tracking_number,omitempty"`
-	CarrierNote     string          `json:"carrier_note,omitempty"`
+	// ReferrerName and ReferralCommissionBps are set when the order used a
+	// secret referral code: who referred the shopper, and the commission rate
+	// (basis points, 500 = 5%) at checkout, so editing the code later never
+	// changes what this order earns. Never serialized: a shopper reads their
+	// own order, and the storefront must not learn the code was a referral.
+	// Staff read them through the referral report.
+	ReferrerName          string          `json:"-"`
+	ReferralCommissionBps int             `json:"-"`
+	TotalWon              int64           `json:"total_won"`
+	RecipientName         string          `json:"recipient_name,omitempty"`
+	RecipientPhone        string          `json:"recipient_phone,omitempty"`
+	ShippingAddress       ShippingAddress `json:"shipping_address,omitempty"`
+	SourceAddressID       string          `json:"source_address_id,omitempty"`
+	PaymentID             string          `json:"payment_id,omitempty"`
+	PaidAt                *time.Time      `json:"paid_at,omitempty"`
+	PaymentDueAt          time.Time       `json:"payment_due_at"`
+	ShippedBy             string          `json:"shipped_by,omitempty"`
+	ShippedAt             *time.Time      `json:"shipped_at,omitempty"`
+	Carrier               string          `json:"carrier,omitempty"`
+	TrackingNumber        string          `json:"tracking_number,omitempty"`
+	CarrierNote           string          `json:"carrier_note,omitempty"`
 	// ConfirmedAt is when a manager accepted the paid order for fulfillment
 	// (transitions paid → confirmed).
 	ConfirmedAt *time.Time `json:"confirmed_at,omitempty"`
@@ -144,6 +152,9 @@ type Order struct {
 	// payment reinstates it. A cancel of an order with PaidAt set is a
 	// refund, and the sales report counts it in the period of CanceledAt.
 	CanceledAt *time.Time `json:"canceled_at,omitempty"`
+	// FulfilledAt is when the order became fulfilled, by whichever route.
+	// Fulfilled is final; the referral report pays commission in its month.
+	FulfilledAt *time.Time `json:"fulfilled_at,omitempty"`
 	// InspectionVideo is the pre-shipment inspection film (검수영상). Required
 	// before Ship; replaceable until the order is fulfilled or canceled.
 	// Stored apart from the order row, so Save never touches it.
@@ -208,7 +219,7 @@ func NewOrder(id, customerID, reservationID string, items []OrderItem, promotion
 		ReservationID:  reservationID,
 		Items:          copiedItems,
 		Status:         StatusPending,
-		PromotionCode:     strings.ToUpper(strings.TrimSpace(promotionCode)),
+		PromotionCode:  strings.ToUpper(strings.TrimSpace(promotionCode)),
 		SubtotalWon:    subtotal,
 		DiscountWon:    discountKRW,
 		ShippingFeeWon: shippingFeeKRW,
@@ -231,6 +242,19 @@ func (o *Order) SetTier(code string, discountWon int64) error {
 	}
 	o.TierPromotionCode = code
 	o.TierDiscountWon = discountWon
+	return nil
+}
+
+// SetReferral records the referral code terms on a new order. It is set once,
+// at checkout complete, while the order is still pending.
+func (o *Order) SetReferral(referrerName string, commissionBps int) error {
+	referrerName = strings.TrimSpace(referrerName)
+	if o.Status != StatusPending || o.PromotionCode == "" || referrerName == "" ||
+		commissionBps < 0 || commissionBps > 10000 {
+		return ErrInvalidOrder
+	}
+	o.ReferrerName = referrerName
+	o.ReferralCommissionBps = commissionBps
 	return nil
 }
 
@@ -323,6 +347,7 @@ func (o *Order) ConfirmReceipt(now time.Time) error {
 	}
 	o.Status = StatusFulfilled
 	o.ReceiptConfirmedAt = &now
+	o.FulfilledAt = &now
 	o.UpdatedAt = now
 	return nil
 }
@@ -356,6 +381,7 @@ func (o *Order) ResolveDisputeFulfilled(now time.Time) error {
 		return ErrInvalidTransition
 	}
 	o.Status = StatusFulfilled
+	o.FulfilledAt = &now
 	o.UpdatedAt = now
 	return nil
 }
@@ -562,6 +588,7 @@ func (o *Order) Fulfill(now time.Time) error {
 		return ErrInvalidTransition
 	}
 	o.Status = StatusFulfilled
+	o.FulfilledAt = &now
 	o.UpdatedAt = now
 	return nil
 }

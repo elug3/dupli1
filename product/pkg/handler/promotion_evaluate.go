@@ -85,7 +85,7 @@ func (h *Handler) ReservePromotion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redemption, result, err := h.promotionSvc.Reserve(r.Context(), body.Code, body.OrderID, domain.EvaluationContext{
+	res, err := h.promotionSvc.ReserveForOrder(r.Context(), body.Code, body.OrderID, domain.EvaluationContext{
 		CustomerID:     body.CustomerID,
 		ShippingFeeWon: body.ShippingFeeWon,
 		Lines:          body.Lines,
@@ -94,10 +94,17 @@ func (h *Handler) ReservePromotion(w http.ResponseWriter, r *http.Request) {
 		h.respondServiceError(w, err)
 		return
 	}
-	h.respondJSON(w, http.StatusOK, map[string]any{
-		"result":     result,
-		"redemption": redemption,
-	})
+	// referral is only on this route, which only dupli1-order reaches (the
+	// internal listener, service account): order snapshots it onto the order
+	// for the commission report. The public evaluate route never carries it.
+	out := map[string]any{
+		"result":     res.Result,
+		"redemption": res.Redemption,
+	}
+	if res.Referral != nil {
+		out["referral"] = res.Referral
+	}
+	h.respondJSON(w, http.StatusOK, out)
 }
 
 // ConsumePromotion marks an order's reservation paid. Idempotent: payment

@@ -352,6 +352,20 @@ func (s *Service) ListAllOrders(ctx context.Context) ([]domain.Order, error) {
 	return s.presentOrders(orders), nil
 }
 
+// ReferralReport is what each referrer is owed for a KST month ("YYYY-MM",
+// empty for this month); see domain.BuildReferralReport.
+func (s *Service) ReferralReport(ctx context.Context, month string) (domain.ReferralReport, error) {
+	m, err := domain.ParseReferralMonth(month, s.now())
+	if err != nil {
+		return domain.ReferralReport{}, err
+	}
+	orders, err := s.repo.ListReferralActivity(ctx, m.Start, m.End)
+	if err != nil {
+		return domain.ReferralReport{}, err
+	}
+	return domain.BuildReferralReport(m, orders), nil
+}
+
 // SalesReport buckets payments and refunds into weeks or months; see
 // reportperiod.NewRange for how granularity, from and to are read.
 func (s *Service) SalesReport(ctx context.Context, granularity, from, to string) (domain.SalesReport, error) {
