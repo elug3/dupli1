@@ -81,5 +81,5 @@ The test merchant (`dev3.nanopay.co.kr`, shop `240000005`, login `shoptest`) and
 ## Rollout
 
 1. Deploy payment and the storefront. Neither depends on the other: an old storefront still opens the 인증결제 bridge, and the new one shows the form only for a payment with no `checkout_url`.
-2. Set `NANO_ENC_KEY` / `NANO_ENC_IV` and restart payment. New card payments are key-in from then on.
+2. Set `NANO_ENC_KEY` / `NANO_ENC_IV` and restart payment. New card payments are key-in from then on. Step by step for VENUS: [ai-instruct-venus-nano-key-in.md](ai-instruct-venus-nano-key-in.md).
 3. Remove the 인증결제 bridge (`/nano/checkout`, `/nano/return`, `/webhooks/nano`, `BuildRequest`, the return MAC) one release later, once no open payment can still be using it.
