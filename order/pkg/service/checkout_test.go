@@ -27,6 +27,8 @@ type fakePromotionClient struct {
 
 	// refuse, when set, is returned instead of a successful evaluation.
 	refuse *ports.PromotionEvaluation
+	// referral, when set, is what Reserve returns for a referral code.
+	referral *ports.PromotionReferral
 }
 
 func (f *fakePromotionClient) evaluate(promoCtx ports.PromotionContext) *ports.PromotionEvaluation {
@@ -60,7 +62,14 @@ func (f *fakePromotionClient) Reserve(_ context.Context, code, orderID string, p
 		f.reserved = map[string]string{}
 	}
 	f.reserved[orderID] = code
-	return f.evaluate(promoCtx), nil
+	verdict := f.evaluate(promoCtx)
+	if verdict.OK && f.referral != nil {
+		copied := *verdict
+		ref := *f.referral
+		copied.Referral = &ref
+		return &copied, nil
+	}
+	return verdict, nil
 }
 
 func (f *fakePromotionClient) Consume(_ context.Context, orderID string) error {

@@ -53,6 +53,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// would otherwise read "events" as an order id.
 	mux.HandleFunc("/api/v1/orders/events", h.requireAuth(h.orderEvents))
 	mux.HandleFunc("/api/v1/orders/reports/sales", h.requireAuth(h.salesReport))
+	mux.HandleFunc("/api/v1/orders/reports/referrals", h.requireAuth(h.referralReport))
 	mux.HandleFunc("/api/v1/orders", h.requireAuth(h.orders))
 	mux.HandleFunc("/api/v1/orders/", h.requireAuth(h.order))
 }
@@ -193,6 +194,32 @@ func (h *Handler) salesReport(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	report, err := h.svc.SalesReport(r.Context(), q.Get("granularity"), q.Get("from"), q.Get("to"))
 	if errors.Is(err, reportperiod.ErrInvalidRange) {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	respondJSON(w, http.StatusOK, report)
+}
+
+// referralReport serves GET /api/v1/orders/reports/referrals?month=YYYY-MM
+// (KST, default this month): what each referrer is owed for the month's
+// fulfilled referral orders, with 3.3% withheld. Same permission as the sales
+// report.
+func (h *Handler) referralReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims, _ := authjwt.FromContext(r.Context())
+	if h.jwtValidator != nil && !permissions.BypassesOrderReadABAC(claims.Permissions) {
+		respondError(w, http.StatusForbidden, "forbidden: insufficient permission")
+		return
+	}
+	report, err := h.svc.ReferralReport(r.Context(), r.URL.Query().Get("month"))
+	if errors.Is(err, domain.ErrInvalidReferralMonth) {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}

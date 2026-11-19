@@ -55,6 +55,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 |-----|-------|
 | [product-stock-tracking-plan.md](product-stock-tracking-plan.md) | Always-tracked SKUs, PDP `inStock`, cart stock-on-add (implemented) |
 | [product-promo-referral-code-plan.md](product-promo-referral-code-plan.md) | Promotional codes: single-user / global once-each + flexible conditions (Phases 1–3 implemented 2026-09-16; sign-up campaign built, inactive until enabled) |
+| [product-referral-codes.md](product-referral-codes.md) | Secret referral codes: referrer name on the code, unlimited uses, per-code commission, monthly commission report with 3.3% withheld (built 2026-11-19) |
 | [product-promotion-rename.md](product-promotion-rename.md) | `coupon` → `promotion` rename across wire, DB, permissions and both frontends (implemented 2026-09-16; one-release compatibility window) |
 | [product-reviews-plan.md](product-reviews-plan.md) | Product reviews (리뷰): public, buyers of fulfilled orders, photos, moderation (backend implemented 2026-11-08; storefront and console screens not built) |
 

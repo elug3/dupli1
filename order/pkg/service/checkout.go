@@ -284,6 +284,20 @@ func (s *Service) CompleteCheckout(ctx context.Context, sessionID string, input 
 			_, _ = s.CancelOrder(ctx, order.ID)
 			return nil, promotionRejection(verdict)
 		}
+		// A referral code: keep who referred the order and the rate, for
+		// the commission report. Failing to record it rolls the order back,
+		// since a referred order that pays no commission is a broken promise
+		// to the referrer.
+		if ref := verdict.Referral; ref != nil {
+			if err := order.SetReferral(ref.ReferrerName, ref.CommissionBps); err != nil {
+				_, _ = s.CancelOrder(ctx, order.ID)
+				return nil, err
+			}
+			if err := s.repo.Save(ctx, order); err != nil {
+				_, _ = s.CancelOrder(ctx, order.ID)
+				return nil, err
+			}
+		}
 	}
 
 	// Set the points aside the same way, keyed by the order. Too few points

@@ -41,6 +41,12 @@ type PromotionPatch struct {
 	// the rename/upgrade window. See docs/product-promotion-rename.md.
 	Discount *float64
 	Expires  *string
+
+	// ReferrerName and CommissionBps edit a referral code. A code's kind is
+	// fixed when it is created. A new rate applies to orders placed from then
+	// on; orders already placed keep the rate they were placed at.
+	ReferrerName  *string
+	CommissionBps *int
 }
 
 type PromotionStore interface {

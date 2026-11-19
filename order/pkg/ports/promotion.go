@@ -50,6 +50,15 @@ type PromotionEvaluation struct {
 	EligibleSubtotalWon int64    `json:"eligible_subtotal_won"`
 	Reason              string   `json:"reason,omitempty"`
 	SubReason           string   `json:"sub_reason,omitempty"`
+	// Referral is set only by Reserve, and only for a secret referral code:
+	// the referrer and commission rate to snapshot onto the order.
+	Referral *PromotionReferral `json:"referral,omitempty"`
+}
+
+// PromotionReferral is a referral code's terms as product's reserve returns them.
+type PromotionReferral struct {
+	ReferrerName  string `json:"referrer_name"`
+	CommissionBps int    `json:"commission_bps"`
 }
 
 // PromotionClient talks to product, which owns promotional code definitions

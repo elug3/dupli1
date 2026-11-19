@@ -72,6 +72,7 @@ func (s *PromotionService) Create(ctx context.Context, p domain.Promotion) (*dom
 	if p.Scope == "" {
 		p.Scope = domain.ScopeGlobal
 	}
+	p.ReferrerName = strings.TrimSpace(p.ReferrerName)
 	if p.IsTier() {
 		return nil, errTiersRetired
 	}
@@ -225,7 +226,7 @@ func (s *PromotionService) evaluate(ctx context.Context, code string, evalCtx do
 		if err != nil {
 			return domain.EvaluationResult{Reason: domain.ReasonNotEligible, SubReason: domain.SubReasonCondition}
 		}
-		if used >= promotion.EffectiveMaxPerCustomer() {
+		if used >= promotion.CustomerLimit() {
 			return domain.EvaluationResult{Reason: domain.ReasonAlreadyUsed}
 		}
 	}
@@ -277,19 +278,44 @@ func (s *PromotionService) withCatalogAttributes(
 	return out
 }
 
+// Reservation is what Reserve hands order: the ledger row, the verdict, and
+// for a referral code the referrer and commission rate order snapshots onto
+// the order. Referral is nil for an ordinary code.
+type Reservation struct {
+	Redemption *domain.Redemption
+	Result     domain.EvaluationResult
+	Referral   *domain.Referral
+}
+
 // Reserve records a pending use at checkout complete. It re-evaluates first so
 // a reservation can never be created for a cart that does not earn it.
 func (s *PromotionService) Reserve(ctx context.Context, code, orderID string, evalCtx domain.EvaluationContext) (*domain.Redemption, domain.EvaluationResult, error) {
+	res, err := s.ReserveForOrder(ctx, code, orderID, evalCtx)
+	return res.Redemption, res.Result, err
+}
+
+// ReserveForOrder is Reserve with the referral terms of the code, for the
+// internal reserve route order calls.
+func (s *PromotionService) ReserveForOrder(ctx context.Context, code, orderID string, evalCtx domain.EvaluationContext) (Reservation, error) {
+	row, result, promotion, err := s.reserve(ctx, code, orderID, evalCtx)
+	out := Reservation{Redemption: row, Result: result}
+	if err == nil && result.OK && promotion != nil {
+		out.Referral = promotion.ReferralSnapshot()
+	}
+	return out, err
+}
+
+func (s *PromotionService) reserve(ctx context.Context, code, orderID string, evalCtx domain.EvaluationContext) (*domain.Redemption, domain.EvaluationResult, *domain.Promotion, error) {
 	result := s.evaluate(ctx, code, evalCtx, false)
 	if !result.OK {
-		return nil, result, nil
-	}
-	if s.ledger == nil {
-		return nil, result, nil
+		return nil, result, nil, nil
 	}
 	promotion, err := s.store.Get(ctx, domain.NormalizedCode(code))
 	if err != nil {
-		return nil, domain.EvaluationResult{Reason: domain.ReasonInvalidCode}, nil
+		return nil, domain.EvaluationResult{Reason: domain.ReasonInvalidCode}, nil, nil
+	}
+	if s.ledger == nil {
+		return nil, result, promotion, nil
 	}
 
 	row, err := s.ledger.Reserve(ctx, ports.ReserveRedemptionInput{
@@ -301,17 +327,17 @@ func (s *PromotionService) Reserve(ctx context.Context, code, orderID string, ev
 		OrderSubtotalWon:    evalCtx.SubtotalWon(),
 		EligibleSubtotalWon: result.EligibleSubtotalWon,
 		AppliedBenefit:      result.AppliedBenefit,
-	}, promotion.EffectiveMaxPerCustomer())
+	}, promotion.CustomerLimit())
 	if err != nil {
 		if errors.Is(err, ports.ErrConflict) {
 			if ports.IsCampaignExhaustedConflict(err) {
-				return nil, domain.EvaluationResult{Reason: domain.ReasonCampaignExhausted}, nil
+				return nil, domain.EvaluationResult{Reason: domain.ReasonCampaignExhausted}, nil, nil
 			}
-			return nil, domain.EvaluationResult{Reason: domain.ReasonAlreadyUsed}, nil
+			return nil, domain.EvaluationResult{Reason: domain.ReasonAlreadyUsed}, nil, nil
 		}
-		return nil, domain.EvaluationResult{}, err
+		return nil, domain.EvaluationResult{}, nil, err
 	}
-	return row, result, nil
+	return row, result, promotion, nil
 }
 
 // Consume marks an order's reservation paid.
@@ -375,8 +401,14 @@ func validateDefinition(p domain.Promotion) error {
 	// A definition may carry no benefit document only while the legacy
 	// percentage column is still meaningful; otherwise it must be explicit.
 	if p.Benefit.IsZero() {
+		if p.IsReferral() {
+			return ports.Invalid("a referral code needs a benefit")
+		}
 		if p.Discount <= 0 || p.Discount >= 1 {
 			return ports.Invalid("a benefit is required (discount_fraction must be between 0 and 1 exclusive)")
+		}
+		if err := domain.ValidateReferral(p); err != nil {
+			return ports.Invalid(err.Error())
 		}
 		return nil
 	}
@@ -388,6 +420,9 @@ func validateDefinition(p domain.Promotion) error {
 	}
 	if p.MaxPerCustomer < 0 {
 		return ports.Invalid("max_per_customer cannot be negative")
+	}
+	if err := domain.ValidateReferral(p); err != nil {
+		return ports.Invalid(err.Error())
 	}
 	return nil
 }
@@ -423,6 +458,12 @@ func applyPatchForValidation(p *domain.Promotion, patch ports.PromotionPatch) {
 	}
 	if patch.Discount != nil {
 		p.Discount = *patch.Discount
+	}
+	if patch.ReferrerName != nil {
+		p.ReferrerName = strings.TrimSpace(*patch.ReferrerName)
+	}
+	if patch.CommissionBps != nil {
+		p.CommissionBps = *patch.CommissionBps
 	}
 }
 
