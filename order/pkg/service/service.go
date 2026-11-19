@@ -366,6 +366,22 @@ func (s *Service) ReferralReport(ctx context.Context, month string) (domain.Refe
 	return domain.BuildReferralReport(m, orders), nil
 }
 
+// ReferralCodeHistory is one referral code's paid orders and the commission
+// it earned per KST month; see domain.BuildReferralCodeHistory. A code with
+// no paid referred orders gives an empty history, not an error: order cannot
+// tell an unused code from an unknown one.
+func (s *Service) ReferralCodeHistory(ctx context.Context, code string) (domain.ReferralCodeHistory, error) {
+	code, err := domain.NormalizeReferralCode(code)
+	if err != nil {
+		return domain.ReferralCodeHistory{}, err
+	}
+	orders, err := s.repo.ListReferralOrdersByCode(ctx, code)
+	if err != nil {
+		return domain.ReferralCodeHistory{}, err
+	}
+	return domain.BuildReferralCodeHistory(code, orders), nil
+}
+
 // SalesReport buckets payments and refunds into weeks or months; see
 // reportperiod.NewRange for how granularity, from and to are read.
 func (s *Service) SalesReport(ctx context.Context, granularity, from, to string) (domain.SalesReport, error) {

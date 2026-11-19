@@ -1508,3 +1508,31 @@ func TestReferralReport_NeedsOrderReadAll(t *testing.T) {
 		t.Fatalf("bad month status = %d, want 400", w.Code)
 	}
 }
+
+func TestReferralCodeHistory_NeedsOrderReadAll(t *testing.T) {
+	h, _ := newTestHandler(t)
+	mux := newMux(h)
+
+	w := do(t, mux, http.MethodGet, "/api/v1/orders/reports/referrals/codes/HUH15", makeToken(t, "u-1", nil), nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("customer status = %d, want 403; body: %s", w.Code, w.Body.String())
+	}
+	token := makeToken(t, "mgr-1", []string{permissions.OrderReadAll})
+	w = do(t, mux, http.MethodGet, "/api/v1/orders/reports/referrals/codes/huh15", token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var hist domain.ReferralCodeHistory
+	if err := json.NewDecoder(w.Body).Decode(&hist); err != nil {
+		t.Fatal(err)
+	}
+	if hist.Code != "HUH15" || hist.Orders == nil || hist.Months == nil || hist.WithholdingBps != 330 {
+		t.Fatalf("history = %+v", hist)
+	}
+	if w = do(t, mux, http.MethodGet, "/api/v1/orders/reports/referrals/codes/", token, nil); w.Code != http.StatusBadRequest {
+		t.Fatalf("empty code status = %d, want 400", w.Code)
+	}
+	if w = do(t, mux, http.MethodGet, "/api/v1/orders/reports/referrals/codes/A/B", token, nil); w.Code != http.StatusNotFound {
+		t.Fatalf("nested status = %d, want 404", w.Code)
+	}
+}

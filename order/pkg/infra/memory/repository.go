@@ -292,6 +292,29 @@ func (r *Repository) ListReferralActivity(ctx context.Context, start, end time.T
 	return orders, nil
 }
 
+func (r *Repository) ListReferralOrdersByCode(ctx context.Context, code string) ([]domain.Order, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	orders := make([]domain.Order, 0)
+	for _, order := range r.orders {
+		if order.ReferrerName != "" && order.PromotionCode == code && order.PaidAt != nil {
+			orders = append(orders, *r.readOrder(order))
+		}
+	}
+	sort.Slice(orders, func(i, j int) bool {
+		if !orders[i].PaidAt.Equal(*orders[j].PaidAt) {
+			return orders[i].PaidAt.After(*orders[j].PaidAt)
+		}
+		return orders[i].ID < orders[j].ID
+	})
+	return orders, nil
+}
+
 func (r *Repository) ListSalesActivity(ctx context.Context, start, end time.Time) ([]domain.Order, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
