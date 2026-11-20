@@ -7,11 +7,6 @@ import "time"
 // DUPLI1_ORDER_SHIPPING_FEE_KRW / DUPLI1_ORDER_SHIPPING_FEE_CENTS aliases) are not set.
 const DefaultShippingFeeWon int64 = 0
 
-// DefaultCardSurchargeBps is the card surcharge, in basis points of what an
-// order otherwise costs (1000 = 10%), applied when
-// DUPLI1_ORDER_CARD_SURCHARGE_BPS is not set.
-const DefaultCardSurchargeBps int64 = 1000
-
 // DefaultInspectionVideoBucket is the private bucket inspection videos go in
 // when DUPLI1_ORDER_S3_BUCKET is not set.
 const DefaultInspectionVideoBucket = "order-inspection-videos"
@@ -45,11 +40,6 @@ type ServerOptions struct {
 	// delivery.
 	ShippingFeeWon int64
 
-	// CardSurchargeBps is added to an order paid by card, in basis points of
-	// the goods after discounts plus delivery (1000 = 10%). Set
-	// DUPLI1_ORDER_CARD_SURCHARGE_BPS to change it; 0 turns it off.
-	CardSurchargeBps int64
-
 	// Inspection video (검수영상) storage: MinIO or any S3 API, private
 	// bucket. Endpoint unset means uploads answer 503 and nothing can ship.
 	// Env: DUPLI1_ORDER_S3_ENDPOINT, DUPLI1_ORDER_S3_ACCESS_KEY,
@@ -78,10 +68,8 @@ func NewServerOptions() *ServerOptions {
 		ProductURL: "http://localhost:8081",
 		// Free delivery by default; set DUPLI1_ORDER_SHIPPING_FEE_WON to charge.
 		ShippingFeeWon: DefaultShippingFeeWon,
-		// 10% on card payments; DUPLI1_ORDER_CARD_SURCHARGE_BPS overrides.
-		CardSurchargeBps: DefaultCardSurchargeBps,
-		S3Bucket:         DefaultInspectionVideoBucket,
-		ReadTimeout:      5 * time.Second,
+		S3Bucket:       DefaultInspectionVideoBucket,
+		ReadTimeout:    5 * time.Second,
 		// WriteTimeout covers paid cancel, which waits on NANO through payment.
 		WriteTimeout:    25 * time.Second,
 		IdleTimeout:     120 * time.Second,

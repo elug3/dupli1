@@ -25,9 +25,10 @@ func BuildSettings(cfg Config) settings.Response {
 		// apply, instead of hardcoding their own copy that can drift from it.
 		// Whole KRW; 0 means free delivery.
 		"shipping_fee_won": cfg.ShippingFeeWon,
-		// Card surcharge in basis points (1000 = 10%) of the goods after
-		// discounts plus delivery, rounded down to the won. 0 means none.
-		"card_surcharge_bps": cfg.CardSurchargeBps,
+		// The card surcharge was removed (SER-110); still published as 0 for
+		// one release so a storefront that quotes a surcharge line from it
+		// shows none. Remove once dupli1-web stops reading it.
+		"card_surcharge_bps": int64(0),
 		// Largest inspection video upload accepted, in bytes.
 		"inspection_video_max_bytes": inspectionVideoMaxBytes(cfg),
 	}

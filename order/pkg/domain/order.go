@@ -96,16 +96,17 @@ type Order struct {
 	// ShippingFeeWon is the delivery charge in whole KRW, captured at order
 	// creation so a later config change never re-prices a placed order.
 	ShippingFeeWon int64 `json:"shipping_fee_won"`
-	// PaymentMethod is what the order was priced for: credit_card or bypass
-	// (staff recording an offline payment). Empty on orders placed before
-	// the card surcharge existed.
+	// PaymentMethod is how the order is paid: credit_card or bypass (staff
+	// recording an offline payment). Empty on orders placed before order
+	// recorded a method.
 	PaymentMethod string `json:"payment_method,omitempty"`
 	// CardSurchargeWon is the card surcharge, in whole KRW, already included
-	// in TotalWon. Zero for any other method.
+	// in TotalWon. Only orders placed before SER-110 (2026-11-20) removed the
+	// 10% card surcharge have one; every new order records 0. Kept so those
+	// orders still show and report what they were charged.
 	CardSurchargeWon int64 `json:"card_surcharge_won"`
 	// PointsWon is the store credit (1 P = ₩1) the shopper paid part of the
-	// goods with. It is already taken off TotalWon, before the card surcharge,
-	// so payment charges and refunds only the money part; payment holds the
+	// goods with. It is already taken off TotalWon, so payment charges and refunds only the money part; payment holds the
 	// points themselves (docs/payment-points.md).
 	PointsWon int64 `json:"points_won"`
 	// ReferrerName and ReferralCommissionBps are set when the order used a
@@ -260,8 +261,7 @@ func (o *Order) SetReferral(referrerName string, commissionBps int) error {
 
 // ApplyPoints takes points off a new order's goods. Points pay for goods only,
 // after every discount, never delivery, so the most an order can take is
-// SubtotalWon - DiscountWon. It runs before ApplyPaymentMethod, so the card
-// surcharge falls only on what is left to pay by card.
+// SubtotalWon - DiscountWon. It runs before ApplyPaymentMethod.
 func (o *Order) ApplyPoints(points int64) error {
 	if points < 0 || o.Status != StatusPending || o.PaymentMethod != "" || o.PointsWon != 0 {
 		return ErrInvalidOrder

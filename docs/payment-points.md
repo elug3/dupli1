@@ -84,12 +84,12 @@ The hold routes are internal APIs ([permissions.md](permissions.md#internal-apis
 The shopper sends `points_won` with checkout complete (`POST /api/v1/orders/checkout/sessions/{id}/complete`). Order:
 
 1. Trims it to the goods after every discount (`subtotal_won − discount_won`). Points never pay delivery, so "use all" can send the whole balance.
-2. Prices the order: goods − discounts − points + delivery, then the card surcharge on that (`CardSurchargeWon(total − points)`). It stores `points_won`, already off `total_won`, so payment charges and refunds only the money part.
+2. Prices the order: goods − discounts − points + delivery (no card surcharge since SER-110). It stores `points_won`, already off `total_won`, so payment charges and refunds only the money part.
 3. Reserves the points in payment, keyed by the order. Too few (`409 insufficient_points`) rolls the order back, like a code spent in the meantime; the session stays open.
 4. Consumes the hold when the order is paid, next to the code's consume.
 5. Releases the hold on **every** cancel, shipped or not: points are money, and a shipped cancel refunds the card part too. Payment also releases it on the `canceled` event, so either one is enough.
 
-**Paid in full with points.** With free delivery and points covering the goods the total is ₩0: no surcharge, nothing to charge. The storefront still calls `POST /api/v1/payments`; payment records a succeeded `method: points`, `provider: points` payment of ₩0 (no PG, no `checkout_url`) and publishes `payment.succeeded`, so order moves to paid the usual way. A cancel refunds nothing by card and gives the points back. The payments table allows `amount_won = 0` for this (migrated on startup).
+**Paid in full with points.** With free delivery and points covering the goods the total is ₩0: nothing to charge. The storefront still calls `POST /api/v1/payments`; payment records a succeeded `method: points`, `provider: points` payment of ₩0 (no PG, no `checkout_url`) and publishes `payment.succeeded`, so order moves to paid the usual way. A cancel refunds nothing by card and gives the points back. The payments table allows `amount_won = 0` for this (migrated on startup).
 
 **Earning** still uses the hold: an order earns on goods after discounts less the points it used. `order.*` events also carry `points_won`.
 

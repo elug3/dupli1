@@ -12,7 +12,7 @@ var (
 	ErrPaymentForbidden  = errors.New("payment method not allowed")
 	ErrMethodUnavailable = errors.New("payment method not available")
 	// ErrMethodMismatch means the order was priced for another payment
-	// method: a card payment on an order priced without the card surcharge.
+	// method: a card payment on an order placed for bypass.
 	ErrMethodMismatch = errors.New("order was priced for a different payment method")
 	// ErrCancelUnsupported means the provider behind this payment has no cancel
 	// API (or is not configured), so any refund must be made out of band.
@@ -27,9 +27,10 @@ type OrderSummary struct {
 	CustomerID string
 	Status     string
 	TotalWon   int64
-	// PaymentMethod is what order priced the order for (credit_card carries
-	// the card surcharge in TotalWon, bypass does not). Empty on orders placed
-	// before order recorded it.
+	// PaymentMethod is what the order was placed for: credit_card or bypass.
+	// Card orders placed before SER-110 carry the old card surcharge in
+	// TotalWon; newer ones do not. Empty on orders placed before order
+	// recorded it.
 	PaymentMethod   string
 	RecipientName   string
 	RecipientPhone  string

@@ -9,8 +9,8 @@ import (
 	"github.com/elug3/dupli1/payment/pkg/service"
 )
 
-// An order priced for bypass has no card surcharge in its total, so a card
-// checkout on it is refused rather than charging the card without one.
+// An order placed for bypass is paid offline by staff, so a card checkout on
+// it is refused.
 func TestCreatePayment_CardRefusedOnBypassPricedOrder(t *testing.T) {
 	orders := stubOrderClient{order: &ports.OrderSummary{
 		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalWon: 4200, PaymentMethod: "bypass",
@@ -25,7 +25,7 @@ func TestCreatePayment_CardRefusedOnBypassPricedOrder(t *testing.T) {
 	}
 }
 
-// A card-priced order charges its total, which already holds the surcharge.
+// A card order charges exactly its total.
 func TestCreatePayment_CardOnCardPricedOrderChargesTotal(t *testing.T) {
 	orders := stubOrderClient{order: &ports.OrderSummary{
 		ID: "ord_1", CustomerID: "cust_1", Status: "pending", TotalWon: 11000, PaymentMethod: "credit_card",

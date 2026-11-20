@@ -29,7 +29,6 @@ func TestBootstrapConfig_CarriesEveryMatchingOption(t *testing.T) {
 		JWKSURL:                 "http://auth.test/jwks.json",
 		NATSURL:                 "nats://nats.test:4222",
 		ShippingFeeWon:          30000,
-		CardSurchargeBps:        1000,
 		S3Endpoint:              "http://minio.test:9000",
 		S3AccessKey:             "access",
 		S3SecretKey:             "secret",

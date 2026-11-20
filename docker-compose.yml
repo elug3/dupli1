@@ -310,7 +310,6 @@ services:
       # Flat per-order delivery charge in whole KRW. Unset is 0 (free delivery).
       # DUPLI1_ORDER_SHIPPING_FEE_KRW and DUPLI1_ORDER_SHIPPING_FEE_CENTS are deprecated aliases.
       DUPLI1_ORDER_SHIPPING_FEE_WON: ${DUPLI1_ORDER_SHIPPING_FEE_WON:-${DUPLI1_ORDER_SHIPPING_FEE_KRW:-${DUPLI1_ORDER_SHIPPING_FEE_CENTS:-0}}}
-      DUPLI1_ORDER_CARD_SURCHARGE_BPS: ${DUPLI1_ORDER_CARD_SURCHARGE_BPS:-1000}
       # Inspection videos (검수영상) go in a private MinIO bucket; shipping
       # needs one. docs/order-inspection-video.md
       DUPLI1_ORDER_S3_ENDPOINT: http://minio:9000

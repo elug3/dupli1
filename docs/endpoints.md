@@ -543,7 +543,7 @@ Requires `Authorization: Bearer <access_token>` when `AUTH_JWKS_URL` or `JWT_SEC
 | `DELETE` | `/api/v1/orders/checkout/sessions/{id}/items/{sku}` | ABAC / `order.create` | Remove item (also `…/items/by-sku-id/{skuId}`) |
 | `POST` | `/api/v1/orders/checkout/sessions/{id}/promotion` | ABAC / `order.create` | Apply a promotional code (pre-rename: `…/coupon`) |
 | `DELETE` | `/api/v1/orders/checkout/sessions/{id}/promotion` | ABAC / `order.create` | Remove the applied code |
-| `POST` | `/api/v1/orders/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout; `payment_method` `credit_card` (default, adds the card surcharge) or `bypass` (`payment.bypass`); `422` + `unavailable_items` when variants invalid |
+| `POST` | `/api/v1/orders/checkout/sessions/{id}/complete` | ABAC / `order.create` | Complete checkout; `payment_method` `credit_card` (default) or `bypass` (`payment.bypass`); `422` + `unavailable_items` when variants invalid |
 | `POST` | `/api/v1/orders` | ABAC / `order.create` | Create a new order |
 | `GET` | `/api/v1/orders` | `order.read.all` | List all orders |
 | `GET` | `/api/v1/orders/events` | `order.read.all` | Live order stream (SSE): a snapshot per change, `Last-Event-ID` replay, 20s heartbeat — [order-live-events.md](order-live-events.md) |
@@ -688,8 +688,8 @@ Order object shape:
   "tier_discount_won": 0,
   "shipping_fee_won": 0,
   "payment_method": "credit_card",
-  "card_surcharge_won": 990,
-  "total_won": 10890,
+  "card_surcharge_won": 0,
+  "total_won": 9900,
   "payment_due_at": "...",
   "paid_at": "...",
   "confirmed_at": "...",

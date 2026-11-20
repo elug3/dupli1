@@ -35,7 +35,6 @@ func BootstrapConfig(opts ServerOptions) bootstrap.Config {
 		JWKSURL:                 opts.JWKSURL,
 		NATSURL:                 opts.NATSURL,
 		ShippingFeeWon:          opts.ShippingFeeWon,
-		CardSurchargeBps:        opts.CardSurchargeBps,
 		S3Endpoint:              opts.S3Endpoint,
 		S3AccessKey:             opts.S3AccessKey,
 		S3SecretKey:             opts.S3SecretKey,
