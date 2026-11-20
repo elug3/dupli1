@@ -8,8 +8,8 @@ import (
 	"github.com/elug3/dupli1/shared/pkg/permissions"
 )
 
-// A bypass order carries no card surcharge, so only someone who can then mark
-// it paid by bypass may price one. Otherwise a shopper could skip the surcharge.
+// Payment refuses a card payment on a bypass order, so only someone who can
+// then mark it paid by bypass may price one.
 func TestCreateOrder_BypassMethodNeedsPaymentBypass(t *testing.T) {
 	h, _ := newTestHandler(t)
 	mux := newMux(h)

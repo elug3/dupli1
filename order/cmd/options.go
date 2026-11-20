@@ -103,7 +103,7 @@ func applyEnv(opts *order.ServerOptions) {
 		opts.DatabaseConnString = v
 	}
 	applyShippingFeeEnv(opts)
-	applyCardSurchargeEnv(opts)
+	warnRemovedCardSurchargeEnv()
 	applyInspectionVideoEnv(opts)
 	if v := os.Getenv("DUPLI1_ORDER_NATS_URL"); v != "" {
 		opts.NATSURL = v
@@ -139,21 +139,13 @@ func applyShippingFeeEnv(opts *order.ServerOptions) {
 	opts.ShippingFeeWon = won
 }
 
-// applyCardSurchargeEnv reads DUPLI1_ORDER_CARD_SURCHARGE_BPS, the card
-// surcharge in basis points (1000 = 10%, 0 = none). Invalid or negative values
-// are logged and ignored so the compiled default stays in place.
-func applyCardSurchargeEnv(opts *order.ServerOptions) {
-	const name = "DUPLI1_ORDER_CARD_SURCHARGE_BPS"
-	v := os.Getenv(name)
-	if v == "" {
-		return
+// warnRemovedCardSurchargeEnv logs when DUPLI1_ORDER_CARD_SURCHARGE_BPS is
+// still set. The card surcharge was removed (SER-110) and the variable does
+// nothing; the log says so rather than leaving an operator to think it applies.
+func warnRemovedCardSurchargeEnv() {
+	if v := os.Getenv("DUPLI1_ORDER_CARD_SURCHARGE_BPS"); v != "" {
+		log.Printf("order: ignoring DUPLI1_ORDER_CARD_SURCHARGE_BPS=%q: the card surcharge was removed, card orders cost the same as any other", v)
 	}
-	bps, err := strconv.ParseInt(v, 10, 64)
-	if err != nil || bps < 0 {
-		log.Printf("order: ignoring invalid %s=%q", name, v)
-		return
-	}
-	opts.CardSurchargeBps = bps
 }
 
 // applyInspectionVideoEnv reads the object storage for inspection videos and

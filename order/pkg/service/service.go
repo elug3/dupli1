@@ -46,9 +46,6 @@ type Service struct {
 	// whole KRW. Zero (the default) means delivery is free, which keeps the
 	// service safe to run unconfigured.
 	shippingFeeKRW int64
-	// cardSurchargeBps is the card surcharge in basis points (1000 = 10%)
-	// added to an order paid by card. Zero means no surcharge.
-	cardSurchargeBps int64
 	// videos stores inspection videos; nil means uploads answer
 	// ErrInspectionVideoStorageUnavailable (and nothing can ship).
 	videos ports.InspectionVideoStore
@@ -74,9 +71,9 @@ type CreateOrderInput struct {
 	// current amount.
 	ShippingFeeWon *int64
 	// PaymentMethod is how the order will be paid: credit_card (the default
-	// when empty, and the one that carries the card surcharge) or bypass.
+	// when empty) or bypass.
 	PaymentMethod string
-	// PointsWon is store credit taken off the goods before the surcharge.
+	// PointsWon is store credit taken off the goods.
 	// Only checkout complete sets it, after setting the points aside is
 	// arranged; a direct POST /orders never spends points.
 	PointsWon int64
@@ -171,18 +168,6 @@ func (s *Service) WithShippingFee(krw int64) *Service {
 		return s
 	}
 	s.shippingFeeKRW = krw
-	return s
-}
-
-// WithCardSurcharge sets the surcharge added to an order paid by card, in basis
-// points of what the order otherwise costs (1000 = 10%). A negative value is
-// ignored so a misconfigured rate cannot discount card orders.
-func (s *Service) WithCardSurcharge(bps int64) *Service {
-	if bps < 0 {
-		log.Printf("order: ignoring negative card surcharge %d bps", bps)
-		return s
-	}
-	s.cardSurchargeBps = bps
 	return s
 }
 
@@ -287,7 +272,7 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput) (*dom
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}
-	if err := order.ApplyPaymentMethod(input.PaymentMethod, s.cardSurchargeBps); err != nil {
+	if err := order.ApplyPaymentMethod(input.PaymentMethod); err != nil {
 		_ = s.stock.ReleaseReservation(ctx, reservationID)
 		return nil, err
 	}

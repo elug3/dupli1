@@ -474,7 +474,7 @@ func TestApplyPointsCoversGoodsOnly(t *testing.T) {
 	if err := o.ApplyPoints(1); err == nil {
 		t.Fatal("second ApplyPoints accepted")
 	}
-	if err := o.ApplyPaymentMethod("", 1000); err != nil || o.CardSurchargeWon != 300 {
-		t.Fatalf("surcharge = %d, %v, want 300 on delivery only", o.CardSurchargeWon, err)
+	if err := o.ApplyPaymentMethod(""); err != nil || o.CardSurchargeWon != 0 || o.TotalWon != 3000 {
+		t.Fatalf("surcharge/total = %d/%d, %v, want 0/3000", o.CardSurchargeWon, o.TotalWon, err)
 	}
 }

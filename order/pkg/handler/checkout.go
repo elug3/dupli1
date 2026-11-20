@@ -270,9 +270,8 @@ func checkoutSessionPathParts(path string) []string {
 }
 
 // mayPriceForMethod refuses an order priced for bypass to anyone who could not
-// then pay it by bypass. Bypass carries no card surcharge, and payment refuses
-// a card payment on a bypass order, so without this a shopper could still
-// price an order surcharge-free and be left with one they cannot pay.
+// then pay it by bypass. Payment refuses a card payment on a bypass order, so
+// without this a shopper could be left with an order they cannot pay.
 func (h *Handler) mayPriceForMethod(w http.ResponseWriter, claims authjwt.Claims, method string) bool {
 	m, err := domain.NormalizePaymentMethod(method)
 	if err != nil {

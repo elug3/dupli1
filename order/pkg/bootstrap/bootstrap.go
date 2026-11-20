@@ -50,9 +50,6 @@ type Config struct {
 	// ShippingFeeWon is the flat delivery charge added to every order, in
 	// whole KRW. Zero means free delivery.
 	ShippingFeeWon int64
-	// CardSurchargeBps is added to an order paid by card, in basis points
-	// (1000 = 10%). Zero means no surcharge.
-	CardSurchargeBps int64
 
 	// Inspection video storage (MinIO / S3 API). Empty S3Endpoint: uploads
 	// answer 503 and, since shipping needs a video, nothing ships.
@@ -155,7 +152,6 @@ func Bootstrap(cfg Config) (*App, error) {
 	svc = service.NewWithCheckout(repo, stock, promotionClient, 0, eventPublisher).
 		WithProduct(product).
 		WithShippingFee(cfg.ShippingFeeWon).
-		WithCardSurcharge(cfg.CardSurchargeBps).
 		WithPayment(payment).
 		WithPaymentMethodGate(payment).
 		WithPoints(httppoints.NewClient(apiBase, cfg.HTTPClient, stockTokenSource))

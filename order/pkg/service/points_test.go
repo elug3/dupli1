@@ -53,7 +53,6 @@ func pointsService(points ports.PointsClient, shippingFee int64) (*service.Servi
 	svc := service.NewWithCheckout(memory.NewRepository(), &fakeStock{reservationID: "res-1"}, nil, 0).
 		WithProduct(&fakeProduct{defaultKRW: 10000}).
 		WithShippingFee(shippingFee).
-		WithCardSurcharge(1000).
 		WithPayment(pay)
 	if points != nil {
 		svc = svc.WithPoints(points)
@@ -62,8 +61,8 @@ func pointsService(points ports.PointsClient, shippingFee int64) (*service.Servi
 }
 
 // ₩10,000 of goods, 4,000 P, ₩3,000 delivery: the card pays 6,000 + 3,000 =
-// 9,000, plus 10% on that = 9,900. The surcharge never falls on the points.
-func TestCompleteCheckout_PointsComeOffBeforeSurcharge(t *testing.T) {
+// 9,000, with no card surcharge on top.
+func TestCompleteCheckout_PointsComeOffTheGoods(t *testing.T) {
 	ctx := t.Context()
 	points := newFakePoints(5000)
 	svc, _ := pointsService(points, 3000)
@@ -76,14 +75,14 @@ func TestCompleteCheckout_PointsComeOffBeforeSurcharge(t *testing.T) {
 		t.Fatalf("CompleteCheckout: %v", err)
 	}
 	o := result.Order
-	if o.PointsWon != 4000 || o.CardSurchargeWon != 900 || o.TotalWon != 9900 {
-		t.Fatalf("points/surcharge/total = %d/%d/%d, want 4000/900/9900", o.PointsWon, o.CardSurchargeWon, o.TotalWon)
+	if o.PointsWon != 4000 || o.CardSurchargeWon != 0 || o.TotalWon != 9000 {
+		t.Fatalf("points/surcharge/total = %d/%d/%d, want 4000/0/9000", o.PointsWon, o.CardSurchargeWon, o.TotalWon)
 	}
 	if points.reserved[o.ID] != 4000 {
 		t.Fatalf("reserved = %v, want 4000 on %s", points.reserved, o.ID)
 	}
 
-	if _, err := svc.MarkOrderPaid(ctx, o.ID, "pay-1", 9900); err != nil {
+	if _, err := svc.MarkOrderPaid(ctx, o.ID, "pay-1", 9000); err != nil {
 		t.Fatalf("MarkOrderPaid: %v", err)
 	}
 	if len(points.consumed) != 1 || points.consumed[0] != o.ID {
@@ -105,7 +104,7 @@ func TestCompleteCheckout_PointsTrimmedToGoods(t *testing.T) {
 		t.Fatalf("CompleteCheckout: %v", err)
 	}
 	o := result.Order
-	if o.PointsWon != 10000 || o.TotalWon != 3300 {
+	if o.PointsWon != 10000 || o.TotalWon != 3000 {
 		t.Fatalf("points/total = %d/%d, want 10000/3300", o.PointsWon, o.TotalWon)
 	}
 }
@@ -153,8 +152,7 @@ func TestCompleteCheckout_PointsNeedTheLedger(t *testing.T) {
 	}
 }
 
-// Paid entirely in points with free delivery: a ₩0 order, no card surcharge,
-// and a cancel gives the points back without asking payment for a refund.
+// Paid entirely in points with free delivery: a ₩0 order, and a cancel gives the points back without asking payment for a refund.
 func TestPointsOnlyOrderCancelReturnsPoints(t *testing.T) {
 	ctx := t.Context()
 	points := newFakePoints(10000)

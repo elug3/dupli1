@@ -23,13 +23,17 @@ func TestOrderTierSurvivesEveryReadPath(t *testing.T) {
 	if err := order.SetTier("VIP", 20000); err != nil {
 		t.Fatalf("SetTier: %v", err)
 	}
-	// Points and the card surcharge ride the same read paths.
+	// Points and the card surcharge ride the same read paths. New orders have
+	// no surcharge since SER-110; this one stands in for an order placed
+	// before, which must still read back what it was charged.
 	if err := order.ApplyPoints(10000); err != nil {
 		t.Fatalf("ApplyPoints: %v", err)
 	}
-	if err := order.ApplyPaymentMethod("credit_card", 1000); err != nil {
+	if err := order.ApplyPaymentMethod("credit_card"); err != nil {
 		t.Fatalf("ApplyPaymentMethod: %v", err)
 	}
+	order.CardSurchargeWon = 16000
+	order.TotalWon += order.CardSurchargeWon
 	if err := repo.Save(ctx, order); err != nil {
 		t.Fatalf("Save: %v", err)
 	}

@@ -123,9 +123,9 @@ All order JSON / DB money uses **whole KRW won** with the `*_won` suffix (`subto
 
 **Shipping fee:** flat per-order charge from `DUPLI1_ORDER_SHIPPING_FEE_WON` (deprecated aliases `DUPLI1_ORDER_SHIPPING_FEE_KRW`, `DUPLI1_ORDER_SHIPPING_FEE_CENTS`; default **0**, free delivery). Snapshotted on the checkout session at open; `complete` charges the quoted fee. Promotional codes discount goods only — total never drops below shipping unless shipping is also discounted (future promo work).
 
-**Card surcharge:** a card order (`payment_method: credit_card`, the default) adds `DUPLI1_ORDER_CARD_SURCHARGE_BPS` (default 1000 = 10%) of `subtotal - discount + shipping`, rounded down, as `card_surcharge_won` inside `total_won`; `bypass` orders have none. See [checkout-session.md](checkout-session.md).
+**Payment method:** an order records `payment_method` (`credit_card`, the default, or `bypass`). There is no card surcharge since SER-110 (2026-11-20): new orders have `card_surcharge_won: 0`, and orders placed before keep the 10% they were charged inside `total_won`. See [checkout-session.md](checkout-session.md).
 
-**Points:** `points_won` on checkout complete pays part of the goods (never delivery) with points; it comes off before the surcharge, is stored on the order and in `order.*` events, and is held in payment's ledger (reserve at complete, consume on paid, release on any cancel). See [payment-points.md](payment-points.md).
+**Points:** `points_won` on checkout complete pays part of the goods (never delivery) with points; it comes off the total, is stored on the order and in `order.*` events, and is held in payment's ledger (reserve at complete, consume on paid, release on any cancel). See [payment-points.md](payment-points.md).
 
 Client-sent `unit_price_won` on create/checkout is **ignored**; prices are resolved server-side from product.
 
