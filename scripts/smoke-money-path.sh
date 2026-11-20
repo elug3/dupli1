@@ -86,6 +86,19 @@ for svc in gateway/health api/v1/auth/health api/v1/products/health api/v1/order
   check "$svc" "$(status_of GET "/$svc")" 200
 done
 
+step "Card payments are priced"
+# The customer's order is priced for a card (the default method) and then paid
+# by manager Bypass. Order refuses to price a card order while payment reports
+# credit_card unavailable, which it does when NANO_* is unset. For a dev stack,
+# placeholder NANO_API_KEY / NANO_SHOPCODE / NANO_LOGIN_ID (and a NANO_BASE_URL
+# that goes nowhere) make it available; nothing here calls NANO.
+card_available=$(api GET /api/v1/payments/methods | field '[m for m in d["methods"] if m["method"]=="credit_card"][0]["available"]')
+if [ "$card_available" != "True" ]; then
+  fail "credit_card is not available at $BASE/api/v1/payments/methods; start payment with placeholder NANO_API_KEY, NANO_SHOPCODE, NANO_LOGIN_ID and NANO_BASE_URL=http://127.0.0.1:9"
+  exit 1
+fi
+pass "credit_card available"
+
 step "Manager sign-in"
 OWNER=$(access_token "$OWNER_EMAIL" "$OWNER_PASSWORD")
 if [ -z "$OWNER" ]; then
@@ -235,7 +248,8 @@ check "soldCount incremented" \
   "$(api GET "/api/v1/products/$PRODUCT_ID" | field 'd.get("soldCount",0)')" \
   "$((sold_before + QUANTITY))"
 
-step "Fulfil, and reject the removed status"
+step "Deliver, fulfil, and reject the removed status"
+check "delivered" "$(api POST "/api/v1/orders/$ORDER_ID/deliver" "$OWNER" | field 'd["status"]')" delivered
 check "fulfilled" "$(api PUT "/api/v1/orders/$ORDER_ID/status" "$OWNER" '{"status":"fulfilled"}' \
   | field 'd["status"]')" fulfilled
 check "confirmed rejected" \
