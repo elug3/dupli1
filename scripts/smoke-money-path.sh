@@ -9,9 +9,13 @@
 # on ship, soldCount tracks the commit, payment bypass stays manager-only, and the
 # removed `confirmed` status is rejected.
 #
-# Usage:
-#   BASE=http://localhost:8080 scripts/smoke-money-path.sh          # creates a test product
-#   BASE=https://dupli1.com SKU_ID=01J... scripts/smoke-money-path.sh  # uses an existing variant
+# Usage (local dev stack only):
+#   BASE=http://localhost:8080 scripts/smoke-money-path.sh               # creates a test product
+#   BASE=http://localhost:8080 SKU_ID=01J... scripts/smoke-money-path.sh  # uses an existing variant
+#
+# It writes real data, so it refuses a non-local BASE and VENUS
+# (scripts/lib-smoke-guard.sh) unless SMOKE_ALLOW_REAL_DATA=yes. To check a
+# production deploy, use the read-only checks in docs/deployment-venus.md.
 #
 # Environment:
 #   BASE            gateway base URL (default http://localhost:8080)
@@ -25,6 +29,9 @@
 set -uo pipefail
 
 BASE=${BASE:-http://localhost:8080}
+# shellcheck source=scripts/lib-smoke-guard.sh
+. "$(dirname "$0")/lib-smoke-guard.sh"
+smoke_guard "$BASE"
 OWNER_EMAIL=${OWNER_EMAIL:-admin@dupli1.com}
 OWNER_PASSWORD=${OWNER_PASSWORD:-password}
 QUANTITY=${QUANTITY:-1}

@@ -43,6 +43,9 @@
 set -uo pipefail
 
 BASE=${BASE:-http://localhost:8080}
+# shellcheck source=scripts/lib-smoke-guard.sh
+. "$(dirname "$0")/lib-smoke-guard.sh"
+smoke_guard "$BASE"
 OWNER_EMAIL=${OWNER_EMAIL:-admin@dupli1.com}
 OWNER_PASSWORD=${OWNER_PASSWORD:-password}
 CODE=${CODE:-WELCOME50}
