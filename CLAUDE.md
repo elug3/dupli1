@@ -35,7 +35,10 @@ cd auth && go build ./cmd/
 sudo dockerd >/tmp/dockerd.log 2>&1 &   # daemon does not autostart on this VM
 sudo docker compose up --build
 
-# End-to-end money path smoke test (stack must be running)
+# End-to-end money path smoke test (local dev stack must be running). It
+# writes a product, a customer and an order, so it refuses VENUS and any
+# non-local BASE (scripts/lib-smoke-guard.sh). Production deploys are checked
+# read-only: docs/deployment-venus.md → "Checking a deploy without writing data"
 BASE=http://localhost:8080 scripts/smoke-money-path.sh
 
 # Sign-up campaign dry run — auto-issue, min spend, consume, release

@@ -9,9 +9,13 @@
 # on ship, soldCount tracks the commit, payment bypass stays manager-only, and the
 # removed `confirmed` status is rejected.
 #
-# Usage:
-#   BASE=http://localhost:8080 scripts/smoke-money-path.sh          # creates a test product
-#   BASE=https://dupli1.com SKU_ID=01J... scripts/smoke-money-path.sh  # uses an existing variant
+# Usage (local dev stack only):
+#   BASE=http://localhost:8080 scripts/smoke-money-path.sh               # creates a test product
+#   BASE=http://localhost:8080 SKU_ID=01J... scripts/smoke-money-path.sh  # uses an existing variant
+#
+# It writes real data, so it refuses a non-local BASE and VENUS
+# (scripts/lib-smoke-guard.sh) unless SMOKE_ALLOW_REAL_DATA=yes. To check a
+# production deploy, use the read-only checks in docs/deployment-venus.md.
 #
 # Environment:
 #   BASE            gateway base URL (default http://localhost:8080)
@@ -25,6 +29,9 @@
 set -uo pipefail
 
 BASE=${BASE:-http://localhost:8080}
+# shellcheck source=scripts/lib-smoke-guard.sh
+. "$(dirname "$0")/lib-smoke-guard.sh"
+smoke_guard "$BASE"
 OWNER_EMAIL=${OWNER_EMAIL:-admin@dupli1.com}
 OWNER_PASSWORD=${OWNER_PASSWORD:-password}
 QUANTITY=${QUANTITY:-1}
@@ -78,6 +85,19 @@ for svc in gateway/health api/v1/auth/health api/v1/products/health api/v1/order
            api/v1/cart/health api/v1/payments/health; do
   check "$svc" "$(status_of GET "/$svc")" 200
 done
+
+step "Card payments are priced"
+# The customer's order is priced for a card (the default method) and then paid
+# by manager Bypass. Order refuses to price a card order while payment reports
+# credit_card unavailable, which it does when NANO_* is unset. For a dev stack,
+# placeholder NANO_API_KEY / NANO_SHOPCODE / NANO_LOGIN_ID (and a NANO_BASE_URL
+# that goes nowhere) make it available; nothing here calls NANO.
+card_available=$(api GET /api/v1/payments/methods | field '[m for m in d["methods"] if m["method"]=="credit_card"][0]["available"]')
+if [ "$card_available" != "True" ]; then
+  fail "credit_card is not available at $BASE/api/v1/payments/methods; start payment with placeholder NANO_API_KEY, NANO_SHOPCODE, NANO_LOGIN_ID and NANO_BASE_URL=http://127.0.0.1:9"
+  exit 1
+fi
+pass "credit_card available"
 
 step "Manager sign-in"
 OWNER=$(access_token "$OWNER_EMAIL" "$OWNER_PASSWORD")
@@ -228,7 +248,8 @@ check "soldCount incremented" \
   "$(api GET "/api/v1/products/$PRODUCT_ID" | field 'd.get("soldCount",0)')" \
   "$((sold_before + QUANTITY))"
 
-step "Fulfil, and reject the removed status"
+step "Deliver, fulfil, and reject the removed status"
+check "delivered" "$(api POST "/api/v1/orders/$ORDER_ID/deliver" "$OWNER" | field 'd["status"]')" delivered
 check "fulfilled" "$(api PUT "/api/v1/orders/$ORDER_ID/status" "$OWNER" '{"status":"fulfilled"}' \
   | field 'd["status"]')" fulfilled
 check "confirmed rejected" \

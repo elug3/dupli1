@@ -137,6 +137,36 @@ listener (`proxy.dupli1.local:8081`, where order sends the internal APIs). After
 editing the file by hand, recreate the proxy yourself:
 `$DC up -d --force-recreate proxy`.
 
+### Checking a deploy without writing data
+
+VENUS serves production, so never run `scripts/smoke-money-path.sh` or
+`scripts/smoke-promotion-campaign.sh` here: they create a product, a customer
+and a real order. Both refuse to start on VENUS or against a non-local `BASE`
+unless `SMOKE_ALLOW_REAL_DATA=yes` (`scripts/lib-smoke-guard.sh`). Run them
+against a local dev stack instead.
+
+These checks only read:
+
+```bash
+# 1. What is deployed: the tags deploy.sh wrote (sha-<short> of each repo's merge commit)
+grep -E '^DUPLI1_(BACKEND|WEB|MANAGE_WEB)_TAG=' /opt/dupli1/.env
+$DC ps --format '{{.Service}} {{.Image}} {{.Status}}'
+
+# 2. Public settings through the edge (no sign-in; same answer shoppers get)
+curl -s -H 'Host: dupli1.com' http://127.0.0.1/api/v1/orders/settings | python3 -m json.tool
+
+# 3. Service logs since the deploy
+$DC logs --since 30m order | tail -50
+
+# 4. Recent orders, in a read-only transaction
+$DC exec -T -e PGOPTIONS='-c default_transaction_read_only=on' postgres \
+  psql -U postgres -d orders -c "SELECT id, status, payment_method, subtotal_won, shipping_fee_won, card_surcharge_won, total_won, created_at FROM orders ORDER BY created_at DESC LIMIT 10;"
+```
+
+For example, the card surcharge removal (dupli1#385) is live when
+`limits.card_surcharge_bps` in step 2 is `0` (the old code answered `1000`) and
+every order created after the deploy has `card_surcharge_won = 0`.
+
 ### Frontends
 
 `dupli1-web` and `dupli1-manage-web` work the same way from their own repos:
@@ -210,10 +240,12 @@ for the transcript purge.
 ## Before cutover — checklist
 
 1. **Smoke-test the copy as owner** (the copy is replaced at cutover, so test
-   orders are harmless). In your own terminal, so the password stays out of logs:
+   orders are harmless). *Historical: since cutover VENUS is production, so this
+   no longer applies and the script refuses to run here; see "Checking a deploy
+   without writing data".* In your own terminal, so the password stays out of logs:
    ```bash
    read -rs OWNER_PASSWORD; export OWNER_PASSWORD OWNER_EMAIL=<owner email>
-   BASE=http://127.0.0.1 scripts/smoke-money-path.sh
+   BASE=http://127.0.0.1 SMOKE_ALLOW_REAL_DATA=yes scripts/smoke-money-path.sh
    ```
    Also sign in to the storefront and manage-web against VENUS: add
    `127.0.0.1 dupli1.com manage.dupli1.com` to `/etc/hosts` on VENUS
