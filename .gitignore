@@ -19,3 +19,6 @@ infra/terraform/terraform.tfvars
 infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
 infra/ec2/*.pem
+
+# Claude Code local settings
+.claude/settings.local.json

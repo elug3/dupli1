@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working agreements
+
+- **Verify before done.** Run the `verify-service` skill: per-module `go test`, Postgres tests where CI has a database (they skip silently without `POSTGRES_URL`), `api/gateway/test.sh` for nginx changes. Say what ran and what did not.
+- **Endpoints and fields** follow the `add-api-endpoint` skill: layering, permission, gateway route in `routes.conf`, additive schema, docs.
+- **Money is `*_won`**, whole won, everywhere.
+- **Before committing**, ask the `reviewer` agent to look at the diff.
+- Never skip, disable or weaken a test to get green.
+
 ## Commands
 
 Each service is an independent Go module. The root `go.mod` is a stub — `go test ./...` from the repo root does **not** work.
