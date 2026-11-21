@@ -16,7 +16,7 @@ You are the **orchestrator**. Subagents cannot spawn subagents and start with no
 
    **Review passed** means no open critical or high finding after at most one re-review. When it passes, **commit** (see Commit below). If it does not pass, do not commit: report the open findings to the user.
 5. **Verify.** Agent `verifier`. Read `verify.md`. Anything other than PASS goes back to step 3 (counts toward the attempt limit) or to the user if it is a requirement problem.
-6. **Remember.** See below. Then report to the user: what was built, the commit hash, the verdict with evidence, review findings left open, any instruction change with its reason, what was not run.
+6. **Remember.** See below. Then report to the user: what was built, the commit hash and PR link, the verdict with evidence, review findings left open, any instruction change with its reason, what was not run.
 
 ## Remember and improve
 
@@ -32,10 +32,19 @@ When review passes, commit once, on the current branch (if it is the default bra
 
 - Stage only the files in the plan's **Affected files**, the tests from `red.md` and any docs the plan lists. Run `git status` first and leave out anything else. `.claude/pipeline/` is git-ignored; never force-add it, and never add `.env` or secrets.
 - Message: imperative subject under 72 chars, a short body saying what and why, the requirement IDs met, and the attribution trailers your session instructions give.
-- Do not push and do not open a PR unless the user asks. If the verifier later fails, fix with a new commit and say so; never amend or rewrite history.
+- If the verifier later fails, fix with a new commit and say so; never amend or rewrite history.
+
+## Push and open the PR
+
+Right after the commit, push the branch (`git push -u origin <branch>`; on a network error retry up to 4 times with backoff) and open a **new draft pull request** into the default branch, unless a PR for that branch is already open (check with the GitHub tools first; a merged or closed one does not count, so open a new one). If one is open, the push updates it; say so instead of opening another.
+
+- Never push to or open a PR from the default branch, and never force-push. If the push is rejected because the remote has commits you lack, fetch and merge them rather than rewriting, and tell the user.
+- Fill the repo's PR template if it has one (`.github/pull_request_template.md`), skipping sections that ask for secrets or anything unrelated to the diff. Otherwise: a summary, the requirements met (R1..Rn), the review result, the verifier's checks and what was not run.
+- Instruction changes made in the Remember stage are pushed to the same PR as their own commit, with their reason in the body.
+- Link the PR in the final report. Do not merge it, approve it, or comment on it; the user does that.
 
 ## Rules
 
-- Commit exactly when review passes (see Commit). Never commit before that; push only if the user asks.
+- Commit exactly when review passes (see Commit), then push and open the draft PR. Never commit, push or open a PR before review passes. Never merge.
 - Small tasks (one-line fix, doc edit) do not need the pipeline; say so and just do them.
 - Report honestly: failed or skipped stages are stated, never smoothed over.
