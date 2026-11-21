@@ -14,6 +14,11 @@
 # holds the compose file and gateway config) moves to --ref only while that
 # lock is held, so a frontend deploy never reads the compose file while a
 # backend deploy is changing it. A rollback puts the checkout back too.
+#
+# The preview stack (docs/deployment-preview.md) runs this same script through
+# preview.sh, which points it at another compose project, env file, checkout
+# and edge with COMPOSE_PROJECT, COMPOSE_OVERRIDE, ENV_FILE, DEPLOY_DIR,
+# EDGE_URL, STORE_HOST and MANAGE_HOST. Unset, they are production's.
 set -euo pipefail
 
 usage() { echo "usage: deploy.sh [--ref <commit>] [backend|web|manage-web] <tag, e.g. sha-abc1234>" >&2; exit 2; }
@@ -38,6 +43,12 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # The checkout the stack runs from. CI runs a copy of this script from its own
 # workspace, so it names the checkout; by hand it's the repo holding the script.
 DEPLOY_DIR=${DEPLOY_DIR:-$(cd "$HERE/../.." && pwd)}
+PROJECT=${COMPOSE_PROJECT:-dupli1}
+# An extra compose file layered on docker-compose.yml, relative to the checkout.
+OVERRIDE=${COMPOSE_OVERRIDE:-}
+EDGE=${EDGE_URL:-http://127.0.0.1}
+STORE=${STORE_HOST:-dupli1.com}
+MANAGE=${MANAGE_HOST:-manage.dupli1.com}
 
 # Per target: services, their GHCR and local image names, the .env variable
 # holding their tag, and "service host path" checks that must answer 200 via
@@ -51,28 +62,32 @@ case $TARGET in
     for s in "${SERVICES[@]}"; do GHCR[$s]=dupli1-$s; LOCAL[$s]=dupli1-prod/$s; done
     TAG_VAR=DUPLI1_BACKEND_TAG
     # Gateway routes that reach each service's health handler (notification has none).
-    HEALTH=("proxy dupli1.com /gateway/health" "auth dupli1.com /api/v1/auth/health"
-      "product dupli1.com /api/v1/products/health" "order dupli1.com /api/v1/orders/health"
-      "cart dupli1.com /api/v1/cart/health" "payment dupli1.com /api/v1/payments/health"
-      "profile dupli1.com /api/v1/profile/health" "support dupli1.com /api/v1/support/health")
+    HEALTH=("proxy $STORE /gateway/health" "auth $STORE /api/v1/auth/health"
+      "product $STORE /api/v1/products/health" "order $STORE /api/v1/orders/health"
+      "cart $STORE /api/v1/cart/health" "payment $STORE /api/v1/payments/health"
+      "profile $STORE /api/v1/profile/health" "support $STORE /api/v1/support/health")
     INTERNAL_GATEWAY=1
     ;;
   web)
     SERVICES=(web)
     GHCR[web]=dupli1-web; LOCAL[web]=dupli1-prod/web
     TAG_VAR=DUPLI1_WEB_TAG
-    HEALTH=("web dupli1.com /" "web dupli1.com /login")
+    HEALTH=("web $STORE /" "web $STORE /login")
     ;;
   manage-web)
     SERVICES=(manage-web)
     GHCR[manage-web]=dupli1-manage-web; LOCAL[manage-web]=dupli1-prod/manage-web-container
     TAG_VAR=DUPLI1_MANAGE_WEB_TAG
-    HEALTH=("manage-web manage.dupli1.com /" "manage-web manage.dupli1.com /login")
+    HEALTH=("manage-web $MANAGE /" "manage-web $MANAGE /login")
     ;;
   *) echo "unknown target: $TARGET (backend, web or manage-web)" >&2; exit 2 ;;
 esac
 
-dc() { docker compose -f "$DEPLOY_DIR/deploy/venus/docker-compose.yml" --env-file "$ENV_FILE" "$@"; }
+dc() {
+  local files=(-f "$DEPLOY_DIR/deploy/venus/docker-compose.yml")
+  [[ -z $OVERRIDE ]] || files+=(-f "$DEPLOY_DIR/$OVERRIDE")
+  docker compose -p "$PROJECT" "${files[@]}" --env-file "$ENV_FILE" "$@"
+}
 
 # Moves the deploy checkout to a commit. Only called with the lock held.
 # -f discards stray local edits in /opt/dupli1/repo (a docs file someone
@@ -110,7 +125,7 @@ internal_gateway_ok() {
   dc exec -T proxy wget -q -O /dev/null -T 5 http://proxy.dupli1.local:8081/gateway/health >/dev/null 2>&1
 }
 
-state_of() { docker inspect -f '{{.State.Status}}/{{.RestartCount}}' "dupli1-$1-1" 2>/dev/null || echo missing; }
+state_of() { docker inspect -f '{{.State.Status}}/{{.RestartCount}}' "$PROJECT-$1-1" 2>/dev/null || echo missing; }
 
 # Every service running with the restart count it had right after `up`, every
 # health route answering 200 (and, for the backend, the internal gateway
@@ -127,7 +142,7 @@ healthy() {
     if [[ -z $bad ]]; then
       for h in "${HEALTH[@]}"; do
         rest=${h#* }; host=${rest%% *}; path=${rest#* }
-        code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' -H "Host: $host" "http://127.0.0.1$path" || true)
+        code=$(curl -s -o /dev/null -m 5 -w '%{http_code}' -H "Host: $host" "$EDGE$path" || true)
         [[ $code == 200 ]] || { bad="$host$path → $code"; break; }
       done
     fi
@@ -187,7 +202,7 @@ for s in "${SERVICES[@]}"; do
     KEPT+=("$s")
   else
     echo "removing $s, which $(git -C "$DEPLOY_DIR" rev-parse --short HEAD) does not have" >&2
-    docker rm -f "dupli1-$s-1" >/dev/null 2>&1 || true
+    docker rm -f "$PROJECT-$s-1" >/dev/null 2>&1 || true
     for i in "${!HEALTH[@]}"; do
       if [[ ${HEALTH[$i]%% *} == "$s" ]]; then unset "HEALTH[$i]"; fi
     done
