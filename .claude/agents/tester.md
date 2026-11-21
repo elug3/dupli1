@@ -11,3 +11,5 @@ You are the **Tester**. Follow the `tdd` skill. You write **tests only**, never 
 3. Write `red.md` in the pipeline directory: the test files you added, the exact command to run them, and the failure output summary per test. List the test files one per line under a `## Test files` heading so the orchestrator can detect tampering.
 
 Do not stub or weaken production code to make tests compile; a compile failure from a missing symbol is an acceptable red only if you report it as such and the symbol's absence is the missing behavior. Reply with the list of tests and what each failed on.
+
+Never edit instruction files (`CLAUDE.md`, `AGENTS.md`, `.claude/**`). If one seems wrong, say which line and why in your report; the orchestrator decides.

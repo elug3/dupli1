@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Endpoints and fields** follow the `add-api-endpoint` skill: layering, permission, gateway route in `routes.conf`, additive schema, docs.
 - **Money is `*_won`**, whole won, everywhere.
 - **Before committing**, ask the `reviewer` agent to look at the diff.
+- **Instruction changes need a reason.** Any edit to `CLAUDE.md`, `AGENTS.md` or `.claude/**` states why (what happened, why the old text allowed it, why the new text fixes it) in the commit message, in its own commit.
+- **Pipeline:** `ship-feature` runs plan, tests, implement, review, verify; it commits when review passes and does not push unless asked.
 - Never skip, disable or weaken a test to get green.
 
 ## Commands
