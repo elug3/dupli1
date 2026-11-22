@@ -71,6 +71,9 @@ func newServeCmd() *cobra.Command {
 			if err := opts.Validate(); err != nil {
 				return err
 			}
+			if err := checkProd(opts); err != nil {
+				return err
+			}
 
 			srv, err := auth.NewServer(*opts)
 			if err != nil {

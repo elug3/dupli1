@@ -29,6 +29,14 @@ x-sentry-env: &sentry-env
   SENTRY_RELEASE: ${DUPLI1_BACKEND_TAG:-}
   SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
 
+# Every Go service runs as prod (shared/pkg/runenv): it refuses to start
+# without its database, AUTH_JWKS_URL, NATS_TOKEN or signing key, or with a
+# dev credential. Prod is also the default; it is spelled out here.
+x-backend-env: &backend-env
+  <<: *sentry-env
+  DUPLI1_ENV: prod
+  NATS_TOKEN: ${NATS_TOKEN:?run make-env.sh — docs/deployment-venus.md}
+
 services:
   # ── state ────────────────────────────────────────────────────────────────
   postgres:
@@ -108,7 +116,7 @@ services:
   nats:
     <<: *service
     image: dupli1-prod/nats:${DUPLI1_IMAGE_TAG:-2026-09-26}
-    command: ["-js"]
+    command: ["-js", "--auth", "${NATS_TOKEN:?run make-env.sh — docs/deployment-venus.md}"]
     networks: { default: { aliases: [nats.dupli1.local] } }
 
   # ── services (env mirrors the ECS task definitions) ──────────────────────
@@ -118,7 +126,7 @@ services:
     entrypoint: ["/usr/local/bin/service"]
     command: []
     environment:
-      <<: *sentry-env
+      <<: *backend-env
       DUPLI1_AUTH_ADDR: ":8080"
       DB_URL: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/schick_db?sslmode=disable
       REDIS_URL: redis://redis.dupli1.local:6379
@@ -141,7 +149,7 @@ services:
     <<: *service
     image: dupli1-prod/product:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
-      <<: *sentry-env
+      <<: *backend-env
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: "8080"
       DUPLI1_PRODUCT_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/products?sslmode=disable
@@ -165,7 +173,7 @@ services:
     <<: *service
     image: dupli1-prod/order:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
-      <<: *sentry-env
+      <<: *backend-env
       DUPLI1_ORDER_ADDR: ":8080"
       DUPLI1_ORDER_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/orders?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
@@ -194,7 +202,7 @@ services:
     <<: *service
     image: dupli1-prod/cart:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
-      <<: *sentry-env
+      <<: *backend-env
       DUPLI1_CART_ADDR: ":8080"
       DUPLI1_CART_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/cart?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
@@ -208,7 +216,7 @@ services:
     <<: *service
     image: dupli1-prod/payment:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
-      <<: *sentry-env
+      <<: *backend-env
       DUPLI1_PAYMENT_ADDR: ":8080"
       DUPLI1_PAYMENT_DB: postgres://schick:${DB_APP_PASSWORD}@postgres:5432/payments?sslmode=disable
       AUTH_JWKS_URL: http://auth.dupli1.local:8080/api/v1/auth/.well-known/jwks.json
@@ -235,7 +243,7 @@ services:
     <<: *service
     image: dupli1-prod/profile:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
-      <<: *sentry-env
+      <<: *backend-env
       DUPLI1_PROFILE_ADDR: ":8080"
       # Customer profiles and saved shipping addresses. Without it profile ran
       # in memory (as it did on ECS) and lost every address on each restart
@@ -251,7 +259,7 @@ services:
     <<: *service
     image: dupli1-prod/notification:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
-      <<: *sentry-env
+      <<: *backend-env
       DUPLI1_NOTIFICATION_ADDR: ":8080"
       # Telegram chat subscriptions (accepted in manage-web). VENUS-only DB:
       # AWS ran notification in-memory, so approvals were lost on restart.
@@ -275,7 +283,7 @@ services:
     <<: *service
     image: dupli1-prod/support:${DUPLI1_BACKEND_TAG:-${DUPLI1_IMAGE_TAG:-2026-09-26}}
     environment:
-      <<: *sentry-env
+      <<: *backend-env
       DUPLI1_SUPPORT_ADDR: ":8080"
       # Conversations, inquiries and transcripts. In memory they would vanish
       # on every deploy, and the inbox with them.

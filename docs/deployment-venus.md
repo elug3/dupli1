@@ -78,6 +78,41 @@ Command prefix used below:
 DC="docker compose -f deploy/venus/docker-compose.yml --env-file /opt/dupli1/.env"
 ```
 
+## Production mode (`DUPLI1_ENV`)
+
+Every Go service runs with `DUPLI1_ENV=prod` (`shared/pkg/runenv`; prod is
+also what an unset variable means). In prod a service refuses to start,
+naming every problem in one log line, instead of falling back on something
+that only belongs in development:
+
+| Service | Required in prod |
+|---------|------------------|
+| all but auth | its database URL (no in-memory store), `AUTH_JWKS_URL` (no HS256-only validation) |
+| all but cart | its NATS URL and `NATS_TOKEN` |
+| auth | `DB_URL`, `REDIS_URL`, `JWT_PRIVATE_KEY_FILE` or `JWT_PRIVATE_KEY` (no ephemeral key), `OWNER_PASSWORD` when `OWNER_EMAIL` is set, live API keys (`DUPLI1_API_KEY_ENV` not `test`) |
+
+It also refuses any value the repository publishes for local development —
+`password`, `dupli1_dev`, `dupli1_nats_dev`, the dev `JWT_SECRET`, `dk_test_…`
+API keys and unfilled `change-me…` placeholders — in a secret or as the
+password of a connection URL. The local `docker-compose.yml` sets
+`DUPLI1_ENV=dev`; a binary started any other way needs `DUPLI1_ENV=dev` to run
+on dev settings.
+
+**NATS token (one-time, before the release that adds it is merged).** NATS
+runs with `--auth` and every backend service sends `NATS_TOKEN`, so the compose
+file refuses to load without it. Add it to the existing `.env` first:
+
+```bash
+grep -q '^NATS_TOKEN=' /opt/dupli1/.env || \
+  echo "NATS_TOKEN='$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')'" >> /opt/dupli1/.env
+```
+
+(`make-env.sh` generates it for a fresh machine and keeps it on a re-run.) If
+the deploy runs without it, `deploy.sh` finds that the compose file does not
+load, puts the checkout back and fails before pulling or restarting anything. The deploy recreates `nats` with the
+token along with the services; core NATS does not redeliver, so an event
+published during that restart can be lost — merge at a quiet time.
+
 ## How it was set up (already done)
 
 ```bash

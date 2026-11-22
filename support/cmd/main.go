@@ -41,6 +41,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "ConfigureOptions: %v\n", err)
 		os.Exit(1)
 	}
+	if err := checkProd(opts); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
 
 	srv, err := support.NewServer(opts)
 	if err != nil {
