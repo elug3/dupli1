@@ -112,6 +112,8 @@ the deploy runs without it, `deploy.sh` finds that the compose file does not
 load, puts the checkout back and fails before pulling or restarting anything. The deploy recreates `nats` with the
 token along with the services; core NATS does not redeliver, so an event
 published during that restart can be lost — merge at a quiet time.
+Step by step, with checks and what to do on a refusal:
+[ai-instruct-venus-dupli1-env.md](ai-instruct-venus-dupli1-env.md).
 
 ## How it was set up (already done)
 

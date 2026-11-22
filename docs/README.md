@@ -20,6 +20,7 @@ When the API surface changes, update [current-state.md](current-state.md) and [a
 | [payment-methods-plan.md](payment-methods-plan.md) | Payment methods: Bypass + NANO card implemented, Bitcoin spec only |
 | [payment-nano-key-in.md](payment-nano-key-in.md) | Key-in card payment (수기결제): the storefront takes the card, payment sends it to NANO once |
 | [ai-instruct-venus-nano-key-in.md](ai-instruct-venus-nano-key-in.md) | AI instruction: turn key-in on in production on VENUS (set `NANO_ENC_KEY`/`NANO_ENC_IV`, restart payment, check, roll back) |
+| [ai-instruct-venus-dupli1-env.md](ai-instruct-venus-dupli1-env.md) | AI instruction: roll out `DUPLI1_ENV` prod mode and the NATS token on VENUS (check `.env`, add `NATS_TOKEN`, verify the deploy, handle a refusal, roll back), and what to do when changing service config |
 | [payment-nano-return-verification.md](payment-nano-return-verification.md) | Why v2.7 returns are unsigned, and how `receiveUrl` MAC binds them |
 | [order-service.md](order-service.md) | Order lifecycle, workers, gateway deps |
 | [order-live-events.md](order-live-events.md) | Admin SSE live order feed (implemented 2026-09-27) |
