@@ -1,0 +1,323 @@
+{
+  "_comment": "Reference data for scripts/seed-reference-data.py. The product service no longer seeds these at startup; edit here, then re-run the script (it only adds what is missing).",
+  "brands": [
+    {
+      "code": "DUP",
+      "name": "Dupli1 Studio"
+    },
+    {
+      "code": "PR",
+      "name": "Prada"
+    },
+    {
+      "code": "BOT",
+      "name": "Bottega Veneta"
+    },
+    {
+      "code": "LV",
+      "name": "Louis Vuitton"
+    },
+    {
+      "code": "CD",
+      "name": "Dior"
+    },
+    {
+      "code": "CH",
+      "name": "Chanel"
+    },
+    {
+      "code": "GUC",
+      "name": "Gucci"
+    },
+    {
+      "code": "HER",
+      "name": "Hermes"
+    },
+    {
+      "code": "CEL",
+      "name": "Celine"
+    },
+    {
+      "code": "BAL",
+      "name": "Balenciaga"
+    },
+    {
+      "code": "FEN",
+      "name": "Fendi"
+    },
+    {
+      "code": "YSL",
+      "name": "Saint Laurent"
+    },
+    {
+      "code": "BUR",
+      "name": "Burberry"
+    }
+  ],
+  "base_colors": [
+    {
+      "code": "BLK",
+      "name": "Black",
+      "hex": "#0a0a0a"
+    },
+    {
+      "code": "WHT",
+      "name": "White",
+      "hex": "#ffffff"
+    },
+    {
+      "code": "CRM",
+      "name": "Cream",
+      "hex": "#efe6d2"
+    },
+    {
+      "code": "BRN",
+      "name": "Brown",
+      "hex": "#6b4226"
+    },
+    {
+      "code": "GRN",
+      "name": "Green",
+      "hex": "#3f6b4a"
+    },
+    {
+      "code": "RED",
+      "name": "Red",
+      "hex": "#b3261e"
+    },
+    {
+      "code": "BLU",
+      "name": "Blue",
+      "hex": "#2f5d9a"
+    },
+    {
+      "code": "BGE",
+      "name": "Beige",
+      "hex": "#d8c3a5"
+    },
+    {
+      "code": "NVY",
+      "name": "Navy",
+      "hex": "#1f2a44"
+    },
+    {
+      "code": "PNK",
+      "name": "Pink",
+      "hex": "#e8b4bc"
+    },
+    {
+      "code": "GRY",
+      "name": "Grey",
+      "hex": "#8e8e8e"
+    },
+    {
+      "code": "GLD",
+      "name": "Gold",
+      "hex": "#c8a96e"
+    },
+    {
+      "code": "SLV",
+      "name": "Silver",
+      "hex": "#c0c3c7"
+    },
+    {
+      "code": "ORG",
+      "name": "Orange",
+      "hex": "#d9772b"
+    },
+    {
+      "code": "YLW",
+      "name": "Yellow",
+      "hex": "#e6c34a"
+    },
+    {
+      "code": "PRP",
+      "name": "Purple",
+      "hex": "#5e3d7a"
+    },
+    {
+      "code": "TAN",
+      "name": "Tan",
+      "hex": "#c19a6b"
+    },
+    {
+      "code": "OLV",
+      "name": "Olive",
+      "hex": "#6b6b3a"
+    }
+  ],
+  "colors": [
+    {
+      "code": "BLK",
+      "name": "Black",
+      "hex": "#0a0a0a",
+      "baseCode": "BLK"
+    },
+    {
+      "code": "WHT",
+      "name": "White",
+      "hex": "#ffffff",
+      "baseCode": "WHT"
+    },
+    {
+      "code": "CRM",
+      "name": "Cream",
+      "hex": "#efe6d2",
+      "baseCode": "CRM"
+    },
+    {
+      "code": "BRN",
+      "name": "Brown",
+      "hex": "#6b4226",
+      "baseCode": "BRN"
+    },
+    {
+      "code": "GRN",
+      "name": "Green",
+      "hex": "#3f6b4a",
+      "baseCode": "GRN"
+    },
+    {
+      "code": "RED",
+      "name": "Red",
+      "hex": "#b3261e",
+      "baseCode": "RED"
+    },
+    {
+      "code": "BLU",
+      "name": "Blue",
+      "hex": "#2f5d9a",
+      "baseCode": "BLU"
+    },
+    {
+      "code": "BGE",
+      "name": "Beige",
+      "hex": "#d8c3a5",
+      "baseCode": "BGE"
+    },
+    {
+      "code": "NVY",
+      "name": "Navy",
+      "hex": "#1f2a44",
+      "baseCode": "NVY"
+    },
+    {
+      "code": "PNK",
+      "name": "Pink",
+      "hex": "#e8b4bc",
+      "baseCode": "PNK"
+    },
+    {
+      "code": "GRY",
+      "name": "Grey",
+      "hex": "#8e8e8e",
+      "baseCode": "GRY"
+    },
+    {
+      "code": "GLD",
+      "name": "Gold",
+      "hex": "#c8a96e",
+      "baseCode": "GLD"
+    },
+    {
+      "code": "SLV",
+      "name": "Silver",
+      "hex": "#c0c3c7",
+      "baseCode": "SLV"
+    },
+    {
+      "code": "ORG",
+      "name": "Orange",
+      "hex": "#d9772b",
+      "baseCode": "ORG"
+    },
+    {
+      "code": "YLW",
+      "name": "Yellow",
+      "hex": "#e6c34a",
+      "baseCode": "YLW"
+    },
+    {
+      "code": "PRP",
+      "name": "Purple",
+      "hex": "#5e3d7a",
+      "baseCode": "PRP"
+    },
+    {
+      "code": "TAN",
+      "name": "Tan",
+      "hex": "#c19a6b",
+      "baseCode": "TAN"
+    },
+    {
+      "code": "OLV",
+      "name": "Olive",
+      "hex": "#6b6b3a",
+      "baseCode": "OLV"
+    }
+  ],
+  "sizes": [
+    {
+      "code": "XXS",
+      "name": "XXS"
+    },
+    {
+      "code": "XS",
+      "name": "XS"
+    },
+    {
+      "code": "S",
+      "name": "S"
+    },
+    {
+      "code": "M",
+      "name": "M"
+    },
+    {
+      "code": "L",
+      "name": "L"
+    },
+    {
+      "code": "XL",
+      "name": "XL"
+    },
+    {
+      "code": "XXL",
+      "name": "XXL"
+    },
+    {
+      "code": "MIN",
+      "name": "Mini"
+    },
+    {
+      "code": "SML",
+      "name": "Small"
+    },
+    {
+      "code": "MED",
+      "name": "Medium"
+    },
+    {
+      "code": "LRG",
+      "name": "Large"
+    },
+    {
+      "code": "OS",
+      "name": "One Size"
+    }
+  ],
+  "editions": [
+    {
+      "code": "V",
+      "name": "Standard"
+    },
+    {
+      "code": "A",
+      "name": "Alternate construction"
+    },
+    {
+      "code": "R",
+      "name": "Limited / special edition"
+    }
+  ]
+}

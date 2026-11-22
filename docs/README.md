@@ -79,7 +79,7 @@ These retain design history. Prefer the living docs above for current behavior.
 | [product-variants-plan.md](product-variants-plan.md) | Historical — parent/variant shipped; prefer sku-system + structure review; stock leftovers → [product-stock-tracking-plan.md](product-stock-tracking-plan.md) |
 | [product-guest-views-plan.md](product-guest-views-plan.md) | Phase 1 shipped; guest cart still open |
 | [product-views-recommendations-plan.md](product-views-recommendations-plan.md) | Phases 0–1 shipped; co-view open |
-| [product-sku-master-data-plan.md](product-sku-master-data-plan.md) | A–C shipped; Phase D dictionary screens shipped as manage-web `/catalog`; `BrandCodeFromName` still reads `SeedBrands` |
+| [product-sku-master-data-plan.md](product-sku-master-data-plan.md) | A–C shipped; Phase D shipped (manage-web `/catalog`; name resolution reads only the master tables) |
 | [product-flat-sellable-model-plan.md](product-flat-sellable-model-plan.md) | Accepted; not implemented. Storage migration still applies; API surface superseded by the v2 plan |
 | [product-api-v2-plan.md](product-api-v2-plan.md) | Proposed: domain cleanup, flatten storage, then `/api/v2` products and styles |
 | [product-sale-unit-reflection.md](product-sale-unit-reflection.md) | Decision background for flatten plan |

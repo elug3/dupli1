@@ -53,6 +53,10 @@ sudo docker compose up --build
 # read-only: docs/deployment-venus.md → "Checking a deploy without writing data"
 BASE=http://localhost:8080 scripts/smoke-money-path.sh
 
+# Product reference data (brands, colors, base colors, sizes, editions) —
+# the service no longer seeds these; run once per new environment, safe to re-run
+DUPLI1_ENV=dev BASE=http://localhost:8080 scripts/seed-reference-data.py   # --dry-run to preview
+
 # Sign-up campaign dry run — auto-issue, min spend, consume, release
 # (stack must be running; enables the campaign and restores it on the way out)
 BASE=http://localhost:8080 scripts/smoke-promotion-campaign.sh

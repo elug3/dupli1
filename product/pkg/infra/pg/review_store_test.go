@@ -23,6 +23,7 @@ func newReviewTestStore(t *testing.T, schema string) (*ReviewStore, *ProductSear
 	if err := products.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	loadReferenceData(t, pool) // the eco bag is Black, a reference-data color
 	stock, err := NewInventoryStore(pool)
 	if err != nil {
 		t.Fatalf("inventory migrate: %v", err)

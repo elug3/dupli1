@@ -87,7 +87,7 @@ func (s *ProductSearchStore) migrateSKUMasters(ctx context.Context) error {
 		s.pool.Exec(ctx, q)
 	}
 
-	if err := s.seedSKUMasters(ctx); err != nil {
+	if err := s.seedCodeSizes(ctx); err != nil {
 		return err
 	}
 	if err := s.backfillProductSKUCodes(ctx); err != nil {
@@ -248,57 +248,18 @@ func (s *ProductSearchStore) backfillVariantSegmentCodes(ctx context.Context) er
 	return nil
 }
 
-func (s *ProductSearchStore) seedSKUMasters(ctx context.Context) error {
-	for _, b := range domain.SeedBrands {
-		if _, err := s.pool.Exec(ctx,
-			`INSERT INTO brands (code, name) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING`,
-			b.Code, b.Name,
-		); err != nil {
-			return fmt.Errorf("seed brand %s: %w", b.Code, err)
-		}
-	}
-	for _, c := range domain.SeedColors {
-		if _, err := s.pool.Exec(ctx,
-			// A seed color without a hex gets the seeded one; a hex staff
-			// set (or changed) is left alone.
-			`INSERT INTO colors (code, name, hex) VALUES ($1, $2, $3)
-			 ON CONFLICT (code) DO UPDATE SET hex = EXCLUDED.hex WHERE colors.hex = ''`,
-			c.Code, c.Name, c.Hex,
-		); err != nil {
-			return fmt.Errorf("seed color %s: %w", c.Code, err)
-		}
-	}
-	for _, b := range domain.SeedBaseColors() {
-		if _, err := s.pool.Exec(ctx,
-			// Like seed colors: a base color without a hex gets the seeded
-			// one; a hex staff set is left alone.
-			`INSERT INTO base_colors (code, name, hex) VALUES ($1, $2, $3)
-			 ON CONFLICT (code) DO UPDATE SET hex = EXCLUDED.hex WHERE base_colors.hex = ''`,
-			b.Code, b.Name, b.Hex,
-		); err != nil {
-			return fmt.Errorf("seed base color %s: %w", b.Code, err)
-		}
-		// Each seed colorway is its own base color (BLK → BLK) until staff say otherwise.
-		if _, err := s.pool.Exec(ctx,
-			`UPDATE colors SET base_code = $1 WHERE code = $1 AND base_code IS NULL`, b.Code,
-		); err != nil {
-			return fmt.Errorf("seed base of color %s: %w", b.Code, err)
-		}
-	}
-	for _, sz := range domain.SizeMasterSeeds() {
+// seedCodeSizes writes the sizes the code depends on into the size master
+// (domain.CodeSizes: the default OS and every size a category sells). Nothing
+// else is seeded at startup: brands, colors, base colors, the other sizes and
+// editions are reference data that scripts/seed-reference-data.py loads, so a
+// row staff delete stays deleted.
+func (s *ProductSearchStore) seedCodeSizes(ctx context.Context) error {
+	for _, sz := range domain.CodeSizes() {
 		if _, err := s.pool.Exec(ctx,
 			`INSERT INTO sizes (code, name) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING`,
 			sz.Code, sz.Name,
 		); err != nil {
 			return fmt.Errorf("seed size %s: %w", sz.Code, err)
-		}
-	}
-	for _, e := range domain.SeedEditions {
-		if _, err := s.pool.Exec(ctx,
-			`INSERT INTO sku_editions (code, name) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING`,
-			e.Code, e.Name,
-		); err != nil {
-			return fmt.Errorf("seed edition %s: %w", e.Code, err)
 		}
 	}
 	return nil

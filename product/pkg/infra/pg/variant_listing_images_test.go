@@ -14,6 +14,7 @@ func TestVariantListingImageURLsRoundTrip(t *testing.T) {
 	if err := store.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	loadReferenceData(t, pool)
 	stock, err := NewInventoryStore(pool)
 	if err != nil {
 		t.Fatalf("inventory migrate: %v", err)

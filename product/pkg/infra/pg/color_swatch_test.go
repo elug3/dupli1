@@ -7,8 +7,8 @@ import (
 	"github.com/elug3/dupli1/product/pkg/domain"
 )
 
-// Seed colors get their hex, a hex staff changed survives a restart, and
-// every variant read carries its color master's swatch hexes.
+// Reference colors carry their hex, a restart never touches a hex staff
+// changed, and every variant read carries its color master's swatch hexes.
 func TestColorSwatchHex_SeedAndVariantRead(t *testing.T) {
 	dsn := requireProductDSN(t)
 	pool := freshProductSchema(t, dsn, "color_swatch_test")
@@ -18,6 +18,7 @@ func TestColorSwatchHex_SeedAndVariantRead(t *testing.T) {
 	if err := store.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	loadReferenceData(t, pool)
 	stock, err := NewInventoryStore(pool)
 	if err != nil {
 		t.Fatalf("inventory migrate: %v", err)
@@ -29,7 +30,7 @@ func TestColorSwatchHex_SeedAndVariantRead(t *testing.T) {
 
 	blk, err := catalog.GetColor(ctx, "BLK")
 	if err != nil || blk.Hex != "#0a0a0a" {
-		t.Fatalf("seeded BLK: %+v %v", blk, err)
+		t.Fatalf("reference BLK: %+v %v", blk, err)
 	}
 
 	// Staff change BLK's hex; a restart (migrate again) keeps it.
@@ -76,7 +77,7 @@ func TestColorSwatchHex_SeedAndVariantRead(t *testing.T) {
 	}
 }
 
-// Colorways point at one base color: seeds are their own base, the swatch
+// Colorways point at one base color: reference colors are their own base, the swatch
 // fill falls back to the base's, a base in use cannot go, and search finds
 // a product by base.
 func TestBaseColors(t *testing.T) {
@@ -88,6 +89,7 @@ func TestBaseColors(t *testing.T) {
 	if err := store.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	loadReferenceData(t, pool)
 	stock, err := NewInventoryStore(pool)
 	if err != nil {
 		t.Fatalf("inventory migrate: %v", err)
@@ -152,6 +154,7 @@ func TestColorTwoToneColumnsDropped(t *testing.T) {
 	if err := store.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	loadReferenceData(t, pool)
 	for _, sql := range []string{
 		`ALTER TABLE colors ADD COLUMN hex2 TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE colors ADD COLUMN base2_code TEXT REFERENCES base_colors(code) ON DELETE RESTRICT`,
@@ -193,6 +196,7 @@ func TestVariantSecondColor(t *testing.T) {
 	if err := store.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	loadReferenceData(t, pool)
 	stock, err := NewInventoryStore(pool)
 	if err != nil {
 		t.Fatalf("inventory migrate: %v", err)

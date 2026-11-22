@@ -204,6 +204,25 @@ For example, the card surcharge removal (dupli1#385) is live when
 `limits.card_surcharge_bps` in step 2 is `0` (the old code answered `1000`) and
 every order created after the deploy has `card_surcharge_won = 0`.
 
+### Product reference data
+
+The product service no longer seeds brands, colors, base colors, sizes or
+editions at startup (only `OS` and the sizes a category sells), and neither the deploy
+job nor `deploy.sh` loads them. VENUS has them because its database came from
+the AWS backup, so a routine deploy needs nothing. Run
+`scripts/seed-reference-data.py` by hand when the product database starts
+empty (a fresh machine without `import-backup.sh`, or a new environment), or
+after editing `scripts/seed/reference-data.json`. It only creates rows that are
+missing and never changes or deletes one, so it is safe to re-run and leaves
+staff edits alone. In your own terminal, as an account with
+`product.master.write`:
+
+```bash
+read -rs DUPLI1_ADMIN_PASSWORD; export DUPLI1_ADMIN_PASSWORD DUPLI1_ADMIN_EMAIL=<owner email>
+BASE=http://127.0.0.1 scripts/seed-reference-data.py --dry-run   # what it would create
+BASE=http://127.0.0.1 scripts/seed-reference-data.py
+```
+
 ### Frontends
 
 `dupli1-web` and `dupli1-manage-web` work the same way from their own repos:

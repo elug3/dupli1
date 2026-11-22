@@ -156,7 +156,7 @@ Covered by `product.*` and the `catalog_editor` bundle. See [endpoints.md](endpo
 
 No silent invent-on-create. Reads enrich blank `brand` / `color` / `size` display names from master tables (`enrichMasterNames`).
 
-A create that sends a display name without its code (`"brand": "Maison Margiela"`, `"color": "Ivory"`, `"size": "Medium"`) is resolved against the master tables as they are now — exact code first, then a case-insensitive name — so a brand, color or size added at runtime works by name like a seeded one. Only when no master matches does it fall back to the seed lists and then a derived code, which then fails the existence check (`404`).
+A create that sends a display name without its code (`"brand": "Maison Margiela"`, `"color": "Ivory"`, `"size": "Medium"`) is resolved against the master tables as they are now — exact code first, then a case-insensitive name — so a brand, color or size added at runtime works by name. Only when no master matches does it fall back to a derived code, which then fails the existence check (`404`).
 
 ### Codes are fixed after create
 
@@ -180,9 +180,15 @@ Lookup:
 
 ---
 
-## Seeded defaults
+## Reference data
 
-On product DB migrate, common rows are seeded (idempotent): brands (`PR`, `BOT`, `LV`, `CD`, `CH`, `GUC`, …), colors (`BLK`, `WHT`, `GRN`, …), sizes (`XS`–`XL`, `MIN`/`SML`/`MED`/`LRG`, `OS`), editions (`V`, `A`, `R`). Runtime catalog APIs are the source of truth afterward.
+The service seeds only one master on migrate, the sizes the code depends on (`domain.CodeSizes`): `OS`, which a variant created without a size gets, and every size a category sells (`domain.CategorySizes`, e.g. clothing's `48R`). Brands, base colors, colors, the other sizes and editions start empty; a new environment loads them once with
+
+```bash
+DUPLI1_ENV=dev BASE=http://localhost:8080 scripts/seed-reference-data.py   # --dry-run to preview
+```
+
+which creates the rows in [`scripts/seed/reference-data.json`](../scripts/seed/reference-data.json) through the catalog API — brands (`PR`, `BOT`, `LV`, `CD`, …), base colors and colors (`BLK`, `WHT`, `GRN`, …, each colorway its own base), sizes (`XXS`–`XXL`, `MIN`/`SML`/`MED`/`LRG`, `OS`), editions (`V`, `A`, `R`). It only adds codes that are missing and never edits one, so it is safe to re-run. Until it has run, a variant created without a size (`OS` by default) or by a color name gets `404 master data not found`. A row staff delete stays deleted: nothing restores it on restart (until 2026-11-06 startup re-inserted every seed). The catalog API is the source of truth.
 
 ---
 

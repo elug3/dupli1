@@ -55,74 +55,15 @@ type Edition struct {
 	Name string `json:"name"`
 }
 
-// Well-known brand seeds (code → display name).
-var SeedBrands = []Brand{
-	{Code: "DUP", Name: "Dupli1 Studio"},
-	{Code: "PR", Name: "Prada"},
-	{Code: "BOT", Name: "Bottega Veneta"},
-	{Code: "LV", Name: "Louis Vuitton"},
-	{Code: "CD", Name: "Dior"},
-	{Code: "CH", Name: "Chanel"},
-	{Code: "GUC", Name: "Gucci"},
-	{Code: "HER", Name: "Hermes"},
-	{Code: "CEL", Name: "Celine"},
-	{Code: "BAL", Name: "Balenciaga"},
-	{Code: "FEN", Name: "Fendi"},
-	{Code: "YSL", Name: "Saint Laurent"},
-	{Code: "BUR", Name: "Burberry"},
-}
-
-// Well-known color seeds.
-//
-// Hex values match the swatch fills the storefront used before colors carried
-// one, so seeding them changes nothing a shopper sees.
-var SeedColors = []Color{
-	{Code: "BLK", Name: "Black", Hex: "#0a0a0a"},
-	{Code: "WHT", Name: "White", Hex: "#ffffff"},
-	{Code: "CRM", Name: "Cream", Hex: "#efe6d2"},
-	{Code: "BRN", Name: "Brown", Hex: "#6b4226"},
-	{Code: "GRN", Name: "Green", Hex: "#3f6b4a"},
-	{Code: "RED", Name: "Red", Hex: "#b3261e"},
-	{Code: "BLU", Name: "Blue", Hex: "#2f5d9a"},
-	{Code: "BGE", Name: "Beige", Hex: "#d8c3a5"},
-	{Code: "NVY", Name: "Navy", Hex: "#1f2a44"},
-	{Code: "PNK", Name: "Pink", Hex: "#e8b4bc"},
-	{Code: "GRY", Name: "Grey", Hex: "#8e8e8e"},
-	{Code: "GLD", Name: "Gold", Hex: "#c8a96e"},
-	{Code: "SLV", Name: "Silver", Hex: "#c0c3c7"},
-	{Code: "ORG", Name: "Orange", Hex: "#d9772b"},
-	{Code: "YLW", Name: "Yellow", Hex: "#e6c34a"},
-	{Code: "PRP", Name: "Purple", Hex: "#5e3d7a"},
-	{Code: "TAN", Name: "Tan", Hex: "#c19a6b"},
-	{Code: "OLV", Name: "Olive", Hex: "#6b6b3a"},
-}
-
-// Well-known size seeds (apparel + bag capacity shorthand).
-var SeedSizes = []Size{
-	{Code: "XXS", Name: "XXS"},
-	{Code: "XS", Name: "XS"},
-	{Code: "S", Name: "S"},
-	{Code: "M", Name: "M"},
-	{Code: "L", Name: "L"},
-	{Code: "XL", Name: "XL"},
-	{Code: "XXL", Name: "XXL"},
-	{Code: "MIN", Name: "Mini"},
-	{Code: "SML", Name: "Small"},
-	{Code: "MED", Name: "Medium"},
-	{Code: "LRG", Name: "Large"},
-	{Code: "OS", Name: "One Size"},
-}
-
-// SizeMasterSeeds is every size the size master is seeded with: SeedSizes,
-// then each size a category sells that SeedSizes lacks, named by its code
-// (48R, 4XL). Without these a clothing SKU in a size its category allows
-// still fails the master lookup on create.
-func SizeMasterSeeds() []Size {
-	out := append([]Size(nil), SeedSizes...)
-	seen := make(map[string]bool, len(out))
-	for _, s := range out {
-		seen[s.Code] = true
-	}
+// CategorySizes is every size a category sells, named by its code (48R,
+// 4XL). The product service writes these into the size master at startup
+// because they follow from the category definitions in code: without them a
+// clothing SKU in a size its category allows would pass the category check and
+// then fail the master lookup on create. Every other size is reference data,
+// loaded by scripts/seed-reference-data.py.
+func CategorySizes() []Size {
+	var out []Size
+	seen := map[string]bool{}
 	for _, c := range SeedCategories {
 		for _, code := range c.Sizes {
 			if !seen[code] {
@@ -134,46 +75,43 @@ func SizeMasterSeeds() []Size {
 	return out
 }
 
-// Well-known edition (VariantCode) seeds.
-var SeedEditions = []Edition{
-	{Code: "V", Name: "Standard"},
-	{Code: "A", Name: "Alternate construction"},
-	{Code: "R", Name: "Limited / special edition"},
+// DefaultSize is the size a variant without one gets (ResolveVariantCodes):
+// a bag sold in one size.
+var DefaultSize = Size{Code: "OS", Name: "One Size"}
+
+// CodeSizes is every size the code itself depends on, which the product
+// service writes into the size master at startup: DefaultSize, then
+// CategorySizes. Without DefaultSize a variant created without a size would
+// fail the master lookup on an environment where seed-reference-data.py has
+// not run yet.
+func CodeSizes() []Size {
+	out := []Size{DefaultSize}
+	for _, sz := range CategorySizes() {
+		if sz.Code != DefaultSize.Code {
+			out = append(out, sz)
+		}
+	}
+	return out
 }
 
-// BrandCodeFromName resolves a display brand name to a seeded code when possible.
-// Falls back to the first-word 2–3 letter prefix (same rules as legacy brandPrefix).
+// BrandCodeFromName derives a brand code from a display name: the first
+// word's leading 2–3 letters (same rules as legacy brandPrefix). Stores look
+// the name up in the brand master first; this is only the fallback when it is
+// not there, and the master check that follows still decides.
 func BrandCodeFromName(name string) string {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
 		return ""
 	}
-	lower := strings.ToLower(trimmed)
-	for _, b := range SeedBrands {
-		if strings.ToLower(b.Name) == lower {
-			return b.Code
-		}
-		fields := strings.Fields(b.Name)
-		if len(fields) > 0 && strings.HasPrefix(lower, strings.ToLower(fields[0])) {
-			return b.Code
-		}
-	}
 	return legacyBrandPrefix(trimmed)
 }
 
-// ColorCodeFromName resolves a display color name to a seeded code when possible.
+// ColorCodeFromName derives a color code from a display name or code. Stores
+// look the name up in the color master first; this is only the fallback.
 func ColorCodeFromName(name string) string {
 	code := NormalizeCode(name)
 	if code == "" {
 		return ""
-	}
-	for _, c := range SeedColors {
-		if c.Code == code {
-			return c.Code
-		}
-		if strings.EqualFold(c.Name, strings.TrimSpace(name)) {
-			return c.Code
-		}
 	}
 	// Already looks like a short code (e.g. F0032, BLK).
 	if ValidSegmentCode(code) && len(code) <= 6 {
@@ -182,19 +120,12 @@ func ColorCodeFromName(name string) string {
 	return OptionCode(name)
 }
 
-// SizeCodeFromName resolves a display size name to a seeded code when possible.
+// SizeCodeFromName derives a size code from a display name or code. Stores
+// look the name up in the size master first; this is only the fallback.
 func SizeCodeFromName(name string) string {
 	code := NormalizeCode(name)
 	if code == "" {
 		return ""
-	}
-	for _, s := range SeedSizes {
-		if s.Code == code {
-			return s.Code
-		}
-		if strings.EqualFold(s.Name, strings.TrimSpace(name)) {
-			return s.Code
-		}
 	}
 	if ValidSegmentCode(code) && len(code) <= 6 {
 		return code
@@ -202,19 +133,11 @@ func SizeCodeFromName(name string) string {
 	return OptionCode(name)
 }
 
-// EditionCodeFromName resolves a display edition name or code.
+// EditionCodeFromName normalizes an edition code.
 func EditionCodeFromName(name string) string {
 	code := NormalizeCode(name)
 	if code == "" {
 		return ""
-	}
-	for _, e := range SeedEditions {
-		if e.Code == code {
-			return e.Code
-		}
-		if strings.EqualFold(e.Name, strings.TrimSpace(name)) {
-			return e.Code
-		}
 	}
 	if ValidSegmentCode(code) {
 		return code

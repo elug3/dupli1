@@ -43,7 +43,7 @@ Two tables:
   (`1139` "블랙", `F0002` "블랙"). Two colorways may share a
   name and stay distinct; a style can sell both.
 - **`base_colors`** holds the **plain colors** shoppers recognize (`BLK`
-  Black, `BRN` Brown), seeded from `domain.SeedColors`. Each colorway points
+  Black, `BRN` Brown), loaded by `scripts/seed-reference-data.py`. Each colorway points
   at one (`base_code`); `NULL` = not assigned yet. The foreign key is
   `RESTRICT`.
 
@@ -62,9 +62,9 @@ its base color's.
 | no base, no hex | Unknown: dashed neutral circle ("no color data") |
 
 Hex input accepts `#RRGGBB` or `RRGGBB` in any case and stores `#rrggbb`.
-Each seed colorway is its own base color (`BLK` → `BLK`). On startup a seed
-color or base color whose `hex` is `""` gets the seeded one; a hex staff set
-is never overwritten.
+Each reference colorway is its own base color (`BLK` → `BLK`). Startup does
+not touch colors or base colors; the script only creates missing codes, so a
+hex staff set is never overwritten.
 
 ## API
 
