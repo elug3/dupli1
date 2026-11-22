@@ -158,6 +158,15 @@ PREV_COMMIT=$(git -C "$DEPLOY_DIR" rev-parse HEAD)
 if [[ -n $REF ]]; then
   checkout_ref "$REF"
 fi
+# A compose file this .env cannot fill (a new required variable such as
+# NATS_TOKEN that the host lacks yet) fails here, before any image or tag
+# changes, and the checkout goes back to what is running.
+if ! config_err=$(dc config -q 2>&1); then
+  echo "$config_err" >&2
+  echo "not deploying $TARGET $TAG: $(git -C "$DEPLOY_DIR" rev-parse --short HEAD)'s compose file does not load with $ENV_FILE" >&2
+  checkout_detach "$PREV_COMMIT"
+  exit 1
+fi
 echo "deploying $TARGET $TAG from $(git -C "$DEPLOY_DIR" rev-parse --short HEAD) (current $PREV, ${PREV_COMMIT::7})"
 
 for s in "${SERVICES[@]}"; do

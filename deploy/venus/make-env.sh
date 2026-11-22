@@ -6,8 +6,9 @@
 #
 # Carried over from AWS: JWT secret + RS256 key (existing sessions stay valid),
 # the order service account's email, Nano Pay, Telegram. Newly generated:
-# Postgres superuser, app role, S3 (SeaweedFS) key, and the two service-account
-# API keys (service accounts have no password). Re-running keeps generated values.
+# Postgres superuser, app role, S3 (SeaweedFS) key, the NATS token, and the two
+# service-account API keys (service accounts have no password). Re-running keeps
+# generated values.
 set -euo pipefail
 BACKUP=${1:?backup dir, e.g. ~/backups/dupli1-2026-09-26}
 IDENTITY=${2:?age identity file}
@@ -53,6 +54,7 @@ env = {
     "PG_SUPERUSER_PASSWORD": generated("PG_SUPERUSER_PASSWORD"),
     "DB_APP_PASSWORD": generated("DB_APP_PASSWORD"),
     "S3_SECRET_KEY": generated("S3_SECRET_KEY"),
+    "NATS_TOKEN": generated("NATS_TOKEN"),
     "JWT_SECRET": secret("jwt-secret"),
     "DUPLI1_ORDER_SERVICE_EMAIL": order_acct["DUPLI1_ORDER_SERVICE_EMAIL"],
     # Service accounts have no password; each has an API key instead.
