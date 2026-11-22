@@ -55,12 +55,3 @@ func TestRejectSecondColor(t *testing.T) {
 		}
 	}
 }
-
-func TestSeedColorsHaveValidHex(t *testing.T) {
-	for _, c := range SeedColors {
-		got, err := NormalizeHex(c.Hex)
-		if err != nil || got != c.Hex || c.Hex == "" {
-			t.Errorf("seed %s hex %q: %v", c.Code, c.Hex, err)
-		}
-	}
-}

@@ -28,7 +28,7 @@ func (s *CatalogStore) ListBrands(ctx context.Context) ([]domain.Brand, error) {
 		return nil, wrapDB("list brands", err)
 	}
 	defer rows.Close()
-	var out []domain.Brand
+	out := []domain.Brand{}
 	for rows.Next() {
 		var b domain.Brand
 		if err := rows.Scan(&b.Code, &b.Name); err != nil {
@@ -113,7 +113,7 @@ func (s *CatalogStore) ListStyles(ctx context.Context, brandCode string) ([]doma
 		return nil, wrapDB("list styles", err)
 	}
 	defer rows.Close()
-	var out []domain.Style
+	out := []domain.Style{}
 	for rows.Next() {
 		var st domain.Style
 		if err := rows.Scan(&st.BrandCode, &st.Code, &st.Name); err != nil {
@@ -222,7 +222,7 @@ func (s *CatalogStore) ListColors(ctx context.Context) ([]domain.Color, error) {
 		return nil, wrapDB("list colors", err)
 	}
 	defer rows.Close()
-	var out []domain.Color
+	out := []domain.Color{}
 	for rows.Next() {
 		c, err := scanColor(rows.Scan)
 		if err != nil {
@@ -306,7 +306,7 @@ func (s *CatalogStore) ListBaseColors(ctx context.Context) ([]domain.BaseColor, 
 		return nil, wrapDB("list base colors", err)
 	}
 	defer rows.Close()
-	var out []domain.BaseColor
+	out := []domain.BaseColor{}
 	for rows.Next() {
 		var b domain.BaseColor
 		if err := rows.Scan(&b.Code, &b.Name, &b.Hex); err != nil {
@@ -372,7 +372,7 @@ func (s *CatalogStore) ListSizes(ctx context.Context) ([]domain.Size, error) {
 		return nil, wrapDB("list sizes", err)
 	}
 	defer rows.Close()
-	var out []domain.Size
+	out := []domain.Size{}
 	for rows.Next() {
 		var sz domain.Size
 		if err := rows.Scan(&sz.Code, &sz.Name); err != nil {
@@ -455,7 +455,7 @@ func (s *CatalogStore) ListEditions(ctx context.Context) ([]domain.Edition, erro
 		return nil, wrapDB("list editions", err)
 	}
 	defer rows.Close()
-	var out []domain.Edition
+	out := []domain.Edition{}
 	for rows.Next() {
 		var e domain.Edition
 		if err := rows.Scan(&e.Code, &e.Name); err != nil {
@@ -539,7 +539,7 @@ func (s *CatalogStore) listCatalogTerms(ctx context.Context, table string) ([]do
 		return nil, wrapDB("list "+table, err)
 	}
 	defer rows.Close()
-	var out []domain.CatalogTerm
+	out := []domain.CatalogTerm{}
 	for rows.Next() {
 		var t domain.CatalogTerm
 		if err := rows.Scan(&t.Code, &t.Name); err != nil {

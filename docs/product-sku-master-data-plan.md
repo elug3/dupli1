@@ -1,6 +1,6 @@
 # Plan: SKU Master Data (Code → Name) Runtime CRUD
 
-> **Mostly shipped.** Phases A–C are as-built in [product-sku-system.md](product-sku-system.md). Phase D's dictionary screens shipped as manage-web `/catalog`; what remains is D.2 — `domain.BrandCodeFromName` still resolves against the in-memory `SeedBrands`.
+> **Mostly shipped.** Phases A–C are as-built in [product-sku-system.md](product-sku-system.md). Phase D's dictionary screens shipped as manage-web `/catalog`; D.2 shipped 2026-11-06: name resolution reads the master tables only, and the compiled-in seed lists are gone (reference data loads via `scripts/seed-reference-data.py`, see [product-sku-system.md](product-sku-system.md#reference-data)).
 
 **Status:** Phases A–C implemented; Phase D.1 (manage-web `/catalog`) implemented; D.2 open.  
 **As-built reference:** [product-sku-system.md](product-sku-system.md) (ULID product `id` + `skuId`, human SKU, masters, catalog APIs, write enforce).
@@ -228,7 +228,7 @@ Code↔name lookups:
 ### Phase D — Admin UI / cleanup
 
 1. Manage-web dictionary screens.
-2. Drop reliance on in-memory `SeedBrands` for resolution (DB is source of truth; seed stays migrate-only).
+2. ~~Drop reliance on in-memory `SeedBrands` for resolution.~~ Done 2026-11-06, and the migrate-time seed went with it: only `OS` and the category sizes are seeded; the rest loads via `scripts/seed-reference-data.py`.
 
 ---
 

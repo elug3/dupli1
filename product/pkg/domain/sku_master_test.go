@@ -7,8 +7,8 @@ import (
 
 // Every size a category sells must be in the size master, or a SKU passes
 // the category check and then fails the master lookup on create.
-func TestSizeMasterSeedsCoverCategorySizes(t *testing.T) {
-	seeds := SizeMasterSeeds()
+func TestCategorySizesCoverCategories(t *testing.T) {
+	seeds := CategorySizes()
 	codes := make(map[string]bool, len(seeds))
 	for _, s := range seeds {
 		if codes[s.Code] {
@@ -24,12 +24,6 @@ func TestSizeMasterSeedsCoverCategorySizes(t *testing.T) {
 			if !codes[code] {
 				t.Errorf("category %s sells size %s, which the size master is not seeded with", c.Code, code)
 			}
-		}
-	}
-	// The original seeds come first, unchanged.
-	for i, s := range SeedSizes {
-		if seeds[i] != s {
-			t.Fatalf("seed %d = %+v, want %+v", i, seeds[i], s)
 		}
 	}
 }
@@ -72,5 +66,18 @@ func TestCheckVariantCodesUnchanged(t *testing.T) {
 	// A legacy row without codes may be given one.
 	if err := CheckVariantCodesUnchanged(Variant{SKU: "BOT-001-GRN"}, Variant{ColorCode: "GRN", SizeCode: "OS"}); err != nil {
 		t.Fatalf("legacy backfill: %v", err)
+	}
+}
+
+// A variant without a size gets DefaultSize, which the service seeds itself.
+func TestCodeSizesHoldTheDefaultSize(t *testing.T) {
+	v := &Variant{Color: "Black", ColorCode: "BLK"}
+	ResolveVariantCodes(v)
+	sizes := CodeSizes()
+	if v.SizeCode != DefaultSize.Code || sizes[0] != DefaultSize {
+		t.Fatalf("default size %q, CodeSizes()[0] = %+v; want %+v first", v.SizeCode, sizes[0], DefaultSize)
+	}
+	if len(sizes) != len(CategorySizes())+1 {
+		t.Fatalf("CodeSizes() has %d sizes, want CategorySizes()+1 = %d", len(sizes), len(CategorySizes())+1)
 	}
 }

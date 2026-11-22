@@ -75,30 +75,30 @@ func TestValidateBrandCode(t *testing.T) {
 	}
 }
 
+// The *FromName helpers are only the fallback when a store finds no master
+// row for the name, so they derive a code rather than knowing any brand.
 func TestBrandCodeFromName(t *testing.T) {
-	if got := BrandCodeFromName("Bottega Veneta"); got != "BOT" {
-		t.Fatalf("got %q", got)
-	}
-	if got := BrandCodeFromName("Prada"); got != "PR" {
-		t.Fatalf("got %q", got)
-	}
-	if got := BrandCodeFromName("Gucci"); got != "GUC" {
-		t.Fatalf("got %q", got)
-	}
-	if got := BrandCodeFromName("Dupli1 Studio"); got != "DUP" {
-		t.Fatalf("got %q", got)
+	for name, want := range map[string]string{
+		"Bottega Veneta": "BOT",
+		"Gucci":          "GUC",
+		"Dupli1 Studio":  "DUP",
+		"":               "",
+	} {
+		if got := BrandCodeFromName(name); got != want {
+			t.Fatalf("BrandCodeFromName(%q) = %q, want %q", name, got, want)
+		}
 	}
 }
 
 func TestColorAndSizeFromName(t *testing.T) {
-	if got := ColorCodeFromName("Black"); got != "BLK" {
-		t.Fatalf("color got %q", got)
+	if got := ColorCodeFromName("BLK"); got != "BLK" {
+		t.Fatalf("color code got %q", got)
 	}
 	if got := ColorCodeFromName("F0032"); got != "F0032" {
 		t.Fatalf("numeric color got %q", got)
 	}
-	if got := SizeCodeFromName("Medium"); got != "MED" {
-		t.Fatalf("size got %q", got)
+	if got := SizeCodeFromName("MED"); got != "MED" {
+		t.Fatalf("size code got %q", got)
 	}
 	if got := SizeCodeFromName("M"); got != "M" {
 		t.Fatalf("size M got %q", got)
@@ -115,7 +115,8 @@ func TestStyleCodeFromProductID(t *testing.T) {
 }
 
 func TestComposeVariantSKULuxury(t *testing.T) {
-	v := &Variant{Color: "Black", Size: "Medium", EditionCode: "V"}
+	// Stores resolve "Black" / "Medium" to codes through the master first.
+	v := &Variant{Color: "Black", ColorCode: "BLK", Size: "Medium", SizeCode: "MED", EditionCode: "V"}
 	sku := ComposeVariantSKU("BOT-001", "BOT", "CAS001", v)
 	if sku != "BOT_CAS001_BLK_V_MED" {
 		t.Fatalf("got %q (codes: color=%q size=%q)", sku, v.ColorCode, v.SizeCode)

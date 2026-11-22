@@ -23,3 +23,7 @@ infra/ec2/*.pem
 # Claude Code local settings
 .claude/settings.local.json
 .claude/pipeline/
+
+# Python bytecode
+__pycache__/
+*.pyc

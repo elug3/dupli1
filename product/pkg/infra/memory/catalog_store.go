@@ -47,20 +47,23 @@ func NewCatalogStore() *CatalogStore {
 		VariantSizeCodes:    map[string]string{},
 		VariantEditionCodes: map[string]string{},
 	}
-	for _, b := range domain.SeedBrands {
+	for _, b := range fixtureBrands {
 		s.Brands[b.Code] = b
 	}
-	for _, b := range domain.SeedBaseColors() {
-		s.BaseColors[b.Code] = b
-	}
-	for _, c := range domain.SeedColors {
-		c.BaseCode = c.Code // each seed colorway is its own base color
+	for _, c := range fixtureColors {
+		s.BaseColors[c.Code] = domain.BaseColor{Code: c.Code, Name: c.Name, Hex: c.Hex}
+		c.BaseCode = c.Code // each fixture colorway is its own base color
 		s.Colors[c.Code] = c
 	}
-	for _, sz := range domain.SizeMasterSeeds() {
+	for _, sz := range fixtureSizes {
 		s.Sizes[sz.Code] = sz
 	}
-	for _, e := range domain.SeedEditions {
+	for _, sz := range domain.CodeSizes() {
+		if _, ok := s.Sizes[sz.Code]; !ok {
+			s.Sizes[sz.Code] = sz
+		}
+	}
+	for _, e := range fixtureEditions {
 		s.Editions[e.Code] = e
 	}
 	for _, t := range domain.SeedSubCategories {
@@ -189,7 +192,7 @@ func (s *CatalogStore) DeleteBrand(ctx context.Context, code string) error {
 func (s *CatalogStore) ListStyles(ctx context.Context, brandCode string) ([]domain.Style, error) {
 	_ = ctx
 	brandCode = domain.NormalizeCode(brandCode)
-	var out []domain.Style
+	out := []domain.Style{}
 	for _, st := range s.Styles {
 		if st.BrandCode == brandCode {
 			out = append(out, st)

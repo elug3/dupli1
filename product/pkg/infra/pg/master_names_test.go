@@ -7,8 +7,8 @@ import (
 	"github.com/elug3/dupli1/product/pkg/domain"
 )
 
-// Names resolve against the master tables, not the compiled-in seeds, and
-// every size clothing sells is in the size master.
+// Names resolve against the master tables, and every size clothing sells is
+// in the size master — with OS, the only sizes the service still seeds at startup.
 func TestCreate_RuntimeMasterNamesAndClothingSizes(t *testing.T) {
 	dsn := requireProductDSN(t)
 	pool := freshProductSchema(t, dsn, "master_names_test")
@@ -18,6 +18,7 @@ func TestCreate_RuntimeMasterNamesAndClothingSizes(t *testing.T) {
 	if err := store.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	loadReferenceData(t, pool)
 	if _, err := NewInventoryStore(pool); err != nil {
 		t.Fatalf("inventory migrate: %v", err)
 	}
@@ -62,8 +63,52 @@ func TestCreate_RuntimeMasterNamesAndClothingSizes(t *testing.T) {
 			t.Fatalf("size %s: %v", size, err)
 		}
 	}
-	// Re-running the seed on restart is a no-op.
+	// Re-seeding the category sizes on restart is a no-op.
 	if err := store.migrate(); err != nil {
 		t.Fatalf("re-migrate: %v", err)
+	}
+}
+
+// A fresh database holds no brands, colors, base colors or editions, and of
+// the sizes only those a category sells: the rest is reference data a script
+// loads, so a row staff delete stays deleted across restarts.
+func TestMigrate_SeedsOnlyCodeSizes(t *testing.T) {
+	dsn := requireProductDSN(t)
+	pool := freshProductSchema(t, dsn, "seed_only_category_sizes_test")
+	ctx := t.Context()
+
+	store := &ProductSearchStore{pool: pool}
+	if err := store.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	for _, table := range []string{"brands", "colors", "base_colors", "sku_editions"} {
+		var n int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&n); err != nil || n != 0 {
+			t.Errorf("%s after migrate: %d rows (%v), want 0", table, n, err)
+		}
+	}
+	var sizes int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM sizes`).Scan(&sizes); err != nil || sizes != len(domain.CodeSizes()) {
+		t.Errorf("sizes after migrate: %d (%v), want %d", sizes, err, len(domain.CodeSizes()))
+	}
+	// A variant created without a size gets OS, so OS is there before any
+	// reference data is loaded.
+	var osName string
+	if err := pool.QueryRow(ctx, `SELECT name FROM sizes WHERE code = $1`, domain.DefaultSize.Code).Scan(&osName); err != nil {
+		t.Errorf("default size %s after migrate: %v", domain.DefaultSize.Code, err)
+	}
+
+	catalog := NewCatalogStore(pool)
+	if _, err := catalog.CreateBrand(ctx, domain.Brand{Code: "PR", Name: "Prada"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.DeleteBrand(ctx, "PR"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.migrate(); err != nil {
+		t.Fatalf("re-migrate: %v", err)
+	}
+	if _, err := catalog.GetBrand(ctx, "PR"); !errors.Is(err, domain.ErrMasterNotFound) {
+		t.Fatalf("deleted brand after restart: want ErrMasterNotFound, got %v", err)
 	}
 }

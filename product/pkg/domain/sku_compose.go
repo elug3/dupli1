@@ -18,7 +18,7 @@ func ResolveVariantCodes(v *Variant) {
 		if v.Size != "" {
 			v.SizeCode = SizeCodeFromName(v.Size)
 		} else {
-			v.SizeCode = "OS"
+			v.SizeCode = DefaultSize.Code
 		}
 	} else {
 		v.SizeCode = NormalizeCode(v.SizeCode)

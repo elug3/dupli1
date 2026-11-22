@@ -23,17 +23,6 @@ type BaseColorPatch struct {
 	Hex  *string
 }
 
-// SeedBaseColors is the plain-color palette, the fills the storefront used
-// before colors carried one. Each SeedColors row is its own base color
-// (BLK → BLK), so a seed colorway's swatch does not change.
-func SeedBaseColors() []BaseColor {
-	out := make([]BaseColor, 0, len(SeedColors))
-	for _, c := range SeedColors {
-		out = append(out, BaseColor{Code: c.Code, Name: c.Name, Hex: c.Hex})
-	}
-	return out
-}
-
 // Apply returns b with the patch's set fields applied.
 func (p BaseColorPatch) Apply(b BaseColor) BaseColor {
 	if p.Name != nil {

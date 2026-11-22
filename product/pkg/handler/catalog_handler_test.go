@@ -243,3 +243,25 @@ func TestCatalogColorSwatchHex(t *testing.T) {
 		}
 	}
 }
+
+// A brand with no styles yet must list as [], not null: manage-web reads the
+// body as an array and crashed on null for every freshly created brand.
+func TestCatalogListStylesEmptyIsArray(t *testing.T) {
+	mux, _ := newFullMux(memory.NewProductStore())
+
+	body, _ := json.Marshal(map[string]string{"code": "ZZ", "name": "Zegna"})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, handler.RouteCatalogBrands, bytes.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create brand: want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/catalog/brands/ZZ/styles", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list styles: want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != "[]" {
+		t.Fatalf("list styles: want [], got %s", got)
+	}
+}
