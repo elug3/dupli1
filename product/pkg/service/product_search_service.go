@@ -36,6 +36,7 @@ type ProductSearchService struct {
 	imageStore     ports.ImageStore
 	inventory      ports.InventoryStore
 	eventPublisher ports.EventPublisher
+	taxonomy       ports.TaxonomyReader
 	now            func() time.Time
 }
 
@@ -50,6 +51,14 @@ func NewProductSearchService(store ports.ProductStore, imageStore ports.ImageSto
 	if len(eventPublisher) > 0 {
 		s.eventPublisher = eventPublisher[0]
 	}
+	return s
+}
+
+// WithTaxonomy sets where the merchandising terms products are validated
+// against come from. Without it the service holds no terms: a product may
+// carry no subcategory, style or target.
+func (s *ProductSearchService) WithTaxonomy(t ports.TaxonomyReader) *ProductSearchService {
+	s.taxonomy = t
 	return s
 }
 
@@ -74,7 +83,47 @@ func (s *ProductSearchService) SearchProducts(ctx context.Context, filter map[st
 	if public {
 		f["status"] = "active"
 	}
+	if err := s.normalizeTaxonomyFilters(ctx, f); err != nil {
+		return nil, 0, err
+	}
 	return s.store.SearchProducts(ctx, f)
+}
+
+// normalizeTaxonomyFilters turns a subcategory, style or target filter given
+// as a code or display name ("Crossbody") into its code. A value the
+// taxonomy does not hold is only lowercased, so it matches nothing rather
+// than failing the search. The terms are read only when one is filtered on.
+func (s *ProductSearchService) normalizeTaxonomyFilters(ctx context.Context, f map[string]string) error {
+	if f["subcategory"] == "" && f["style"] == "" && f["target"] == "" {
+		return nil
+	}
+	tax, err := loadTaxonomy(ctx, s.taxonomy)
+	if err != nil {
+		return err
+	}
+	for key, kind := range map[string]domain.TaxonomyKind{
+		"subcategory": domain.TaxonomySubCategory,
+		"style":       domain.TaxonomyBagStyle,
+		"target":      domain.TaxonomyTarget,
+	} {
+		v := f[key]
+		if v == "" {
+			continue
+		}
+		terms := tax.Styles
+		switch kind {
+		case domain.TaxonomySubCategory:
+			terms = tax.SubCategories
+		case domain.TaxonomyTarget:
+			terms = tax.Targets
+		}
+		if n, ok := domain.NormalizeTerm(kind, terms, v); ok {
+			f[key] = n
+		} else {
+			f[key] = domain.NormalizeTaxonomyCode(v)
+		}
+	}
+	return nil
 }
 
 func (s *ProductSearchService) ListProducts(ctx context.Context) ([]domain.Product, error) {
@@ -258,7 +307,11 @@ func (s *ProductSearchService) CreateProduct(ctx context.Context, p domain.Produ
 	if s.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
-	if err := domain.NormalizeProductTaxonomy(&p, ""); err != nil {
+	tax, err := loadTaxonomy(ctx, s.taxonomy)
+	if err != nil {
+		return nil, err
+	}
+	if err := domain.NormalizeProductTaxonomy(&p, "", tax); err != nil {
 		return nil, ports.Invalid(err.Error())
 	}
 	attrs, err := domain.NormalizeAttributes(p.Attributes)
@@ -302,7 +355,11 @@ func (s *ProductSearchService) UpdateProduct(ctx context.Context, p domain.Produ
 		return nil, err
 	}
 	merged := existing.MergeUpdate(p)
-	if err := domain.NormalizeProductTaxonomy(&merged, existing.Category); err != nil {
+	tax, err := loadTaxonomy(ctx, s.taxonomy)
+	if err != nil {
+		return nil, err
+	}
+	if err := domain.NormalizeProductTaxonomy(&merged, existing.Category, tax); err != nil {
 		return nil, ports.Invalid(err.Error())
 	}
 	attrs, err := domain.NormalizeAttributes(merged.Attributes)

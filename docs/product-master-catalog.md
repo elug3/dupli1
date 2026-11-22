@@ -16,21 +16,38 @@ Storefront bag filters need a fixed **master catalog** independent of SKU segmen
 
 `style` here is **not** SKU `styleCode` (design family under a brand).
 
-Categories and their subcategories are Go seeds (`domain.SeedCategories`); adding a category there is what makes its products creatable. A category may also list its **sizes** (size master codes): `clothing` sells letter sizes `XXS`–`XXXL` and `4XL`, and Italian sizes `34`–`60` in even steps, each in a short, regular and long fit (`48S`, `48`, `48R`, `48L`). Every one of them is seeded into the size master on migrate (`domain.CategorySizes`, named by its code; with the default `OS` these are the only rows the service seeds, `domain.CodeSizes`), so each can be used on a SKU. A jacket SKU in `OS` or a bag capacity size is refused with `400`, and so is moving a product into `clothing` while one of its SKUs has such a size. `bags` lists none and takes any size. Style and target are shared by every category. See [product-multi-category-design.md](product-multi-category-design.md).
+Categories are defined in code (`domain.SeedCategories`); adding one there is what makes its products creatable. Their **subcategories**, and the shared **bag styles** and **targets**, are data staff edit (below). A category may also list its **sizes** (size master codes): `clothing` sells letter sizes `XXS`–`XXXL` and `4XL`, and Italian sizes `34`–`60` in even steps, each in a short, regular and long fit (`48S`, `48`, `48R`, `48L`). Every one of them is seeded into the size master on migrate (`domain.CategorySizes`, named by its code; with the default `OS` these are the only rows the service seeds, `domain.CodeSizes`), so each can be used on a SKU. A jacket SKU in `OS` or a bag capacity size is refused with `400`, and so is moving a product into `clothing` while one of its SKUs has such a size. `bags` lists none and takes any size. Style and target are shared by every category. See [product-multi-category-design.md](product-multi-category-design.md).
 
 ## Master catalog APIs (public)
 
 | Method | Path | Response |
 |--------|------|----------|
-| `GET` | `/api/v1/products/catalog/categories` | `[{ code, name, subCategories }]` — every category, storefront order |
-| `GET` | `/api/v1/products/catalog/master?category=` | `{ subCategories, styles, targets }` each `{ code, name }[]`; `category` defaults to `bags`, unknown → `400` |
+| `GET` | `/api/v1/products/catalog/categories` | `[{ code, name, subCategories, sizes? }]` — every category, storefront order |
+| `GET` | `/api/v1/products/catalog/master?category=` | `{ subCategories, styles, targets }` each `{ code, name, sortOrder, category? }[]`; `category` defaults to `bags`, unknown → `400` |
 | `GET` | `/api/v1/products/catalog/subcategories?category=` | that category's subcategory terms (default `bags`) |
 | `GET` | `/api/v1/products/catalog/bag-styles` | bag style terms |
 | `GET` | `/api/v1/products/catalog/targets` | target terms |
 
 Legacy aliases: `/api/v1/catalog/master`, `/api/v1/catalog/subcategories`, `/api/v1/catalog/bag-styles`, `/api/v1/catalog/targets`.
 
-Bag terms are seeded into Postgres tables `bag_subcategories`, `bag_styles`, `bag_targets` on migrate and served from there, so bag responses are unchanged; other categories are served from their Go seeds. Codes are lowercase; create/update normalize case and reject unknown values (`400`).
+Lists are ordered by `sortOrder`, then code. A subcategory term carries its `category`.
+
+### Editing the taxonomy (`product.master.write`)
+
+Subcategories, bag styles and targets live in Postgres (`bag_subcategories` with a `category` column, `bag_styles`, `bag_targets`). Nothing seeds them at startup: a new environment loads them with `scripts/seed-reference-data.py` (the `subcategories`, `bag_styles` and `targets` lists in `scripts/seed/reference-data.json`). Product create/update and the search filters read the same tables, so a term staff add is usable at once and one they delete is refused on the next write.
+
+| Method | Path | Body | Result |
+|--------|------|------|--------|
+| `POST` | `/api/v1/products/catalog/subcategories` | `{ code, name, category?, sortOrder? }` | `201` term. `category` is `bags` or `clothing` (default `bags`) |
+| `POST` | `/api/v1/products/catalog/bag-styles` · `/targets` | `{ code, name, sortOrder? }` | `201` term; a `category` here is `400` |
+| `PATCH` | `/api/v1/products/catalog/{subcategories,bag-styles,targets}/{code}` | `{ name?, sortOrder? }` | `200` term; neither given → `400` |
+| `DELETE` | `/api/v1/products/catalog/{subcategories,bag-styles,targets}/{code}` | — | `204`; `409` while a product carries the code |
+
+- Codes are lowercase letters, digits, `-` or `_` (at most 32), normalized to lowercase; anything else is `400`. A taken code is `409`; a **subcategory code is unique across categories**.
+- An omitted `sortOrder` puts the term after the last one in its list (for a subcategory, its category's list).
+- A term's code never changes, and neither does a subcategory's category: products store the code. Rename with `PATCH`, or add a new term and move products over before deleting the old one.
+- Product create/update normalize a code or display name (`Crossbody` → `cross`; the target typo `mem` → `men`) and refuse a value the tables do not hold (`400`).
+- Upgrading in place: the migrate that adds `bag_subcategories.category` marks the existing rows `bags` and copies `padded` and `jackets` (the clothing subcategories the code used to serve) once, so existing clothing products stay editable before anyone runs the script.
 
 ## Product search
 

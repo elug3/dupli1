@@ -91,6 +91,10 @@ const (
 	RouteCatalogSubCategories = "/api/v1/products/catalog/subcategories"
 	RouteCatalogBagStyles     = "/api/v1/products/catalog/bag-styles"
 	RouteCatalogTargets       = "/api/v1/products/catalog/targets"
+	// One staff-edited term (PATCH / DELETE, product.master.write).
+	RouteCatalogSubCategoryByCode = "/api/v1/products/catalog/subcategories/{code}"
+	RouteCatalogBagStyleByCode    = "/api/v1/products/catalog/bag-styles/{code}"
+	RouteCatalogTargetByCode      = "/api/v1/products/catalog/targets/{code}"
 
 	// Pre-rename coupon spellings under /products — same handlers, kept for one
 	// release so clients can move at their own pace. Retired together with the

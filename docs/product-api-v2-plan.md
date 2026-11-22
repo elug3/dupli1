@@ -228,9 +228,9 @@ Found while reviewing the catalog master (2026-11-04). Three bugs were fixed in 
 
 | Item | Today | v2 |
 |---|---|---|
-| Categories as data | `domain.SeedCategories` in Go (`taxonomy.go`): categories, subcategories, category sizes; a new category needs a deploy | Categories, subcategories and category sizes in Postgres with an admin API (`product.master.write`) |
+| Categories as data | `domain.SeedCategories` in Go (`taxonomy.go`): categories and category sizes; a new category needs a deploy (subcategories are data since 2026-11-22) | Categories, subcategories and category sizes in Postgres with an admin API (`product.master.write`) |
 | One list, read by every client | dupli1-web (`app/lib/catalog.ts` slug maps and `STOREFRONT_CATEGORIES`, `SIZE_ORDER` in `product-variants.ts`) and manage-web (`app/lib/categories.ts`, `KNOWN_CATEGORIES` in `routes/products.tsx`) keep their own copies | Both read `/catalog/categories`, which carries display order; adding a category is one admin action |
-| Bag taxonomy tables | `bag_subcategories` / `bag_styles` / `bag_targets` are seeded and listed from Postgres, but writes validate against the Go seeds and there is no write API, so a row added there shows as a filter and is refused on create | Settled by the category redesign: one source, read and validated the same way |
+| Bag taxonomy tables | Done 2026-11-22: subcategories (now with a `category`), bag styles and targets are staff-edited through `POST`/`PATCH`/`DELETE` (`product.master.write`) and products are validated against the same tables ([product-master-catalog.md](product-master-catalog.md#editing-the-taxonomy-productmasterwrite)). Categories themselves are still Go | Categories as data too (row above) |
 | Size-chart measurements | Four fixed fields (`chestCm`, `lengthCm`, `shoulderCm`, `sleeveCm`), at most 20 rows | Measurement keys per category (trousers: waist, inseam; shoes: foot length) |
 | A SKU's own size | Clients find the `sizeChart` row for the variant's `sizeCode` themselves | `measurements_cm` (clothing) / `dimensions_mm` (bags) on every product (§6.2), still stored once per style |
 | Names as input | A create may send `color: "Ivory"` instead of `colorCode`; v1 resolves it against the masters | Requests carry codes only; names are read-only |

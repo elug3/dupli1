@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/ports"
@@ -147,9 +148,26 @@ func (s *CatalogService) DeleteEdition(ctx context.Context, code string) error {
 	return s.store.DeleteEdition(ctx, code)
 }
 
+// loadTaxonomy reads every merchandising term; a nil reader holds none.
+func loadTaxonomy(ctx context.Context, r ports.TaxonomyReader) (domain.Taxonomy, error) {
+	var tax domain.Taxonomy
+	if r == nil {
+		return tax, nil
+	}
+	var err error
+	if tax.SubCategories, err = r.ListTaxonomy(ctx, domain.TaxonomySubCategory); err != nil {
+		return tax, err
+	}
+	if tax.Styles, err = r.ListTaxonomy(ctx, domain.TaxonomyBagStyle); err != nil {
+		return tax, err
+	}
+	if tax.Targets, err = r.ListTaxonomy(ctx, domain.TaxonomyTarget); err != nil {
+		return tax, err
+	}
+	return tax, nil
+}
+
 // ListSubCategories returns one category's subcategories; "" means bags.
-// Bag terms come from the store (seeded tables) so the response stays as it
-// was before categories; other categories are served from their seeds.
 func (s *CatalogService) ListSubCategories(ctx context.Context, category string) ([]domain.CatalogTerm, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("catalog store not initialized")
@@ -158,15 +176,24 @@ func (s *CatalogService) ListSubCategories(ctx context.Context, category string)
 	if err != nil {
 		return nil, err
 	}
-	if c.Code == domain.DefaultCategory {
-		return s.store.ListSubCategories(ctx)
+	all, err := s.store.ListTaxonomy(ctx, domain.TaxonomySubCategory)
+	if err != nil {
+		return nil, err
 	}
-	return append([]domain.CatalogTerm(nil), c.SubCategories...), nil
+	return domain.Taxonomy{SubCategories: all}.SubCategoriesOf(c.Code), nil
 }
 
-// ListCategories returns every category products may carry.
-func (s *CatalogService) ListCategories(context.Context) []domain.Category {
-	return domain.Categories()
+// ListCategories returns every category products may carry, each with its
+// subcategories.
+func (s *CatalogService) ListCategories(ctx context.Context) ([]domain.Category, error) {
+	if s.store == nil {
+		return nil, fmt.Errorf("catalog store not initialized")
+	}
+	tax, err := loadTaxonomy(ctx, s.store)
+	if err != nil {
+		return nil, err
+	}
+	return domain.Categories(tax), nil
 }
 
 func lookupCategory(code string) (domain.Category, error) {
@@ -184,14 +211,91 @@ func (s *CatalogService) ListBagStyles(ctx context.Context) ([]domain.CatalogTer
 	if s.store == nil {
 		return nil, fmt.Errorf("catalog store not initialized")
 	}
-	return s.store.ListBagStyles(ctx)
+	return s.store.ListTaxonomy(ctx, domain.TaxonomyBagStyle)
 }
 
 func (s *CatalogService) ListTargets(ctx context.Context) ([]domain.CatalogTerm, error) {
 	if s.store == nil {
 		return nil, fmt.Errorf("catalog store not initialized")
 	}
-	return s.store.ListTargets(ctx)
+	return s.store.ListTaxonomy(ctx, domain.TaxonomyTarget)
+}
+
+// CreateTaxonomyTerm adds a subcategory, bag style or target. The code is
+// normalized (lowercase) and must be a valid term code; a subcategory names
+// one of the categories in code (blank means bags). A nil sortOrder puts the
+// term after the last one in its list. A code already in use — for a
+// subcategory, in any category — is ErrMasterExists.
+func (s *CatalogService) CreateTaxonomyTerm(ctx context.Context, kind domain.TaxonomyKind, t domain.CatalogTerm, sortOrder *int) (*domain.CatalogTerm, error) {
+	if !kind.Valid() {
+		return nil, fmt.Errorf("unknown taxonomy kind %q", kind)
+	}
+	t.Code = domain.NormalizeTaxonomyCode(t.Code)
+	t.Name = strings.TrimSpace(t.Name)
+	if !domain.ValidTaxonomyCode(t.Code) {
+		return nil, ports.Invalid(fmt.Sprintf("invalid code %q: lowercase letters, digits, '-' or '_', at most 32", t.Code))
+	}
+	if t.Name == "" {
+		return nil, ports.Invalid("name is required")
+	}
+	if sortOrder != nil && *sortOrder < 0 {
+		return nil, ports.Invalid("sortOrder must not be negative")
+	}
+	if kind == domain.TaxonomySubCategory {
+		c, err := lookupCategory(t.Category)
+		if err != nil {
+			return nil, err
+		}
+		t.Category = c.Code
+	} else if strings.TrimSpace(t.Category) != "" {
+		return nil, ports.Invalid("only a subcategory has a category")
+	}
+	if sortOrder != nil {
+		t.SortOrder = *sortOrder
+	} else {
+		list, err := s.store.ListTaxonomy(ctx, kind)
+		if err != nil {
+			return nil, err
+		}
+		t.SortOrder = 0
+		for _, other := range list {
+			if other.Category == t.Category && other.SortOrder >= t.SortOrder {
+				t.SortOrder = other.SortOrder + 1
+			}
+		}
+	}
+	return s.store.CreateTaxonomyTerm(ctx, kind, t)
+}
+
+// UpdateTaxonomyTerm renames a term and/or moves it in its list. Neither its
+// code nor a subcategory's category changes, since products store the code.
+func (s *CatalogService) UpdateTaxonomyTerm(ctx context.Context, kind domain.TaxonomyKind, code string, patch domain.CatalogTermPatch) (*domain.CatalogTerm, error) {
+	if !kind.Valid() {
+		return nil, fmt.Errorf("unknown taxonomy kind %q", kind)
+	}
+	if patch.Name == nil && patch.SortOrder == nil {
+		return nil, ports.Invalid("nothing to change: send name and/or sortOrder")
+	}
+	if patch.Name != nil {
+		name := strings.TrimSpace(*patch.Name)
+		if name == "" {
+			return nil, ports.Invalid("name is required")
+		}
+		patch.Name = &name
+	}
+	if patch.SortOrder != nil && *patch.SortOrder < 0 {
+		return nil, ports.Invalid("sortOrder must not be negative")
+	}
+	return s.store.UpdateTaxonomyTerm(ctx, kind, domain.NormalizeTaxonomyCode(code), patch)
+}
+
+// DeleteTaxonomyTerm removes a term no product carries (ErrMasterInUse
+// otherwise).
+func (s *CatalogService) DeleteTaxonomyTerm(ctx context.Context, kind domain.TaxonomyKind, code string) error {
+	if !kind.Valid() {
+		return fmt.Errorf("unknown taxonomy kind %q", kind)
+	}
+	return s.store.DeleteTaxonomyTerm(ctx, kind, domain.NormalizeTaxonomyCode(code))
 }
 
 // MasterCatalog returns one category's merchandising taxonomy: its

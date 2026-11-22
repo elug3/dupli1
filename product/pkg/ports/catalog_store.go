@@ -48,8 +48,27 @@ type CatalogStore interface {
 	UpdateEditionName(ctx context.Context, code, name string) (*domain.Edition, error)
 	DeleteEdition(ctx context.Context, code string) error
 
-	// Bag merchandising taxonomy (storefront filters).
-	ListSubCategories(ctx context.Context) ([]domain.CatalogTerm, error)
-	ListBagStyles(ctx context.Context) ([]domain.CatalogTerm, error)
-	ListTargets(ctx context.Context) ([]domain.CatalogTerm, error)
+	TaxonomyStore
+}
+
+// TaxonomyReader lists the merchandising terms products are validated
+// against (subcategories, bag styles, targets).
+type TaxonomyReader interface {
+	// ListTaxonomy returns one kind's terms ordered by sort order, then code.
+	// Subcategories carry their category.
+	ListTaxonomy(ctx context.Context, kind domain.TaxonomyKind) ([]domain.CatalogTerm, error)
+}
+
+// TaxonomyStore is the staff-edited merchandising taxonomy. Codes arrive
+// normalized and validated by the service.
+type TaxonomyStore interface {
+	TaxonomyReader
+	// CreateTaxonomyTerm fails with ErrMasterExists when the code is taken
+	// (a subcategory code is unique across categories).
+	CreateTaxonomyTerm(ctx context.Context, kind domain.TaxonomyKind, t domain.CatalogTerm) (*domain.CatalogTerm, error)
+	// UpdateTaxonomyTerm fails with ErrMasterNotFound for an unknown code.
+	UpdateTaxonomyTerm(ctx context.Context, kind domain.TaxonomyKind, code string, patch domain.CatalogTermPatch) (*domain.CatalogTerm, error)
+	// DeleteTaxonomyTerm fails with ErrMasterInUse while a product carries
+	// the code, and ErrMasterNotFound for an unknown one.
+	DeleteTaxonomyTerm(ctx context.Context, kind domain.TaxonomyKind, code string) error
 }

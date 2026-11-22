@@ -10,6 +10,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/elug3/dupli1/product/pkg/domain"
 	"github.com/elug3/dupli1/product/pkg/handler"
 	"github.com/elug3/dupli1/product/pkg/infra/gateway"
 	natsinfra "github.com/elug3/dupli1/product/pkg/infra/nats"
@@ -104,6 +105,8 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 
 	catalogStore := pg.NewCatalogStore(store.Pool())
 	catalogSvc := service.NewCatalogService(catalogStore)
+	// Products are validated against the taxonomy staff keep in the catalog.
+	svc.WithTaxonomy(catalogStore)
 
 	visitorStore, err := pg.NewVisitorStore(store.Pool())
 	if err != nil {
@@ -256,6 +259,19 @@ func Bootstrap(ctx context.Context, cfg Config) (*App, error) {
 	handler.Mount(mux, "GET", handler.RouteCatalogSubCategories, http.HandlerFunc(h.ListSubCategories), handler.LegacyRouteCatalogSubCategories)
 	handler.Mount(mux, "GET", handler.RouteCatalogBagStyles, http.HandlerFunc(h.ListBagStyles), handler.LegacyRouteCatalogBagStyles)
 	handler.Mount(mux, "GET", handler.RouteCatalogTargets, http.HandlerFunc(h.ListTargets), handler.LegacyRouteCatalogTargets)
+	// …edited by staff (no legacy aliases for the writes).
+	for _, t := range []struct {
+		kind       domain.TaxonomyKind
+		list, item string
+	}{
+		{domain.TaxonomySubCategory, handler.RouteCatalogSubCategories, handler.RouteCatalogSubCategoryByCode},
+		{domain.TaxonomyBagStyle, handler.RouteCatalogBagStyles, handler.RouteCatalogBagStyleByCode},
+		{domain.TaxonomyTarget, handler.RouteCatalogTargets, handler.RouteCatalogTargetByCode},
+	} {
+		handler.Mount(mux, "POST", t.list, requirePerm(permissions.ProductMasterWrite, h.CreateTaxonomyTerm(t.kind)))
+		handler.Mount(mux, "PATCH", t.item, requirePerm(permissions.ProductMasterWrite, h.UpdateTaxonomyTerm(t.kind)))
+		handler.Mount(mux, "DELETE", t.item, requirePerm(permissions.ProductMasterWrite, h.DeleteTaxonomyTerm(t.kind)))
+	}
 
 	handler.Mount(mux, "GET", handler.RoutePromotions,
 		requireAnyPerm(http.HandlerFunc(h.ListPromotions), permissions.PromotionRead, permissions.CouponRead),

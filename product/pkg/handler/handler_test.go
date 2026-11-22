@@ -20,7 +20,7 @@ func newMux(store *memory.ProductStore) *http.ServeMux {
 	if store.Catalog == nil {
 		store.Catalog = memory.NewCatalogStore()
 	}
-	svc := service.NewProductSearchService(store, nil)
+	svc := service.NewProductSearchService(store, nil).WithTaxonomy(store.Catalog)
 	promotionSvc := service.NewPromotionService(memory.NewPromotionStore())
 	catalogSvc := service.NewCatalogService(store.Catalog)
 	h := handler.NewHandler(svc, promotionSvc, nil, catalogSvc).
@@ -41,7 +41,7 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	if store.Catalog == nil {
 		store.Catalog = memory.NewCatalogStore()
 	}
-	svc := service.NewProductSearchService(store, nil)
+	svc := service.NewProductSearchService(store, nil).WithTaxonomy(store.Catalog)
 	promotionSvc := service.NewPromotionService(memory.NewPromotionStore())
 	catalogSvc := service.NewCatalogService(store.Catalog)
 	h := handler.NewHandler(svc, promotionSvc, nil, catalogSvc).
@@ -84,6 +84,15 @@ func newFullMux(store *memory.ProductStore) (*http.ServeMux, *handler.Handler) {
 	handler.Mount(mux, "GET", handler.RouteCatalogSubCategories, http.HandlerFunc(h.ListSubCategories), handler.LegacyRouteCatalogSubCategories)
 	handler.Mount(mux, "GET", handler.RouteCatalogBagStyles, http.HandlerFunc(h.ListBagStyles), handler.LegacyRouteCatalogBagStyles)
 	handler.Mount(mux, "GET", handler.RouteCatalogTargets, http.HandlerFunc(h.ListTargets), handler.LegacyRouteCatalogTargets)
+	for kind, routes := range map[domain.TaxonomyKind][2]string{
+		domain.TaxonomySubCategory: {handler.RouteCatalogSubCategories, handler.RouteCatalogSubCategoryByCode},
+		domain.TaxonomyBagStyle:    {handler.RouteCatalogBagStyles, handler.RouteCatalogBagStyleByCode},
+		domain.TaxonomyTarget:      {handler.RouteCatalogTargets, handler.RouteCatalogTargetByCode},
+	} {
+		handler.Mount(mux, "POST", routes[0], h.CreateTaxonomyTerm(kind))
+		handler.Mount(mux, "PATCH", routes[1], h.UpdateTaxonomyTerm(kind))
+		handler.Mount(mux, "DELETE", routes[1], h.DeleteTaxonomyTerm(kind))
+	}
 	return mux, h
 }
 

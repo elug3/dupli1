@@ -24,6 +24,10 @@ func TestFixturesMatchReferenceData(t *testing.T) {
 		Colors     []domain.Color     `json:"colors"`
 		Sizes      []domain.Size      `json:"sizes"`
 		Editions   []domain.Edition   `json:"editions"`
+
+		SubCategories []domain.CatalogTerm `json:"subcategories"`
+		BagStyles     []domain.CatalogTerm `json:"bag_styles"`
+		Targets       []domain.CatalogTerm `json:"targets"`
 	}
 	if err := json.Unmarshal(raw, &data); err != nil {
 		t.Fatal(err)
@@ -33,6 +37,15 @@ func TestFixturesMatchReferenceData(t *testing.T) {
 	}
 	if !reflect.DeepEqual(data.Sizes, fixtureSizes) {
 		t.Errorf("sizes differ:\n json %+v\n go   %+v", data.Sizes, fixtureSizes)
+	}
+	for kind, json := range map[domain.TaxonomyKind][]domain.CatalogTerm{
+		domain.TaxonomySubCategory: data.SubCategories,
+		domain.TaxonomyBagStyle:    data.BagStyles,
+		domain.TaxonomyTarget:      data.Targets,
+	} {
+		if !reflect.DeepEqual(json, fixtureTaxonomy[kind]) {
+			t.Errorf("%s differ:\n json %+v\n go   %+v", kind, json, fixtureTaxonomy[kind])
+		}
 	}
 	if !reflect.DeepEqual(data.Editions, fixtureEditions) {
 		t.Errorf("editions differ:\n json %+v\n go   %+v", data.Editions, fixtureEditions)

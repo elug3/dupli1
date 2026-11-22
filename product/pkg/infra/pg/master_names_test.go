@@ -81,7 +81,7 @@ func TestMigrate_SeedsOnlyCodeSizes(t *testing.T) {
 	if err := store.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	for _, table := range []string{"brands", "colors", "base_colors", "sku_editions"} {
+	for _, table := range []string{"brands", "colors", "base_colors", "sku_editions", "bag_subcategories", "bag_styles", "bag_targets"} {
 		var n int
 		if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&n); err != nil || n != 0 {
 			t.Errorf("%s after migrate: %d rows (%v), want 0", table, n, err)

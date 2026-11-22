@@ -1,5 +1,5 @@
 {
-  "_comment": "Reference data for scripts/seed-reference-data.py. The product service no longer seeds these at startup; edit here, then re-run the script (it only adds what is missing).",
+  "_comment": "Reference data for scripts/seed-reference-data.py. The product service no longer seeds these at startup; edit here, then re-run the script (it only adds what is missing). subcategories, bag_styles and targets are the merchandising taxonomy staff edit through the API; a subcategory names its category (bags or clothing, defined in code).",
   "brands": [
     {
       "code": "DUP",
@@ -318,6 +318,99 @@
     {
       "code": "R",
       "name": "Limited / special edition"
+    }
+  ],
+  "subcategories": [
+    {
+      "code": "handbags",
+      "name": "Handbags",
+      "category": "bags",
+      "sortOrder": 0
+    },
+    {
+      "code": "tote",
+      "name": "Tote",
+      "category": "bags",
+      "sortOrder": 1
+    },
+    {
+      "code": "shoulder",
+      "name": "Shoulder",
+      "category": "bags",
+      "sortOrder": 2
+    },
+    {
+      "code": "cross",
+      "name": "Crossbody",
+      "category": "bags",
+      "sortOrder": 3
+    },
+    {
+      "code": "mini",
+      "name": "Mini",
+      "category": "bags",
+      "sortOrder": 4
+    },
+    {
+      "code": "padded",
+      "name": "Padded Jackets",
+      "category": "clothing",
+      "sortOrder": 0
+    },
+    {
+      "code": "jackets",
+      "name": "Jackets",
+      "category": "clothing",
+      "sortOrder": 1
+    }
+  ],
+  "bag_styles": [
+    {
+      "code": "casual",
+      "name": "Casual",
+      "sortOrder": 0
+    },
+    {
+      "code": "evening",
+      "name": "Evening",
+      "sortOrder": 1
+    },
+    {
+      "code": "business",
+      "name": "Business",
+      "sortOrder": 2
+    },
+    {
+      "code": "weekend",
+      "name": "Weekend",
+      "sortOrder": 3
+    },
+    {
+      "code": "statement",
+      "name": "Statement",
+      "sortOrder": 4
+    }
+  ],
+  "targets": [
+    {
+      "code": "all",
+      "name": "All",
+      "sortOrder": 0
+    },
+    {
+      "code": "men",
+      "name": "Men",
+      "sortOrder": 1
+    },
+    {
+      "code": "women",
+      "name": "Women",
+      "sortOrder": 2
+    },
+    {
+      "code": "kids",
+      "name": "Kids",
+      "sortOrder": 3
     }
   ]
 }
