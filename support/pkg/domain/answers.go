@@ -1,11 +1,14 @@
 package domain
 
-// DefaultAnswers is the copy each node opens with, seeded into the database on
-// first start.
+import "strings"
+
+// DefaultAnswers is the copy each node opens with until staff edit it.
 //
-// The database is the source of truth once seeded, so staff can edit wording
-// from the manager inbox without a deploy; seeding uses "insert if absent" and
-// never overwrites an edit. This map is the starting text, not the live text.
+// It is never written to the database. A node shows its stored copy when staff
+// have saved one from the manager inbox and this text otherwise, so the menu
+// works on an empty database, a deleted row falls back instead of leaving a
+// node empty, and a deploy that changes this text reaches every node no one
+// has edited.
 //
 // Two rules the copy obeys, from docs/support-telegram-bot.md:
 //   - Never name a day the bot will reply. There is no holiday calendar, so
@@ -48,10 +51,25 @@ var DefaultAnswers = map[string]string{
 		"상담 시간에 순서대로 답변드립니다.",
 }
 
-// AnswerFor returns the seeded copy for a node, or the greeting for the root.
+// AnswerFor returns the built-in copy for a node, or the greeting for the root.
 func AnswerFor(node string) string {
 	if node == NodeRoot {
 		return RootGreeting
 	}
 	return DefaultAnswers[node]
+}
+
+// WithDefaultAnswers returns stored copy with DefaultAnswers filling every node
+// that has none, so the editor shows each node as the bot sends it.
+func WithDefaultAnswers(stored map[string]string) map[string]string {
+	out := make(map[string]string, len(DefaultAnswers))
+	for node, body := range DefaultAnswers {
+		out[node] = body
+	}
+	for node, body := range stored {
+		if strings.TrimSpace(body) != "" {
+			out[node] = body
+		}
+	}
+	return out
 }

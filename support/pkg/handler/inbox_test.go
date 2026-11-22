@@ -231,3 +231,33 @@ func TestInboxIs503WithoutAValidator(t *testing.T) {
 		t.Fatalf("status = %d, want 503", res.Code)
 	}
 }
+
+// The editor lists every node as the bot sends it: staff copy where saved,
+// the built-in copy everywhere else, since nothing seeds the table.
+func TestAnswersListFillsUneditedNodesWithBuiltInCopy(t *testing.T) {
+	f := newInboxFixture(t)
+	token := "admin|" + permissions.SupportManage
+
+	if res := do(t, f.mux, http.MethodPut, "/api/v1/support/answers", token, `{"node":"ret","body":"<b>새 안내</b>"}`); res.Code != http.StatusOK {
+		t.Fatalf("put: %d %s", res.Code, res.Body.String())
+	}
+	res := do(t, f.mux, http.MethodGet, "/api/v1/support/answers", token, "")
+	if res.Code != http.StatusOK {
+		t.Fatalf("get: %d %s", res.Code, res.Body.String())
+	}
+	var out struct {
+		Answers map[string]string `json:"answers"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Answers) != len(domain.DefaultAnswers) {
+		t.Fatalf("got %d nodes, want %d", len(out.Answers), len(domain.DefaultAnswers))
+	}
+	if out.Answers["ret"] != "<b>새 안내</b>" {
+		t.Fatalf("edited node = %q", out.Answers["ret"])
+	}
+	if out.Answers[domain.NodeOrder] != domain.DefaultAnswers[domain.NodeOrder] {
+		t.Fatalf("unedited node = %q, want the built-in copy", out.Answers[domain.NodeOrder])
+	}
+}

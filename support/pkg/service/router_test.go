@@ -384,7 +384,7 @@ func TestMissingCopyFallsBackToTheSeededText(t *testing.T) {
 		t.Fatalf("Handle: %v", err)
 	}
 	if bot.edits[0].text != domain.AnswerFor(domain.NodeReturn) {
-		t.Fatalf("text = %q, want the seeded fallback", bot.edits[0].text)
+		t.Fatalf("text = %q, want the built-in fallback", bot.edits[0].text)
 	}
 }
 

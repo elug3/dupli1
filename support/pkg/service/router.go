@@ -354,11 +354,11 @@ func (r *Router) render(ctx context.Context, node, language string) (string, []p
 	return text, buttons, nil
 }
 
-// answerFor reads a node's copy, falling back to the seeded text.
+// answerFor reads a node's copy, falling back to the built-in text.
 //
-// The fallback matters on the day someone deletes a row: a node with no copy
-// would otherwise render as an empty message, which Telegram rejects outright,
-// turning one missing row into a dead menu.
+// Nothing seeds the table, so every node staff have not edited takes the
+// fallback. Without it a node with no copy would render as an empty message,
+// which Telegram rejects outright, turning one missing row into a dead menu.
 func (r *Router) answerFor(ctx context.Context, node, language string) (string, error) {
 	if r.answers != nil {
 		body, err := r.answers.Body(ctx, node, language)
@@ -369,8 +369,8 @@ func (r *Router) answerFor(ctx context.Context, node, language string) (string, 
 			return body, nil
 		}
 	}
-	if seeded := domain.AnswerFor(node); seeded != "" {
-		return seeded, nil
+	if builtIn := domain.AnswerFor(node); builtIn != "" {
+		return builtIn, nil
 	}
 	return domain.RootGreeting, nil
 }

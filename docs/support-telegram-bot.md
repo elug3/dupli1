@@ -138,7 +138,7 @@ Root menu, sent on `/start` and reachable from every leaf via `⬅️ 처음으�
 | 💳 결제 문의 | `pay` | Canned payment-method copy → handoff |
 | 🙋 상담원 연결 | `agt` | Immediate handoff |
 
-Canned answers live in the database (`support_answers`), not in Go constants, so staff can edit copy from the manage-web inbox without a deploy. Seed them from a migration.
+Canned answers live in the database (`support_answers`), not in Go constants, so staff can edit copy from the manage-web inbox without a deploy. Nothing seeds the table (changed 2026-11-06): a node with no saved copy sends the built-in `domain.DefaultAnswers` text, so an empty database works and a deleted row falls back.
 
 ```sql
 CREATE TABLE support_answers (
