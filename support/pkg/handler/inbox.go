@@ -257,7 +257,7 @@ func (h *Handler) answersHandler(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "could not load answers")
 			return
 		}
-		respondJSON(w, http.StatusOK, map[string]any{"answers": answers})
+		respondJSON(w, http.StatusOK, map[string]any{"answers": domain.WithDefaultAnswers(answers)})
 	case http.MethodPut:
 		var req struct {
 			Node string `json:"node"`

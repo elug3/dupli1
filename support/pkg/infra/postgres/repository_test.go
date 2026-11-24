@@ -169,45 +169,29 @@ func TestSaveKeepsIdentityItAlreadyKnows(t *testing.T) {
 	}
 }
 
-func TestSeedFillsMissingAnswersAndNeverOverwritesEdits(t *testing.T) {
+// Nothing seeds support_answers: a node staff never edited has no row, so the
+// router sends domain.DefaultAnswers, and an edit is stored as written.
+func TestAnswersHoldOnlyStaffEdits(t *testing.T) {
 	db := requirePostgres(t)
 	ctx := context.Background()
 	if _, err := db.Exec(`DELETE FROM support_answers`); err != nil {
 		t.Fatalf("clean answers: %v", err)
 	}
+	repo := postgres.NewAnswerRepository(db)
 
-	seeded, err := postgres.SeedAnswers(ctx, db, domain.DefaultLanguage)
-	if err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	if seeded != len(domain.DefaultAnswers) {
-		t.Fatalf("seeded %d rows, want %d", seeded, len(domain.DefaultAnswers))
-	}
-
-	// Staff edit the copy from the inbox…
 	edited := "<b>운영팀이 고친 안내</b>"
-	if _, err := db.Exec(
-		`UPDATE support_answers SET body = $1 WHERE node = $2 AND language = $3`,
-		edited, domain.NodeReturn, domain.DefaultLanguage,
-	); err != nil {
-		t.Fatalf("edit: %v", err)
+	if err := repo.Put(ctx, domain.NodeReturn, domain.DefaultLanguage, edited, "manager-1"); err != nil {
+		t.Fatalf("put: %v", err)
 	}
-
-	// …and the next deploy must not undo it.
-	again, err := postgres.SeedAnswers(ctx, db, domain.DefaultLanguage)
+	all, err := repo.All(ctx, domain.DefaultLanguage)
 	if err != nil {
-		t.Fatalf("reseed: %v", err)
+		t.Fatalf("all: %v", err)
 	}
-	if again != 0 {
-		t.Fatalf("reseed wrote %d rows, want none", again)
+	if len(all) != 1 || all[domain.NodeReturn] != edited {
+		t.Fatalf("stored answers = %v, want only the edit", all)
 	}
-
-	body, err := postgres.NewAnswerRepository(db).Body(ctx, domain.NodeReturn, domain.DefaultLanguage)
-	if err != nil {
-		t.Fatalf("read back: %v", err)
-	}
-	if body != edited {
-		t.Fatalf("body = %q, want the edit preserved", body)
+	if body, err := repo.Body(ctx, domain.NodeOrder, domain.DefaultLanguage); err != nil || body != "" {
+		t.Fatalf("unedited node body = %q (%v), want empty so the built-in copy takes over", body, err)
 	}
 }
 
@@ -218,7 +202,7 @@ func TestAnswerBodyIsEmptyForAnUnknownNode(t *testing.T) {
 		t.Fatalf("Body: %v", err)
 	}
 	if body != "" {
-		t.Fatalf("body = %q, want empty so the seeded fallback takes over", body)
+		t.Fatalf("body = %q, want empty so the built-in fallback takes over", body)
 	}
 }
 

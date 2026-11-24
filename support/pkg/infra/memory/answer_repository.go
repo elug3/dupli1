@@ -4,24 +4,19 @@ import (
 	"context"
 	"strings"
 	"sync"
-
-	"github.com/elug3/dupli1/support/pkg/domain"
 )
 
-// AnswerRepository serves the seeded copy from memory, for local dev and tests
-// without a database. Edits are not persisted anywhere — that needs Postgres.
+// AnswerRepository keeps staff-edited copy in memory, for local dev and tests
+// without a database. Like the Postgres table it starts empty: nodes no one
+// edited take domain.DefaultAnswers. Edits are not persisted — that needs
+// Postgres.
 type AnswerRepository struct {
 	mu   sync.RWMutex
 	rows map[string]string
 }
 
-// NewAnswerRepository starts from the seeded default copy.
 func NewAnswerRepository() *AnswerRepository {
-	rows := make(map[string]string, len(domain.DefaultAnswers))
-	for node, body := range domain.DefaultAnswers {
-		rows[key(node, domain.DefaultLanguage)] = body
-	}
-	return &AnswerRepository{rows: rows}
+	return &AnswerRepository{rows: map[string]string{}}
 }
 
 func (r *AnswerRepository) Body(_ context.Context, node, language string) (string, error) {

@@ -752,4 +752,4 @@ Customer consultation: the Telegram consultation bot — **a different bot from 
 
 Inquiry JSON carries no `chat_id`: the shopper's Telegram identity never leaves the service, and the console does not need it to answer.
 
-Local Compose falls back to `getUpdates` polling when `TELEGRAM_SUPPORT_WEBHOOK_URL` is unset. Conversations and canned answers persist in PostgreSQL `support` (`DUPLI1_SUPPORT_DB`, host port **5440**), with an in-memory fallback when that variable is unset. Answer copy is seeded on start with insert-if-absent, so an edit made from the inbox survives the next deploy.
+Local Compose falls back to `getUpdates` polling when `TELEGRAM_SUPPORT_WEBHOOK_URL` is unset. Conversations and canned answers persist in PostgreSQL `support` (`DUPLI1_SUPPORT_DB`, host port **5440**), with an in-memory fallback when that variable is unset. Nothing seeds the answer table: a node shows the copy staff saved from the inbox, and the built-in `domain.DefaultAnswers` text otherwise (`GET /api/v1/support/answers` returns every node that way), so edits survive a deploy and a deleted row falls back instead of going blank.

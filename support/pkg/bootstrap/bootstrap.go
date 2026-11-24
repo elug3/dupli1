@@ -17,7 +17,6 @@ import (
 	"github.com/elug3/dupli1/shared/pkg/authjwt"
 	"github.com/elug3/dupli1/shared/pkg/natspublisher"
 	tg "github.com/elug3/dupli1/shared/pkg/telegram"
-	"github.com/elug3/dupli1/support/pkg/domain"
 	"github.com/elug3/dupli1/support/pkg/handler"
 	emailinfra "github.com/elug3/dupli1/support/pkg/infra/email"
 	gatewayinfra "github.com/elug3/dupli1/support/pkg/infra/gateway"
@@ -319,16 +318,6 @@ func openStore(connString string) (*store, error) {
 	db, err := postgres.Open(connString)
 	if err != nil {
 		return nil, err
-	}
-	seedCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	seeded, err := postgres.SeedAnswers(seedCtx, db, domain.DefaultLanguage)
-	if err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if seeded > 0 {
-		log.Printf("seeded %d support answer(s)", seeded)
 	}
 	return &store{
 		conversations: postgres.NewConversationRepository(db),
