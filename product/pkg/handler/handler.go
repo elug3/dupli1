@@ -870,27 +870,8 @@ func (h *Handler) extractFilters(r *http.Request) map[string]string {
 		filter["subcategory"] = v
 		delete(filter, "subCategory")
 	}
-	if v := filter["subcategory"]; v != "" {
-		if n, ok := domain.NormalizeSubCategory(v); ok {
-			filter["subcategory"] = n
-		} else {
-			filter["subcategory"] = domain.NormalizeTaxonomyCode(v)
-		}
-	}
-	if v := filter["style"]; v != "" {
-		if n, ok := domain.NormalizeBagStyle(v); ok {
-			filter["style"] = n
-		} else {
-			filter["style"] = domain.NormalizeTaxonomyCode(v)
-		}
-	}
-	if v := filter["target"]; v != "" {
-		if n, ok := domain.NormalizeTarget(v); ok {
-			filter["target"] = n
-		} else {
-			filter["target"] = domain.NormalizeTaxonomyCode(v)
-		}
-	}
+	// subcategory / style / target names become codes in the service, which
+	// reads the staff-edited taxonomy.
 	if tags := collectTags(r); tags != "" {
 		filter["tags"] = tags
 	}

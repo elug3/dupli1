@@ -171,7 +171,7 @@ func TestUpdateProduct_StyleOnlyKeepsPrice(t *testing.T) {
 			Category: "bags", Style: "casual", Price: 2500, OfficialPrice: 3000, Status: "active",
 		},
 	}
-	svc := service.NewProductSearchService(store, nil)
+	svc := service.NewProductSearchService(store, nil).WithTaxonomy(memory.NewCatalogStore())
 
 	updated, err := svc.UpdateProduct(t.Context(), domain.Product{ID: "BOT-001", Style: "evening"})
 	if err != nil {
@@ -200,7 +200,7 @@ func TestUpdateProduct_AttributesMemo(t *testing.T) {
 			Attributes: map[string]string{"condition": "good"},
 		},
 	}
-	svc := service.NewProductSearchService(store, nil)
+	svc := service.NewProductSearchService(store, nil).WithTaxonomy(memory.NewCatalogStore())
 
 	updated, err := svc.UpdateProduct(t.Context(), domain.Product{ID: "BOT-001", Style: "evening"})
 	if err != nil {
@@ -542,7 +542,7 @@ func TestClothingSizesAndSizeChart(t *testing.T) {
 	store.Variants = []domain.Variant{
 		{SKU: "BOT_PUF001_BLK_OS", ProductID: "BAG-1", Color: "Black", ColorCode: "BLK", SizeCode: "OS", Status: "active"},
 	}
-	svc := service.NewProductSearchService(store, nil).WithInventory(inv)
+	svc := service.NewProductSearchService(store, nil).WithTaxonomy(memory.NewCatalogStore()).WithInventory(inv)
 
 	if _, err := svc.CreateVariant(t.Context(), "JKT-1", domain.Variant{ColorCode: "BLK", SizeCode: "OS"}); !errors.Is(err, ports.ErrInvalid) {
 		t.Fatalf("one-size jacket: want ErrInvalid, got %v", err)

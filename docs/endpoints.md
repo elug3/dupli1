@@ -322,9 +322,18 @@ Errors: `400` invalid field, `401` missing/invalid token, `404` address not foun
 | `PATCH` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` | Rename edition |
 | `DELETE` | `/api/v1/products/catalog/editions/{code}` | `product.master.write` | Delete edition (409 if in use) |
 | `GET` | `/api/v1/products/catalog/master` | public | Bag merchandising taxonomy (`subCategories`, `styles`, `targets`) |
-| `GET` | `/api/v1/products/catalog/subcategories` | public | List bag subcategories |
+| `GET` | `/api/v1/products/catalog/subcategories` | public | List one category's subcategories (`?category=`, default `bags`) |
+| `POST` | `/api/v1/products/catalog/subcategories` | `product.master.write` | Create subcategory (`category` = `bags`/`clothing`) |
+| `PATCH` | `/api/v1/products/catalog/subcategories/{code}` | `product.master.write` | Rename / reorder subcategory |
+| `DELETE` | `/api/v1/products/catalog/subcategories/{code}` | `product.master.write` | Delete subcategory (409 if a product carries it) |
 | `GET` | `/api/v1/products/catalog/bag-styles` | public | List bag styles (occasion) |
-| `GET` | `/api/v1/products/catalog/targets` | public | List targets (all/men/women/kids) |
+| `POST` | `/api/v1/products/catalog/bag-styles` | `product.master.write` | Create bag style |
+| `PATCH` | `/api/v1/products/catalog/bag-styles/{code}` | `product.master.write` | Rename / reorder bag style |
+| `DELETE` | `/api/v1/products/catalog/bag-styles/{code}` | `product.master.write` | Delete bag style (409 if in use) |
+| `GET` | `/api/v1/products/catalog/targets` | public | List targets |
+| `POST` | `/api/v1/products/catalog/targets` | `product.master.write` | Create target |
+| `PATCH` | `/api/v1/products/catalog/targets/{code}` | `product.master.write` | Rename / reorder target |
+| `DELETE` | `/api/v1/products/catalog/targets/{code}` | `product.master.write` | Delete target (409 if in use) |
 | `GET` | `/api/v1/products/catalog/categories` | public | Categories with their subcategories and allowed sizes |
 | `GET` | `/api/v1/products/promotions` | `promotion.read` | List promotional codes |
 | `POST` | `/api/v1/products/promotions` | `promotion.create` | Create promotional code |

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Load the product reference data (brands, base colors, colors, sizes,
-editions) from scripts/seed/reference-data.json through the admin API.
+editions, and the merchandising taxonomy: subcategories, bag styles, targets)
+from scripts/seed/reference-data.json through the admin API.
 
 The product service no longer seeds these at startup — only OS and the
 sizes a category sells, which follow from code. Run this once on a new environment,
@@ -39,6 +40,9 @@ KINDS = [
     ("sizes", "sizes"),
     ("editions", "editions"),
     ("brands", "brands"),
+    ("subcategories", "subcategories"),
+    ("bag_styles", "bag-styles"),
+    ("targets", "targets"),
 ]
 
 
@@ -76,6 +80,22 @@ class API:
         self.token = body["token"]
 
 
+def existing_codes(api: API, key: str, path: str, rows) -> set:
+    """Codes already in the store. Subcategories list per category, and a
+    subcategory code is unique across categories, so every category the data
+    names is listed."""
+    queries = [""]
+    if key == "subcategories":
+        queries = sorted({"?category=" + r.get("category", "bags") for r in rows}) or ["?category=bags"]
+    have = set()
+    for q in queries:
+        status, existing = api.call("GET", f"{CATALOG}/{path}{q}")
+        if status != 200:
+            sys.exit(f"list {path}{q}: {status} {existing}")
+        have |= {row["code"] for row in existing or []}
+    return have
+
+
 def run_mode() -> str:
     """DUPLI1_ENV as the services read it: blank is prod."""
     mode = os.environ.get("DUPLI1_ENV", "").strip().lower() or "prod"
@@ -110,17 +130,14 @@ def main() -> int:
 
     failed = 0
     for key, path in KINDS:
-        status, existing = api.call("GET", f"{CATALOG}/{path}")
-        if status != 200:
-            sys.exit(f"list {path}: {status} {existing}")
-        have = {row["code"] for row in existing or []}
+        have = existing_codes(api, key, path, data.get(key, []))
         created = skipped = 0
         for row in data.get(key, []):
             if row["code"] in have:
                 skipped += 1
                 continue
             if args.dry_run:
-                print(f"  would create {key[:-1]} {row['code']} {row['name']}")
+                print(f"  would create {key} {row['code']} {row['name']}")
                 created += 1
                 continue
             status, body = api.call("POST", f"{CATALOG}/{path}", row)
@@ -129,7 +146,7 @@ def main() -> int:
             elif status == 409:  # created by someone else since the list
                 skipped += 1
             else:
-                print(f"  ! {key[:-1]} {row['code']}: {status} {body}", file=sys.stderr)
+                print(f"  ! {key} {row['code']}: {status} {body}", file=sys.stderr)
                 failed += 1
         verb = "would create" if args.dry_run else "created"
         print(f"{key}: {verb} {created}, already there {skipped}")

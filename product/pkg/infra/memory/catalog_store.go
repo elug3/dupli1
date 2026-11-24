@@ -12,15 +12,14 @@ import (
 
 // CatalogStore is an in-memory ports.CatalogStore for tests.
 type CatalogStore struct {
-	Brands        map[string]domain.Brand
-	Styles        map[string]domain.Style // key: brandCode+"|"+code
-	Colors        map[string]domain.Color
-	BaseColors    map[string]domain.BaseColor
-	Sizes         map[string]domain.Size
-	Editions      map[string]domain.Edition
-	SubCategories map[string]domain.CatalogTerm
-	BagStyles     map[string]domain.CatalogTerm
-	Targets       map[string]domain.CatalogTerm
+	Brands     map[string]domain.Brand
+	Styles     map[string]domain.Style // key: brandCode+"|"+code
+	Colors     map[string]domain.Color
+	BaseColors map[string]domain.BaseColor
+	Sizes      map[string]domain.Size
+	Editions   map[string]domain.Edition
+	// Taxonomy terms by kind, then code (a subcategory carries its category).
+	Terms map[domain.TaxonomyKind]map[string]domain.CatalogTerm
 
 	// Optional back-refs for delete-in-use checks (set by tests or product store).
 	ProductBrandStyles  map[string]string // productID -> brandCode+"|"+styleCode
@@ -28,24 +27,28 @@ type CatalogStore struct {
 	VariantColor2Codes  map[string]string // sku -> color2Code (two-color skus)
 	VariantSizeCodes    map[string]string // sku -> sizeCode
 	VariantEditionCodes map[string]string
+	ProductTerms        map[string]map[domain.TaxonomyKind]string // productID -> kind -> code
 }
 
 func NewCatalogStore() *CatalogStore {
 	s := &CatalogStore{
-		Brands:              map[string]domain.Brand{},
-		Styles:              map[string]domain.Style{},
-		Colors:              map[string]domain.Color{},
-		BaseColors:          map[string]domain.BaseColor{},
-		Sizes:               map[string]domain.Size{},
-		Editions:            map[string]domain.Edition{},
-		SubCategories:       map[string]domain.CatalogTerm{},
-		BagStyles:           map[string]domain.CatalogTerm{},
-		Targets:             map[string]domain.CatalogTerm{},
+		Brands:     map[string]domain.Brand{},
+		Styles:     map[string]domain.Style{},
+		Colors:     map[string]domain.Color{},
+		BaseColors: map[string]domain.BaseColor{},
+		Sizes:      map[string]domain.Size{},
+		Editions:   map[string]domain.Edition{},
+		Terms: map[domain.TaxonomyKind]map[string]domain.CatalogTerm{
+			domain.TaxonomySubCategory: {},
+			domain.TaxonomyBagStyle:    {},
+			domain.TaxonomyTarget:      {},
+		},
 		ProductBrandStyles:  map[string]string{},
 		VariantColorCodes:   map[string]string{},
 		VariantColor2Codes:  map[string]string{},
 		VariantSizeCodes:    map[string]string{},
 		VariantEditionCodes: map[string]string{},
+		ProductTerms:        map[string]map[domain.TaxonomyKind]string{},
 	}
 	for _, b := range fixtureBrands {
 		s.Brands[b.Code] = b
@@ -66,14 +69,10 @@ func NewCatalogStore() *CatalogStore {
 	for _, e := range fixtureEditions {
 		s.Editions[e.Code] = e
 	}
-	for _, t := range domain.SeedSubCategories {
-		s.SubCategories[t.Code] = t
-	}
-	for _, t := range domain.SeedBagStyles {
-		s.BagStyles[t.Code] = t
-	}
-	for _, t := range domain.SeedTargets {
-		s.Targets[t.Code] = t
+	for kind, terms := range fixtureTaxonomy {
+		for _, t := range terms {
+			s.Terms[kind][t.Code] = t
+		}
 	}
 	return s
 }
@@ -537,36 +536,93 @@ func (s *CatalogStore) DeleteEdition(ctx context.Context, code string) error {
 	return nil
 }
 
-func listTerms(m map[string]domain.CatalogTerm, seedOrder []domain.CatalogTerm) []domain.CatalogTerm {
+// trackProductTerms records which taxonomy codes a product carries, for the
+// delete-in-use check.
+func (s *CatalogStore) trackProductTerms(p domain.Product) {
+	s.ProductTerms[p.ID] = map[domain.TaxonomyKind]string{
+		domain.TaxonomySubCategory: p.SubCategory,
+		domain.TaxonomyBagStyle:    p.Style,
+		domain.TaxonomyTarget:      p.Target,
+	}
+}
+
+func (s *CatalogStore) terms(kind domain.TaxonomyKind) (map[string]domain.CatalogTerm, error) {
+	m, ok := s.Terms[kind]
+	if !ok {
+		return nil, fmt.Errorf("unknown taxonomy kind %q", kind)
+	}
+	return m, nil
+}
+
+func (s *CatalogStore) ListTaxonomy(ctx context.Context, kind domain.TaxonomyKind) ([]domain.CatalogTerm, error) {
+	_ = ctx
+	m, err := s.terms(kind)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]domain.CatalogTerm, 0, len(m))
-	seen := make(map[string]struct{}, len(m))
-	for _, t := range seedOrder {
-		if cur, ok := m[t.Code]; ok {
-			out = append(out, cur)
-			seen[t.Code] = struct{}{}
+	for _, t := range m {
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SortOrder != out[j].SortOrder {
+			return out[i].SortOrder < out[j].SortOrder
+		}
+		return out[i].Code < out[j].Code
+	})
+	return out, nil
+}
+
+func (s *CatalogStore) CreateTaxonomyTerm(ctx context.Context, kind domain.TaxonomyKind, t domain.CatalogTerm) (*domain.CatalogTerm, error) {
+	_ = ctx
+	m, err := s.terms(kind)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := m[t.Code]; ok {
+		return nil, domain.ErrMasterExists
+	}
+	if kind != domain.TaxonomySubCategory {
+		t.Category = ""
+	}
+	m[t.Code] = t
+	return &t, nil
+}
+
+func (s *CatalogStore) UpdateTaxonomyTerm(ctx context.Context, kind domain.TaxonomyKind, code string, patch domain.CatalogTermPatch) (*domain.CatalogTerm, error) {
+	_ = ctx
+	m, err := s.terms(kind)
+	if err != nil {
+		return nil, err
+	}
+	t, ok := m[code]
+	if !ok {
+		return nil, domain.ErrMasterNotFound
+	}
+	if patch.Name != nil {
+		t.Name = *patch.Name
+	}
+	if patch.SortOrder != nil {
+		t.SortOrder = *patch.SortOrder
+	}
+	m[code] = t
+	return &t, nil
+}
+
+func (s *CatalogStore) DeleteTaxonomyTerm(ctx context.Context, kind domain.TaxonomyKind, code string) error {
+	_ = ctx
+	m, err := s.terms(kind)
+	if err != nil {
+		return err
+	}
+	if _, ok := m[code]; !ok {
+		return domain.ErrMasterNotFound
+	}
+	for _, carried := range s.ProductTerms {
+		if carried[kind] == code {
+			return domain.ErrMasterInUse
 		}
 	}
-	rest := make([]domain.CatalogTerm, 0)
-	for code, t := range m {
-		if _, ok := seen[code]; !ok {
-			rest = append(rest, t)
-		}
-	}
-	sort.Slice(rest, func(i, j int) bool { return rest[i].Code < rest[j].Code })
-	return append(out, rest...)
-}
-
-func (s *CatalogStore) ListSubCategories(ctx context.Context) ([]domain.CatalogTerm, error) {
-	_ = ctx
-	return listTerms(s.SubCategories, domain.SeedSubCategories), nil
-}
-
-func (s *CatalogStore) ListBagStyles(ctx context.Context) ([]domain.CatalogTerm, error) {
-	_ = ctx
-	return listTerms(s.BagStyles, domain.SeedBagStyles), nil
-}
-
-func (s *CatalogStore) ListTargets(ctx context.Context) ([]domain.CatalogTerm, error) {
-	_ = ctx
-	return listTerms(s.Targets, domain.SeedTargets), nil
+	delete(m, code)
+	return nil
 }

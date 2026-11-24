@@ -44,6 +44,10 @@ func (s *CatalogReportService) Report(ctx context.Context, status string) (domai
 	if err != nil {
 		return domain.CatalogReport{}, err
 	}
+	tax, err := loadTaxonomy(ctx, s.masters)
+	if err != nil {
+		return domain.CatalogReport{}, err
+	}
 
 	report := domain.CatalogReport{
 		Status:           status,
@@ -74,7 +78,7 @@ func (s *CatalogReportService) Report(ctx context.Context, status string) (domai
 		brandFor(m.Code, m.Name)
 	}
 
-	categories, findSub := newCategoryTally()
+	categories, findSub := newCategoryTally(tax)
 	cells := map[[3]string]*domain.CatalogCell{}
 	var cellOrder [][3]string
 
@@ -142,7 +146,7 @@ func brandKey(code, name string) string {
 // subcategory" bucket) as products turn up in them, plus a function that
 // returns the result in taxonomy order. Empty buckets the taxonomy does not
 // name are dropped.
-func newCategoryTally() (func() []domain.CatalogCategoryCount, func(category, sub string) (*domain.CatalogCategoryCount, *domain.CatalogSubCategoryCount)) {
+func newCategoryTally(tax domain.Taxonomy) (func() []domain.CatalogCategoryCount, func(category, sub string) (*domain.CatalogCategoryCount, *domain.CatalogSubCategoryCount)) {
 	type entry struct {
 		cat  *domain.CatalogCategoryCount
 		subs map[string]*domain.CatalogSubCategoryCount
@@ -168,7 +172,7 @@ func newCategoryTally() (func() []domain.CatalogCategoryCount, func(category, su
 		e.order = append(e.order, code)
 		return s
 	}
-	for _, c := range domain.Categories() {
+	for _, c := range domain.Categories(tax) {
 		e := addCategory(c.Code, c.Name)
 		for _, sc := range c.SubCategories {
 			addSub(e, sc.Code, sc.Name)

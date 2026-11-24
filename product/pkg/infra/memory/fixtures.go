@@ -65,3 +65,30 @@ var fixtureEditions = []domain.Edition{
 	{Code: "A", Name: "Alternate construction"},
 	{Code: "R", Name: "Limited / special edition"},
 }
+
+// fixtureTaxonomy is reference-data.json's subcategories, bag_styles and
+// targets, with each list's position as its sort order.
+var fixtureTaxonomy = map[domain.TaxonomyKind][]domain.CatalogTerm{
+	domain.TaxonomySubCategory: {
+		{Code: "handbags", Name: "Handbags", Category: "bags", SortOrder: 0},
+		{Code: "tote", Name: "Tote", Category: "bags", SortOrder: 1},
+		{Code: "shoulder", Name: "Shoulder", Category: "bags", SortOrder: 2},
+		{Code: "cross", Name: "Crossbody", Category: "bags", SortOrder: 3},
+		{Code: "mini", Name: "Mini", Category: "bags", SortOrder: 4},
+		{Code: "padded", Name: "Padded Jackets", Category: "clothing", SortOrder: 0},
+		{Code: "jackets", Name: "Jackets", Category: "clothing", SortOrder: 1},
+	},
+	domain.TaxonomyBagStyle: {
+		{Code: "casual", Name: "Casual", SortOrder: 0},
+		{Code: "evening", Name: "Evening", SortOrder: 1},
+		{Code: "business", Name: "Business", SortOrder: 2},
+		{Code: "weekend", Name: "Weekend", SortOrder: 3},
+		{Code: "statement", Name: "Statement", SortOrder: 4},
+	},
+	domain.TaxonomyTarget: {
+		{Code: "all", Name: "All", SortOrder: 0},
+		{Code: "men", Name: "Men", SortOrder: 1},
+		{Code: "women", Name: "Women", SortOrder: 2},
+		{Code: "kids", Name: "Kids", SortOrder: 3},
+	},
+}

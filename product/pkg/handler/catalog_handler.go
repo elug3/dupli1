@@ -338,7 +338,12 @@ func (h *Handler) DeleteEdition(w http.ResponseWriter, r *http.Request) {
 
 // ListCategories serves GET /api/v1/products/catalog/categories.
 func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
-	h.respondJSON(w, http.StatusOK, h.catalogSvc.ListCategories(r.Context()))
+	cats, err := h.catalogSvc.ListCategories(r.Context())
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	h.respondJSON(w, http.StatusOK, cats)
 }
 
 // GetMasterCatalog serves one category's taxonomy; ?category= defaults to bags.
@@ -376,4 +381,66 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.respondJSON(w, http.StatusOK, list)
+}
+
+type taxonomyTermBody struct {
+	Code      string `json:"code"`
+	Name      string `json:"name"`
+	Category  string `json:"category"`
+	SortOrder *int   `json:"sortOrder"`
+}
+
+type taxonomyPatchBody struct {
+	Name      *string `json:"name"`
+	SortOrder *int    `json:"sortOrder"`
+}
+
+// CreateTaxonomyTerm serves POST on a taxonomy list: {code, name,
+// sortOrder? (default: after the last), category? (subcategories only;
+// default bags)}.
+func (h *Handler) CreateTaxonomyTerm(kind domain.TaxonomyKind) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body taxonomyTermBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			h.respondError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		created, err := h.catalogSvc.CreateTaxonomyTerm(r.Context(), kind, domain.CatalogTerm{
+			Code: body.Code, Name: body.Name, Category: body.Category,
+		}, body.SortOrder)
+		if err != nil {
+			h.respondServiceError(w, err)
+			return
+		}
+		h.respondJSON(w, http.StatusCreated, created)
+	}
+}
+
+// UpdateTaxonomyTerm serves PATCH on one term: {name?, sortOrder?}.
+func (h *Handler) UpdateTaxonomyTerm(kind domain.TaxonomyKind) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body taxonomyPatchBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			h.respondError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		updated, err := h.catalogSvc.UpdateTaxonomyTerm(r.Context(), kind, r.PathValue("code"),
+			domain.CatalogTermPatch{Name: body.Name, SortOrder: body.SortOrder})
+		if err != nil {
+			h.respondServiceError(w, err)
+			return
+		}
+		h.respondJSON(w, http.StatusOK, updated)
+	}
+}
+
+// DeleteTaxonomyTerm serves DELETE on one term; 409 while a product carries it.
+func (h *Handler) DeleteTaxonomyTerm(kind domain.TaxonomyKind) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := h.catalogSvc.DeleteTaxonomyTerm(r.Context(), kind, r.PathValue("code")); err != nil {
+			h.respondServiceError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }

@@ -8,9 +8,74 @@ import (
 // CatalogTerm is a merchandising master-catalog entry (code → display name).
 // Distinct from SKU segment masters (Brand / Style / Color): these classify
 // products for storefront filters, not human SKU composition.
+//
+// Staff edit them (product.master.write); nothing in code lists them. A
+// subcategory belongs to one category, and its code is unique across all
+// categories. SortOrder orders a list (ascending, then by code).
 type CatalogTerm struct {
-	Code string `json:"code"`
-	Name string `json:"name"`
+	Code      string `json:"code"`
+	Name      string `json:"name"`
+	Category  string `json:"category,omitempty"`
+	SortOrder int    `json:"sortOrder"`
+}
+
+// TaxonomyKind names one of the three staff-edited merchandising lists.
+type TaxonomyKind string
+
+const (
+	TaxonomySubCategory TaxonomyKind = "subcategory"
+	TaxonomyBagStyle    TaxonomyKind = "bag_style"
+	TaxonomyTarget      TaxonomyKind = "target"
+)
+
+// Valid reports whether k is one of the three kinds.
+func (k TaxonomyKind) Valid() bool {
+	return k == TaxonomySubCategory || k == TaxonomyBagStyle || k == TaxonomyTarget
+}
+
+// CatalogTermPatch changes a term's display name and/or sort order. Its code,
+// and a subcategory's category, never change: products store the code.
+type CatalogTermPatch struct {
+	Name      *string
+	SortOrder *int
+}
+
+// Taxonomy is every merchandising term as the store holds it, which is what
+// products are validated against.
+type Taxonomy struct {
+	SubCategories []CatalogTerm // each carries its Category
+	Styles        []CatalogTerm
+	Targets       []CatalogTerm
+}
+
+// SubCategoriesOf returns one category's subcategories, in list order.
+func (t Taxonomy) SubCategoriesOf(category string) []CatalogTerm {
+	category = NormalizeTaxonomyCode(category)
+	out := []CatalogTerm{}
+	for _, sc := range t.SubCategories {
+		if sc.Category == category {
+			out = append(out, sc)
+		}
+	}
+	return out
+}
+
+// ValidTaxonomyCode reports whether code (already normalized) is usable as a
+// term code: lowercase letters, digits, '-' or '_', starting with a letter or
+// digit, at most 32 characters.
+func ValidTaxonomyCode(code string) bool {
+	if code == "" || len(code) > 32 {
+		return false
+	}
+	for i, r := range code {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+		case (r == '-' || r == '_') && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // MasterCatalog is the bag merchandising taxonomy returned by
@@ -21,8 +86,10 @@ type MasterCatalog struct {
 	Targets       []CatalogTerm `json:"targets"`
 }
 
-// Category is a top-level kind of product (bags, clothing). It owns its
-// subcategories; style and target are shared by every category.
+// Category is a top-level kind of product (bags, clothing), defined in code:
+// adding one is what makes its products creatable. It owns its subcategories,
+// which staff edit and the catalog service fills in; style and target are
+// shared by every category.
 type Category struct {
 	Code          string        `json:"code"`
 	Name          string        `json:"name"`
@@ -67,43 +134,11 @@ func CheckVariantSize(category, sizeCode string) error {
 // written before categories were checked carry "" and are all bags.
 const DefaultCategory = "bags"
 
-// Bag subcategory seeds (under category=bags).
-var SeedSubCategories = []CatalogTerm{
-	{Code: "handbags", Name: "Handbags"},
-	{Code: "tote", Name: "Tote"},
-	{Code: "shoulder", Name: "Shoulder"},
-	{Code: "cross", Name: "Crossbody"},
-	{Code: "mini", Name: "Mini"},
-}
-
-// Bag occasion / look style seeds (not SKU design-family styles).
-var SeedBagStyles = []CatalogTerm{
-	{Code: "casual", Name: "Casual"},
-	{Code: "evening", Name: "Evening"},
-	{Code: "business", Name: "Business"},
-	{Code: "weekend", Name: "Weekend"},
-	{Code: "statement", Name: "Statement"},
-}
-
-// Audience / target seeds.
-var SeedTargets = []CatalogTerm{
-	{Code: "all", Name: "All"},
-	{Code: "men", Name: "Men"},
-	{Code: "women", Name: "Women"},
-	{Code: "kids", Name: "Kids"},
-}
-
-// Clothing subcategory seeds (under category=clothing).
-var SeedClothingSubCategories = []CatalogTerm{
-	{Code: "padded", Name: "Padded Jackets"},
-	{Code: "jackets", Name: "Jackets"},
-}
-
 // SeedCategories lists every category a product may carry, in storefront
 // order. Adding one here is what makes its products creatable.
 var SeedCategories = []Category{
-	{Code: "bags", Name: "Bags", SubCategories: SeedSubCategories},
-	{Code: "clothing", Name: "Clothing", SubCategories: SeedClothingSubCategories, Sizes: ApparelSizes},
+	{Code: "bags", Name: "Bags"},
+	{Code: "clothing", Name: "Clothing", Sizes: ApparelSizes},
 }
 
 // ApparelSizes are the sizes clothing is sold in, smallest first: letter
@@ -124,11 +159,12 @@ func italianSizes(from, to int) []string {
 	return out
 }
 
-// Categories returns a copy of SeedCategories.
-func Categories() []Category {
+// Categories returns a copy of SeedCategories, each with the subcategories
+// tax holds for it.
+func Categories(tax Taxonomy) []Category {
 	out := make([]Category, len(SeedCategories))
 	for i, c := range SeedCategories {
-		c.SubCategories = append([]CatalogTerm(nil), c.SubCategories...)
+		c.SubCategories = tax.SubCategoriesOf(c.Code)
 		c.Sizes = append([]string(nil), c.Sizes...)
 		out[i] = c
 	}
@@ -149,26 +185,17 @@ func LookupCategory(code string) (Category, bool) {
 	return Category{}, false
 }
 
-// DefaultMasterCatalog returns the seeded bag taxonomy.
-func DefaultMasterCatalog() MasterCatalog {
-	return MasterCatalog{
-		SubCategories: append([]CatalogTerm(nil), SeedSubCategories...),
-		Styles:        append([]CatalogTerm(nil), SeedBagStyles...),
-		Targets:       append([]CatalogTerm(nil), SeedTargets...),
-	}
-}
-
 // NormalizeTaxonomyCode lowercases and trims a merchandising code.
 func NormalizeTaxonomyCode(code string) string {
 	return strings.ToLower(strings.TrimSpace(code))
 }
 
-func lookupTerm(seeds []CatalogTerm, code string) (CatalogTerm, bool) {
+func lookupTerm(terms []CatalogTerm, code string) (CatalogTerm, bool) {
 	n := NormalizeTaxonomyCode(code)
 	if n == "" {
 		return CatalogTerm{}, false
 	}
-	for _, t := range seeds {
+	for _, t := range terms {
 		if t.Code == n || strings.EqualFold(t.Name, strings.TrimSpace(code)) {
 			return t, true
 		}
@@ -176,46 +203,18 @@ func lookupTerm(seeds []CatalogTerm, code string) (CatalogTerm, bool) {
 	return CatalogTerm{}, false
 }
 
-// NormalizeSubCategory returns the canonical bag subcategory code, or "" if
-// blank. Unknown values return ("", false).
-func NormalizeSubCategory(code string) (string, bool) {
-	return normalizeSubCategoryIn(SeedSubCategories, code)
-}
-
-func normalizeSubCategoryIn(terms []CatalogTerm, code string) (string, bool) {
-	if strings.TrimSpace(code) == "" {
-		return "", true
-	}
-	t, ok := lookupTerm(terms, code)
-	if !ok {
-		return "", false
-	}
-	return t.Code, true
-}
-
-// NormalizeBagStyle returns the canonical bag-style code, or "" if blank.
-func NormalizeBagStyle(code string) (string, bool) {
-	if strings.TrimSpace(code) == "" {
-		return "", true
-	}
-	t, ok := lookupTerm(SeedBagStyles, code)
-	if !ok {
-		return "", false
-	}
-	return t.Code, true
-}
-
-// NormalizeTarget returns the canonical target code, or "" if blank.
-// Accepts common typo "mem" → "men".
-func NormalizeTarget(code string) (string, bool) {
+// NormalizeTerm returns the canonical code for a code or display name in
+// terms, or "" if blank. Unknown values return ("", false). For targets the
+// common typo "mem" is read as "men".
+func NormalizeTerm(kind TaxonomyKind, terms []CatalogTerm, code string) (string, bool) {
 	raw := strings.TrimSpace(code)
 	if raw == "" {
 		return "", true
 	}
-	if NormalizeTaxonomyCode(raw) == "mem" {
+	if kind == TaxonomyTarget && NormalizeTaxonomyCode(raw) == "mem" {
 		raw = "men"
 	}
-	t, ok := lookupTerm(SeedTargets, raw)
+	t, ok := lookupTerm(terms, raw)
 	if !ok {
 		return "", false
 	}
@@ -227,22 +226,22 @@ func NormalizeTarget(code string) (string, bool) {
 // category; a blank category is validated as bags and stays blank. Empty
 // values are allowed; unknown codes return an error.
 //
+// The terms come from tax, what staff keep in the store.
+//
 // previousCategory is the category the product already carries (""
 // on create). An unknown category is accepted only when it is that one
 // unchanged, so a row written before categories were checked can still be
 // edited; its subcategory is then checked against bags.
-func NormalizeProductTaxonomy(p *Product, previousCategory string) error {
+func NormalizeProductTaxonomy(p *Product, previousCategory string, tax Taxonomy) error {
 	if p == nil {
 		return nil
 	}
-	subTerms := SeedSubCategories
 	categoryName := DefaultCategory
 	if strings.TrimSpace(p.Category) != "" {
 		c, ok := LookupCategory(p.Category)
 		switch {
 		case ok:
 			p.Category = c.Code
-			subTerms = c.SubCategories
 			categoryName = c.Code
 		case strings.TrimSpace(previousCategory) != "" && p.Category == previousCategory:
 			// Legacy free-text category: leave it as stored.
@@ -251,19 +250,19 @@ func NormalizeProductTaxonomy(p *Product, previousCategory string) error {
 		}
 	}
 
-	sc, ok := normalizeSubCategoryIn(subTerms, p.SubCategory)
+	sc, ok := NormalizeTerm(TaxonomySubCategory, tax.SubCategoriesOf(categoryName), p.SubCategory)
 	if !ok {
 		return fmt.Errorf("invalid subcategory %q for category %q", p.SubCategory, categoryName)
 	}
 	p.SubCategory = sc
 
-	st, ok := NormalizeBagStyle(p.Style)
+	st, ok := NormalizeTerm(TaxonomyBagStyle, tax.Styles, p.Style)
 	if !ok {
 		return fmt.Errorf("invalid style %q", p.Style)
 	}
 	p.Style = st
 
-	tg, ok := NormalizeTarget(p.Target)
+	tg, ok := NormalizeTerm(TaxonomyTarget, tax.Targets, p.Target)
 	if !ok {
 		return fmt.Errorf("invalid target %q", p.Target)
 	}

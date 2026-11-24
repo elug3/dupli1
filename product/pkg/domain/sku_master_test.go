@@ -19,7 +19,7 @@ func TestCategorySizesCoverCategories(t *testing.T) {
 		}
 		codes[s.Code] = true
 	}
-	for _, c := range Categories() {
+	for _, c := range Categories(Taxonomy{}) {
 		for _, code := range c.Sizes {
 			if !codes[code] {
 				t.Errorf("category %s sells size %s, which the size master is not seeded with", c.Code, code)

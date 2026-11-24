@@ -53,8 +53,8 @@ func freshProductSchema(t *testing.T, dsn, schema string) *pgxpool.Pool {
 
 // loadReferenceData writes scripts/seed/reference-data.json into the schema,
 // as scripts/seed-reference-data.py does for a real environment: the service
-// itself seeds only the category sizes, so a test that relies on Black, OS or
-// Prada existing loads them here.
+// itself seeds only OS and the category sizes, so a test that relies on Black,
+// Prada or a subcategory existing loads them here.
 func loadReferenceData(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "scripts", "seed", "reference-data.json"))
@@ -67,6 +67,10 @@ func loadReferenceData(t *testing.T, pool *pgxpool.Pool) {
 		Colors     []domain.Color     `json:"colors"`
 		Sizes      []domain.Size      `json:"sizes"`
 		Editions   []domain.Edition   `json:"editions"`
+
+		SubCategories []domain.CatalogTerm `json:"subcategories"`
+		BagStyles     []domain.CatalogTerm `json:"bag_styles"`
+		Targets       []domain.CatalogTerm `json:"targets"`
 	}
 	if err := json.Unmarshal(raw, &data); err != nil {
 		t.Fatalf("parse reference data: %v", err)
@@ -93,5 +97,15 @@ func loadReferenceData(t *testing.T, pool *pgxpool.Pool) {
 	}
 	for _, e := range data.Editions {
 		exec(`INSERT INTO sku_editions (code, name) VALUES ($1, $2) ON CONFLICT DO NOTHING`, e.Code, e.Name)
+	}
+	for _, t := range data.SubCategories {
+		exec(`INSERT INTO bag_subcategories (code, name, category, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+			t.Code, t.Name, t.Category, t.SortOrder)
+	}
+	for _, t := range data.BagStyles {
+		exec(`INSERT INTO bag_styles (code, name, sort_order) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, t.Code, t.Name, t.SortOrder)
+	}
+	for _, t := range data.Targets {
+		exec(`INSERT INTO bag_targets (code, name, sort_order) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, t.Code, t.Name, t.SortOrder)
 	}
 }

@@ -375,6 +375,7 @@ func (s *ProductStore) CreateProduct(ctx context.Context, p domain.Product) (*do
 	}
 	s.Products = append(s.Products, p)
 	cat.ProductBrandStyles[p.ID] = p.BrandCode + "|" + p.StyleCode
+	cat.trackProductTerms(p)
 
 	switch {
 	case len(p.Variants) > 0:
@@ -415,6 +416,7 @@ func (s *ProductStore) UpdateProduct(ctx context.Context, p domain.Product) (*do
 			p.ReviewCount = existing.ReviewCount
 			p.RatingAverage = existing.RatingAverage
 			s.Products[i] = p
+			s.catalog().trackProductTerms(p)
 			return s.GetProduct(ctx, p.ID)
 		}
 	}
@@ -425,6 +427,7 @@ func (s *ProductStore) DeleteProduct(ctx context.Context, id string) error {
 	for i, p := range s.Products {
 		if p.ID == id {
 			s.Products = append(s.Products[:i], s.Products[i+1:]...)
+			delete(s.catalog().ProductTerms, id)
 			kept := s.Variants[:0]
 			for _, v := range s.Variants {
 				if v.ProductID != id {
